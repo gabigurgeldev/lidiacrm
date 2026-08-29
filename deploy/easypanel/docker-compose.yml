@@ -1,0 +1,159 @@
+# DeskcommCRM sob o EasyPanel — configuração DESTA instalação (lidiacrm.com.br).
+#
+# NÃO é upstream. É a stack de produção adaptada a um host onde quem manda nas
+# portas 80/443 e no TLS é o Traefik do EasyPanel, e onde o Supabase roda como
+# um OUTRO serviço compose do mesmo painel.
+#
+# Corresponde a docker-compose.prod.yml da v1.10.1. É CÓPIA, não `include:` nem
+# `extends:`: o EasyPanel aceita UM composeFile, e resolver isso com merge
+# compraria um modo de falha silencioso justamente na peça que sobe o produto.
+# A dívida é real — ao subir de versão, reveja este arquivo contra o prod.yml.
+#
+# Três diferenças em relação ao prod.yml, cada uma medida nesta VPS:
+#
+#   1. SEM `caddy`. As portas 80/443 são do `easypanel-traefik` (medido:
+#      `0.0.0.0:80->80/tcp`). No prod.yml o Caddy só é desligado pelo override
+#      docker-compose.traefik.yml, que aqui não existe — logo ele subiria e
+#      falharia no bind, derrubando o `up -d` inteiro.
+#
+#   2. SEM labels de Traefik. Quem publica o domínio é o painel, pela
+#      configuração de arquivo dele (/etc/easypanel/traefik/config/main.yaml).
+#
+#   3. Rede EXTRA `supabase`. O Supabase é outro projeto compose, logo outra
+#      rede. Medido: só o `kong` dele entra na rede `easypanel`; o `db` fica
+#      apenas em `lidiacrm_supabase_default`. Então é a essa rede que `app` e
+#      `worker` se anexam para alcançar `db:5432` — provado por um contêiner
+#      avulso: nela `db` resolve (172.16.2.3) e responde `server 15.8`.
+#
+# O nome dos serviços é contrato, não estética: `docker/scheduler/entrypoint.sh`
+# fala com `http://app:3000` — constante, não configurável — e o compose publica
+# o nome do serviço como alias de rede. Renomear `app` cala os 22 crons, e o
+# sintoma não é erro: a tela só fica velha.
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  app:
+    mem_limit: 768m
+    image: ${APP_IMAGE:-ghcr.io/melgarafael/deskcommcrm:1.10.1}
+    pull_policy: ${APP_PULL_POLICY:-missing}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      srh:
+        condition: service_started
+      waha:
+        condition: service_started
+    healthcheck:
+      # Probe TCP puro (node existe na imagem; curl/nc não). NÃO usar
+      # /api/v1/health: ele dá 503 quando WAHA ou Redis caem, e o `scheduler`
+      # depende de `app` estar healthy — uma dependência secundária derrubaria
+      # os crons.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('net').connect(3000,'127.0.0.1').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    logging: *default-logging
+    networks: [internal, supabase]
+
+  worker:
+    mem_limit: 512m
+    image: ${WORKER_IMAGE:-ghcr.io/melgarafael/deskcomm-worker:1.10.1}
+    pull_policy: ${WORKER_PULL_POLICY:-missing}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WAHA_API_BASE_URL: http://waha:3000
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8787/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging: *default-logging
+    # `supabase` também aqui: o worker abre pool direto no Postgres
+    # (lib/agent-engine/env.ts exige SUPABASE_DB_URL), e no prod.yml ele fica só
+    # na rede interna porque lá o banco é remoto.
+    networks: [internal, supabase]
+
+  waha:
+    mem_limit: 1280m
+    image: ${WAHA_IMAGE:-devlikeapro/waha:latest-2026.7.2}
+    restart: unless-stopped
+    environment:
+      WAHA_API_KEY: "sha512:${WAHA_API_KEY_SHA512}"
+      WHATSAPP_HOOK_URL: ${WAHA_WEBHOOK_BASE_URL}/api/v1/webhooks/waha
+      WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,session.status,state.change"
+      WHATSAPP_HOOK_HMAC: ${WAHA_HMAC_SECRET}
+      WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}
+      WAHA_DASHBOARD_ENABLED: "false"
+      WHATSAPP_RESTART_ALL_SESSIONS: "${WHATSAPP_RESTART_ALL_SESSIONS:-True}"
+    volumes:
+      - waha-data:/app/.sessions # sessões pareadas (QR) — perder = re-parear
+      - waha-media:/app/.media
+    logging: *default-logging
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    logging: *default-logging
+    networks: [internal]
+
+  srh:
+    image: hiett/serverless-redis-http@sha256:5b0bb9239fce53abf87b2018a7a0deb9ec7bd900c5360738fe5fbeeb426f9150
+    restart: unless-stopped
+    environment:
+      SRH_MODE: env
+      SRH_TOKEN: ${SRH_TOKEN}
+      SRH_CONNECTION_STRING: "redis://redis:6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    logging: *default-logging
+    networks: [internal]
+
+  scheduler:
+    image: ${SCHEDULER_IMAGE:-ghcr.io/melgarafael/deskcomm-scheduler:1.10.1}
+    pull_policy: ${SCHEDULER_PULL_POLICY:-missing}
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      TZ: UTC
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+    logging: *default-logging
+    networks: [internal]
+
+volumes:
+  waha-data:
+  waha-media:
+
+networks:
+  internal:
+    driver: bridge
+  # Criada pelo serviço `supabase` do mesmo projeto no painel. `external` porque
+  # não somos donos dela: declarar sem isso faria o compose tentar criá-la e
+  # falhar com "network declared as external, but could not be found" — ou pior,
+  # criar uma homônima vazia onde `db` não resolve.
+  supabase:
+    external: true
+    name: ${SUPABASE_NETWORK:-lidiacrm_supabase_default}
