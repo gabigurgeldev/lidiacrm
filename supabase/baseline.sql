@@ -10094,6 +10094,11 @@ alter table public.agent_inbox_items
     -- tratava `skipped` como sucesso, e a linha da fonte seguia dizendo `ready`.
     -- Irmão direto de `midia_nao_lida`: mesma chave, mesmo silêncio.
     'conhecimento_nao_indexado',
+    -- (migration 0204) Disparo em massa que o pacing vetou (warm-up, cap diario)
+    -- ou que esta falhando em serie fica parado com a razao na propria linha —
+    -- mas quem nao abrir a tela nao fica sabendo. Este kind leva o defeito a
+    -- Central de avisos. Entra NESTA lista, no fim, pela mesma razao das de cima.
+    'disparo_travado',
     'other'
   ));
 
@@ -17003,6 +17008,647 @@ revoke all     on function public.fn_conversation_assign(uuid, uuid, uuid, text,
 revoke execute on function public.fn_conversation_assign(uuid, uuid, uuid, text, uuid, boolean) from anon;
 grant  execute on function public.fn_conversation_assign(uuid, uuid, uuid, text, uuid, boolean)
   to authenticated, service_role;
+
+-- ---- Disparo em massa: campanha, destinatarios e o claim por numero (migration 0204) ----
+--
+-- Racional completo no cabecalho de
+-- `supabase/migrations/20260830180000_0204_disparo_em_massa.sql`. Em uma frase: o
+-- CRM sabia falar com UMA pessoa, e quem instala numa VPS com 400 clientes na
+-- planilha nao tinha caminho nenhum.
+--
+-- O que NAO esta aqui, de proposito: o valor `disparo_travado` de
+-- `agent_inbox_items.kind`. Ele entrou na lista CANONICA da constraint, la em
+-- cima, junto dos outros. Reconstruir a mesma constraint num segundo bloco e o
+-- padrao da issue #159 que `tests/unit/baseline-constraint-reconstruida.test.ts`
+-- proibe: os blocos antigos rodam antes e falham em cadeia no `update.sh` de um
+-- clone que ja tenha vocabulario posterior.
+--
+-- Nota de re-aplicacao: tudo aqui e auto-curativo. As tabelas sao
+-- `create table if not exists`; toda constraint e `drop ... if exists` antes do
+-- `add`; e todo indice e `if not exists`.
+--
+-- POSICAO NO ARQUIVO: este bloco entra ANTES da varredura de `anon`, que e o
+-- ultimo bloco do baseline de proposito. Colar apendice DEPOIS dela desarma a
+-- cura para tudo que vier em seguida: a funcao nova nasce com `EXECUTE` para
+-- `anon` (efeito do `alter default privileges` do corpo do dump, que fica no
+-- catalogo) e nao ha mais nada depois para tirar. Vigiado por
+-- `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`.
+--
+-- `fn_claim_due_bulk_sends` carrega o proprio `revoke ... from public, anon`
+-- mesmo assim: a varredura e a rede de seguranca, nao a permissao para nao
+-- escrever o revoke — e o par explicito e o que a doutrina de migrations cobra.
+-- ───────────────────────────── bulk_sends ────────────────────────────────────
+
+create table if not exists public.bulk_sends (
+  id                  uuid primary key default gen_random_uuid(),
+  organization_id     uuid not null references public.organizations(id) on delete cascade,
+  name                text not null,
+  status              text not null default 'draft',
+  channel_session_id  uuid not null references public.channel_sessions(id) on delete restrict,
+  -- Cópia FIXADA do provider no instante da criação, mesmo raciocínio de
+  -- `flow_versions.trigger_config` (0203). Referenciar `channel_sessions.provider`
+  -- deixaria uma campanha montada para canal oficial (template) trocar em
+  -- silêncio para QR se o número fosse re-pareado no meio da fila. Com a cópia,
+  -- o motor compara com a sessão viva e FALHA ALTO em vez de mandar a coisa
+  -- errada para o resto da lista.
+  provider            text not null,
+  mode                text not null,
+  -- Modo livre: o texto que sai igual para todo mundo.
+  body                text,
+  -- Modo template: a definição aprovada da plataforma e os valores das variáveis.
+  template_name       text,
+  template_language   text,
+  template_values     jsonb not null default '{}'::jsonb,
+  -- O "tempo de disparo" que o operador escolheu. Piso aplicado no motor.
+  interval_ms         integer not null default 5000,
+  -- null = começa assim que der start.
+  scheduled_for       timestamptz,
+  -- Relógio do produto: quando a próxima mensagem pode sair.
+  next_send_at        timestamptz,
+  -- Lease do motor: até quando este tique é dono da linha.
+  claimed_until       timestamptz,
+  -- outside_window | warmup_cap | daily_cap | operador
+  pause_reason        text,
+  -- A frase em pt-BR que o pacing produziu, para a tela não reescrever a régua.
+  pause_detail        text,
+  started_at          timestamptz,
+  finished_at         timestamptz,
+  created_by_user_id  uuid references auth.users(id) on delete set null,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now()
+);
+
+do $bulk_sends_checks$ begin
+  alter table public.bulk_sends drop constraint if exists bulk_sends_status_check;
+  alter table public.bulk_sends add constraint bulk_sends_status_check
+    check (status in ('draft','scheduled','running','paused','done','cancelled'));
+
+  alter table public.bulk_sends drop constraint if exists bulk_sends_mode_check;
+  alter table public.bulk_sends add constraint bulk_sends_mode_check
+    check (mode in ('freeform','template'));
+
+  alter table public.bulk_sends drop constraint if exists bulk_sends_pause_reason_check;
+  alter table public.bulk_sends add constraint bulk_sends_pause_reason_check
+    check (pause_reason is null
+           or pause_reason in ('outside_window','warmup_cap','daily_cap','operador'));
+
+  -- Coerência modo↔conteúdo no SCHEMA, não na prosa: um disparo em modo
+  -- template SEM definição sairia como texto vazio pelo canal oficial, e um em
+  -- modo livre sem corpo enviaria string vazia para a lista inteira.
+  alter table public.bulk_sends drop constraint if exists bulk_sends_modo_x_conteudo_check;
+  alter table public.bulk_sends add constraint bulk_sends_modo_x_conteudo_check
+    check (
+      (mode = 'template' and template_name is not null and template_language is not null)
+      or (mode = 'freeform' and body is not null and length(btrim(body)) > 0)
+    );
+
+  -- Mesma régua de KNOB_BOUNDS (lib/agent-engine/pacing/defaults.ts): a tela e o
+  -- banco recusam o mesmo intervalo. NÃO é o piso anti-ban — quem decide o ritmo
+  -- real é decidePacing, e este valor só COMPÕE com ele por Math.max. Existe
+  -- para zero e negativo não chegarem ao motor, e para 10min ser o teto dos dois
+  -- lados: acima disso é erro de digitação, não escolha.
+  alter table public.bulk_sends drop constraint if exists bulk_sends_interval_check;
+  alter table public.bulk_sends add constraint bulk_sends_interval_check
+    check (interval_ms between 1000 and 600000);
+end $bulk_sends_checks$;
+
+create index if not exists idx_bulk_sends_due
+  on public.bulk_sends (next_send_at)
+  where status = 'running';
+
+create index if not exists idx_bulk_sends_agendados
+  on public.bulk_sends (scheduled_for)
+  where status = 'scheduled';
+
+create index if not exists idx_bulk_sends_listagem
+  on public.bulk_sends (organization_id, created_at desc);
+
+-- Serve ao `not exists` do claim: "este número já tem outra campanha com lease
+-- vivo?". Sem ele a pergunta vira varredura da tabela a cada tique.
+create index if not exists idx_bulk_sends_por_numero
+  on public.bulk_sends (channel_session_id, claimed_until)
+  where status = 'running';
+
+-- Sem CHECK de vocabulário em `provider`, e é deliberado: a coluna é uma CÓPIA
+-- congelada de `channel_sessions.provider`, que já tem
+-- `channel_sessions_provider_check`. Repetir a lista aqui criaria um TERCEIRO
+-- lugar a editar quando um canal novo entrar (o quarto contando
+-- `lib/channels/capabilities.ts`), e o esquecido reprovaria o `update.sh` de um
+-- clone que já tem a linha nova. O valor só chega aqui vindo de uma sessão que
+-- passou pelo CHECK de lá, e o motor ainda o reconfere contra a sessão viva.
+comment on column public.bulk_sends.provider is
+  'Copia congelada de channel_sessions.provider no instante da criacao. Sem CHECK proprio de proposito: a lista canonica e a de channel_sessions_provider_check.';
+
+-- ─────────────────────── bulk_send_recipients ────────────────────────────────
+
+create table if not exists public.bulk_send_recipients (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  bulk_send_id     uuid not null references public.bulk_sends(id) on delete cascade,
+  contact_id       uuid not null references public.contacts(id) on delete cascade,
+  -- `sending` não é decoração: é o que torna a retomada pós-restart segura.
+  -- `sendMessageHandler` NÃO lança quando o envio falha — ele marca a linha de
+  -- `messages` e devolve normalmente. Entre marcar `sending` e ter o desfecho há
+  -- uma chamada de rede; um contêiner que morre no meio deixa a linha aqui. A
+  -- varredura do tique seguinte só a devolve para `pending` quando `message_id`
+  -- é nulo (nada chegou a ser criado). Com `message_id`, ela vai LER o estado
+  -- daquela mensagem e adotar o desfecho — nunca reenviar.
+  status           text not null default 'pending',
+  -- Por que NÃO recebeu. Resolvido na montagem da lista (o operador vê o recorte
+  -- antes de confirmar) ou no envio, quando a pessoa bloqueou no meio da campanha.
+  skip_reason      text,
+  -- Mensagem crua do transporte quando `failed`. Não é `skip_reason`: pulado é
+  -- decisão nossa e não se tenta de novo; falha é do mundo e se tenta.
+  error            text,
+  message_id       uuid references public.messages(id) on delete set null,
+  attempts         smallint not null default 0,
+  sent_at          timestamptz,
+  created_at       timestamptz not null default now()
+);
+
+do $bulk_recipients_checks$ begin
+  alter table public.bulk_send_recipients drop constraint if exists bulk_send_recipients_status_check;
+  alter table public.bulk_send_recipients add constraint bulk_send_recipients_status_check
+    check (status in ('pending','sending','sent','failed','skipped'));
+
+  -- O vocabulário é EXATAMENTE o de `MotivoDeBloqueio`
+  -- (`lib/automation/guarda-do-contato.ts`), menos `no_contact` — que nunca
+  -- chega a virar linha, porque a FK exige o contato para a linha existir.
+  -- Igualdade deliberada: uma camada de tradução entre o veredito da guarda e o
+  -- valor gravado seria mais um lugar para divergir, e o teste
+  -- `bulk-send-frases.test.ts` varre este CHECK cobrando frase para cada valor.
+  alter table public.bulk_send_recipients drop constraint if exists bulk_send_recipients_skip_reason_check;
+  alter table public.bulk_send_recipients add constraint bulk_send_recipients_skip_reason_check
+    check (skip_reason is null
+           or skip_reason in ('contact_blocked','consent_declined','no_phone','contact_anonymized','contact_merged'));
+
+  -- `skipped` SEM motivo é o silêncio que esta feature existe para não ter: a
+  -- tela não teria o que dizer ao operador, e o invariante 4 (nenhuma demanda
+  -- sem próximo passo) morreria numa linha em branco.
+  alter table public.bulk_send_recipients drop constraint if exists bulk_send_recipients_skip_tem_motivo;
+  alter table public.bulk_send_recipients add constraint bulk_send_recipients_skip_tem_motivo
+    check ((status = 'skipped') = (skip_reason is not null));
+end $bulk_recipients_checks$;
+
+-- A trava de não-duplicação: a mesma pessoa não entra duas vezes na mesma
+-- campanha, nem por planilha repetida, nem por corrida no motor.
+create unique index if not exists uniq_bulk_send_recipient
+  on public.bulk_send_recipients (bulk_send_id, contact_id);
+
+-- A fila que o motor consome: o próximo `pending` deste disparo.
+create index if not exists idx_bulk_send_recipients_fila
+  on public.bulk_send_recipients (bulk_send_id, id)
+  where status = 'pending';
+
+-- A tela de resultado agrupa por desfecho — e é o mesmo índice que serve à
+-- LISTA de disparos: um único `group by (bulk_send_id, status)` para a página
+-- inteira, em vez de um `count` por linha. É por isso que não há contador
+-- materializado em `bulk_sends`: ele teria DOIS escritores (a rota, que grava
+-- os pulados na montagem, e o motor, que grava os enviados) e divergiria.
+create index if not exists idx_bulk_send_recipients_desfecho
+  on public.bulk_send_recipients (bulk_send_id, status);
+
+-- A varredura de `sending` órfão do tique seguinte (contêiner que morreu no
+-- meio de um envio). `updated_at` não existe aqui de propósito: `created_at` +
+-- `sent_at` bastam, e o que decide a adoção é `message_id`, não o relógio.
+create index if not exists idx_bulk_send_recipients_em_voo
+  on public.bulk_send_recipients (bulk_send_id)
+  where status = 'sending';
+
+-- ───────────────────────────────── RLS ───────────────────────────────────────
+
+alter table public.bulk_sends           enable row level security;
+alter table public.bulk_send_recipients enable row level security;
+
+drop policy if exists tenant_isolation_bulk_sends_all on public.bulk_sends;
+create policy tenant_isolation_bulk_sends_all on public.bulk_sends
+  for all
+  using (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin())
+  with check (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+
+drop policy if exists tenant_isolation_bulk_send_recipients_all on public.bulk_send_recipients;
+create policy tenant_isolation_bulk_send_recipients_all on public.bulk_send_recipients
+  for all
+  using (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin())
+  with check (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+
+revoke all on public.bulk_sends           from anon, public;
+revoke all on public.bulk_send_recipients from anon, public;
+
+grant select, insert, update, delete on public.bulk_sends           to authenticated;
+grant select, insert, update, delete on public.bulk_send_recipients to authenticated;
+
+-- ───────────────────────────── o claim ───────────────────────────────────────
+--
+-- Mesmo desenho de `fn_claim_due_flow_executions` (0203), inclusive o rodízio
+-- por organização — uma org com dez campanhas não pode monopolizar o lote e
+-- deixar a campanha única de outra parada. As duas armadilhas herdadas:
+--
+--   1. `for update skip locked` NÃO convive com window function na mesma query,
+--      por isso a CTE `travados` é separada.
+--   2. `skip locked` sozinho NÃO impede duas conexões de reclamarem a mesma
+--      linha: as duas materializam os candidatos ANTES de qualquer lock, e a
+--      segunda, ao ganhar o lock, reavalia apenas o WHERE do UPDATE (READ
+--      COMMITTED). Por isso a condição de lease está REPETIDA no UPDATE.
+--
+-- Aqui o lease importa mais que no flow engine: entre reclamar e enviar há uma
+-- chamada de rede ao WhatsApp. Dois tiques donos da mesma campanha mandariam a
+-- mesma mensagem duas vezes para a mesma pessoa — e envio em dobro é pior que
+-- não-envio (mesma doutrina do `recover-stuck-messages`).
+--
+-- ─── A cláusula que as funções irmãs NÃO têm, e por que ela existe ───────────
+--
+-- O throttle anti-ban é POR NÚMERO (`channel_knobs` é chaveado em
+-- `channel_session_id`), mas o claim do follow-up e o do flow engine fazem
+-- rodízio por ORGANIZAÇÃO. Copiá-los sem mais nada deixaria duas campanhas do
+-- MESMO número rodando ao mesmo tempo — cada uma respeitando 1 msg/1,2s por si,
+-- e o número real saindo a 2 msg/1,2s. O anti-ban ficaria verde em toda medição
+-- individual e o cliente seria banido mesmo assim.
+--
+-- São duas travas, e as duas são necessárias:
+--   * `not exists (...)` — não reclama campanha cujo número já tem OUTRA com
+--     lease vivo (concorrência entre tiques distintos);
+--   * `distinct on (channel_session_id)` — o MESMO lote nunca entrega duas do
+--     mesmo número (concorrência dentro de um tique).
+
+create or replace function public.fn_claim_due_bulk_sends(p_limit int, p_lease_seconds int)
+returns setof public.bulk_sends
+language sql
+security definer
+set search_path = public
+as $claim$
+  with orgs as (
+    select distinct organization_id
+      from public.bulk_sends
+     where status = 'running'
+       and next_send_at <= now()
+  ),
+  fila as (
+    select f.id, f.channel_session_id, f.next_send_at, f.posicao_na_org
+      from orgs
+      cross join lateral (
+        select d.id,
+               d.channel_session_id,
+               d.next_send_at,
+               row_number() over (order by d.next_send_at) as posicao_na_org
+          from public.bulk_sends d
+         where d.organization_id = orgs.organization_id
+           and d.status = 'running'
+           and d.next_send_at <= now()
+           and (d.claimed_until is null or d.claimed_until < now())
+           -- O número já está ocupado por outra campanha viva — ver o cabeçalho.
+           and not exists (
+             select 1
+               from public.bulk_sends o
+              where o.channel_session_id = d.channel_session_id
+                and o.id <> d.id
+                and o.status = 'running'
+                and o.claimed_until is not null
+                and o.claimed_until > now()
+           )
+         order by d.next_send_at
+         limit p_limit
+      ) f
+  ),
+  -- Uma por número dentro do lote. `distinct on` exige que o `order by` comece
+  -- pela mesma expressão; a preferência real (rodízio, depois quem esperou mais)
+  -- vem depois dela e decide QUAL das do número entra.
+  um_por_numero as (
+    select distinct on (channel_session_id) id, next_send_at, posicao_na_org
+      from fila
+     order by channel_session_id, posicao_na_org, next_send_at
+  ),
+  escolhidos as (
+    select id from um_por_numero order by posicao_na_org, next_send_at limit p_limit
+  ),
+  travados as (
+    select b.id from public.bulk_sends b
+     where b.id in (select id from escolhidos)
+     for update skip locked
+  )
+  update public.bulk_sends b
+     set claimed_until = now() + make_interval(secs => p_lease_seconds),
+         updated_at = now()
+   where b.id in (select id from travados)
+     -- REPETIDA de propósito — ver o item 2 do cabeçalho acima.
+     and (b.claimed_until is null or b.claimed_until < now())
+  returning b.*;
+$claim$;
+
+-- Função em `public` nasce EXPOSTA por DUAS origens distintas, e tratar só uma
+-- deixa a RPC alcançável pela anon key: (A) o `alter default privileges ... to anon`
+-- do baseline, que `revoke from public` não remove; (B) o grant a PUBLIC que o
+-- Postgres dá a toda função ao criá-la, que `revoke from anon` não remove.
+revoke execute on function public.fn_claim_due_bulk_sends(int, int) from public, anon, authenticated;
+grant execute on function public.fn_claim_due_bulk_sends(int, int) to service_role;
+
+comment on table public.bulk_sends is
+  'Disparo em massa: uma campanha de mensagem para uma lista, por um numero. O ritmo real e o maximo entre interval_ms, channel_knobs.throttle_ms e capabilities.minIntervalMs — o operador pode ir mais devagar, nunca mais rapido.';
+
+comment on table public.bulk_send_recipients is
+  'Um destinatario de um disparo, com o desfecho individual. skipped = decisao nossa (bloqueado, sem telefone, recusou), com motivo obrigatorio; failed = o transporte recusou, e so isso se tenta de novo.';
+
+notify pgrst, 'reload schema';
+
+
+
+
+-- ---- Flow Engine: motor de automação por grafo com registry de nós (migration 0203) ----
+--
+-- Racional completo no cabeçalho de
+-- `supabase/migrations/20260830120000_0203_flow_engine.sql`. Em uma frase: o repo
+-- tinha dois motores de automação e nenhum deles admitia um TIPO DE NÓ NOVO sem
+-- editar cinco arquivos — o grafo do follow-up é uma união Zod fechada. Este bloco
+-- cria as quatro tabelas do motor com registry, mais o telefone de aviso do
+-- atendente (que não existia em coluna nenhuma do schema).
+--
+-- Nota de re-aplicação: tudo aqui é auto-curativo. As tabelas são
+-- `create table if not exists`; toda constraint é `drop ... if exists` antes do
+-- `add`; a coluna nova é `add column if not exists`; e o dado que violaria o
+-- CHECK de telefone é zerado ANTES de a constraint ser criada — senão o
+-- `update.sh` de um clone com telefone mal formatado quebraria.
+--
+-- Este bloco fica ANTES da varredura de `security definer` que fecha o arquivo.
+--
+-- ⚠️ ELE ESTAVA DEPOIS, e o comentário aqui afirmava que era de propósito. Era
+-- defeito: a varredura é o ÚLTIMO bloco justamente porque cura toda função
+-- criada até ali, e um apêndice depois dela fica de fora da cura. Reprovado por
+-- `tests/unit/varredura-anon-e-o-ultimo-bloco.test.ts`, que existe para isso.
+--
+-- `fn_claim_due_flow_executions` carrega o próprio `revoke ... from public, anon`
+-- de qualquer modo — cinto e suspensório, porque a varredura preserva o
+-- `service_role` que ela já tinha.
+-- ───────────────────────────── flows ─────────────────────────────────────────
+
+create table if not exists public.flows (
+  id                  uuid primary key default gen_random_uuid(),
+  organization_id     uuid not null references public.organizations(id) on delete cascade,
+  name                text not null,
+  folder              text,
+  status              text not null default 'draft',
+  active_version_id   uuid,
+  draft_graph         jsonb,
+  trigger_config      jsonb not null default '{"kind":"manual"}'::jsonb,
+  settings            jsonb not null default '{}'::jsonb,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now(),
+  created_by_user_id  uuid references auth.users(id) on delete set null
+);
+
+do $flows_status$ begin
+  alter table public.flows drop constraint if exists flows_status_check;
+  alter table public.flows add constraint flows_status_check
+    check (status in ('draft','active','paused'));
+end $flows_status$;
+
+create unique index if not exists uniq_flows_org_name
+  on public.flows (organization_id, lower(name));
+
+-- ─────────────────────────── flow_versions ───────────────────────────────────
+
+create table if not exists public.flow_versions (
+  id                    uuid primary key default gen_random_uuid(),
+  organization_id       uuid not null references public.organizations(id) on delete cascade,
+  flow_id               uuid not null references public.flows(id) on delete cascade,
+  version_number        integer not null,
+  graph                 jsonb not null,
+  -- Cópia fixada do gatilho no instante da publicação — ver cabeçalho.
+  trigger_config        jsonb not null,
+  published_by_user_id  uuid references auth.users(id) on delete set null,
+  published_at          timestamptz not null default now()
+);
+
+create unique index if not exists uniq_flow_versions_number
+  on public.flow_versions (flow_id, version_number);
+
+do $flows_fk$ begin
+  alter table public.flows drop constraint if exists flows_active_version_fk;
+  alter table public.flows add constraint flows_active_version_fk
+    foreign key (active_version_id) references public.flow_versions(id) on delete set null;
+end $flows_fk$;
+
+-- ────────────────────────── flow_executions ──────────────────────────────────
+
+create table if not exists public.flow_executions (
+  id                uuid primary key default gen_random_uuid(),
+  organization_id   uuid not null references public.organizations(id) on delete cascade,
+  flow_id           uuid not null references public.flows(id) on delete cascade,
+  version_id        uuid not null references public.flow_versions(id),
+  status            text not null default 'pending',
+  current_node_id   text not null,
+  next_eval_at      timestamptz,
+  claimed_until     timestamptz,
+  attempts          smallint not null default 0,
+  max_attempts      smallint not null default 5,
+  last_error        text,
+  steps_taken       smallint not null default 0,
+  outcome           text,
+  -- As variáveis da execução (`{{vars.*}}`). Escopo de execução, nunca de fluxo.
+  context           jsonb not null default '{}'::jsonb,
+  lead_id           uuid references public.crm_leads(id) on delete cascade,
+  contact_id        uuid references public.contacts(id) on delete cascade,
+  conversation_id   uuid references public.conversations(id) on delete set null,
+  -- `event_log.id`, SEM foreign key: o event_log é podado por retenção, e uma FK
+  -- faria a poda apagar histórico de execução junto (cascade fantasma).
+  trigger_event_id  uuid,
+  -- Anti-loop (profundidade 1): de onde veio, para o matcher não rearmar a si mesmo.
+  lineage           jsonb not null default '{}'::jsonb,
+  started_at        timestamptz not null default now(),
+  completed_at      timestamptz,
+  updated_at        timestamptz not null default now()
+);
+
+do $exec_checks$ begin
+  alter table public.flow_executions drop constraint if exists flow_executions_status_check;
+  alter table public.flow_executions add constraint flow_executions_status_check
+    check (status in ('pending','running','waiting','paused','completed','cancelled','dead'));
+
+  -- Estado com relógio TEM next_eval_at; pausado e terminais NÃO. Coerência no
+  -- schema, não na prosa — mesmo cinto do `followup_enrollments`.
+  alter table public.flow_executions drop constraint if exists flow_executions_clock_check;
+  alter table public.flow_executions add constraint flow_executions_clock_check
+    check (
+      (status in ('pending','running','waiting') and next_eval_at is not null)
+      or (status in ('paused','completed','cancelled','dead'))
+    );
+end $exec_checks$;
+
+create index if not exists idx_flow_executions_due
+  on public.flow_executions (next_eval_at)
+  where status in ('pending','running','waiting');
+
+create index if not exists idx_flow_executions_due_por_org
+  on public.flow_executions (organization_id, next_eval_at)
+  where status in ('pending','running','waiting');
+
+create index if not exists idx_flow_executions_listagem
+  on public.flow_executions (organization_id, flow_id, started_at desc);
+
+create index if not exists idx_flow_executions_erros
+  on public.flow_executions (organization_id, started_at desc)
+  where status = 'dead';
+
+-- UM evento arma um fluxo no máximo uma vez. É este índice que torna o matcher
+-- seguro sob reentrega do drain — sem ele, um retry duplicaria a automação.
+create unique index if not exists uniq_flow_executions_trigger_event
+  on public.flow_executions (flow_id, trigger_event_id)
+  where trigger_event_id is not null;
+
+-- ──────────────────────── flow_execution_events ──────────────────────────────
+
+create table if not exists public.flow_execution_events (
+  id               uuid primary key default gen_random_uuid(),
+  organization_id  uuid not null references public.organizations(id) on delete cascade,
+  execution_id     uuid not null references public.flow_executions(id) on delete cascade,
+  node_id          text,
+  event_type       text not null,
+  payload          jsonb not null default '{}'::jsonb,
+  idempotency_key  text,
+  created_at       timestamptz not null default now()
+);
+
+create unique index if not exists uniq_flow_execution_events_idem
+  on public.flow_execution_events (execution_id, idempotency_key)
+  where idempotency_key is not null;
+
+create index if not exists idx_flow_execution_events_trilha
+  on public.flow_execution_events (execution_id, created_at);
+
+-- ──────────────── attendant_availability.notification_phone ──────────────────
+
+alter table public.attendant_availability
+  add column if not exists notification_phone text;
+
+comment on column public.attendant_availability.notification_phone is
+  'E.164 para onde o Flow Engine avisa este atendente (no whatsapp.notify_user). Por organizacao: a mesma pessoa em dois tenants pode ter dois numeros.';
+
+-- Corrige o dado ANTES da constraint: um clone com telefone fora do formato
+-- travaria o update.sh. O que não casa o formato vira NULL.
+update public.attendant_availability
+   set notification_phone = null
+ where notification_phone is not null
+   and notification_phone !~ '^\+[0-9]{8,15}$';
+
+do $phone_check$ begin
+  alter table public.attendant_availability
+    drop constraint if exists attendant_availability_notification_phone_e164;
+  alter table public.attendant_availability
+    add constraint attendant_availability_notification_phone_e164
+    check (notification_phone is null or notification_phone ~ '^\+[0-9]{8,15}$');
+end $phone_check$;
+
+-- ───────────────────────────────── RLS ───────────────────────────────────────
+
+alter table public.flows                 enable row level security;
+alter table public.flow_versions         enable row level security;
+alter table public.flow_executions       enable row level security;
+alter table public.flow_execution_events enable row level security;
+
+drop policy if exists tenant_isolation_flows_all on public.flows;
+create policy tenant_isolation_flows_all on public.flows
+  for all
+  using (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin())
+  with check (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+
+drop policy if exists tenant_isolation_flow_versions_all on public.flow_versions;
+create policy tenant_isolation_flow_versions_all on public.flow_versions
+  for all
+  using (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin())
+  with check (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+
+drop policy if exists tenant_isolation_flow_executions_all on public.flow_executions;
+create policy tenant_isolation_flow_executions_all on public.flow_executions
+  for all
+  using (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin())
+  with check (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+
+drop policy if exists tenant_isolation_flow_execution_events_all on public.flow_execution_events;
+create policy tenant_isolation_flow_execution_events_all on public.flow_execution_events
+  for all
+  using (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin())
+  with check (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+
+revoke all on public.flows                 from anon, public;
+revoke all on public.flow_versions         from anon, public;
+revoke all on public.flow_executions       from anon, public;
+revoke all on public.flow_execution_events from anon, public;
+
+grant select, insert, update, delete on public.flows           to authenticated;
+grant select, insert, update, delete on public.flow_versions   to authenticated;
+grant select, insert, update, delete on public.flow_executions to authenticated;
+grant select, insert                 on public.flow_execution_events to authenticated;
+
+-- ───────────────────────────── o claim ───────────────────────────────────────
+--
+-- Cópia deliberada de `fn_claim_due_followup_enrollments` NA VERSÃO JUSTA
+-- (migration 0146): rodízio por organização, para uma org com fila grande não
+-- monopolizar o lote. Duas armadilhas herdadas com o desenho, as duas comentadas
+-- onde importam:
+--
+--   1. `for update skip locked` NÃO convive com window function na mesma query —
+--      por isso a CTE `travados` é separada.
+--   2. `skip locked` sozinho NÃO impede duas conexões de reclamarem a mesma
+--      linha: as duas materializam a lista de candidatos ANTES de qualquer lock
+--      existir, e a segunda, ao ganhar o lock, reavalia apenas o WHERE do UPDATE
+--      (READ COMMITTED). Por isso a condição de lease está REPETIDA no UPDATE.
+
+create or replace function public.fn_claim_due_flow_executions(p_limit int, p_lease_seconds int)
+returns setof public.flow_executions
+language sql
+security definer
+set search_path = public
+as $claim$
+  with orgs as (
+    select distinct organization_id
+      from public.flow_executions
+     where status in ('pending','running','waiting')
+       and next_eval_at <= now()
+  ),
+  fila as (
+    select f.id, f.next_eval_at, f.posicao_na_org
+      from orgs
+      cross join lateral (
+        select d.id,
+               d.next_eval_at,
+               row_number() over (order by d.next_eval_at) as posicao_na_org
+          from public.flow_executions d
+         where d.organization_id = orgs.organization_id
+           and d.status in ('pending','running','waiting')
+           and d.next_eval_at <= now()
+           and (d.claimed_until is null or d.claimed_until < now())
+         order by d.next_eval_at
+         limit p_limit
+      ) f
+  ),
+  escolhidos as (
+    -- Posição 1 de todas as organizações, depois a 2 de todas. Empate na mesma
+    -- posição vai para quem esperou mais.
+    select id from fila order by posicao_na_org, next_eval_at limit p_limit
+  ),
+  travados as (
+    select e.id from public.flow_executions e
+     where e.id in (select id from escolhidos)
+     for update skip locked
+  )
+  update public.flow_executions e
+     set claimed_until = now() + make_interval(secs => p_lease_seconds),
+         updated_at = now()
+   where e.id in (select id from travados)
+     -- REPETIDA de propósito — ver o item 2 do cabeçalho acima.
+     and (e.claimed_until is null or e.claimed_until < now())
+  returning e.*;
+$claim$;
+
+-- Função em `public` nasce EXPOSTA por DUAS origens distintas, e tratar só uma
+-- deixa a RPC alcançável pela anon key: (A) o `alter default privileges ... to anon`
+-- do baseline, que `revoke from public` não remove; (B) o grant a PUBLIC que o
+-- Postgres dá a toda função ao criá-la, que `revoke from anon` não remove.
+revoke execute on function public.fn_claim_due_flow_executions(int, int) from public, anon, authenticated;
+grant execute on function public.fn_claim_due_flow_executions(int, int) to service_role;
+
+
+
+
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

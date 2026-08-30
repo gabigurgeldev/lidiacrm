@@ -24,6 +24,7 @@ import {
   ListChecks,
   Lock,
   Palette,
+  PaperPlaneTilt,
   Plugs,
   PlugsConnected,
   PuzzlePiece,
@@ -183,8 +184,46 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     group: "atendimento",
     sidebar: true,
   },
+  {
+    // Fica em "atendimento" e não em "crm" porque o que se faz aqui é FALAR com
+    // gente pelo WhatsApp — o mesmo verbo do Inbox, só que com muitas pessoas de
+    // uma vez. O CRM é onde se move o funil; o disparo é onde se manda mensagem.
+    //
+    // `manager`: mandar a mesma mensagem para 400 pessoas é a ação de maior
+    // alcance que o produto oferece, e a que mais pode custar o número do
+    // cliente se for feita errado.
+    href: "/app/disparos",
+    label: "Disparo em massa",
+    description:
+      "Fale com uma lista de contatos pelo WhatsApp, no ritmo que o número aguenta, e veja pessoa a pessoa o que saiu.",
+    icon: PaperPlaneTilt,
+    group: "atendimento",
+    minRole: "manager",
+    sidebar: true,
+  },
 
   // ---- CRM — o funil ----
+  {
+    href: "/app/flows",
+    label: "Fluxos",
+    description:
+      "Monte no quadro o que o sistema faz sozinho: distribuir o lead, avisar quem atende, esperar e cobrar.",
+    icon: FlowArrow,
+    group: "crm",
+    minRole: "manager",
+    sidebar: true,
+  },
+  {
+    // Sem `sidebar`: fica no hub do grupo. A lista de fluxos já leva para cá, e
+    // duas entradas na barra para o mesmo assunto competem por atenção.
+    href: "/app/flows/execucoes",
+    label: "Execuções dos fluxos",
+    description:
+      "O que os seus fluxos fizeram, passo a passo — e o que parou no meio, com o motivo.",
+    icon: ClockCountdown,
+    group: "crm",
+    minRole: "manager",
+  },
   {
     // ⚠️ ERA "Kanban", e a URL continua sendo. O nome saiu da interface porque o
     // produto tinha CINCO vocabulários para a mesma coisa — "Kanban" no menu,
