@@ -39,7 +39,7 @@ x-logging: &default-logging
 services:
   app:
     mem_limit: 768m
-    image: ${APP_IMAGE:-ghcr.io/melgarafael/deskcommcrm:1.10.1}
+    image: ${APP_IMAGE:-ghcr.io/gabigurgeldev/deskcommcrm:1.11.0}
     pull_policy: ${APP_PULL_POLICY:-missing}
     restart: unless-stopped
     env_file: .env
@@ -69,7 +69,7 @@ services:
 
   worker:
     mem_limit: 512m
-    image: ${WORKER_IMAGE:-ghcr.io/melgarafael/deskcomm-worker:1.10.1}
+    image: ${WORKER_IMAGE:-ghcr.io/gabigurgeldev/deskcomm-worker:1.11.0}
     pull_policy: ${WORKER_PULL_POLICY:-missing}
     restart: unless-stopped
     env_file: .env
@@ -131,7 +131,7 @@ services:
     networks: [internal]
 
   scheduler:
-    image: ${SCHEDULER_IMAGE:-ghcr.io/melgarafael/deskcomm-scheduler:1.10.1}
+    image: ${SCHEDULER_IMAGE:-ghcr.io/gabigurgeldev/deskcomm-scheduler:1.11.0}
     pull_policy: ${SCHEDULER_PULL_POLICY:-missing}
     restart: unless-stopped
     depends_on:
