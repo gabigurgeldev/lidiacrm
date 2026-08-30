@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Flow Engine — o lead entra, o fluxo age",
+    "subtitle": "Do INSERT em crm_leads à mensagem no WhatsApp do vendedor, e de volta ao funil quando ninguém atende",
+    "output": "flow-engine.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "origem", "label": "O que dispara" },
+    { "id": "barramento", "label": "Barramento e gatilho" },
+    { "id": "motor", "label": "Motor" },
+    { "id": "nos", "label": "Os blocos" },
+    { "id": "efeito", "label": "Efeito no mundo" },
+    { "id": "tela", "label": "Tela" }
+  ],
+  "mainPath": [
+    "crm_leads",
+    "event_log",
+    "matcher",
+    "flow_executions",
+    "tick",
+    "no_rodizio",
+    "no_aviso",
+    "envio",
+    "execucoes_tela"
+  ],
+  "nodes": [
+    { "id": "crm_leads", "lane": "origem", "col": 0, "type": "table", "label": "crm_leads", "sublabel": "trigger fn_emit_event_on_lead_change" },
+    { "id": "construtor", "lane": "tela", "col": 0, "type": "frontend", "label": "/app/flows/[id]", "sublabel": "canvas, ssr:false" },
+
+    { "id": "event_log", "lane": "barramento", "col": 1, "type": "table", "label": "event_log", "sublabel": "lead.created" },
+    { "id": "flows", "lane": "motor", "col": 1, "type": "table", "label": "flows", "sublabel": "ponteiro mutável" },
+    { "id": "publish", "lane": "tela", "col": 1, "type": "route", "label": "POST /flows/[id]/publish", "sublabel": "valida e congela" },
+
+    { "id": "matcher", "lane": "barramento", "col": 2, "type": "lib", "label": "flowTriggerHandler", "sublabel": "eventos derivados do registry" },
+    { "id": "flow_versions", "lane": "motor", "col": 2, "type": "table", "label": "flow_versions", "sublabel": "grafo imutável + gatilho fixado" },
+
+    { "id": "flow_executions", "lane": "motor", "col": 3, "type": "table", "label": "flow_executions", "sublabel": "um cursor, next_eval_at" },
+    { "id": "cron", "lane": "barramento", "col": 3, "type": "route", "label": "cron flow-engine-worker", "sublabel": "1×/min" },
+
+    { "id": "claim", "lane": "motor", "col": 4, "type": "database", "label": "fn_claim_due_flow_executions", "sublabel": "rodízio por org, skip locked" },
+    { "id": "registry", "lane": "nos", "col": 4, "type": "lib", "label": "FlowNodeRegistry", "sublabel": "11 blocos, extensível" },
+
+    { "id": "tick", "lane": "motor", "col": 5, "type": "service", "label": "rodarTickDeFluxos", "sublabel": "caminha até esperar ou terminar" },
+    { "id": "passos", "lane": "motor", "col": 5, "type": "table", "label": "flow_execution_events", "sublabel": "append-only, idempotente" },
+
+    { "id": "no_decide", "lane": "nos", "col": 5, "type": "lib", "label": "logic.if", "sublabel": "17 operadores, puro" },
+    { "id": "no_rodizio", "lane": "nos", "col": 5, "type": "lib", "label": "routing.round_robin", "sublabel": "reusa selectRoundRobin" },
+    { "id": "no_espera", "lane": "nos", "col": 5, "type": "lib", "label": "logic.wait", "sublabel": "espera persistida" },
+    { "id": "no_aviso", "lane": "nos", "col": 5, "type": "lib", "label": "whatsapp.notify_user", "sublabel": "telefone do atendente" },
+
+    { "id": "elegiveis", "lane": "efeito", "col": 6, "type": "lib", "label": "loadEligibleAttendants", "sublabel": "disponível, horário, capacidade" },
+    { "id": "envio", "lane": "efeito", "col": 6, "type": "service", "label": "sendMessageHandler", "sublabel": "os 10 gates do before_send" },
+    { "id": "atribuicao", "lane": "efeito", "col": 6, "type": "table", "label": "crm_leads.owner_user_id", "sublabel": "o lead ganha dono" },
+    { "id": "avisos", "lane": "efeito", "col": 6, "type": "table", "label": "agent_inbox_items", "sublabel": "execução morta abre aviso" },
+
+    { "id": "execucoes_tela", "lane": "tela", "col": 7, "type": "frontend", "label": "/app/flows/execucoes", "sublabel": "o que rodou e o que parou" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "crm_leads", "to": "event_log", "label": "emit_event" },
+    { "id": "e2", "from": "event_log", "to": "matcher", "label": "drain" },
+    { "id": "e3", "from": "matcher", "to": "flows", "label": "quais estão ativos" },
+    { "id": "e4", "from": "matcher", "to": "flow_versions", "label": "acha o bloco de início" },
+    { "id": "e5", "from": "matcher", "to": "flow_executions", "label": "cria (unique por evento)" },
+    { "id": "e6", "from": "construtor", "to": "publish", "label": "publica" },
+    { "id": "e7", "from": "publish", "to": "flow_versions", "label": "congela o grafo" },
+    { "id": "e8", "from": "publish", "to": "flows", "label": "aponta a versão ativa" },
+    { "id": "e9", "from": "cron", "to": "claim", "label": "reclama vencidas" },
+    { "id": "e10", "from": "claim", "to": "flow_executions", "label": "lease de 120s" },
+    { "id": "e11", "from": "claim", "to": "tick", "label": "o lote" },
+    { "id": "e12", "from": "tick", "to": "flow_versions", "label": "lê o grafo fixado" },
+    { "id": "e13", "from": "tick", "to": "registry", "label": "resolve o tipo do bloco" },
+    { "id": "e14", "from": "registry", "to": "no_decide", "label": "" },
+    { "id": "e15", "from": "registry", "to": "no_rodizio", "label": "" },
+    { "id": "e16", "from": "registry", "to": "no_espera", "label": "" },
+    { "id": "e17", "from": "registry", "to": "no_aviso", "label": "" },
+    { "id": "e18", "from": "no_rodizio", "to": "elegiveis", "label": "quem pode receber" },
+    { "id": "e19", "from": "no_rodizio", "to": "atribuicao", "label": "entrega o lead" },
+    { "id": "e20", "from": "no_aviso", "to": "envio", "label": "texto ao vendedor" },
+    { "id": "e21", "from": "tick", "to": "passos", "label": "grava cada passo" },
+    { "id": "e22", "from": "tick", "to": "flow_executions", "label": "persiste o estado" },
+    { "id": "e23", "from": "tick", "to": "avisos", "label": "quando morre" },
+    { "id": "e24", "from": "flow_executions", "to": "execucoes_tela", "label": "lista e erros" },
+    { "id": "e25", "from": "passos", "to": "execucoes_tela", "label": "a trilha" },
+    { "id": "e26", "from": "no_espera", "to": "flow_executions", "label": "next_eval_at" },
+    { "id": "e27", "from": "construtor", "to": "registry", "label": "paleta e saídas" },
+    { "id": "e28", "from": "no_decide", "to": "tick", "label": "o ramo escolhido" }
+  ]
+}
