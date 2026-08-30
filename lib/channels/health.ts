@@ -183,11 +183,45 @@ export async function listarConexoesCaidas(
     .is("archived_at", null)
     .in("status", [...STATUS_QUE_AVISAM]);
 
-  return (data ?? []).map((s) => ({
-    id: s.id as string,
-    apelido: (s.display_name as string | null) ?? (s.phone_number as string | null) ?? "sem nome",
-    status: (s.status as string | null) ?? "",
-  }));
+  return conexoesCaidasDe(data ?? []);
+}
+
+/**
+ * A REGRA, separada de quem busca as linhas.
+ *
+ * Existe porque a faixa (`components/app/ConexaoCaidaBanner.tsx`) é renderizada
+ * pelo layout de /app — um Server Component que NÃO re-renderiza em navegação
+ * client-side. Ela congelava no estado do pareamento: numa instalação real o
+ * dono leu "WhatsApp sem nome está desconectado" com as duas conexões já em
+ * WORKING, porque a faixa era do momento do QR e a página nunca recarregou.
+ *
+ * Para a faixa se atualizar sozinha ela precisa aplicar esta mesma regra sobre
+ * o que o cliente já busca. Duplicar `STATUS_QUE_AVISAM` e o fallback do apelido
+ * lá seria a duplicação sem fonte única do anti-pattern nº 2 — e divergiria no
+ * primeiro status acrescentado, com o gate verde.
+ *
+ * Pura de propósito: sem Supabase, sem `await`. Serve servidor e browser.
+ */
+export function conexoesCaidasDe(
+  linhas: ReadonlyArray<{
+    id: string;
+    display_name?: string | null;
+    phone_number?: string | null;
+    status?: string | null;
+    archived_at?: string | null;
+  }>,
+): ConexaoCaida[] {
+  const avisam = new Set<string>(STATUS_QUE_AVISAM);
+  return linhas
+    // `archived_at` só chega quando quem chama o traz; a consulta acima já o
+    // filtra no banco. Repetir aqui protege o caminho do cliente, cuja rota de
+    // listagem pode um dia passar a devolver arquivadas.
+    .filter((s) => !s.archived_at && avisam.has(s.status ?? ""))
+    .map((s) => ({
+      id: s.id,
+      apelido: s.display_name ?? s.phone_number ?? "sem nome",
+      status: s.status ?? "",
+    }));
 }
 
 interface SessaoParaVigiar {
