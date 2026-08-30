@@ -6283,6 +6283,177 @@ export const DICIONARIO: Traducoes = {
   "tokens": { es: "tokens" },
   "Voltar para": { es: "Volver a" },
   "Ir para outra organização": { es: "Ir a otra organización" },
+
+  // ─── Fluxos (Flow Engine) ───
+  //
+  // Inclui rótulos que NÃO vêm de `t("literal")` e sim do registry de nós
+  // (`t(no.rotulo)`, `t(ramo.label)`, `t(NOME_DO_OPERADOR[op])`). O guarda de
+  // i18n não os cobra — ele só coleta chave literal —, mas sem estas linhas
+  // quem escolheu espanhol veria a paleta inteira em português. Degradar para
+  // o português é o comportamento previsto; deixar por isso mesmo, quando a
+  // tradução é barata, seria escolher a degradação.
+  "Execuções dos fluxos": { es: "Ejecuciones de los flujos" },
+  "Monte no quadro o que o sistema faz sozinho: distribuir, avisar, esperar e cobrar.":
+    { es: "Arme en el tablero lo que el sistema hace solo: repartir, avisar, esperar y cobrar." },
+  "Monte no quadro o que o sistema faz sozinho: distribuir o lead, avisar quem atende, esperar e cobrar.":
+    { es: "Arme en el tablero lo que el sistema hace solo: repartir el lead, avisar a quien atiende, esperar y cobrar." },
+  "O que os seus fluxos fizeram, passo a passo — e o que parou no meio.":
+    { es: "Lo que hicieron sus flujos, paso a paso — y lo que se detuvo a mitad de camino." },
+  "O que os seus fluxos fizeram, passo a passo — e o que parou no meio, com o motivo.":
+    { es: "Lo que hicieron sus flujos, paso a paso — y lo que se detuvo a mitad de camino, con el motivo." },
+
+  // Lista de fluxos
+  "Nome do fluxo — por exemplo, Novo lead do Meta Ads":
+    { es: "Nombre del flujo — por ejemplo, Nuevo lead de Meta Ads" },
+  "Fluxo criado. Abra para montar.": { es: "Flujo creado. Ábralo para armarlo." },
+  "Não consegui criar o fluxo.": { es: "No pude crear el flujo." },
+  "Não consegui mudar o estado.": { es: "No pude cambiar el estado." },
+  "Você ainda não tem nenhum fluxo.": { es: "Todavía no tiene ningún flujo." },
+  "Um fluxo é uma sequência que roda sozinha quando algo acontece — por exemplo: chegou um lead, distribua para um vendedor, avise ele no WhatsApp e, se ninguém atender em 5 minutos, passe para outro.":
+    { es: "Un flujo es una secuencia que corre sola cuando algo pasa — por ejemplo: llegó un lead, repártalo a un vendedor, avísele por WhatsApp y, si nadie atiende en 5 minutos, páselo a otro." },
+  "Publicado e pronto para ligar.": { es: "Publicado y listo para encender." },
+  "Rascunho — publique antes de ligar.": { es: "Borrador — publique antes de encender." },
+  "Ligado": { es: "Encendido" },
+  "Abrir": { es: "Abrir" },
+  "Fluxo ligado.": { es: "Flujo encendido." },
+  "Fluxo pausado.": { es: "Flujo pausado." },
+
+  // Construtor
+  "Nunca publicado": { es: "Nunca publicado" },
+  "Fluxo publicado. Volte à lista para ligá-lo.":
+    { es: "Flujo publicado. Vuelva a la lista para encenderlo." },
+  "Não consegui publicar.": { es: "No pude publicar." },
+
+  // Painel do bloco
+  "Nome deste bloco": { es: "Nombre de este bloque" },
+  "É só o nome que aparece no quadro. Mudar não desliga nenhuma ligação.":
+    { es: "Es solo el nombre que aparece en el tablero. Cambiarlo no desconecta ninguna unión." },
+  "Remover este bloco": { es: "Quitar este bloque" },
+  "Este bloco não tem ajustes.": { es: "Este bloque no tiene ajustes." },
+  "Este fluxo começa sozinho toda vez que um lead novo entra no funil.":
+    { es: "Este flujo empieza solo cada vez que un lead nuevo entra al embudo." },
+  "Esperar quantos minutos?": { es: "¿Esperar cuántos minutos?" },
+  "Mínimo de 5 minutos — abaixo disso o relógio do sistema não distingue.":
+    { es: "Mínimo de 5 minutos — por debajo de eso el reloj del sistema no distingue." },
+  "Como registrar o fim": { es: "Cómo registrar el final" },
+  "Aparece na tela de Execuções, para você separar o que deu certo do que não deu.":
+    { es: "Aparece en la pantalla de Ejecuciones, para separar lo que salió bien de lo que no." },
+  "Marcador": { es: "Etiqueta" },
+  "Quem fica com o lead": { es: "Quién se queda con el lead" },
+  "Use {{vars.dono_escolhido}} para pegar quem o bloco de distribuição escolheu, ou cole o identificador de uma pessoa.":
+    { es: "Use {{vars.dono_escolhido}} para tomar a quien eligió el bloque de reparto, o pegue el identificador de una persona." },
+  "Cole o identificador, ou use a variável do bloco de distribuição":
+    { es: "Pegue el identificador, o use la variable del bloque de reparto" },
+  "Contar a partir de quando": { es: "Contar desde cuándo" },
+  "Do começo do fluxo": { es: "Desde el comienzo del flujo" },
+  "De quando o lead foi entregue": { es: "Desde que el lead fue entregado" },
+  "Se não houver ninguém disponível": { es: "Si no hay nadie disponible" },
+  "Esperar e tentar de novo": { es: "Esperar e intentar de nuevo" },
+  "Seguir pela saída 'Ninguém disponível'": { es: "Seguir por la salida 'Nadie disponible'" },
+  "Fora do horário comercial não há ninguém disponível, e isso não é erro — por isso o padrão é esperar.":
+    { es: "Fuera del horario comercial no hay nadie disponible, y eso no es un error — por eso lo predeterminado es esperar." },
+  "Tentar de novo depois de quantos minutos?": { es: "¿Intentar de nuevo después de cuántos minutos?" },
+  "Mensagem para o vendedor": { es: "Mensaje para el vendedor" },
+  "Vai para o WhatsApp de quem está com o lead. Use {{lead.title}}, {{lead.score}} e {{contact.phone_number}} para incluir os dados.":
+    { es: "Va al WhatsApp de quien tiene el lead. Use {{lead.title}}, {{lead.score}} y {{contact.phone_number}} para incluir los datos." },
+  "O telefone de aviso de cada pessoa fica em Ajustes. Sem ele, o fluxo segue pela saída 'Sem telefone cadastrado'.":
+    { es: "El teléfono de aviso de cada persona está en Ajustes. Sin él, el flujo sigue por la salida 'Sin teléfono registrado'." },
+  "Título do aviso": { es: "Título del aviso" },
+  "Texto do aviso": { es: "Texto del aviso" },
+  "Gravidade": { es: "Gravedad" },
+  "Informação": { es: "Información" },
+
+  // Decisão
+  "A primeira condição verdadeira vence. O que não bater em nenhuma sai pelo 'Nenhuma delas'.":
+    { es: "Gana la primera condición verdadera. Lo que no coincida con ninguna sale por 'Ninguna de ellas'." },
+  "Nome desta saída": { es: "Nombre de esta salida" },
+  "Nova condição": { es: "Nueva condición" },
+  "Acrescentar saída": { es: "Agregar salida" },
+  "Remover esta saída": { es: "Quitar esta salida" },
+
+  // Operadores (vêm de NOME_DO_OPERADOR — `t()` dinâmico)
+  "é igual a": { es: "es igual a" },
+  "é diferente de": { es: "es distinto de" },
+  "é maior que": { es: "es mayor que" },
+  "é maior ou igual a": { es: "es mayor o igual a" },
+  "é menor que": { es: "es menor que" },
+  "é menor ou igual a": { es: "es menor o igual a" },
+  "não contém": { es: "no contiene" },
+  "começa com": { es: "empieza con" },
+  "termina com": { es: "termina con" },
+  "está em branco": { es: "está vacío" },
+  "está preenchido": { es: "está completo" },
+  "está na lista": { es: "está en la lista" },
+  "não está na lista": { es: "no está en la lista" },
+  "casa com o padrão": { es: "coincide con el patrón" },
+  "é antes de": { es: "es antes de" },
+  "é depois de": { es: "es después de" },
+  "está entre": { es: "está entre" },
+
+  // Paleta: categorias e blocos (vêm do registry — `t()` dinâmico)
+  "Começo": { es: "Comienzo" },
+  "Decisão e tempo": { es: "Decisión y tiempo" },
+  "Distribuição": { es: "Reparto" },
+  "Avisos": { es: "Avisos" },
+  "Quando um lead é criado": { es: "Cuando se crea un lead" },
+  "Começa o fluxo toda vez que um lead novo entra no funil.":
+    { es: "Empieza el flujo cada vez que un lead nuevo entra al embudo." },
+  "Decidir": { es: "Decidir" },
+  "Segue por um caminho diferente conforme o que for verdade sobre o lead.":
+    { es: "Sigue por un camino distinto según lo que sea verdad sobre el lead." },
+  "Esperar": { es: "Esperar" },
+  "Segura o fluxo por um tempo antes de continuar.":
+    { es: "Detiene el flujo un tiempo antes de continuar." },
+  "Encerra o fluxo com um desfecho que aparece no relatório.":
+    { es: "Cierra el flujo con un desenlace que aparece en el informe." },
+  "Marcar o lead": { es: "Etiquetar el lead" },
+  "Põe um marcador no lead, para achar e filtrar depois.":
+    { es: "Pone una etiqueta en el lead, para encontrarlo y filtrarlo después." },
+  "Definir o dono do lead": { es: "Definir el dueño del lead" },
+  "Entrega o lead a uma pessoa específica.": { es: "Entrega el lead a una persona específica." },
+  "O vendedor já falou com o lead?": { es: "¿El vendedor ya habló con el lead?" },
+  "Verifica se saiu alguma mensagem para o lead depois que ele foi distribuído.":
+    { es: "Verifica si salió algún mensaje para el lead después de que fue repartido." },
+  "Distribuir para um vendedor": { es: "Repartir a un vendedor" },
+  "Entrega o lead ao próximo da fila entre quem está disponível agora.":
+    { es: "Entrega el lead al siguiente de la fila entre quienes están disponibles ahora." },
+  "Passar para outro vendedor": { es: "Pasar a otro vendedor" },
+  "Tira o lead de quem não atendeu e entrega ao próximo da fila.":
+    { es: "Le quita el lead a quien no atendió y lo entrega al siguiente de la fila." },
+  "Avisar o vendedor no WhatsApp": { es: "Avisar al vendedor por WhatsApp" },
+  "Manda uma mensagem para o WhatsApp de quem atende, com os dados do lead.":
+    { es: "Manda un mensaje al WhatsApp de quien atiende, con los datos del lead." },
+  "Abrir aviso na Central": { es: "Abrir aviso en la Central" },
+  "Registra um aviso na Central para quem administra ver e resolver.":
+    { es: "Registra un aviso en la Central para que quien administra lo vea y lo resuelva." },
+
+  // Saídas dos blocos (vêm de `branches` — `t()` dinâmico)
+  "Começa aqui": { es: "Empieza aquí" },
+  "Depois da espera": { es: "Después de la espera" },
+  "Depois de marcar": { es: "Después de etiquetar" },
+  "Depois de definir": { es: "Después de definir" },
+  "Depois de distribuir": { es: "Después de repartir" },
+  "Depois de passar adiante": { es: "Después de pasarlo adelante" },
+  "Depois de avisar": { es: "Después de avisar" },
+  "Ninguém disponível": { es: "Nadie disponible" },
+  "Sim, já falou": { es: "Sí, ya habló" },
+  "Ainda não falou": { es: "Todavía no habló" },
+  "Sem telefone cadastrado": { es: "Sin teléfono registrado" },
+  "Não saiu agora": { es: "No salió ahora" },
+
+  // Execuções
+  "Esperando": { es: "Esperando" },
+  "Concluídas": { es: "Concluidas" },
+  "Pararam com erro": { es: "Se detuvieron con error" },
+  "Nada por aqui ainda.": { es: "Todavía no hay nada por aquí." },
+  "Assim que um fluxo ligado for disparado por um lead novo, a execução dele aparece nesta lista.":
+    { es: "En cuanto un flujo encendido sea disparado por un lead nuevo, su ejecución aparece en esta lista." },
+  "Parou no bloco": { es: "Se detuvo en el bloque" },
+  "passos": { es: "pasos" },
+  "Na fila": { es: "En la fila" },
+  "Rodando": { es: "Corriendo" },
+  "Parou com erro": { es: "Se detuvo con error" },
+
 };
 
 /**

@@ -17,6 +17,8 @@
 
 import type { z } from "zod";
 
+import type { RoutingCandidate } from "@/lib/routing/decide";
+
 // ─────────────────────────── ramos (saídas do nó) ───────────────────────────
 
 /**
@@ -123,13 +125,13 @@ export interface EscopoDeVariaveis {
 
 // ──────────────────────────────── as portas ──────────────────────────────────
 
-export interface AtendenteElegivel {
-  userId: string;
-  /** Quando foi atribuído pela última vez. `null` = nunca, e vai na frente. */
-  lastAssignedAt: string | null;
-  currentLoad: number;
-  capacity: number;
-}
+/**
+ * Estruturalmente idêntico a `RoutingCandidate` (lib/routing/decide.ts), e isso
+ * é deliberado: a porta de roteamento devolve o que `loadEligibleAttendants` já
+ * produz, sem conversão. Formato próprio obrigaria a traduzir ida e volta, e é
+ * na tradução que a regra de quem-recebe-o-próximo-lead se perde.
+ */
+export type AtendenteElegivel = RoutingCandidate;
 
 export interface PortaDeRoteamento {
   /**

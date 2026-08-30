@@ -10,6 +10,8 @@
 
 import { z } from "zod";
 
+import { selectRoundRobin } from "@/lib/routing/decide";
+
 import { ramoPadrao, type AtendenteElegivel, type FlowNodeDefinition, type NodeExecutionResult } from "../types";
 
 // ───────────────────────────── crm.add_tag ───────────────────────────────────
@@ -47,25 +49,19 @@ export const crmAddTag: FlowNodeDefinition<AddTagConfig> = {
 
 /**
  * Rodízio: quem esperou mais tempo desde a última atribuição vai primeiro;
- * `null` (nunca recebeu) vai na frente de todos. Desempate determinístico por
- * id, para dois workers no mesmo instante escolherem o mesmo.
+ * `null` (nunca recebeu) vai na frente. Desempate determinístico por id, para
+ * dois workers no mesmo instante escolherem o mesmo.
  *
- * É a régua de `selectRoundRobin` (lib/routing/decide.ts), reescrita sobre o
- * tipo deste motor em vez de importada — a de lá recebe o tipo de elegível do
- * roteamento de CONVERSAS, e adaptar o formato ida e volta esconderia a regra
- * atrás de duas conversões. A cópia é de 6 linhas e está sob teste que compara
- * as duas ordenações no mesmo conjunto.
+ * NÃO é reimplementado aqui: é `selectRoundRobin` de `lib/routing/decide.ts`,
+ * que já é puro e já é a régua do roteamento de conversas. Uma segunda
+ * implementação divergiria na primeira mudança de regra, e a divergência
+ * apareceria como "o sistema distribuiu errado" sem ninguém saber qual das
+ * duas falou.
  */
 export function escolherPorRodizio(
   candidatos: readonly AtendenteElegivel[],
-): AtendenteElegivel | null {
-  if (candidatos.length === 0) return null;
-  return [...candidatos].sort((a, b) => {
-    const ta = a.lastAssignedAt === null ? -1 : Date.parse(a.lastAssignedAt);
-    const tb = b.lastAssignedAt === null ? -1 : Date.parse(b.lastAssignedAt);
-    if (ta !== tb) return ta - tb;
-    return a.userId.localeCompare(b.userId);
-  })[0]!;
+): string | null {
+  return selectRoundRobin([...candidatos]);
 }
 
 /** Variável em que o dono escolhido fica, para os nós seguintes o lerem. */
@@ -108,12 +104,12 @@ async function distribuir(
     };
   }
 
-  await ctx.crm.atribuirDono({ leadId: lead.id, userId: escolhido.userId });
-  const tentados = [...excluir, escolhido.userId];
+  await ctx.crm.atribuirDono({ leadId: lead.id, userId: escolhido });
+  const tentados = [...excluir, escolhido];
   return {
     kind: "advance",
     branch_id: "else",
-    vars: { [VAR_DONO_ESCOLHIDO]: escolhido.userId, [VAR_JA_TENTADOS]: tentados },
+    vars: { [VAR_DONO_ESCOLHIDO]: escolhido, [VAR_JA_TENTADOS]: tentados },
   };
 }
 

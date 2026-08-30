@@ -108,8 +108,8 @@ function mundoNovo(): Mundo {
     enviados: [],
     avisos: [],
     elegiveis: [
-      { userId: "user-antigo", lastAssignedAt: "2026-08-01T00:00:00Z", currentLoad: 1, capacity: 5 },
-      { userId: "user-recente", lastAssignedAt: "2026-08-29T00:00:00Z", currentLoad: 1, capacity: 5 },
+      { userId: "user-antigo", lastAssignedAt: Date.parse("2026-08-01T00:00:00Z"), currentLoad: 1 },
+      { userId: "user-recente", lastAssignedAt: Date.parse("2026-08-29T00:00:00Z"), currentLoad: 1 },
     ],
     donoRespondeu: false,
     desfechoDoEnvio: { kind: "enviado", messageId: "msg-1" },
@@ -499,9 +499,7 @@ describe("controle negativo do próprio teste", () => {
   it("se o rodízio não filtrasse os já tentados, o segundo aviso iria para o MESMO vendedor", () => {
     // Prova que a asserção de redistribuição acima mede algo: com a lista de
     // excluídos vazia, o rodízio devolve de novo `user-antigo`.
-    const semFiltro = [...mundo.elegiveis].sort((a, b) =>
-      Date.parse(a.lastAssignedAt!) - Date.parse(b.lastAssignedAt!),
-    )[0]!;
+    const semFiltro = [...mundo.elegiveis].sort((a, b) => a.lastAssignedAt! - b.lastAssignedAt!)[0]!;
     expect(semFiltro.userId).toBe("user-antigo");
     vi.clearAllMocks();
   });

@@ -17,6 +17,7 @@ import { followupGatilhoEtapaHandler } from "@/lib/followup/gatilho-etapa.handle
 import { followupGatilhoCasoHandler } from "@/lib/followup/gatilho-caso.handler";
 import { mediaPersistHandler } from "@/workers/media-persist-worker.handler";
 import { mediaDeriveHandler } from "@/workers/media-derive-worker.handler";
+import { flowTriggerHandler } from "@/lib/flow-engine/trigger-matcher.handler";
 import { webPushInboundHandler } from "@/lib/notifications/push.handler";
 import { registerHandler } from "@/lib/event-log/dispatcher";
 
@@ -39,5 +40,9 @@ export function ensureHandlersRegistered(): void {
   registerHandler(mediaPersistHandler);
   registerHandler(mediaDeriveHandler);
   registerHandler(webPushInboundHandler);
+  // Flow Engine por último: ele só CRIA execução (o trabalho acontece no tick do
+  // worker), então nada depende dele para seguir, e um erro aqui não pode
+  // atrasar o handler que responde ao cliente.
+  registerHandler(flowTriggerHandler);
   _registered = true;
 }
