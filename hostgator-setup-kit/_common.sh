@@ -671,6 +671,29 @@ owner_id_by_email() {
 # SEM o drain de eventos — a automação inteira parada, em silêncio.
 cron_tag() { printf '# deskcomm:%s:%s' "${PROJECT_DIR:-$PWD}" "${1:?papel da linha (drain|agent)}"; }
 
+# O crontab atual, ou vazio — e SEMPRE com status 0.
+#
+# `crontab -l` sai 1 quando o usuário ainda não tem crontab nenhum, que é o
+# estado de toda VPS recém-entregue. O `install.sh` roda sob `set -euo
+# pipefail`, e ali esse 1 não fica no `crontab -l`: o `pipefail` o promove a
+# status do pipeline inteiro, inclusive do `( ... ) | crontab -`, onde o
+# `crontab -` que ESCREVEU a linha devolveu 0. O `set -e` então mata o
+# instalador DEPOIS de gravar o cron do drain e ANTES de instalar o agente de
+# atualização — e o `2>/dev/null` garante que nenhuma mensagem explique o
+# porquê.
+#
+# Medido numa VPS Ubuntu 24.04 limpa (Docker 29.7.1) instalando a v1.10.1: o
+# instalador morreu logo após "✓ chave de cifra ativa no banco", sem imprimir o
+# ✓ do drain, e caiu no banner de recuperação — que manda apagar o `.env` e
+# recomeçar, receita errada para um estado em que tudo já estava de pé. Na
+# segunda execução passou, porque a primeira havia deixado um crontab para
+# trás: o defeito só existe na PRIMEIRA instalação de cada host, que é
+# exatamente a que todo self-hoster faz.
+#
+# `|| true` dentro de `{ }` e não `( )`: subshell aqui custaria um fork por
+# chamada sem ganhar isolamento nenhum.
+crontab_atual() { { crontab -l 2>/dev/null || true; }; }
+
 # Puro (testável sem tocar no crontab real): lê o crontab atual em stdin e
 # imprime o novo. Tira as linhas DESTA instalação — pelo marcador, e também
 # pela `assinatura` para as linhas legadas, escritas antes de o marcador
@@ -699,7 +722,7 @@ setup_event_log_drain_cron() {
   if crontab -l 2>/dev/null | grep -qF -e "$url_drain"; then first_time=0; fi
 
   local cron_line="* * * * * curl -fsS -H \"Authorization: Bearer ${secret}\" \"${url_drain}\" >/dev/null 2>&1 ${marcador}"
-  ( crontab -l 2>/dev/null | cron_merge "$marcador" "$url_drain" "$cron_line" ) | crontab -
+  ( crontab_atual | cron_merge "$marcador" "$url_drain" "$cron_line" ) | crontab -
   c_grn "✓ automações ativas (cron do event-log-drain, a cada minuto)"
 
   if [ "$first_time" = 1 ]; then
@@ -738,7 +761,7 @@ setup_update_agent_cron() {
   local legado="cd ${PROJECT_DIR} && bash hostgator-setup-kit/agent.sh"
   local marcador; marcador="$(cron_tag agent)"
   local cron_line="*/5 * * * * ${legado} >/dev/null 2>&1 ${marcador}"
-  ( crontab -l 2>/dev/null | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
+  ( crontab_atual | cron_merge "$marcador" "$legado" "$cron_line" ) | crontab -
   c_grn "✓ atualização pela tela ativa (agente a cada 5 minutos)"
 }
 

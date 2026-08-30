@@ -8,6 +8,74 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.11.0] — 2026-08-30
+
+### Alterado
+
+- **O CRM instala em Postgres 15, não só em 17** Até agora a instalação exigia Postgres 17. Quem tentasse usar um banco 15 ou 16
+  — o padrão de boa parte dos painéis de VPS e dos templates prontos de Supabase
+  — via a montagem do banco parar no meio, e a instalação terminava sem as
+  tabelas.
+
+  A exigência nunca foi uma decisão de projeto. O arquivo que monta o banco é
+  gerado automaticamente a partir de um servidor de referência, e esse servidor
+  rodava a versão 17; ao ser gerado, o arquivo levou junto nove linhas com uma
+  permissão que só existe nessa versão. Nenhuma parte do sistema usa essa
+  permissão. Bastava o banco não reconhecê-la para o arquivo inteiro ser
+  recusado — e um arquivo recusado é um banco vazio, não um banco incompleto.
+
+  As nove linhas saíram. A permissão que sobrou em cada uma é exatamente a mesma
+  de antes, então nada muda no comportamento nem na proteção das tabelas de
+  auditoria, que continuam não aceitando alteração nem exclusão.
+
+  Quem já roda o CRM não precisa fazer nada: o Postgres 17 segue funcionando
+  igual. O que mudou é que 15 e 16 passaram a funcionar também.
+
+### Corrigido
+
+- **A instalação numa VPS nova vai até o fim** A primeira instalação num servidor limpo parava duas vezes, e nas duas o
+  instalador mandava apagar a configuração e recomeçar — receita errada, porque
+  nada estava pela metade.
+
+  A primeira parada acontecia ao criar o seu usuário de administrador. O banco
+  recusava o comando com `"language" is not a known variable`, uma mensagem que
+  não tem relação nenhuma com o que estava sendo feito: um comentário dentro do
+  script terminava sendo executado como se fosse um comando, e a saída dele era
+  despejada no meio da instrução que criava o usuário.
+
+  A segunda acontecia no último passo, ao ligar as automações. O instalador
+  gravava o disparo do processamento de eventos e morria em seguida, sem
+  mensagem nenhuma, antes de instalar o agente que faz o botão "Atualizar agora"
+  funcionar pela tela. A causa era o servidor ainda não ter nenhuma tarefa
+  agendada — condição que só existe na primeira instalação de cada máquina, e que
+  some sozinha na segunda tentativa. Era por isso que rodar o instalador de novo
+  "resolvia": o problema tinha sido criado e apagado pela própria primeira
+  execução.
+
+  Quem já tem o CRM instalado não é afetado: os dois defeitos só aparecem em
+  servidor onde nada foi instalado antes.
+
+- **A conexão de WhatsApp aparece com nome, e o aviso de queda não fica preso na tela** Toda conexão de WhatsApp nascia sem nome. A tela de conectar nunca perguntou um,
+  e o nome do perfil do próprio WhatsApp — que o sistema já recebia — era jogado
+  fora. Quem tinha dois números ligados via os dois identificados apenas pelo
+  telefone, e no aviso de queda lia "WhatsApp sem nome está desconectado", que é
+  justamente a hora em que saber qual número caiu importa.
+
+  Agora o nome do perfil é adotado sozinho, na primeira vez que a conexão é vista
+  funcionando. Se você tinha escolhido um apelido — "Vendas", "Suporte" —, ele é
+  mantido: o nome do perfil só preenche o que estava vazio, e nunca substitui o
+  que você escreveu.
+
+  O segundo conserto é o aviso vermelho de conexão caída. Ele era montado quando a
+  página carregava e não se atualizava mais: quem reconectava o número e seguia
+  navegando pelo menu continuava com a faixa na tela dizendo que estava tudo fora
+  do ar, às vezes por horas, até recarregar a página inteira. Agora ele se
+  reconfere sozinho a cada minuto — some quando a conexão volta e aparece quando
+  ela cai, sem recarregar nada.
+
+  As conexões que já existem recebem o nome na próxima vez que você abrir a tela
+  de conexões. Não é preciso reconectar nem parear de novo.
+
 ## [1.10.1] — 2026-08-28
 
 ### Corrigido
@@ -1540,7 +1608,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.10.1...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.10.1...v1.11.0
 [1.10.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.10.0...v1.10.1
 [1.10.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.9.1...v1.10.0
 [1.9.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.9.0...v1.9.1

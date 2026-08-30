@@ -26,6 +26,7 @@ import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { requireRole } from "@/lib/auth/require-role";
 import { CHANNEL_PROVIDER_WAHA } from "@/lib/channels/capabilities";
 import { numeroObservadoDaSessao } from "@/lib/channels/numero-observado";
+import { nomeObservadoDaSessao } from "@/lib/channels/nome-observado";
 import { isChannelStatus } from "@/lib/schemas/channels";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -161,6 +162,7 @@ export async function GET(
 
   let liveStatus = session.status as string;
   let phoneNumber = session.phone_number as string | null;
+  let displayName = session.display_name as string | null;
   try {
     const remote = (await waha.getSessionQr(nomeSessao)) as {
       status?: string;
@@ -175,6 +177,17 @@ export async function GET(
       jid: remote.me?.id,
       statusAoVivo: liveStatus,
       gravado: phoneNumber,
+    });
+    // O `pushName` só chega POR AQUI. O webhook de `session.status` traz um
+    // `me` SEM ele — medido numa instalação real: `{id, lid,
+    // reachoutTimelock}` —, e o cron `channel-health` conversa com o adapter,
+    // cujo `checkHealth` devolve `{reachable, status, detail}` e nada do
+    // perfil. Esta rota é o único lugar que tem o dado E já escreve na tabela.
+    displayName = nomeObservadoDaSessao({
+      pushName: remote.me?.pushName,
+      jid: remote.me?.id,
+      statusAoVivo: liveStatus,
+      gravado: displayName,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown";
@@ -191,6 +204,7 @@ export async function GET(
     patch.last_status_change_at = checkedAt;
   }
   if (phoneNumber && phoneNumber !== session.phone_number) patch.phone_number = phoneNumber;
+  if (displayName && displayName !== session.display_name) patch.display_name = displayName;
 
   const gravar = (corpo: Record<string, unknown>) =>
     supabase
