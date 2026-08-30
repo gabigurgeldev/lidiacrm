@@ -30,7 +30,8 @@
 import Link from "next/link";
 
 import { useT } from "@/hooks/i18n/useT";
-import type { ConexaoCaida } from "@/lib/channels/health";
+import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
+import { conexoesCaidasDe, type ConexaoCaida } from "@/lib/channels/health";
 
 /**
  * `precisaEscanear` muda o texto do botão, não só a cor: reconectar por QR é uma
@@ -38,12 +39,40 @@ import type { ConexaoCaida } from "@/lib/channels/health";
  * aconteceu antes de agir. Mandar "Escanear" para quem precisa investigar faria
  * a pessoa perder tempo numa tela que não resolve o problema dela.
  */
+/**
+ * ─── Por que a faixa se atualiza sozinha ───────────────────────────────────
+ *
+ * `caidas` vem do layout de /app, que é Server Component — e layout do App
+ * Router NÃO re-renderiza em navegação client-side. A faixa congelava no estado
+ * em que a página foi carregada.
+ *
+ * Medido numa instalação real: o dono pareou dois números, viu a faixa durante o
+ * QR (normal), e continuou lendo "WhatsApp sem nome está desconectado" depois de
+ * ambos ficarem WORKING — porque ele navegou pelo menu em vez de recarregar. A
+ * consulta do banco no mesmo instante dizia ZERO conexões caídas. Um aviso que
+ * mente sobre o presente é pior que aviso nenhum: ensina a ignorar a faixa, que
+ * é exatamente o que este componente existe para evitar.
+ *
+ * O SSR continua entregando o primeiro estado — sem piscar na carga —, e o hook
+ * assume depois. `refetchInterval` de 60s e não de 5s: o custo é uma consulta
+ * por minuto por aba aberta, e status de conexão não muda em segundos.
+ */
+const INTERVALO_DE_RECONFERENCIA_MS = 60_000;
+
 export function ConexaoCaidaBanner({ caidas }: { caidas: ConexaoCaida[] }) {
   const t = useT();
-  if (caidas.length === 0) return null;
+  const { data: sessoes } = useChannelSessions({
+    refetchInterval: INTERVALO_DE_RECONFERENCIA_MS,
+  });
 
-  const uma = caidas.length === 1 ? caidas[0] : null;
-  const precisaEscanear = caidas.some((c) => c.status === "SCAN_QR_CODE");
+  // Enquanto o cliente não trouxe nada (primeira pintura, ou rota indisponível),
+  // vale o que o servidor mandou. Trocar por `[]` faria a faixa PISCAR e sumir
+  // numa desconexão real — perder o aviso é o defeito mais caro dos dois.
+  const vigentes = sessoes ? conexoesCaidasDe(sessoes) : caidas;
+  if (vigentes.length === 0) return null;
+
+  const uma = vigentes.length === 1 ? vigentes[0] : null;
+  const precisaEscanear = vigentes.some((c) => c.status === "SCAN_QR_CODE");
 
   return (
     <div
@@ -62,7 +91,7 @@ export function ConexaoCaidaBanner({ caidas }: { caidas: ConexaoCaida[] }) {
           ) : (
             <>
               <strong className="font-semibold">
-                {caidas.length} {t("conexões")}
+                {vigentes.length} {t("conexões")}
               </strong>{" "}
               {t("de WhatsApp estão desconectadas")}
             </>
