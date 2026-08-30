@@ -8,6 +8,26 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.12.0] — 2026-08-30
+
+### Adicionado
+
+- **Fluxos — monte no quadro o que o sistema faz sozinho** Uma tela nova em **Fluxos** (menu Funil) onde você desenha o que acontece
+  sozinho quando um lead novo entra: distribuir para o próximo vendedor da fila,
+  avisar essa pessoa no WhatsApp dela, esperar, e passar para outro se ninguém
+  atender.
+
+  O fluxo só vale depois de **publicado** e **ligado** — são dois botões
+  diferentes de propósito. Publicar congela o desenho; ligar aceita que ele mexa
+  no funil. Enquanto você monta, nada acontece.
+
+  Para o aviso chegar ao vendedor, cadastre o WhatsApp de cada atendente em
+  Ajustes. Sem ele o fluxo continua, seguindo pela saída "Sem telefone
+  cadastrado" — que você pode ligar a um aviso para o gerente.
+
+  A tela de **Execuções** mostra o que cada fluxo fez, passo a passo, e o que
+  parou no meio com o motivo.
+
 ## [1.11.0] — 2026-08-30
 
 ### Alterado
@@ -1608,7 +1628,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.11.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.10.1...v1.11.0
 [1.10.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.10.0...v1.10.1
 [1.10.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.9.1...v1.10.0
