@@ -95,6 +95,12 @@ export const ApiErrorCodes = {
   internal_error: "internal_error",
   upstream_unavailable: "upstream_unavailable",
   unavailable: "unavailable", // 503: dependência de config ausente (ex.: pool do engine sem SUPABASE_DB_URL)
+  // 503: AI_CRED_AES_KEY não decodifica para 32 bytes. Separado de
+  // `unavailable` porque o conserto é outro e específico — mexer numa variável
+  // nomeada do .env —, e porque sem um código próprio a falha voltava a cair em
+  // `internal_error`, onde ficou invisível o bastante para uma instalação
+  // inteira ficar sem cadastro de chave de IA sem ninguém saber por quê.
+  ai_encryption_key_misconfigured: "ai_encryption_key_misconfigured",
   waha_error: "waha_error",
   ai_provider_error: "ai_provider_error",
   nuvemshop_error: "nuvemshop_error",

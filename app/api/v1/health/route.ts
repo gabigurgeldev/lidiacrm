@@ -24,6 +24,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { chaveDeCifragemUtilizavel } from "@/lib/crypto/aes_gcm";
 import { env } from "@/lib/env";
 import { alvoDe, classificarFalhaDeAlcance, type FalhaDeAlcance } from "@/lib/net/alcance";
 
@@ -193,6 +194,25 @@ function segredoInternoConfere(req: NextRequest): boolean {
   });
 }
 
+/**
+ * A instalação consegue cifrar chave de IA?
+ *
+ * É o único check daqui que não fala com ninguém pela rede — e existe porque
+ * uma `AI_CRED_AES_KEY` em formato errado deixava a instalação sem cadastro de
+ * IA de um jeito que NENHUMA sonda revelava: o app subia, o banco respondia,
+ * `/api/v1/health` dizia "healthy", e a falha só aparecia como "Erro interno"
+ * na cara de quem tentasse salvar a chave.
+ *
+ * `degraded`, nunca `down`: o compose usa este endpoint como healthcheck, e
+ * `down` viraria 503 — ou seja, uma variável mal formatada derrubaria o CRM
+ * inteiro, incluindo o atendimento, que não depende disto para nada.
+ */
+function checkChaveDeCifragemDaIa(): Check {
+  const r = chaveDeCifragemUtilizavel();
+  if (r.ok) return { status: "ok", latency_ms: 0 };
+  return { status: "degraded", latency_ms: 0, error: r.erro, reason: "nao_configurado" };
+}
+
 /** Sem o segredo, o endereço não sai — o resto do diagnóstico sai igual. */
 function semAlvo(check: Check): Check {
   const { target: _oculto, ...resto } = check;
@@ -208,7 +228,12 @@ export async function GET(req: NextRequest) {
 
   const verboso = req.nextUrl.searchParams.get("verbose") === "1" && segredoInternoConfere(req);
   const filtrar = verboso ? (c: Check) => c : semAlvo;
-  const checks = { supabase: filtrar(supabase), redis: filtrar(redis), waha: filtrar(waha) };
+  const checks = {
+    supabase: filtrar(supabase),
+    redis: filtrar(redis),
+    waha: filtrar(waha),
+    ai_encryption_key: checkChaveDeCifragemDaIa(),
+  };
 
   const anyDown = Object.values(checks).some((c) => c.status === "down");
   const anyDegraded = Object.values(checks).some((c) => c.status === "degraded");

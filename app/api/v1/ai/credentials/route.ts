@@ -101,6 +101,18 @@ export async function POST(req: NextRequest): Promise<Response> {
         { requestId },
       );
     }
+    // 503, não 500: a chave que a INSTALAÇÃO usa para cifrar está ilegível, o
+    // que é indisponibilidade de configuração e não defeito do pedido. Repetir
+    // não adianta — e "Tente de novo em instantes", que é o que a tela diz no
+    // erro genérico, manda a pessoa fazer exatamente a única coisa inútil.
+    if (guardado.motivo === "chave_de_cifragem_da_instalacao") {
+      return fail(
+        "ai_encryption_key_misconfigured",
+        "A chave de cifragem desta instalação (AI_CRED_AES_KEY) está inválida — precisa ter 32 bytes, em base64 ou hex. Nenhuma credencial pode ser salva até quem administra o servidor corrigi-la.",
+        503,
+        { requestId },
+      );
+    }
     return fail("internal_error", "Erro ao criar credential.", 500, { requestId });
   }
 

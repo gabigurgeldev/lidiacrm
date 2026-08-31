@@ -19,7 +19,8 @@
  * uma tela em português.
  */
 import { audit } from "@/lib/audit";
-import { bufToBytea, encryptKey } from "@/lib/crypto/aes_gcm";
+import { bufToBytea, encryptKey, ChaveDeCifragemInvalida } from "@/lib/crypto/aes_gcm";
+import { logger } from "@/lib/logger";
 import { validateProviderKey, type Provider } from "@/lib/ai/provider-validators";
 import type { createAdminClient } from "@/lib/supabase/admin";
 
@@ -28,10 +29,18 @@ export type ResultadoDeGuardar =
   | {
       ok: false;
       /**
-       * `label_em_uso` é o único que o chamador precisa distinguir: é escolha do
-       * usuário e tem conserto óbvio (mudar o nome). O resto é falha nossa.
+       * `label_em_uso` é escolha do usuário e tem conserto óbvio (mudar o nome).
+       *
+       * `chave_de_cifragem_da_instalacao` é o outro que o chamador PRECISA
+       * distinguir, e por motivo oposto: quem está na tela não pode fazer nada,
+       * mas quem administra a instalação pode — e só descobre se a mensagem
+       * disser. Enquanto isso caía no balde de "erro interno", uma instalação
+       * com a chave em formato errado ficava sem cadastro de IA para sempre,
+       * sem uma linha de log dizendo por quê.
+       *
+       * O resto é falha nossa.
        */
-      motivo: "cifragem" | "label_em_uso" | "banco";
+      motivo: "cifragem" | "chave_de_cifragem_da_instalacao" | "label_em_uso" | "banco";
       detalhe?: string;
     };
 
@@ -51,8 +60,26 @@ export async function guardarCredencial(p: PedidoDeGuardar): Promise<ResultadoDe
   try {
     encrypted = encryptKey(p.apiKey);
   } catch (err) {
-    // Sem `console.error` com a chave por perto: o que interessa é que falhou.
-    return { ok: false, motivo: "cifragem", detalhe: err instanceof Error ? err.message : undefined };
+    // Nada da chave do usuário entra aqui — `ChaveDeCifragemInvalida` fala
+    // apenas do formato da AI_CRED_AES_KEY da instalação, e `logger` não recebe
+    // `p.apiKey` em campo nenhum.
+    //
+    // O log existe porque a ausência dele custou um diagnóstico inteiro: esta
+    // falha acontece ANTES do INSERT, então nem o log do app nem o do Postgres
+    // registravam coisa alguma, e o sintoma na tela era só "Erro interno".
+    const configurada = err instanceof ChaveDeCifragemInvalida;
+    logger.error("ai.credencial.cifragem_falhou", {
+      organizationId: p.orgId,
+      provider: p.provider,
+      ...(p.requestId ? { requestId: p.requestId } : {}),
+      motivo: err instanceof Error ? err.message : "desconhecido",
+      ...(configurada ? { comoCorrigir: (err as ChaveDeCifragemInvalida).comoCorrigir } : {}),
+    });
+    return {
+      ok: false,
+      motivo: configurada ? "chave_de_cifragem_da_instalacao" : "cifragem",
+      detalhe: err instanceof Error ? err.message : undefined,
+    };
   }
 
   const { data: created, error } = await p.admin

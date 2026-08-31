@@ -68,6 +68,17 @@ export async function salvarChaveDaIa(formData: FormData): Promise<ResultadoDaCh
         erro: "Já existe uma chave cadastrada com esse nome. Veja em IA › Credenciais.",
       };
     }
+    // Este é o pior lugar possível para um erro mudo: é o wizard, primeira
+    // impressão de quem acabou de instalar. "Tente de novo" é conselho falso
+    // aqui — a falha é da configuração do servidor e repetir nunca resolve.
+    if (r.motivo === "chave_de_cifragem_da_instalacao") {
+      return {
+        ok: false,
+        erro:
+          "Este servidor está com a chave de cifragem (AI_CRED_AES_KEY) inválida: ela precisa ter 32 bytes, em base64 ou hex. " +
+          "Enquanto não for corrigida, nenhuma chave de IA pode ser guardada — avise quem administra a instalação.",
+      };
+    }
     return { ok: false, erro: "Não consegui guardar a chave agora. Tente de novo." };
   }
 
