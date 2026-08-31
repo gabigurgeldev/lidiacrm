@@ -1,0 +1,75 @@
+name: Implantar na VPS (EasyPanel)
+
+# Fecha o último elo do deploy deste fork: `push` na `main` publica as imagens
+# (publish-image.yml) e ESTE workflow manda o EasyPanel puxá-las. Sem ele, a
+# imagem nova ficava no GHCR e a VPS seguia servindo a antiga até alguém clicar
+# "Implantar" à mão — foi o que aconteceu com a 1.13.0, e o diagnóstico custou
+# horas porque o sintoma ("cliquei Implantar e não mudou") não aponta para a
+# causa (a tag pinada não era a nova).
+#
+# ── Por que `workflow_run` e não `push` ────────────────────────────────────────
+# Disparar no mesmo `push` da `main` correria em paralelo com a construção da
+# imagem: o EasyPanel puxaria a tag `latest` ANTIGA, porque a nova ainda estaria
+# em build. `workflow_run` espera a publicação terminar — e só age se ela deu
+# certo.
+#
+# ── DESVIO DELIBERADO DA DOUTRINA DE PACKAGING ────────────────────────────────
+# `docs/doctrine/packaging.md`, invariante 3, manda instalação de cliente apontar
+# para NÚMERO DE VERSÃO, nunca para tag móvel. Esta VPS aponta para `latest`
+# (topo da `main`) de propósito, e a decisão é do dono do produto:
+#
+#   - é a instalação DELE, operada só por ele — não é parque de cliente;
+#   - o ciclo release → tag → imagem versionada depende de um GitHub App
+#     (`RELEASE_APP_ID` / `RELEASE_APP_PRIVATE_KEY`) que este fork não tem, então
+#     `cortar-tag` falha e a tag só nasce se alguém a empurrar à mão.
+#
+# O compose distribuído (`docker-compose.prod.yml`) NÃO muda: seu default segue
+# `stable`, que é a última release. Quem instalar o produto continua pinado em
+# versão. O desvio vive só no env desta VPS.
+
+on:
+  workflow_run:
+    workflows: ["Publicar imagem Docker (GHCR)"]
+    types: [completed]
+
+# Sem permissão nenhuma: este workflow só chama um webhook externo. Sem o bloco,
+# o GITHUB_TOKEN herdaria o default do repositório — configuração que vive fora
+# do repo e muda num clique (mesma razão do `permissions: {}` de `imagens-ok`).
+permissions: {}
+
+jobs:
+  implantar:
+    # As duas condições importam. `conclusion == 'success'` evita implantar
+    # imagem que não construiu; `head_branch == 'main'` evita que a construção
+    # de um PR (publish-image.yml roda em `pull_request`) derrube a produção com
+    # código não revisado.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar o webhook de deploy do EasyPanel
+        env:
+          WEBHOOK: ${{ secrets.EASYPANEL_DEPLOY_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "::error::secret EASYPANEL_DEPLOY_URL ausente — o deploy automático está desligado."
+            echo "::error::Pegue a URL em: EasyPanel → projeto → serviço → Deploy → Webhook."
+            exit 1
+          fi
+
+          # `--fail-with-body` para que um 4xx/5xx do painel apareça no log em vez
+          # de virar sucesso silencioso: um deploy que não disparou tem de ser
+          # vermelho aqui, senão o modo de falha volta a ser "a VPS ficou velha e
+          # ninguém soube".
+          codigo=$(curl -sS --fail-with-body -X POST \
+            -o resposta.txt -w '%{http_code}' \
+            --max-time 60 --retry 3 --retry-delay 5 --retry-connrefused \
+            "$WEBHOOK")
+
+          echo "HTTP $codigo"
+          head -c 500 resposta.txt || true
+          echo
+          echo "Deploy disparado para o commit ${{ github.event.workflow_run.head_sha }}."
