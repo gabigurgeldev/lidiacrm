@@ -31,6 +31,11 @@ on:
   workflow_run:
     workflows: ["Publicar imagem Docker (GHCR)"]
     types: [completed]
+  # Acionamento manual: reimplanta a imagem `latest` que já está publicada, sem
+  # precisar de um commit vazio só para provocar o gatilho. Serve para o caso em
+  # que a publicação deu certo mas o deploy não — foi o que aconteceu duas vezes
+  # aqui, as duas por secret criado DEPOIS do run começar.
+  workflow_dispatch: {}
 
 # Sem permissão nenhuma: este workflow só chama um webhook externo. Sem o bloco,
 # o GITHUB_TOKEN herdaria o default do repositório — configuração que vive fora
@@ -43,9 +48,13 @@ jobs:
     # imagem que não construiu; `head_branch == 'main'` evita que a construção
     # de um PR (publish-image.yml roda em `pull_request`) derrube a produção com
     # código não revisado.
+    # No acionamento manual não há `workflow_run` para inspecionar, e as duas
+    # condições abaixo seriam falsas — o job ficaria eternamente pulado, que é o
+    # jeito mais silencioso possível de um botão não funcionar.
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main'
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     steps:
       - name: Mandar o EasyPanel implantar
@@ -83,5 +92,8 @@ jobs:
           echo "HTTP $codigo"
           head -c 500 resposta.txt || true
           echo
-          echo "Deploy disparado para o commit ${{ github.event.workflow_run.head_sha }}."
+          # `|| github.sha` porque no acionamento manual não existe
+          # `workflow_run`, e a linha sairia com o commit em branco justamente
+          # no caso em que alguém está olhando para ela.
+          echo "Deploy disparado para o commit ${{ github.event.workflow_run.head_sha || github.sha }}."
           echo "Para conferir: /api/v1/health do CRM deve passar a reportar esse SHA em version."
