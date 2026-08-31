@@ -50,6 +50,14 @@ export interface ResumoDaImportacao {
   total_linhas: number;
   imported: number;
   skipped_duplicates: number;
+  /**
+   * Linha repetida DENTRO do próprio arquivo (mesmo telefone/email de uma
+   * linha anterior) — diferente de `skipped_duplicates`, que é contra o
+   * banco. Sem este contador, o "recorte" da tela de disparo (que soma
+   * repetição sobre a LISTA DE IDS já deduplicada) nunca vê essa repetição:
+   * ela já foi descartada aqui, em silêncio, antes de virar um id.
+   */
+  repeated_in_file: number;
   errors: LinhaErro[];
 }
 
@@ -114,6 +122,7 @@ export async function importarLinhas(
   const candidatos: Array<{ linha: number; contato: Record<string, unknown> }> = [];
   const errors: LinhaErro[] = [];
   const vistosNoArquivo = new Set<string>();
+  let repeatedInFile = 0;
 
   for (let i = 0; i < dataRows.length; i++) {
     const linha = i + 2; // 1-based contando o cabeçalho — bate com o editor de planilhas.
@@ -128,6 +137,7 @@ export async function importarLinhas(
     }
     const chave = contato.phone_number ?? `email:${(contato.email as string).toLowerCase()}`;
     if (vistosNoArquivo.has(chave)) {
+      repeatedInFile += 1;
       continue; // repetido DENTRO do arquivo — duplicado, sem ruído de erro.
     }
     vistosNoArquivo.add(chave);
@@ -142,7 +152,13 @@ export async function importarLinhas(
 
   if (candidatos.length === 0) {
     return {
-      resumo: { total_linhas: dataRows.length, imported: 0, skipped_duplicates: 0, errors },
+      resumo: {
+        total_linhas: dataRows.length,
+        imported: 0,
+        skipped_duplicates: 0,
+        repeated_in_file: repeatedInFile,
+        errors,
+      },
       contatos: [],
     };
   }
@@ -277,7 +293,13 @@ export async function importarLinhas(
   }
 
   return {
-    resumo: { total_linhas: dataRows.length, imported, skipped_duplicates: skippedDuplicates, errors },
+    resumo: {
+      total_linhas: dataRows.length,
+      imported,
+      skipped_duplicates: skippedDuplicates,
+      repeated_in_file: repeatedInFile,
+      errors,
+    },
     contatos,
   };
 }

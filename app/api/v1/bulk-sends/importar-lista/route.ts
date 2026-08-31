@@ -119,6 +119,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       total_linhas: resumo.total_linhas,
       imported: resumo.imported,
       skipped_duplicates: resumo.skipped_duplicates,
+      repeated_in_file: resumo.repeated_in_file,
       erros: resumo.errors.length,
     },
   });
@@ -131,7 +132,12 @@ export async function POST(req: NextRequest): Promise<Response> {
       linhas_com_erro: resumo.errors,
       vao_receber: recorte.vaoReceber,
       fora_por_motivo: recorte.foraPorMotivo,
-      repetidos: recorte.repetidos,
+      // Soma dois sinais distintos: `recorte.repetidos` pega id repetido na
+      // LISTA JÁ RESOLVIDA (ex.: contact_ids repetido vindo do corpo da
+      // requisição); `resumo.repeated_in_file` pega a repetição que
+      // `importarLinhas` já removeu ANTES de virar id — sem somar os dois, a
+      // planilha com telefone repetido nunca mostra "repetidos na planilha".
+      repetidos: recorte.repetidos + resumo.repeated_in_file,
     },
     { requestId },
   );
