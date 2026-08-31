@@ -64,6 +64,18 @@ export const ApiErrorCodes = {
   invalid_state_transition: "invalid_state_transition",
   invalid_owner: "invalid_owner", // novo dono não é membro ativo agent+ da org (bulk assign, G3-04)
   trigger_kind_not_implemented: "trigger_kind_not_implemented", // publish de followup-flow com kind sem motor de enrollment (stage_change/conversation_end)
+  // Disparo em massa pedido num modo que a CONEXÃO escolhida não aceita: texto
+  // livre num canal que exige modelo aprovado, ou modelo num número por QR (que
+  // não tem WABA por trás, logo não tem definição aprovada). Código próprio e
+  // não `unprocessable_entity` porque a frase precisa ensinar o caminho — a
+  // pessoa escolheu uma combinação que a tela nem oferece, então quem chegou
+  // aqui veio pela API e merece saber qual dos dois trocar.
+  bulk_send_mode_incompativel: "bulk_send_mode_incompativel",
+  // Nenhum contato da lista pode receber (todos bloqueados, sem telefone,
+  // anonimizados ou recusaram). Campanha que não fala com ninguém não nasce:
+  // ela viraria um disparo "concluído" com zero enviados, e o operador leria
+  // isso como sucesso.
+  bulk_send_sem_destinatario: "bulk_send_sem_destinatario",
 
   // 415 — tipo de mídia
   unsupported_media_type: "unsupported_media_type",

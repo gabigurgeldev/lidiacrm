@@ -45,6 +45,23 @@ interface LinhaDeKnobs {
   allow_sunday: boolean | null;
   timezone: string | null;
   warmup_daily_caps: unknown;
+  number_activated_at: string | null;
+}
+
+/**
+ * Os knobs MAIS a idade do número — que é o que `decidePacing()` pede e
+ * `knobsDoCanal()` não devolvia.
+ *
+ * A automação só precisava da janela horária, então `knobsDoCanal` bastava. O
+ * disparo em massa precisa da decisão INTEIRA (janela + warm-up + cap diário +
+ * throttle), e o degrau de warm-up é calculado pela idade do número — sem
+ * `number_activated_at` o motor trata a idade como 0 e aplica o degrau mais
+ * conservador em número já formado, travando a campanha em 20 mensagens/dia.
+ */
+export interface ConfigDePacingDoCanal {
+  knobs: PacingKnobs;
+  /** null = sem linha em `channel_knobs`; o motor trata como idade 0 (conservador). */
+  numberActivatedAt: Date | null;
 }
 
 /**
@@ -53,15 +70,15 @@ interface LinhaDeKnobs {
  * 7h–22h em `America/Sao_Paulo`: o comportamento pretendido desde sempre, agora
  * no fuso certo.
  */
-export async function knobsDoCanal(
+export async function configDePacingDoCanal(
   admin: SupabaseClient,
   organizationId: string,
   channelSessionId: string,
-): Promise<PacingKnobs> {
+): Promise<ConfigDePacingDoCanal> {
   const { data, error } = await admin
     .from("channel_knobs")
     .select(
-      "throttle_ms, jitter_max_ms, window_start_hour, window_end_hour, allow_sunday, timezone, warmup_daily_caps",
+      "throttle_ms, jitter_max_ms, window_start_hour, window_end_hour, allow_sunday, timezone, warmup_daily_caps, number_activated_at",
     )
     .eq("organization_id", organizationId)
     .eq("channel_session_id", channelSessionId)
@@ -75,21 +92,34 @@ export async function knobsDoCanal(
       channelSessionId,
       causa: error.message,
     });
-    return { ...PACING_DEFAULTS };
+    return { knobs: { ...PACING_DEFAULTS }, numberActivatedAt: null };
   }
   const linha = data as LinhaDeKnobs | null;
-  if (!linha) return { ...PACING_DEFAULTS };
+  if (!linha) return { knobs: { ...PACING_DEFAULTS }, numberActivatedAt: null };
 
   const caps = linha.warmup_daily_caps === null ? null : parseWarmupCaps(linha.warmup_daily_caps);
   return {
-    throttleMs: linha.throttle_ms ?? PACING_DEFAULTS.throttleMs,
-    jitterMaxMs: linha.jitter_max_ms ?? PACING_DEFAULTS.jitterMaxMs,
-    windowStartHour: linha.window_start_hour ?? PACING_DEFAULTS.windowStartHour,
-    windowEndHour: linha.window_end_hour ?? PACING_DEFAULTS.windowEndHour,
-    allowSunday: linha.allow_sunday ?? PACING_DEFAULTS.allowSunday,
-    timezone: linha.timezone ?? PACING_DEFAULTS.timezone,
-    warmupDailyCaps: caps ?? PACING_DEFAULTS.warmupDailyCaps,
+    knobs: {
+      throttleMs: linha.throttle_ms ?? PACING_DEFAULTS.throttleMs,
+      jitterMaxMs: linha.jitter_max_ms ?? PACING_DEFAULTS.jitterMaxMs,
+      windowStartHour: linha.window_start_hour ?? PACING_DEFAULTS.windowStartHour,
+      windowEndHour: linha.window_end_hour ?? PACING_DEFAULTS.windowEndHour,
+      allowSunday: linha.allow_sunday ?? PACING_DEFAULTS.allowSunday,
+      timezone: linha.timezone ?? PACING_DEFAULTS.timezone,
+      warmupDailyCaps: caps ?? PACING_DEFAULTS.warmupDailyCaps,
+    },
+    // PostgREST devolve timestamptz como string ISO; o motor quer Date.
+    numberActivatedAt: linha.number_activated_at ? new Date(linha.number_activated_at) : null,
   };
+}
+
+/** A porta que a automação já usava. Só os knobs — ela não pergunta idade. */
+export async function knobsDoCanal(
+  admin: SupabaseClient,
+  organizationId: string,
+  channelSessionId: string,
+): Promise<PacingKnobs> {
+  return (await configDePacingDoCanal(admin, organizationId, channelSessionId)).knobs;
 }
 
 /**

@@ -1,6 +1,12 @@
 /**
  * As guardas COMPARTILHADAS por toda ação que manda mensagem para um contato:
- * existe, não está bloqueado, tem telefone, tem consentimento.
+ * existe, não está bloqueado, não foi anonimizado nem mesclado, tem telefone,
+ * não recusou.
+ *
+ * Duas portas para a mesma régua: `checarContato(contato)` é o núcleo puro, e
+ * `checarGuardasDeContato(ctx)` é a porta da automação, que só extrai o contato
+ * do `ActionCtx` e delega. O disparo em massa usa o núcleo — ele monta a lista
+ * de uma query própria e não tem `ActionCtx` para forjar.
  *
  * Nasceu porque a mesma sequência de 3 `if`s vivia em `send-whatsapp.ts` e em
  * `send-ai-message.ts` — irmãs de propósito (mesmo comentário de cabeçalho:
@@ -55,18 +61,39 @@
  */
 import type { ActionCtx } from "@/lib/automation/types";
 
-export type MotivoDeBloqueio = "no_contact" | "contact_blocked" | "no_phone" | "consent_declined";
+export type MotivoDeBloqueio =
+  | "no_contact"
+  | "contact_blocked"
+  | "no_phone"
+  | "consent_declined"
+  | "contact_anonymized"
+  | "contact_merged";
 
 export interface ContatoLiberadoParaEnvio {
   id: string;
   phone_number: string;
 }
 
-interface ContatoDoContexto {
+export interface ContatoDoContexto {
   id: string;
   is_blocked?: boolean;
   phone_number?: string | null;
   consent?: { marketing?: { granted_at?: string | null; declined_at?: string | null } | null } | null;
+  /**
+   * LGPD: o titular pediu para apagar. Mandar mensagem para dado anonimizado é o
+   * pior desfecho possível de qualquer caminho de envio.
+   *
+   * ⚠️ Campo OPCIONAL, e isso importa para não se prometer demais: quem não o
+   * carregar no objeto não ganha a guarda — ela não vai ao banco buscar. A
+   * automação passa o contato que veio no `context` do evento; se ele não trouxe
+   * `is_anonymized`, o comportamento dela segue idêntico ao de antes (nem
+   * conserto, nem regressão). Quem seleciona a coluna explicitamente é o disparo
+   * em massa (`lib/bulk-send/montagem.ts`), que monta a lista a partir de uma
+   * query própria.
+   */
+  is_anonymized?: boolean | null;
+  /** Contato mesclado é lápide: quem responde é o sobrevivente, não ele. */
+  is_merged_into?: string | null;
 }
 
 export type ResultadoDaGuarda =
@@ -74,16 +101,38 @@ export type ResultadoDaGuarda =
   | { ok: false; reason: MotivoDeBloqueio };
 
 /**
- * Corre as 4 guardas, na ordem que mais barato falha primeiro (nenhum dado
- * lido antes de saber que há contato). Devolve o contato tipado e estreito
- * (só o que o chamador precisa) quando passa; a razão do bloqueio quando não.
+ * O NÚCLEO PURO: um contato entra, um veredito sai. Sem `ActionCtx`, sem banco.
+ *
+ * Existe separado porque o disparo em massa precisa da MESMA régua e não tem um
+ * `ActionCtx` para forjar — ele monta a lista a partir de uma query própria. A
+ * alternativa era o disparo reescrever as guardas, e é exatamente o "conserto
+ * por instância" que o cabeçalho deste arquivo conta ter pago uma vez: o gate de
+ * consentimento nasceu só numa das duas ações irmãs e ficou esquecido na outra.
+ *
+ * Corre as guardas na ordem em que mais barato falha primeiro (nenhum dado lido
+ * antes de saber que há contato). Devolve o contato tipado e estreito — só o que
+ * o chamador precisa — quando passa; a razão do bloqueio quando não.
  */
-export function checarGuardasDeContato(ctx: ActionCtx): ResultadoDaGuarda {
-  const contact = ctx.context.contact as ContatoDoContexto | undefined;
+export function checarContato(contact: ContatoDoContexto | null | undefined): ResultadoDaGuarda {
   if (!contact) return { ok: false, reason: "no_contact" };
   if (contact.is_blocked) return { ok: false, reason: "contact_blocked" };
+  // LGPD e lápide vêm ANTES do telefone: os dois são "esta pessoa não recebe
+  // mais mensagem", e é essa a frase que a tela precisa mostrar. Se o telefone
+  // falhasse primeiro, um contato anonimizado (que perde o telefone junto)
+  // apareceria como "sem telefone" — e o operador tentaria consertar o que não
+  // é para ser consertado.
+  if (contact.is_anonymized) return { ok: false, reason: "contact_anonymized" };
+  if (contact.is_merged_into) return { ok: false, reason: "contact_merged" };
   if (!contact.phone_number) return { ok: false, reason: "no_phone" };
   // Recusa registrada — não "grant ausente". Ver o cabeçalho.
   if (contact.consent?.marketing?.declined_at) return { ok: false, reason: "consent_declined" };
   return { ok: true, contact: { id: contact.id, phone_number: contact.phone_number } };
+}
+
+/**
+ * A porta da automação: pega o contato do `context` do evento e delega ao núcleo.
+ * Uma linha, de propósito — a régua mora num lugar só.
+ */
+export function checarGuardasDeContato(ctx: ActionCtx): ResultadoDaGuarda {
+  return checarContato(ctx.context.contact as ContatoDoContexto | undefined);
 }

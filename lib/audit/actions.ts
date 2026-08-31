@@ -402,6 +402,24 @@ export const AUDIT_ACTIONS = [
   // Relógio HTTP (Hobby / sem contêiner scheduler): uma batida que alguém
   // de fora chama. Só audita quando alguma tarefa mexeu em dado.
   "relogio.tick_run",
+  // ── Disparo em massa ────────────────────────────────────────────────────
+  // `created` é o registro de QUEM DECIDIU falar com N pessoas de uma vez, com
+  // o tamanho da lista e a conexão escolhida. É a linha que responde "quem
+  // mandou aquilo para a base inteira?" — e por isso vem separada de
+  // `started`: agendar e disparar são intenções diferentes, e uma campanha
+  // pode nascer e nunca sair.
+  "bulk_send.created",
+  "bulk_send.started",
+  "bulk_send.paused",
+  "bulk_send.resumed",
+  // Parar um disparo em voo é a ação que alguém pode querer negar ter feito.
+  "bulk_send.cancelled",
+  "bulk_send.retried",
+  // NÃO existe `bulk_send.recipient_sent`, e a ausência é decisão: uma linha
+  // de auditoria por mensagem afogaria uma tabela append-only de 5 anos com
+  // 500 linhas por campanha. O desfecho POR PESSOA já mora em
+  // `bulk_send_recipients` e em `messages`, que é onde se vai procurá-lo.
+  "bulk_send.worker_run",
   // ── Fluxo por linguagem natural (Flow Engine) ──────────────────────────
   // `ai_generated` é o único registro de que ALGUÉM pediu para a IA montar um
   // fluxo (com quantos nós/arestas, por qual modelo) — não há auditoria por

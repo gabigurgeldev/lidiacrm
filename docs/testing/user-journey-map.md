@@ -735,6 +735,82 @@ GitHub dispara no horário é do GitHub.
 
 ---
 
+## J19 — Falar com uma lista inteira sem queimar o número `[P0]`
+
+**Por que P0:** é a ação de maior alcance do produto — a mesma mensagem para
+centenas de pessoas — e a que mais pode custar o ativo do cliente. Um número de
+WhatsApp banido não se recupera: o cliente perde o histórico, os contatos e o
+canal de venda de uma vez. Errar aqui não é um bug de tela.
+
+**A régua não é nova, e é isso que importa.** O produto já tinha motor de pacing
+anti-ban completo (`lib/agent-engine/pacing/`) — janela horária no fuso do
+tenant, warm-up por idade do número, cap diário, throttle com jitter — usado
+pelo agente. O disparo IMPORTA essa régua; não tem uma segunda. O que ele
+acrescenta é o intervalo escolhido pelo operador, e ele só COMPÕE por
+`Math.max`: dá para ir mais devagar, nunca mais rápido. É a única linha da
+feature que tem teste dos dois sentidos, de propósito
+(`lib/bulk-send/ritmo.test.ts`).
+
+**O desfecho vem do ESTADO DA MENSAGEM, nunca da ausência de exceção.**
+`sendMessageHandler` não lança quando o envio falha: marca `messages.status` e
+devolve normalmente. Um motor que lesse "não lançou" como "enviado" mostraria
+"500 enviados" com o transporte fora do ar. É o defeito medido que
+`lib/automation/desfecho-do-envio.ts` existe para matar, e o disparo usa aquele
+tradutor em vez de um novo.
+
+Spec: `tests/e2e/disparo-em-massa.spec.ts` (`SPECS_PARTE_1`).
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J19.1 | Chega-se pelo menu, não pela URL | link "Disparo em massa" visível e clicável | NÃO MEDIDO |
+| J19.2 | Planilha com 5 linhas vira lista | 3 recebem; 1 erro de linha, 1 repetida | NÃO MEDIDO |
+| J19.3 | O recorte aparece ANTES da decisão | "3 vão receber" + "repetidos na planilha" | NÃO MEDIDO |
+| J19.4 | Pedir 1s de intervalo rende o piso | campo aplica o piso da conexão, nunca 1 | NÃO MEDIDO |
+| J19.5 | A confirmação nomeia o tamanho | botão diz "Criar disparo para N pessoas" | NÃO MEDIDO |
+| J19.6 | Bloqueado antes vira pulado com motivo | "pediram para parar", sem oferecer reenvio | NÃO MEDIDO |
+
+**⚠️ NÃO MEDIDO — e a razão é do ambiente, não do código.** A spec foi escrita e
+declarada em `SPECS_PARTE_1`, mas **não foi executada**: o ambiente fresco estilo
+VPS exige Postgres em contêiner (`pnpm test:db`, `pgvector/pgvector:pg15`) e o
+Docker Desktop desta máquina não subiu o engine — a distro WSL `docker-desktop`
+fica em `Stopped`. Sem banco não há `baseline.sql` aplicado, sem baseline não há
+app, e sem app não há tela para dirigir. Declarar PASS aqui seria afirmar o que
+ninguém observou; a doutrina de QA Visual chama isso de cobertura parcial lida
+como total.
+
+**O que ESTÁ medido, e por qual instrumento:**
+
+- o ritmo, nos dois sentidos — `lib/bulk-send/ritmo.test.ts` (12 casos verdes);
+- o motor inteiro com relógio e banco falsos — `tests/unit/bulk-send-motor.test.ts`
+  (23 casos verdes), incluindo mensagem que volta `failed` **sem exceção**,
+  mensagem em `queued` que fica em voo com `message_id` em vez de reenviar, e
+  órfão de reinício que ADOTA o desfecho da mensagem;
+- o recorte da lista — `tests/unit/bulk-send-montagem.test.ts` (11 verdes),
+  incluindo a dedupe por variante de nono dígito;
+- código cru nunca chegando à tela — `tests/unit/bulk-send-frases.test.ts`
+  (9 verdes), que varre os CHECKs do baseline cobrando frase para cada valor.
+
+**O que NÃO foi exercitado por nenhum instrumento:** a migration `0204` aplicada
+num Postgres real (install + update), e por consequência os dois invariantes
+escritos — `tests/invariants/bulk-send-isolamento.test.ts` (RLS entre duas
+organizações) e `tests/invariants/bulk-send-schema.test.ts`. Eles existem e
+estão prontos; falta a máquina.
+
+**NÃO COBERTO, declarado:** o envio chegando ao WhatsApp. Exige WAHA de pé, e a
+spec que exige WAHA vive em `FORA_DO_CI`. O que a spec cobre é tudo o que
+acontece **antes** de a mensagem sair — que é onde moram os erros de primeira
+impressão.
+
+**Dívida declarada, não esquecimento:** o disparo não faz spinning de copy. O
+`spinningGate` (`lib/agent-engine/guardrails/before-send.ts`) existe contra
+"template idêntico em massa na janela do número" e **não roda neste caminho** —
+ele é do agent-engine, que fala `pg.Pool`. Aqui a mesma mensagem sai para todo
+mundo *de propósito*, porque é o que uma campanha é, e o mitigador é o ritmo. É
+frente própria; está escrito no cabeçalho de `lib/bulk-send/motor.ts` para
+ninguém presumir cobertura.
+
+---
+
 ## J20 — Montar um fluxo descrevendo o que se quer, em vez de arrastar bloco a bloco `[P1]`
 
 **Por que P1, não P0:** o editor visual (J-nenhuma ainda documentada — o

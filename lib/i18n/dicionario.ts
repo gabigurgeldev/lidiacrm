@@ -6454,6 +6454,147 @@ export const DICIONARIO: Traducoes = {
   "Rodando": { es: "Corriendo" },
   "Parou com erro": { es: "Se detuvo con error" },
 
+  // ─── Disparo em massa ───
+  //
+  // O vocabulário aqui é de PRODUTO, não técnico: quem lê é dono de PME. Duas
+  // escolhas de tradução que não são óbvias e valem a nota:
+  //
+  //   * "disparo" → "envío masivo", não "disparo". Em espanhol "disparo" é tiro
+  //     de arma; o termo do mercado hispano para esta feature é "envío masivo".
+  //   * "queimar o número" → "que bloqueen el número". A metáfora brasileira não
+  //     atravessa, e o que a frase precisa comunicar é a consequência real.
+  "Disparo em massa": { es: "Envío masivo" },
+  "Disparos": { es: "Envíos masivos" },
+  "Novo disparo": { es: "Nuevo envío masivo" },
+  "Criar o primeiro": { es: "Crear el primero" },
+  "Nenhum disparo ainda": { es: "Todavía no hay envíos masivos" },
+  "Nome do disparo": { es: "Nombre del envío" },
+  "Promoção de setembro": { es: "Promoción de septiembre" },
+  "Só para você achar depois. O contato não vê esse nome.":
+    { es: "Solo para que lo encuentres después. El contacto no ve este nombre." },
+  "Planilha de contatos (.csv)": { es: "Planilla de contactos (.csv)" },
+  "Precisa ter uma coluna de telefone. No Excel use 'Salvar como' → 'CSV UTF-8'. Quem já está na sua base entra também, sem duplicar.":
+    { es: "Necesita una columna de teléfono. En Excel usá 'Guardar como' → 'CSV UTF-8'. Quien ya está en tu base también entra, sin duplicarse." },
+  "Lendo a planilha…": { es: "Leyendo la planilla…" },
+  "Passo {n} de 4": { es: "Paso {n} de 4" },
+  "Fale com uma lista de contatos pelo WhatsApp, no ritmo que o número aguenta — e veja, pessoa a pessoa, o que saiu e o que não saiu.":
+    { es: "Hablá con una lista de contactos por WhatsApp, al ritmo que el número soporta — y mirá, persona por persona, qué salió y qué no." },
+  "Um disparo manda a mesma mensagem para uma lista de contatos, espaçando os envios para o número não ser bloqueado pelo WhatsApp.":
+    { es: "Un envío masivo manda el mismo mensaje a una lista de contactos, espaciando los envíos para que WhatsApp no bloquee el número." },
+
+  // Passo 2 — a conexão e o que ela permite
+  "Por qual número enviar": { es: "Por qué número enviar" },
+  "Nenhuma conexão de WhatsApp. Conecte um número em Conexões primeiro.":
+    { es: "Ninguna conexión de WhatsApp. Conectá un número en Conexiones primero." },
+  "desconectado — o disparo espera reconectar":
+    { es: "desconectado — el envío espera la reconexión" },
+  "Envia texto livre.": { es: "Envía texto libre." },
+  "Só envia modelo aprovado.": { es: "Solo envía plantilla aprobada." },
+  "No mínimo {s}s entre mensagens.": { es: "Mínimo {s}s entre mensajes." },
+  "Hoje: até {n} mensagens.": { es: "Hoy: hasta {n} mensajes." },
+  "Este canal cobra por mensagem.": { es: "Este canal cobra por mensaje." },
+  "Este canal cobra por mensagem enviada.": { es: "Este canal cobra por mensaje enviado." },
+  "Escreva a mensagem que todos vão receber.":
+    { es: "Escribí el mensaje que todos van a recibir." },
+  "Este número só entrega modelo aprovado. Escolha o modelo em Conexões › Modelos e volte — o disparo por modelo ainda é feito por lá.":
+    { es: "Este número solo entrega plantilla aprobada. Elegí la plantilla en Conexiones › Plantillas y volvé — el envío por plantilla todavía se hace desde ahí." },
+
+  // Passo 3 — o ritmo
+  "Tempo entre uma mensagem e outra": { es: "Tiempo entre un mensaje y otro" },
+  "segundos": { es: "segundos" },
+  "Mínimo de {s}s exigido por este canal — não dá para ir mais rápido.":
+    { es: "Mínimo de {s}s exigido por este canal — no se puede ir más rápido." },
+  "Mínimo de {s}s para o número não ser bloqueado. Dá para afrouxar em Conexões, por sua conta e risco.":
+    { es: "Mínimo de {s}s para que no bloqueen el número. Se puede aflojar en Conexiones, por tu cuenta y riesgo." },
+  "Começar quando": { es: "Cuándo empezar" },
+  "Deixe em branco para começar assim que você disparar.":
+    { es: "Dejalo en blanco para empezar apenas lo dispares." },
+  "Fora de {i}h–{f}h o envio espera a manhã seguinte, sozinho.":
+    { es: "Fuera de {i}h–{f}h el envío espera a la mañana siguiente, solo." },
+
+  // Passo 4 — a confirmação nomeia o tamanho da ação
+  "Você vai falar com {n} pessoas pelo número {c}.":
+    { es: "Vas a hablar con {n} personas por el número {c}." },
+  "Uma mensagem a cada {s} segundos — pelo menos {m} minutos até a última.":
+    { es: "Un mensaje cada {s} segundos — al menos {m} minutos hasta el último." },
+  "Este número ainda está em aquecimento: hoje saem no máximo {n}, e o resto continua nos próximos dias.":
+    { es: "Este número todavía está en calentamiento: hoy salen como máximo {n}, y el resto sigue en los próximos días." },
+  "O disparo é criado parado. Você ainda vai conferir e apertar o botão de enviar.":
+    { es: "El envío se crea detenido. Todavía vas a revisarlo y apretar el botón de enviar." },
+  "Criar disparo para {n} pessoas": { es: "Crear envío para {n} personas" },
+  "Disparo criado. Confira e dispare quando quiser.":
+    { es: "Envío creado. Revisalo y disparalo cuando quieras." },
+
+  // O recorte da lista
+  "{n} vão receber": { es: "{n} van a recibir" },
+  "{n} fora:": { es: "{n} afuera:" },
+  "repetidos na planilha": { es: "repetidos en la planilla" },
+  "{n} linhas da planilha não puderam ser lidas.":
+    { es: "{n} líneas de la planilla no se pudieron leer." },
+  "pediram para parar": { es: "pidieron parar" },
+  "recusaram marketing": { es: "rechazaron marketing" },
+  "sem telefone": { es: "sin teléfono" },
+  "anonimizados": { es: "anonimizados" },
+  "mesclados com outro": { es: "fusionados con otro" },
+
+  // A lista e o dossiê
+  "{n} enviados": { es: "{n} enviados" },
+  "{n} na fila": { es: "{n} en la fila" },
+  "{n} falharam": { es: "{n} fallaron" },
+  "{n} fora da lista": { es: "{n} fuera de la lista" },
+  "Falharam": { es: "Fallaron" },
+  "Fora da lista": { es: "Fuera de la lista" },
+  "Disparar para {n} pessoas": { es: "Enviar a {n} personas" },
+  "Cancelar este disparo? Quem ainda não recebeu não vai receber.":
+    { es: "¿Cancelar este envío? Quien todavía no recibió no va a recibir." },
+  "Pelo menos {m} minutos até a última mensagem.":
+    { es: "Al menos {m} minutos hasta el último mensaje." },
+  "Quem não recebeu": { es: "Quién no recibió" },
+  "Tentar de novo os {n} que falharam": { es: "Reintentar los {n} que fallaron" },
+  "Ninguém ficou de fora. Todos os {n} receberam.":
+    { es: "Nadie quedó afuera. Los {n} recibieron." },
+  "Nada a mostrar ainda — o disparo não começou.":
+    { es: "Todavía no hay nada que mostrar — el envío no empezó." },
+  "Abrir o contato": { es: "Abrir el contacto" },
+  "Abrir Conexões": { es: "Abrir Conexiones" },
+
+  // As frases de `lib/bulk-send/frases.ts`. Chegam à tela por variável, então o
+  // varredor de AST não as alcança — mas sem estas linhas a tela em espanhol
+  // cairia para o português exatamente onde ela explica o que fazer.
+  "Esta pessoa pediu para não receber mais mensagens.":
+    { es: "Esta persona pidió no recibir más mensajes." },
+  "Não há o que fazer — e não deve haver. O pedido dela vale para todo disparo futuro.":
+    { es: "No hay nada que hacer — ni debe haberlo. Su pedido vale para todo envío futuro." },
+  "Esta pessoa recusou receber comunicação de marketing.":
+    { es: "Esta persona rechazó recibir comunicación de marketing." },
+  "Não há o que fazer. A recusa fica registrada no contato e vale para todo disparo futuro.":
+    { es: "No hay nada que hacer. El rechazo queda registrado en el contacto y vale para todo envío futuro." },
+  "Este contato não tem telefone cadastrado.":
+    { es: "Este contacto no tiene teléfono registrado." },
+  "Abra o contato e adicione o telefone. Depois ele pode entrar num disparo novo.":
+    { es: "Abrí el contacto y agregá el teléfono. Después puede entrar en un envío nuevo." },
+  "Este contato foi anonimizado a pedido do titular (LGPD).":
+    { es: "Este contacto fue anonimizado a pedido del titular (LGPD)." },
+  "Não há o que fazer, e a anonimização não se desfaz.":
+    { es: "No hay nada que hacer, y la anonimización no se deshace." },
+  "Este contato foi mesclado com outro e não é mais o registro válido.":
+    { es: "Este contacto fue fusionado con otro y ya no es el registro válido." },
+  "Quem responde agora é o contato que o absorveu — inclua ele num disparo novo.":
+    { es: "Quien responde ahora es el contacto que lo absorbió — incluilo en un envío nuevo." },
+  "Esperando a janela de envio abrir": { es: "Esperando que abra la ventana de envío" },
+  "O disparo continua sozinho no horário. Para mudar a janela deste número, vá em Conexões.":
+    { es: "El envío sigue solo en el horario. Para cambiar la ventana de este número, andá a Conexiones." },
+  "Limite de aquecimento do número atingido hoje":
+    { es: "Límite de calentamiento del número alcanzado hoy" },
+  "Número novo manda pouco por dia de propósito, para não ser banido. O disparo continua amanhã, sozinho.":
+    { es: "Un número nuevo manda poco por día a propósito, para que no lo bloqueen. El envío sigue mañana, solo." },
+  "Limite diário do número atingido": { es: "Límite diario del número alcanzado" },
+  "O disparo continua amanhã, sozinho. O limite deste número se ajusta em Conexões.":
+    { es: "El envío sigue mañana, solo. El límite de este número se ajusta en Conexiones." },
+  "Pausado por você": { es: "Pausado por vos" },
+  "Continue quando quiser — o disparo retoma de onde parou, sem repetir ninguém.":
+    { es: "Seguí cuando quieras — el envío retoma donde paró, sin repetir a nadie." },
+
   // ─── Criar fluxo com IA (dentro do editor de fluxo) ───
   "Criar com IA": { es: "Crear con IA" },
   "Criar fluxo com IA": { es: "Crear flujo con IA" },
