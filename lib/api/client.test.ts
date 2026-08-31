@@ -95,4 +95,55 @@ describe("apiClient", () => {
     const headers = fetchMock.mock.calls[0]![1].headers as Record<string, string>;
     expect(headers["Idempotency-Key"]).toBe("custom-key-123");
   });
+
+  /**
+   * A página de erro do proxy NÃO é mensagem de usuário.
+   *
+   * Visto em produção: durante a troca de contêiner de um deploy, o proxy
+   * respondeu a própria página ("Service is not reachable"), o cliente usou o
+   * corpo cru como `message`, e o construtor de fluxo renderizou um
+   * `<!DOCTYPE html>` inteiro — com SVG, gradientes e links — dentro do balão
+   * de erro. Quem viu não tinha como saber que bastava tentar de novo.
+   */
+  it("t8: corpo HTML de proxy não vira mensagem de tela — vira frase acionável", async () => {
+    const paginaDoProxy =
+      '<!DOCTYPE html> <html lang="en"> <head><title>Not Found</title></head>' +
+      "<body><div>Service is not reachable</div></body></html>";
+    // 500 e não 502: aqui interessa provar a recusa do HTML, sem o retry.
+    //
+    // `mockImplementation` e não `mockResolvedValue`: o corpo de uma Response só
+    // pode ser lido UMA vez, então devolver sempre a mesma instância faria a
+    // segunda chamada ler vazio — e o teste passaria a medir o próprio defeito.
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(paginaDoProxy, { status: 500 })));
+
+    await expect(apiClient.get("/x")).rejects.toMatchObject({
+      status: 500,
+      message: expect.not.stringContaining("<"),
+    });
+
+    // O corpo não se perde — deixa de ser interface e vira material de depuração.
+    await apiClient.get("/x").catch((err: ApiError) => {
+      expect(err.message).not.toContain("DOCTYPE");
+      expect(err.details?.corpo_bruto).toContain("Service is not reachable");
+    });
+  });
+
+  it("t9: 502 e 504 são tentados de novo — é a janela em que o deploy troca o contêiner", async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response("<html>bad gateway</html>", { status: 502 }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: { ok: true } }));
+
+    const r = await apiClient.get<{ data: { ok: boolean } }>("/x");
+    expect(r).toEqual({ data: { ok: true } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("t10: texto de erro curto e legível CONTINUA sendo mostrado", async () => {
+    // A recusa é do despejo de página, não de toda resposta não-JSON: uma frase
+    // curta do servidor ainda é a melhor mensagem disponível.
+    fetchMock.mockResolvedValue(new Response("limite da conta excedido", { status: 400 }));
+    await expect(apiClient.get("/x")).rejects.toMatchObject({
+      message: "limite da conta excedido",
+    });
+  });
 });

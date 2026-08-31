@@ -15,7 +15,17 @@ export type RequestOpts = {
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_ATTEMPTS = 3;
-const RETRYABLE_STATUSES = new Set([429, 503]);
+/**
+ * 502 e 504 entraram junto com 429/503 porque descrevem exatamente a janela em
+ * que um deploy troca o contêiner: por alguns segundos o proxy não acha ninguém
+ * atrás do domínio e responde a PRÓPRIA página de erro. Sem eles, qualquer
+ * pessoa que clicasse durante uma implantação recebia falha definitiva numa
+ * indisponibilidade que dura menos que o backoff.
+ */
+const RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
+
+/** Acima disso, um corpo de erro é despejo de página, não frase para alguém ler. */
+const MAX_MENSAGEM_DE_CORPO = 200;
 const MUTATING_METHODS = new Set<HttpMethod>(["POST", "PATCH", "PUT", "DELETE"]);
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -49,7 +59,44 @@ function parseRetryAfterSeconds(value: string | null): number | null {
   return n;
 }
 
+/**
+ * A frase que vai para a tela quando o corpo do erro NÃO veio da nossa API.
+ *
+ * Existe porque o corpo cru era usado como mensagem, e num restart de deploy o
+ * corpo é a página de erro do proxy: a tela do construtor de fluxo exibiu um
+ * `<!DOCTYPE html>` inteiro, com SVG e links, no lugar de uma frase. Quem viu
+ * aquilo não tinha como saber que bastava tentar de novo — e era só isso.
+ */
+function mensagemPorStatus(status: number): string {
+  if (status === 502 || status === 503 || status === 504) {
+    return "O servidor está indisponível no momento (pode ser uma atualização em andamento). Tente de novo em alguns segundos.";
+  }
+  if (status >= 500) return "O servidor falhou ao processar o pedido.";
+  if (status === 404) return "Endereço não encontrado no servidor.";
+  if (status === 401 || status === 403) return "Sem permissão para esta ação.";
+  return `A requisição falhou (HTTP ${status}).`;
+}
+
+/**
+ * Só usa o corpo como mensagem quando ele é PLAUSÍVEL como frase.
+ *
+ * Duas recusas, e as duas foram vistas em produção: página HTML (o `<` inicial
+ * denuncia proxy, gateway ou CDN respondendo no lugar do app) e texto longo
+ * demais para caber numa linha de tela. O corpo não se perde — ele continua
+ * disponível no console via `details`; o que ele deixa de fazer é virar
+ * interface.
+ */
+function mensagemDeCorpo(corpo: unknown, status: number): string {
+  if (typeof corpo !== "string") return mensagemPorStatus(status);
+  const texto = corpo.trim();
+  if (texto.length === 0) return mensagemPorStatus(status);
+  if (texto.startsWith("<")) return mensagemPorStatus(status);
+  if (texto.length > MAX_MENSAGEM_DE_CORPO) return mensagemPorStatus(status);
+  return texto;
+}
+
 function synthesizeCode(status: number): string {
+  if (status === 502 || status === 503 || status === 504) return "service_unavailable";
   if (status >= 500) return "internal_error";
   if (status === 429) return "rate_limited";
   if (status === 401) return "unauthorized";
@@ -170,11 +217,13 @@ async function request<T>(
       throw new ApiError(
         res.status,
         synthesizeCode(res.status),
-        undefined,
-        responseRequestId,
+        // O corpo cru vai para `details`, não para `message`: quem depura ainda
+        // o alcança, e a tela para de renderizá-lo.
         typeof errBody === "string" && errBody.length > 0
-          ? errBody
-          : `HTTP ${res.status}`,
+          ? { corpo_bruto: errBody.slice(0, 2000) }
+          : undefined,
+        responseRequestId,
+        mensagemDeCorpo(errBody, res.status),
       );
     } catch (err) {
       // ApiError thrown above for non-retryable: propagate immediately
