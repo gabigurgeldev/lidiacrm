@@ -84,9 +84,9 @@ export async function GET(req: NextRequest): Promise<Response> {
   const agora = Date.now();
 
   const conexoes = await Promise.all(
-    sessoes.map(async (s) => {
-      const capabilities = capabilitiesOf(s.provider);
-      const { knobs, numberActivatedAt } = await configDePacingDoCanal(admin, orgId, s.id);
+    sessoes.map(async (session) => {
+      const capabilities = capabilitiesOf(session.provider);
+      const { knobs, numberActivatedAt } = await configDePacingDoCanal(admin, orgId, session.id);
       const { pisoMs, origem } = pisoDoIntervalo(knobs, capabilities);
 
       // A MESMA função do motor. O comentário dela diz, com todas as letras, que
@@ -98,20 +98,22 @@ export async function GET(req: NextRequest): Promise<Response> {
       const capDoWarmup = warmupCapFor(idadeDias, knobs.warmupDailyCaps);
       const tetoDeHoje =
         capDoWarmup === null
-          ? s.daily_message_limit
-          : Math.min(capDoWarmup, s.daily_message_limit ?? Number.POSITIVE_INFINITY);
+          ? session.daily_message_limit
+          : Math.min(capDoWarmup, session.daily_message_limit ?? Number.POSITIVE_INFINITY);
 
       return {
-        id: s.id,
-        rotulo: s.display_name || s.phone_number || "Número sem nome",
-        telefone: s.phone_number,
-        conectada: s.status === "WORKING",
+        id: session.id,
+        // `channel_sessions.display_name` é o número/canal, não uma pessoa —
+        // outro conceito do rótulo de contato (`lib/contacts/rotulo-do-contato.ts`).
+        rotulo: session.display_name || session.phone_number || "Número sem nome",
+        telefone: session.phone_number,
+        conectada: session.status === "WORKING",
         // Vocabulário de PRODUTO. A tela nunca vê o nome do canal.
-        modo: modoPermitido(s.provider),
+        modo: modoPermitido(session.provider),
         piso_ms: pisoMs,
         piso_origem: origem,
-        cobra_por_mensagem: temCustoPorMensagem(s.provider),
-        risco_de_banimento: temRiscoDeBanimento(s.provider),
+        cobra_por_mensagem: temCustoPorMensagem(session.provider),
+        risco_de_banimento: temRiscoDeBanimento(session.provider),
         teto_de_hoje: Number.isFinite(tetoDeHoje) ? tetoDeHoje : null,
         em_aquecimento: capDoWarmup !== null,
         janela: { inicio: knobs.windowStartHour, fim: knobs.windowEndHour, fuso: knobs.timezone },

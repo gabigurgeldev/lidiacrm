@@ -735,7 +735,7 @@ GitHub dispara no horário é do GitHub.
 
 ---
 
-## J19 — Falar com uma lista inteira sem queimar o número `[P0]`
+## J21 — Falar com uma lista inteira sem queimar o número `[P0]`
 
 **Por que P0:** é a ação de maior alcance do produto — a mesma mensagem para
 centenas de pessoas — e a que mais pode custar o ativo do cliente. Um número de
@@ -762,12 +762,12 @@ Spec: `tests/e2e/disparo-em-massa.spec.ts` (`SPECS_PARTE_1`).
 
 | # | Caso | Expectativa | Resultado |
 |---|------|-------------|-----------|
-| J19.1 | Chega-se pelo menu, não pela URL | link "Disparo em massa" visível e clicável | NÃO MEDIDO |
-| J19.2 | Planilha com 5 linhas vira lista | 3 recebem; 1 erro de linha, 1 repetida | NÃO MEDIDO |
-| J19.3 | O recorte aparece ANTES da decisão | "3 vão receber" + "repetidos na planilha" | NÃO MEDIDO |
-| J19.4 | Pedir 1s de intervalo rende o piso | campo aplica o piso da conexão, nunca 1 | NÃO MEDIDO |
-| J19.5 | A confirmação nomeia o tamanho | botão diz "Criar disparo para N pessoas" | NÃO MEDIDO |
-| J19.6 | Bloqueado antes vira pulado com motivo | "pediram para parar", sem oferecer reenvio | NÃO MEDIDO |
+| J21.1 | Chega-se pelo menu, não pela URL | link "Disparo em massa" visível e clicável | NÃO MEDIDO |
+| J21.2 | Planilha com 5 linhas vira lista | 3 recebem; 1 erro de linha, 1 repetida | NÃO MEDIDO |
+| J21.3 | O recorte aparece ANTES da decisão | "3 vão receber" + "repetidos na planilha" | NÃO MEDIDO |
+| J21.4 | Pedir 1s de intervalo rende o piso | campo aplica o piso da conexão, nunca 1 | NÃO MEDIDO |
+| J21.5 | A confirmação nomeia o tamanho | botão diz "Criar disparo para N pessoas" | NÃO MEDIDO |
+| J21.6 | Bloqueado antes vira pulado com motivo | "pediram para parar", sem oferecer reenvio | NÃO MEDIDO |
 
 **⚠️ NÃO MEDIDO — e a razão é do ambiente, não do código.** A spec foi escrita e
 declarada em `SPECS_PARTE_1`, mas **não foi executada**: o ambiente fresco estilo
@@ -859,7 +859,7 @@ Spec: `tests/e2e/flow-builder-ia.spec.ts` (`SPECS_PARTE_1`).
 | J20.3 | Sem provedor de IA configurado | frase amigável, nunca erro cru | NÃO MEDIDO |
 | J20.4 | Fechar o painel após erro | canvas volta a responder, paleta clicável | NÃO MEDIDO |
 
-**⚠️ NÃO MEDIDO — mesma causa do J19: Docker não sobe nesta máquina.**
+**⚠️ NÃO MEDIDO — mesma causa do J21: Docker não sobe nesta máquina.**
 `pnpm test:db` nunca rodou, então a migration nenhuma (esta entrega não tem
 migration nova, mas o app inteiro depende de baseline aplicado) e a spec e2e
 acima nunca foram executadas de verdade. Declarado, não escondido.
