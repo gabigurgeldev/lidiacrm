@@ -30,6 +30,31 @@ function jsonSchemaDeGeracao(): Record<string, unknown> {
 }
 
 describe("o JSON Schema entregue ao provedor", () => {
+  /**
+   * A forma que derrubou o passo em produção, com dois modelos de fabricantes
+   * diferentes respondendo o mesmo "Provider returned error".
+   *
+   *   z.discriminatedUnion(...)  ->  oneOf   ← recusado
+   *   z.union(...)               ->  anyOf   ← aceito
+   *
+   * Structured Outputs de APIs compatíveis com OpenAI aceita `anyOf` e recusa
+   * `oneOf`. E `strictJsonSchema: false` NÃO salva: ele afrouxa `required` e
+   * `additionalProperties`, e não troca a palavra-chave da união — foi
+   * exatamente por isso que a correção anterior não bastou.
+   */
+  it("não tem `oneOf` em lugar nenhum — só `anyOf` é aceito", () => {
+    const texto = JSON.stringify(jsonSchemaDeGeracao());
+    expect(
+      texto.includes('"oneOf"'),
+      "voltou a haver `oneOf`. Alguém trocou um z.union por z.discriminatedUnion, " +
+        "ou um configSchema de nó com discriminatedUnion entrou na geração sem override " +
+        "em CONFIG_PARA_GERACAO. Ver o cabeçalho de generation-schema.ts.",
+    ).toBe(false);
+
+    // O contraprova: a união existe, e existe na forma certa.
+    expect(texto.includes('"anyOf"'), "a união sumiu inteira — isso não é o conserto").toBe(true);
+  });
+
   it("não tem $ref nem $defs — recursão quebra provedores de saída estruturada", () => {
     const texto = JSON.stringify(jsonSchemaDeGeracao());
 
@@ -117,10 +142,12 @@ describe("o JSON Schema entregue ao provedor", () => {
     // vocabulário da IA não é — ela deixaria de saber que o bloco existe.
     const schema = montarSchemaDeGeracao();
     const json = jsonSchemaDeGeracao();
-    const nodes = (json.properties as Record<string, Record<string, unknown>>).nodes;
-    const variantes = (nodes.items as Record<string, unknown[]>).oneOf ?? (nodes.items as Record<string, unknown[]>).anyOf;
+    const props = json.properties as Record<string, Record<string, unknown>> | undefined;
+    const items = props?.nodes?.items as Record<string, unknown[]> | undefined;
+    const variantes = items?.anyOf ?? items?.oneOf;
 
     expect(Object.keys(schema.shape).sort()).toEqual(["edges", "nodes"]);
-    expect(variantes.length).toBeGreaterThanOrEqual(11);
+    expect(variantes ?? [], "a lista de variantes de nó sumiu do schema").not.toEqual([]);
+    expect(variantes?.length ?? 0).toBeGreaterThanOrEqual(11);
   });
 });

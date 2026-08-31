@@ -94,8 +94,32 @@ const ifConfigParaGeracao = z.strictObject({
  * Override por tipo de nó. Vazio para todos os outros — só entra aqui o nó cujo
  * schema de runtime é hostil à saída estruturada, e com a justificativa acima.
  */
+/**
+ * `whatsapp.notify_user`: sem a união do `destinatario`.
+ *
+ * Dois motivos, e o segundo importa mais que a compatibilidade. O primeiro é a
+ * forma: `destinatario` é `discriminatedUnion`, que emite `oneOf` — recusado por
+ * saída estruturada.
+ *
+ * O segundo: a variante `{ tipo: "usuario" }` é RECUSADA PELO PRÓPRIO MOTOR.
+ * `lib/flow-engine/nodes/avisos.ts` devolve
+ * `{ kind: "dead", reason: "destinatario_fixo_ainda_nao_suportado" }` ao
+ * executá-la. Ou seja, era uma forma que a IA podia gerar e que morreria em
+ * execução — o fluxo nasceria bonito na tela e falharia calado no primeiro lead.
+ * Oferecer à IA só o que o motor sabe rodar é o comportamento correto,
+ * independente de provedor.
+ */
+const notifyUserConfigParaGeracao = z.strictObject({
+  destinatario: z
+    .strictObject({ tipo: z.literal("dono_do_lead") })
+    .default({ tipo: "dono_do_lead" })
+    .describe("Sempre o dono do lead — é o único destinatário que o motor executa hoje."),
+  mensagem: z.string().min(1).max(4000),
+});
+
 const CONFIG_PARA_GERACAO: Readonly<Record<string, z.ZodTypeAny>> = {
   "logic.if": ifConfigParaGeracao,
+  "whatsapp.notify_user": notifyUserConfigParaGeracao,
 };
 
 /** Uma variante do union — um tipo de nó, com o `configSchema` dele embutido. */
@@ -126,13 +150,31 @@ export function montarSchemaDeGeracao() {
   garantirNosRegistrados();
   const nos = todosOsNos();
 
-  // discriminatedUnion exige 2+ variantes — hoje são 11; se o registry algum
-  // dia tiver só 1 tipo (não acontece em produção), cai para z.array de um
-  // objeto só, sem discriminação, para não lançar em runtime.
+  /**
+   * `z.union` e NÃO `z.discriminatedUnion` — a diferença é o que faz a chamada
+   * funcionar. Medido:
+   *
+   *   z.discriminatedUnion(...)  ->  { $schema, oneOf }
+   *   z.union(...)               ->  { $schema, anyOf }
+   *
+   * Structured Outputs de APIs compatíveis com OpenAI aceita `anyOf` e recusa
+   * `oneOf`. Com o `oneOf`, a OpenRouter respondia erro e o stream morria —
+   * medido com DOIS modelos de fabricantes diferentes (gemini-2.5-flash-lite e
+   * qwen3.8-flash), o que descartou o modelo e acusou o formato.
+   *
+   * `strictJsonSchema: false` na rota NÃO resolve isto: ele afrouxa `required` e
+   * `additionalProperties`, e não troca a palavra-chave da união.
+   *
+   * O que se perde: a mensagem de erro do Zod deixa de apontar a variante certa
+   * pelo campo `type` e passa a listar as tentativas. Custo de depuração local,
+   * pago uma vez; o `oneOf` custava a funcionalidade inteira, sempre.
+   *
+   * Vigiado por `generation-schema-cabe-no-provedor.test.ts`.
+   */
   const variantes = nos.map(variantePara);
   const noSchema =
     variantes.length >= 2
-      ? z.discriminatedUnion("type", variantes as [typeof variantes[0], typeof variantes[0], ...(typeof variantes[0])[]])
+      ? z.union(variantes as [typeof variantes[0], typeof variantes[0], ...(typeof variantes[0])[]])
       : variantes[0]!;
 
   return z.object({

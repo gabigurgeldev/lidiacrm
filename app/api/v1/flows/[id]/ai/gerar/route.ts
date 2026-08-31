@@ -63,6 +63,28 @@ const entradaSchema = z.strictObject({
     .default([]),
 });
 
+/**
+ * Extrai do erro do SDK o que o PROVEDOR disse — status e corpo da resposta.
+ *
+ * `AI_APICallError` carrega `statusCode` e `responseBody`, mas o `message` que
+ * chega ao log é só "Provider returned error". O corpo é onde a OpenRouter
+ * escreve o motivo (schema recusado, modelo indisponível, crédito acabado), e
+ * é a diferença entre diagnosticar em um minuto e em uma rodada de deploy.
+ *
+ * Sem `any` e sem depender do tipo do SDK: lê as propriedades se existirem.
+ * Truncado em 600 caracteres porque a resposta pode trazer o schema inteiro de
+ * volta, e o log não é lugar para isso.
+ */
+function detalheDaChamada(error: unknown): Record<string, unknown> {
+  if (typeof error !== "object" || error === null) return {};
+  const e = error as { statusCode?: unknown; responseBody?: unknown; url?: unknown };
+  const saida: Record<string, unknown> = {};
+  if (typeof e.statusCode === "number") saida.status = e.statusCode;
+  if (typeof e.responseBody === "string") saida.resposta = e.responseBody.slice(0, 600);
+  if (typeof e.url === "string") saida.url = e.url;
+  return saida;
+}
+
 export async function POST(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
@@ -141,6 +163,11 @@ export async function POST(
         ms: Date.now() - t0,
         modeloCanonico: resolvido.modelId,
         causa: error instanceof Error ? error.message : String(error),
+        // `error.message` do SDK resume tudo como "Provider returned error" —
+        // frase que não diz NADA sobre o que o provedor recusou. O motivo real
+        // vem no corpo da resposta HTTP, e sem ele a investigação custou uma
+        // rodada inteira de deploy só para descobrir o que já estava ali.
+        ...detalheDaChamada(error),
       });
       void audit({
         action: "flow.ai_generation_failed",
