@@ -60,6 +60,10 @@ export type InboxKind =
   // nenhum trecho foi gravado. UM kind e não dois, porque quem lê a Central
   // quer saber que o material não entrou — o porquê é o corpo do aviso.
   | 'conhecimento_nao_indexado'
+  // (migration 0204) Disparo em massa que o pacing vetou (warm-up, cap diário,
+  // janela de horário). Sem isto a campanha trava em silêncio — o operador só
+  // saberia abrindo o disparo e reparando que nada saiu.
+  | 'disparo_travado'
   | 'other';
 
 export interface InboxItemRow {

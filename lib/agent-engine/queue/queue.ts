@@ -177,6 +177,12 @@ export async function faltaParaOProximoJob(pool: Pool): Promise<number | null> {
   const { rows } = await pool.query<{ falta_ms: number | null }>(
     `select case
               when min(run_after) is null then null
+              -- 'infinity'::timestamptz NÃO subtrai: o Postgres lança
+              -- "cannot subtract infinite timestamps" antes de o least()
+              -- abaixo conseguir clampar. session-watchdog.ts grava
+              -- run_after='infinity' de propósito (hold do bot silenciado) —
+              -- precisa do próprio ramo, não só do clamp de 86400000ms.
+              when min(run_after) = 'infinity'::timestamptz then 86400000
               else least(
                      greatest(extract(epoch from (min(run_after) - now())) * 1000, 0),
                      86400000

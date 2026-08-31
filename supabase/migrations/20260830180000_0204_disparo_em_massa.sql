@@ -232,17 +232,49 @@ create index if not exists idx_bulk_send_recipients_em_voo
 alter table public.bulk_sends           enable row level security;
 alter table public.bulk_send_recipients enable row level security;
 
+-- SELECT só-tenancy (todo membro lê, inclusive viewer — a lista de disparos e
+-- a tela de destinatários dependem disso) + escrita com `fn_role_at_least`
+-- (as rotas exigem "manager" pra criar/pausar/retomar/cancelar/reprocessar —
+-- ver requireRole em app/api/v1/bulk-sends/**). Mesmo par de channel_sessions.
 drop policy if exists tenant_isolation_bulk_sends_all on public.bulk_sends;
-create policy tenant_isolation_bulk_sends_all on public.bulk_sends
-  for all
-  using (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin())
-  with check (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+
+drop policy if exists tenant_isolation_bulk_sends_select on public.bulk_sends;
+create policy tenant_isolation_bulk_sends_select on public.bulk_sends
+  for select using (
+    organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
+  );
+
+drop policy if exists tenant_isolation_bulk_sends_write on public.bulk_sends;
+create policy tenant_isolation_bulk_sends_write on public.bulk_sends
+  for all using (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  ) with check (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  );
 
 drop policy if exists tenant_isolation_bulk_send_recipients_all on public.bulk_send_recipients;
-create policy tenant_isolation_bulk_send_recipients_all on public.bulk_send_recipients
-  for all
-  using (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin())
-  with check (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+
+drop policy if exists tenant_isolation_bulk_send_recipients_select on public.bulk_send_recipients;
+create policy tenant_isolation_bulk_send_recipients_select on public.bulk_send_recipients
+  for select using (
+    organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
+  );
+
+drop policy if exists tenant_isolation_bulk_send_recipients_write on public.bulk_send_recipients;
+create policy tenant_isolation_bulk_send_recipients_write on public.bulk_send_recipients
+  for all using (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  ) with check (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  );
 
 revoke all on public.bulk_sends           from anon, public;
 revoke all on public.bulk_send_recipients from anon, public;
