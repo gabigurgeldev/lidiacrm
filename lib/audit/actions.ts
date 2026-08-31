@@ -420,6 +420,14 @@ export const AUDIT_ACTIONS = [
   // 500 linhas por campanha. O desfecho POR PESSOA já mora em
   // `bulk_send_recipients` e em `messages`, que é onde se vai procurá-lo.
   "bulk_send.worker_run",
+  // ── Fluxo por linguagem natural (Flow Engine) ──────────────────────────
+  // `ai_generated` é o único registro de que ALGUÉM pediu para a IA montar um
+  // fluxo (com quantos nós/arestas, por qual modelo) — não há auditoria por
+  // pergunta de esclarecimento (equivalente a digitar numa busca, não a uma
+  // mutação). A geração em si NÃO grava `flows.draft_graph`; quem persiste é
+  // o "Salvar rascunho" de sempre, que já audita como `flow.updated`.
+  "flow.ai_generated",
+  "flow.ai_generation_failed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

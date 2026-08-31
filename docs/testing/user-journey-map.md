@@ -735,6 +735,164 @@ GitHub dispara no horário é do GitHub.
 
 ---
 
+## J21 — Falar com uma lista inteira sem queimar o número `[P0]`
+
+**Por que P0:** é a ação de maior alcance do produto — a mesma mensagem para
+centenas de pessoas — e a que mais pode custar o ativo do cliente. Um número de
+WhatsApp banido não se recupera: o cliente perde o histórico, os contatos e o
+canal de venda de uma vez. Errar aqui não é um bug de tela.
+
+**A régua não é nova, e é isso que importa.** O produto já tinha motor de pacing
+anti-ban completo (`lib/agent-engine/pacing/`) — janela horária no fuso do
+tenant, warm-up por idade do número, cap diário, throttle com jitter — usado
+pelo agente. O disparo IMPORTA essa régua; não tem uma segunda. O que ele
+acrescenta é o intervalo escolhido pelo operador, e ele só COMPÕE por
+`Math.max`: dá para ir mais devagar, nunca mais rápido. É a única linha da
+feature que tem teste dos dois sentidos, de propósito
+(`lib/bulk-send/ritmo.test.ts`).
+
+**O desfecho vem do ESTADO DA MENSAGEM, nunca da ausência de exceção.**
+`sendMessageHandler` não lança quando o envio falha: marca `messages.status` e
+devolve normalmente. Um motor que lesse "não lançou" como "enviado" mostraria
+"500 enviados" com o transporte fora do ar. É o defeito medido que
+`lib/automation/desfecho-do-envio.ts` existe para matar, e o disparo usa aquele
+tradutor em vez de um novo.
+
+Spec: `tests/e2e/disparo-em-massa.spec.ts` (`SPECS_PARTE_1`).
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J21.1 | Chega-se pelo menu, não pela URL | link "Disparo em massa" visível e clicável | NÃO MEDIDO |
+| J21.2 | Planilha com 5 linhas vira lista | 3 recebem; 1 erro de linha, 1 repetida | NÃO MEDIDO |
+| J21.3 | O recorte aparece ANTES da decisão | "3 vão receber" + "repetidos na planilha" | NÃO MEDIDO |
+| J21.4 | Pedir 1s de intervalo rende o piso | campo aplica o piso da conexão, nunca 1 | NÃO MEDIDO |
+| J21.5 | A confirmação nomeia o tamanho | botão diz "Criar disparo para N pessoas" | NÃO MEDIDO |
+| J21.6 | Bloqueado antes vira pulado com motivo | "pediram para parar", sem oferecer reenvio | NÃO MEDIDO |
+
+**⚠️ NÃO MEDIDO — e a razão é do ambiente, não do código.** A spec foi escrita e
+declarada em `SPECS_PARTE_1`, mas **não foi executada**: o ambiente fresco estilo
+VPS exige Postgres em contêiner (`pnpm test:db`, `pgvector/pgvector:pg15`) e o
+Docker Desktop desta máquina não subiu o engine — a distro WSL `docker-desktop`
+fica em `Stopped`. Sem banco não há `baseline.sql` aplicado, sem baseline não há
+app, e sem app não há tela para dirigir. Declarar PASS aqui seria afirmar o que
+ninguém observou; a doutrina de QA Visual chama isso de cobertura parcial lida
+como total.
+
+**O que ESTÁ medido, e por qual instrumento:**
+
+- o ritmo, nos dois sentidos — `lib/bulk-send/ritmo.test.ts` (12 casos verdes);
+- o motor inteiro com relógio e banco falsos — `tests/unit/bulk-send-motor.test.ts`
+  (23 casos verdes), incluindo mensagem que volta `failed` **sem exceção**,
+  mensagem em `queued` que fica em voo com `message_id` em vez de reenviar, e
+  órfão de reinício que ADOTA o desfecho da mensagem;
+- o recorte da lista — `tests/unit/bulk-send-montagem.test.ts` (11 verdes),
+  incluindo a dedupe por variante de nono dígito;
+- código cru nunca chegando à tela — `tests/unit/bulk-send-frases.test.ts`
+  (9 verdes), que varre os CHECKs do baseline cobrando frase para cada valor.
+
+**O que NÃO foi exercitado por nenhum instrumento:** a migration `0204` aplicada
+num Postgres real (install + update), e por consequência os dois invariantes
+escritos — `tests/invariants/bulk-send-isolamento.test.ts` (RLS entre duas
+organizações) e `tests/invariants/bulk-send-schema.test.ts`. Eles existem e
+estão prontos; falta a máquina.
+
+**NÃO COBERTO, declarado:** o envio chegando ao WhatsApp. Exige WAHA de pé, e a
+spec que exige WAHA vive em `FORA_DO_CI`. O que a spec cobre é tudo o que
+acontece **antes** de a mensagem sair — que é onde moram os erros de primeira
+impressão.
+
+**Dívida declarada, não esquecimento:** o disparo não faz spinning de copy. O
+`spinningGate` (`lib/agent-engine/guardrails/before-send.ts`) existe contra
+"template idêntico em massa na janela do número" e **não roda neste caminho** —
+ele é do agent-engine, que fala `pg.Pool`. Aqui a mesma mensagem sai para todo
+mundo *de propósito*, porque é o que uma campanha é, e o mitigador é o ritmo. É
+frente própria; está escrito no cabeçalho de `lib/bulk-send/motor.ts` para
+ninguém presumir cobertura.
+
+---
+
+## J20 — Montar um fluxo descrevendo o que se quer, em vez de arrastar bloco a bloco `[P1]`
+
+**Por que P1, não P0:** o editor visual (J-nenhuma ainda documentada — o
+Flow Engine, migration 0203, não tinha jornada registrada até aqui) já
+permite montar qualquer fluxo à mão; a criação por IA é um ATALHO, não o único
+caminho. Sobe para P1 e não fica em P2 porque é a primeira feature de
+streaming do produto — o modo de falha mais provável (canvas travado, stream
+que nunca termina) não é cosmético.
+
+**O que existia antes desta entrega:** dois bugs visuais no editor
+(`app/app/flows/[id]/_components/FlowCanvas.tsx`) — um `<MiniMap>` do
+`@xyflow/react` sem tema escuro aparecendo como retângulo branco sólido no
+canto inferior direito (o CSS default do pacote usa uma variável clara sem
+override, e o irmão mais antigo — o construtor de follow-up — já evitava o
+MiniMap de propósito), e nenhum ícone em nenhum dos 11 blocos da paleta.
+
+**O que entrou:** os dois bugs corrigidos (ícones vêm de um mapa novo,
+`nodeIcons.ts`, casado pelo `type`/`category` que a API já devolvia), mais um
+botão "Criar com IA" DENTRO do mesmo editor — nunca uma tela separada, por
+pedido explícito do dono do produto. A pessoa descreve o que quer, a IA faz
+até uma pergunta de esclarecimento por vez (sempre por múltipla escolha,
+nunca texto livre) e, quando tem o suficiente, monta o grafo em streaming de
+verdade: os nós aparecem no canvas real conforme a IA os produz, com a tela
+travada para interação até terminar.
+
+**As duas decisões de arquitetura que mudam o resultado:**
+
+1. **O schema que a IA usa nasce do REGISTRY**, não é escrito à mão
+   (`lib/flow-engine/ai/generation-schema.ts`) — um discriminated union com
+   uma variante por tipo de nó hoje registrado, cada uma com o `configSchema`
+   exato daquele tipo embutido. Um 12º tipo registrado amanhã entra
+   automaticamente. `position` nunca é pedida à IA — vem de
+   `lib/flow-engine/ai/auto-layout.ts` (BFS puro a partir do trigger), porque
+   layout espacial é a única coisa que um modelo de texto faz mal de graça.
+2. **A geração NÃO grava o banco.** A rota de streaming só devolve o grafo;
+   quem persiste é o "Salvar rascunho" de sempre — mesma doutrina de
+   `montarQuadro.ts` no onboarding ("o que se grava é o que a pessoa está
+   vendo"). Nada de caminho de gravação paralelo para fluxo gerado por IA.
+
+Spec: `tests/e2e/flow-builder-ia.spec.ts` (`SPECS_PARTE_1`).
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J20.1 | O botão vive dentro do editor | aparece no mesmo cabeçalho de Salvar/Publicar, sem navegar | NÃO MEDIDO |
+| J20.2 | Painel abre sobre o canvas | sem trocar de URL | NÃO MEDIDO |
+| J20.3 | Sem provedor de IA configurado | frase amigável, nunca erro cru | NÃO MEDIDO |
+| J20.4 | Fechar o painel após erro | canvas volta a responder, paleta clicável | NÃO MEDIDO |
+
+**⚠️ NÃO MEDIDO — mesma causa do J21: Docker não sobe nesta máquina.**
+`pnpm test:db` nunca rodou, então a migration nenhuma (esta entrega não tem
+migration nova, mas o app inteiro depende de baseline aplicado) e a spec e2e
+acima nunca foram executadas de verdade. Declarado, não escondido.
+
+**O que ESTÁ medido, por instrumento:**
+
+- `lib/flow-engine/ai/auto-layout.test.ts` (7 casos) — BFS determinístico,
+  ramificação, nó órfão nunca sobreposto;
+- `lib/flow-engine/ai/generation-schema.test.ts` (5 casos) — o schema aceita
+  o exemplo canônico de CADA um dos 11 tipos registrados (achou e corrigiu um
+  defeito real: os exemplos de `crm.add_tag` e `notify.internal` violavam o
+  próprio `configSchema` deles — passava despercebido porque `branches()`
+  desses dois tipos não lê `config`);
+- `lib/flow-engine/ai/budget-gate.test.ts` (6 casos) — o mapeamento de campos
+  entre `BudgetStatus` e `EntradaDeOrcamento` está correto nos dois sentidos
+  (modo `off`/`avisar`/`bloquear`, teto zerado, org repassada corretamente);
+- `tests/unit/pontos-de-ia-completude.test.ts` — os dois pontos novos
+  (`flow_ai_interpretar`, `flow_ai_gerar`) entram no registro E são
+  detectados como emitidos (via `FORA_DO_SEAM`, porque `resolverModeloDoPonto`
+  é chamado posicionalmente, não com `purpose: 'x'`).
+
+**Dívida DECLARADA, não esquecida — `registraEm: "nenhum"` nos dois pontos.**
+`lib/ai/log-invocation.ts`'s `InvocationKind` é um union FECHADO que
+`tests/invariants/vocabulario-banco-x-typescript.test.ts` trava
+deliberadamente contra o CHECK da tabela `ai_invocations` — depreciada, mas
+ainda existente. Alargar o union para caber os dois pontos novos quebraria
+esse invariante sem abrir superfície nova nenhuma (`llm_calls.purpose` já é
+texto livre, sem CHECK). Custo/latência desta feature não aparecem em
+`llm_calls` por ora; o `audit()` (`flow.ai_generated`/`flow.ai_generation_failed`)
+é o único rastro até essa frente ser resolvida.
+
+---
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

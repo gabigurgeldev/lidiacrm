@@ -62,6 +62,9 @@ export const KIND_LABEL = {
   // Diz o que ACONTECEU com o material, e nunca "a indexação falhou": quem
   // subiu um PDF quer saber que o agente ainda não sabe o que está nele.
   conhecimento_nao_indexado: "Um material que você enviou não entrou na base de conhecimento",
+  // Diz que a campanha PAROU (não "está lenta"): quem lê quer saber que
+  // precisa agir, não que o disparo está "só devagar".
+  disparo_travado: "Um disparo em massa travou e está esperando para continuar",
   other: "Aviso do assistente",
 } as const satisfies Record<InboxKind, string>;
 

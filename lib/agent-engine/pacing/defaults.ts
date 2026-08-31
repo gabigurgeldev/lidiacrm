@@ -48,6 +48,14 @@ export interface PacingKnobs {
 export const KNOB_BOUNDS = {
   /** teto de intervalo/jitter aceito na UI (ms). */
   intervalMaxMs: 600_000,
+  /**
+   * Piso de intervalo aceito na UI (ms). NÃO é o piso anti-ban — quem decide o
+   * ritmo real é `decidePacing`, e o intervalo escolhido pelo operador só
+   * COMPÕE com ele por `Math.max`. Este número existe para a borda recusar
+   * `0`/negativo antes de o motor ter de tratá-los, e para o CHECK do banco
+   * (`bulk_sends_interval_check`) ter a mesma régua que a tela.
+   */
+  intervalMinMs: 1_000,
   /** maior hora aceita como INÍCIO de janela (fim vai até 24). */
   hourLastStart: 23,
   /** fim de janela é exclusivo e pode chegar à meia-noite seguinte. */

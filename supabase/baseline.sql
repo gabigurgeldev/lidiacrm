@@ -17221,16 +17221,44 @@ alter table public.bulk_sends           enable row level security;
 alter table public.bulk_send_recipients enable row level security;
 
 drop policy if exists tenant_isolation_bulk_sends_all on public.bulk_sends;
-create policy tenant_isolation_bulk_sends_all on public.bulk_sends
-  for all
-  using (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin())
-  with check (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+
+drop policy if exists tenant_isolation_bulk_sends_select on public.bulk_sends;
+create policy tenant_isolation_bulk_sends_select on public.bulk_sends
+  for select using (
+    organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
+  );
+
+drop policy if exists tenant_isolation_bulk_sends_write on public.bulk_sends;
+create policy tenant_isolation_bulk_sends_write on public.bulk_sends
+  for all using (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  ) with check (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  );
 
 drop policy if exists tenant_isolation_bulk_send_recipients_all on public.bulk_send_recipients;
-create policy tenant_isolation_bulk_send_recipients_all on public.bulk_send_recipients
-  for all
-  using (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin())
-  with check (organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin());
+
+drop policy if exists tenant_isolation_bulk_send_recipients_select on public.bulk_send_recipients;
+create policy tenant_isolation_bulk_send_recipients_select on public.bulk_send_recipients
+  for select using (
+    organization_id in (select public.fn_user_org_ids()) or public.fn_is_platform_admin()
+  );
+
+drop policy if exists tenant_isolation_bulk_send_recipients_write on public.bulk_send_recipients;
+create policy tenant_isolation_bulk_send_recipients_write on public.bulk_send_recipients
+  for all using (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  ) with check (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  );
 
 revoke all on public.bulk_sends           from anon, public;
 revoke all on public.bulk_send_recipients from anon, public;
@@ -17645,6 +17673,67 @@ $claim$;
 -- Postgres dá a toda função ao criá-la, que `revoke from anon` não remove.
 revoke execute on function public.fn_claim_due_flow_executions(int, int) from public, anon, authenticated;
 grant execute on function public.fn_claim_due_flow_executions(int, int) to service_role;
+
+-- ---- Flow Engine: a policy nasceu ALL-só-tenancy (migration 0205) ----
+-- ⚠️ ENTRA ANTES DO BLOCO DA VARREDURA anon, mesmo motivo da 0193/0194/0195.
+--
+-- A 0203 criou as quatro tabelas com `tenant_isolation_<tabela>_all` sem
+-- `fn_role_at_least` — qualquer papel do tenant, inclusive `viewer`, criava e
+-- apagava fluxo falando direto com o PostgREST. Forward-fix idempotente:
+-- drop + create da mesma policy, gated em 'manager' (toda rota de
+-- /api/v1/flows/** fora de /ai/ já exige requireRole("manager", ...) pra
+-- QUALQUER verbo, então não há leitura que precise ficar aberta pra papel
+-- menor — diferente do par select-aberto de channel_sessions/ai_agents).
+
+drop policy if exists tenant_isolation_flows_all on public.flows;
+create policy tenant_isolation_flows_all on public.flows
+  for all using (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  ) with check (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  );
+
+drop policy if exists tenant_isolation_flow_versions_all on public.flow_versions;
+create policy tenant_isolation_flow_versions_all on public.flow_versions
+  for all using (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  ) with check (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  );
+
+drop policy if exists tenant_isolation_flow_executions_all on public.flow_executions;
+create policy tenant_isolation_flow_executions_all on public.flow_executions
+  for all using (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  ) with check (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  );
+
+drop policy if exists tenant_isolation_flow_execution_events_all on public.flow_execution_events;
+create policy tenant_isolation_flow_execution_events_all on public.flow_execution_events
+  for all using (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  ) with check (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  );
+
+notify pgrst, 'reload schema';
 
 
 

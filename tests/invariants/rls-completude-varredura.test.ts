@@ -162,6 +162,36 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "manager da org A NÃO lê linhas da org B (0 rows)\") prova isolamento " +
       "com `countAs` real, além do self-read do agent.",
   },
+  {
+    tabela: "bulk_sends",
+    razao:
+      "tests/invariants/bulk-send-isolamento.test.ts prova isolamento " +
+      "cross-tenant (leitura, escrita e o with check do insert) com " +
+      "`countAs`/`writeCountAs` reais.",
+  },
+  {
+    tabela: "bulk_send_recipients",
+    razao: "tests/invariants/bulk-send-isolamento.test.ts — mesmo arquivo da linha acima.",
+  },
+  {
+    tabela: "flows",
+    razao:
+      "tests/invariants/flow-engine-isolamento.test.ts prova isolamento " +
+      "cross-tenant (leitura, escrita e o with check do insert) com " +
+      "`countAs`/`writeCountAs` reais.",
+  },
+  {
+    tabela: "flow_versions",
+    razao: "tests/invariants/flow-engine-isolamento.test.ts — mesmo arquivo da linha acima.",
+  },
+  {
+    tabela: "flow_executions",
+    razao: "tests/invariants/flow-engine-isolamento.test.ts — mesmo arquivo da linha acima.",
+  },
+  {
+    tabela: "flow_execution_events",
+    razao: "tests/invariants/flow-engine-isolamento.test.ts — mesmo arquivo da linha acima.",
+  },
 ];
 
 /**

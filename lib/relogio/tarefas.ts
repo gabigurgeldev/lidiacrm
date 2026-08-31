@@ -26,6 +26,11 @@ export const TAREFAS_DO_RELOGIO = [
     rotulo: "Destravar envios parados",
     porque: "Mensagem presa em «enviando» deixa de mentir progresso.",
   },
+  {
+    id: "bulk-send-worker",
+    rotulo: "Andar os disparos em massa",
+    porque: "É quem manda a próxima mensagem da lista, no ritmo que o número aguenta.",
+  },
 ] as const;
 
 export type IdDeTarefaDoRelogio = (typeof TAREFAS_DO_RELOGIO)[number]["id"];

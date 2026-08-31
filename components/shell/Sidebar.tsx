@@ -104,7 +104,7 @@ export function SidebarContent({
           </span>
         )}
       </div>
-      <nav className="flex-1 space-y-3 overflow-y-auto p-2" aria-label={t("Navegação principal")}>
+      <nav className="flex-1 space-y-2 overflow-y-auto p-2" aria-label={t("Navegação principal")}>
         {grupos.map(({ group, items }) => {
           const tituloId = `nav-grupo-${group.id}`;
           return (
@@ -133,7 +133,7 @@ export function SidebarContent({
                         aria-current={isActive ? "page" : undefined}
                         onClick={onNavigate}
                         className={cn(
-                          "relative flex items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors",
+                          "relative flex items-center gap-3 rounded-md px-3 py-1 text-sm transition-colors",
                           isActive
                             ? "bg-accent text-accent-foreground"
                             : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
@@ -159,7 +159,7 @@ export function SidebarContent({
                       aria-current={pathname === group.hub.href ? "page" : undefined}
                       onClick={onNavigate}
                       className={cn(
-                        "flex items-center gap-3 rounded-md px-3 py-1.5 text-sm transition-colors",
+                        "flex items-center gap-3 rounded-md px-3 py-1 text-sm transition-colors",
                         pathname === group.hub.href
                           ? "bg-accent text-accent-foreground"
                           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",

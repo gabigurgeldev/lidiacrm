@@ -1,0 +1,267 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Disparo em massa — a lista, o ritmo e o laço que volta",
+    "subtitle": "por que o anti-ban não foi reimplementado, por que o desfecho vem da linha de messages, e o que acontece quando trava",
+    "output": "disparo-em-massa.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que o operador vê" },
+    { "id": "borda", "label": "Borda HTTP" },
+    { "id": "relogio", "label": "Relógio" },
+    { "id": "regra", "label": "Regra pura (sem I/O)" },
+    { "id": "saida", "label": "O ponto único de saída" },
+    { "id": "banco", "label": "Banco" },
+    { "id": "volta", "label": "O laço de retorno" }
+  ],
+  "mainPath": [
+    "wizard",
+    "criar",
+    "montagem",
+    "recipients",
+    "cron",
+    "motor",
+    "pacing",
+    "handler",
+    "messages",
+    "dossie"
+  ],
+  "nodes": [
+    {
+      "id": "wizard",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "Novo disparo (4 passos)",
+      "sublabel": "app/app/disparos/_components/NovoDisparoDialog.tsx · o 4º passo nomeia quantas pessoas"
+    },
+    {
+      "id": "planilha",
+      "lane": "borda",
+      "col": 1,
+      "type": "api",
+      "label": "POST /bulk-sends/importar-lista",
+      "sublabel": "reusa lib/contacts/importar.ts · devolve os ids de quem JÁ existia, que o import de contatos não devolvia"
+    },
+    {
+      "id": "conexoes",
+      "lane": "borda",
+      "col": 1,
+      "type": "api",
+      "label": "GET /bulk-sends/conexoes",
+      "sublabel": "traduz capability em vocabulário de produto — a tela nunca vê nome de canal (lint-channels)"
+    },
+    {
+      "id": "criar",
+      "lane": "borda",
+      "col": 2,
+      "type": "api",
+      "label": "POST /bulk-sends",
+      "sublabel": "manager+ · pré-voo do template UMA vez · nasce em rascunho, nunca disparando"
+    },
+    {
+      "id": "start",
+      "lane": "borda",
+      "col": 3,
+      "type": "api",
+      "label": "POST /bulk-sends/:id/start",
+      "sublabel": "rate limit 10/h · transição no WHERE, nunca select-depois-update"
+    },
+    {
+      "id": "montagem",
+      "lane": "regra",
+      "col": 2,
+      "type": "lib",
+      "label": "montarRecorte + checarContato",
+      "sublabel": "a MESMA guarda da automação · dedupe por variante de nono dígito"
+    },
+    {
+      "id": "recipients",
+      "lane": "banco",
+      "col": 3,
+      "type": "table",
+      "label": "bulk_send_recipients",
+      "sublabel": "um por pessoa · unique (disparo, contato) · skipped SEM motivo é recusado pelo CHECK"
+    },
+    {
+      "id": "disparos",
+      "lane": "banco",
+      "col": 3,
+      "type": "table",
+      "label": "bulk_sends",
+      "sublabel": "next_send_at = relógio do produto · claimed_until = lease do motor · provider congelado"
+    },
+    {
+      "id": "scheduler",
+      "lane": "relogio",
+      "col": 4,
+      "type": "service",
+      "label": "scheduler (crond) — 1×/min",
+      "sublabel": "docker/scheduler/entrypoint.sh · timeout 45s"
+    },
+    {
+      "id": "tick",
+      "lane": "relogio",
+      "col": 4,
+      "type": "service",
+      "label": "relógio HTTP (sem contêiner)",
+      "sublabel": "lib/relogio/executar.ts · orçamento menor: divide a requisição com 4 tarefas"
+    },
+    {
+      "id": "cron",
+      "lane": "borda",
+      "col": 5,
+      "type": "api",
+      "label": "GET/POST /cron/bulk-send-worker",
+      "sublabel": "Bearer fail-closed · audita SÓ quando o tique mexeu em algo"
+    },
+    {
+      "id": "claim",
+      "lane": "banco",
+      "col": 5,
+      "type": "database",
+      "label": "fn_claim_due_bulk_sends (definer)",
+      "sublabel": "lease REPETIDO no UPDATE · exclusividade por número — a cláusula que as irmãs não têm"
+    },
+    {
+      "id": "motor",
+      "lane": "regra",
+      "col": 6,
+      "type": "lib",
+      "label": "rodarTiqueDeDisparo",
+      "sublabel": "lib/bulk-send/motor.ts · dependências injetadas, zero I/O · orçamento de TEMPO, não de mensagens"
+    },
+    {
+      "id": "pacing",
+      "lane": "regra",
+      "col": 6,
+      "type": "lib",
+      "label": "decidePacing + intervaloEfetivo",
+      "sublabel": "a régua do produto inteiro, importada · operador vai mais devagar, nunca mais rápido"
+    },
+    {
+      "id": "ledger",
+      "lane": "banco",
+      "col": 7,
+      "type": "table",
+      "label": "pacing_ledger",
+      "sublabel": "o disparo ESCREVE aqui — senão ele seria invisível ao anti-ban do agente no mesmo número"
+    },
+    {
+      "id": "handler",
+      "lane": "saida",
+      "col": 7,
+      "type": "service",
+      "label": "sendMessageHandler",
+      "sublabel": "ponto ÚNICO de saída · veta is_blocked · confere contrato do template · NÃO lança quando falha"
+    },
+    {
+      "id": "messages",
+      "lane": "banco",
+      "col": 8,
+      "type": "table",
+      "label": "messages",
+      "sublabel": "a linha É o desfecho: sent / queued / failed — lida por desfechoDoEnvio, nunca deduzida"
+    },
+    {
+      "id": "dossie",
+      "lane": "humano",
+      "col": 9,
+      "type": "frontend",
+      "label": "Dossiê do disparo",
+      "sublabel": "contadores · por que parou · próximo passo por motivo · tentar de novo só o que FALHOU"
+    },
+    {
+      "id": "central",
+      "lane": "volta",
+      "col": 8,
+      "type": "service",
+      "label": "agent_inbox_items (disparo_travado)",
+      "sublabel": "um aviso ABERTO por disparo · avisa sem o operador abrir a tela"
+    },
+    {
+      "id": "trilha",
+      "lane": "volta",
+      "col": 9,
+      "type": "service",
+      "label": "audit: bulk_send.created / started / cancelled",
+      "sublabel": "quem decidiu falar com N pessoas · NÃO há uma linha por mensagem, de propósito"
+    },
+    {
+      "id": "optout",
+      "lane": "volta",
+      "col": 6,
+      "type": "database",
+      "label": "contacts.is_blocked",
+      "sublabel": "a ingestão grava quando a pessoa diz PARAR — e o motor reconfere a cada destinatário"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "wizard", "to": "planilha", "label": "CSV multipart" },
+    { "id": "e2", "from": "wizard", "to": "conexoes", "label": "qual número, e o que ele permite" },
+    { "id": "e3", "from": "planilha", "to": "criar", "label": "contact_ids resolvidos" },
+    { "id": "e4", "from": "criar", "to": "montagem", "label": "aplica as guardas" },
+    { "id": "e5", "from": "montagem", "to": "recipients", "label": "pending + skipped com motivo" },
+    { "id": "e6", "from": "criar", "to": "disparos", "label": "nasce em rascunho" },
+    { "id": "e7", "from": "wizard", "to": "criar", "label": "confirmação nomeia o tamanho" },
+    { "id": "e8", "from": "start", "to": "disparos", "label": "running + next_send_at" },
+    { "id": "e9", "from": "dossie", "to": "start", "label": "o botão de disparar" },
+    { "id": "e10", "from": "scheduler", "to": "cron", "label": "curl com INTERNAL_SECRET" },
+    { "id": "e11", "from": "tick", "to": "motor", "label": "mesma regra, outro relógio" },
+    { "id": "e12", "from": "cron", "to": "motor", "label": "roda o tique" },
+    { "id": "e13", "from": "motor", "to": "claim", "label": "reclama com lease" },
+    { "id": "e14", "from": "claim", "to": "disparos", "label": "uma campanha por número" },
+    { "id": "e15", "from": "motor", "to": "pacing", "label": "posso enviar? e em que ritmo?" },
+    { "id": "e16", "from": "pacing", "to": "disparos", "label": "veto vira next_send_at + pause_reason" },
+    { "id": "e17", "from": "motor", "to": "recipients", "label": "próximo pendente · marca sending ANTES" },
+    { "id": "e18", "from": "motor", "to": "optout", "label": "reconfere a cada destinatário" },
+    { "id": "e19", "from": "motor", "to": "handler", "label": "uma mensagem" },
+    { "id": "e20", "from": "handler", "to": "messages", "label": "grava a linha e o estado dela" },
+    { "id": "e21", "from": "messages", "to": "motor", "label": "desfechoDoEnvio lê o status" },
+    { "id": "e22", "from": "motor", "to": "ledger", "label": "só o que o canal ACEITOU" },
+    { "id": "e23", "from": "ledger", "to": "pacing", "label": "quanto este número já mandou hoje" },
+    { "id": "e24", "from": "recipients", "to": "dossie", "label": "contadores e motivos" },
+    { "id": "e25", "from": "disparos", "to": "dossie", "label": "por que parou, e quando volta" },
+    { "id": "e26", "from": "motor", "to": "central", "label": "travou por cap ou falhas seguidas" },
+    { "id": "e27", "from": "central", "to": "dossie", "label": "o operador é avisado sem abrir a tela" },
+    { "id": "e28", "from": "criar", "to": "trilha", "label": "quem decidiu, e para quantos" },
+    { "id": "e29", "from": "start", "to": "trilha", "label": "agendar e disparar são intenções distintas" },
+    { "id": "e30", "from": "cron", "to": "trilha", "label": "worker_run só com efeito" },
+    {
+      "id": "e31",
+      "from": "conexoes",
+      "to": "pacing",
+      "label": "o piso e o teto que a tela mostra saem das MESMAS funções do motor"
+    },
+    {
+      "id": "e32",
+      "from": "optout",
+      "to": "recipients",
+      "label": "quem pediu para parar vira skipped/contact_blocked, não falha"
+    }
+  ],
+  "naoLigacoes": [
+    {
+      "de": "motor",
+      "para": "spinningGate",
+      "porque": "O gate anti-copy-idêntica é do agent-engine (fala pg.Pool) e NÃO cobre este caminho. A campanha manda a mesma mensagem de propósito — é o que uma campanha é — e o mitigador aqui é o ritmo, não a variação. Dívida DECLARADA no cabeçalho de lib/bulk-send/motor.ts; ninguém deve presumir cobertura."
+    },
+    {
+      "de": "motor",
+      "para": "adapter",
+      "porque": "O disparo NÃO fala com transporte nenhum. Todo envio passa por sendMessageHandler, que é o ponto único de saída — um caminho próprio nasceria sem o veto de is_blocked, sem o pré-voo do template e sem herdar o próximo conserto."
+    },
+    {
+      "de": "scheduler",
+      "para": "tick",
+      "porque": "São ALTERNATIVAS, não etapas: quem tem o contêiner scheduler não usa o relógio HTTP, e vice-versa. Ligá-los sugeriria uma cadeia que não existe."
+    },
+    {
+      "de": "recipients",
+      "para": "retry",
+      "porque": "`skipped` NUNCA volta para a fila — só `failed`. Não é limitação técnica: reenviar para quem pediu para parar seria o produto ajudando a furar um opt-out registrado. A proibição mora no dado (frases.ts, tentarDeNovo) e na rota, não na tela."
+    }
+  ]
+}

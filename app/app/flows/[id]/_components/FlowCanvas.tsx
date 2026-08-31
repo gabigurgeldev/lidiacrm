@@ -4,7 +4,6 @@ import {
   addEdge,
   Background,
   Controls,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
@@ -25,10 +24,14 @@ import { useT } from "@/hooks/i18n/useT";
 import { usePaletaDeNos, type NoDaPaleta } from "@/hooks/flows/useFlowNodes";
 import { useFluxo, usePublicarFluxo, useSalvarRascunho } from "@/hooks/flows/useFlows";
 import type { ErroDeGrafo, FlowGraph } from "@/lib/flow-engine/graph-schema";
+import { configExemploDoTipo } from "@/lib/flow-engine/node-examples";
 import { garantirNosRegistrados } from "@/lib/flow-engine/register-all";
 import { buscarNo } from "@/lib/flow-engine/registry";
 import type { FlowBranch } from "@/lib/flow-engine/types";
+import { Question } from "@/lib/ui/icons";
 
+import { ConstrutorComIa } from "./ConstrutorComIa";
+import { ICONE_DA_CATEGORIA, ICONE_DO_TIPO } from "./nodeIcons";
 import { NoDoFluxo, type DadosDoNo } from "./NoDoFluxo";
 import { PainelDoNo } from "./PainelDoNo";
 
@@ -126,6 +129,10 @@ function Quadro({ flowId }: { flowId: string }) {
   const [selecionado, setSelecionado] = useState<string | null>(null);
   const [erros, setErros] = useState<ErroDeGrafo[]>([]);
   const [semeadoDe, setSemeadoDe] = useState<string | null>(null);
+  // Travado enquanto a IA constrói em streaming: nada de arrastar nó, ligar
+  // linha, salvar ou publicar no meio de um grafo que ainda está sendo escrito
+  // pedaço a pedaço. Ver ConstrutorComIa.tsx.
+  const [bloqueado, setBloqueado] = useState(false);
 
   // Semear o quadro DURANTE A RENDERIZAÇÃO, e não num `useEffect`.
   //
@@ -164,7 +171,7 @@ function Quadro({ flowId }: { flowId: string }) {
   const acrescentar = useCallback(
     (no: NoDaPaleta) => {
       const id = `n${Date.now().toString(36)}`;
-      const config = configInicial(no.type);
+      const config = configExemploDoTipo(no.type);
       setNos((atuais) => [
         ...atuais,
         {
@@ -257,7 +264,13 @@ function Quadro({ flowId }: { flowId: string }) {
   if (isLoading) return <Skeleton className="m-6 h-full" />;
 
   return (
-    <div className="flex h-full flex-col">
+    // `relative`: é contra ESTE elemento que o overlay do ConstrutorComIa se
+    // posiciona (`absolute inset-0`), mesmo ele sendo renderizado lá dentro do
+    // <header> — CSS absolute ancora no ancestral posicionado mais próximo,
+    // não no pai imediato do DOM. Cobre cabeçalho + paleta + canvas juntos:
+    // os botões do cabeçalho já ficam `disabled` durante a construção, então
+    // cobri-los também é consistente com "não dá para mexer em nada".
+    <div className="relative flex h-full flex-col">
       <header className="flex items-center gap-3 border-b px-4 py-3">
         <Button asChild variant="ghost" size="sm">
           <Link href="/app/flows">{t("Voltar")}</Link>
@@ -268,17 +281,41 @@ function Quadro({ flowId }: { flowId: string }) {
           <Badge variant="secondary">{t("Nunca publicado")}</Badge>
         )}
         <div className="ml-auto flex gap-2">
-          <Button variant="outline" size="sm" onClick={aoSalvar} disabled={salvar.isPending} data-testid="salvar-rascunho">
+          <ConstrutorComIa
+            flowId={flowId}
+            onAtualizarCanvas={({ nos: n, arestas: a }) => {
+              setNos(n);
+              setArestas(a);
+            }}
+            grafoAntesDeGerar={() => ({ nos, arestas })}
+            onMudarBloqueio={setBloqueado}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={aoSalvar}
+            disabled={salvar.isPending || bloqueado}
+            data-testid="salvar-rascunho"
+          >
             {t("Salvar rascunho")}
           </Button>
-          <Button size="sm" onClick={aoPublicar} disabled={publicar.isPending} data-testid="publicar-fluxo">
+          <Button
+            size="sm"
+            onClick={aoPublicar}
+            disabled={publicar.isPending || bloqueado}
+            data-testid="publicar-fluxo"
+          >
             {t("Publicar")}
           </Button>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="w-56 shrink-0 overflow-y-auto border-r p-3" data-testid="paleta">
+        <aside
+          className="flex w-56 shrink-0 flex-col overflow-y-auto border-r p-3"
+          data-testid="paleta"
+          aria-disabled={bloqueado}
+        >
           {(paleta?.categorias ?? []).map((cat) => (
             <div key={cat.id} className="mb-4">
               <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -287,19 +324,24 @@ function Quadro({ flowId }: { flowId: string }) {
               <ul className="flex flex-col gap-1">
                 {(paleta?.nos ?? [])
                   .filter((n) => n.category === cat.id)
-                  .map((n) => (
-                    <li key={n.type}>
-                      <button
-                        type="button"
-                        onClick={() => acrescentar(n)}
-                        title={t(n.descricao)}
-                        className="w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
-                        data-testid={`paleta-${n.type}`}
-                      >
-                        {t(n.rotulo)}
-                      </button>
-                    </li>
-                  ))}
+                  .map((n) => {
+                    const Icone = ICONE_DO_TIPO[n.type] ?? ICONE_DA_CATEGORIA[n.category] ?? Question;
+                    return (
+                      <li key={n.type}>
+                        <button
+                          type="button"
+                          onClick={() => acrescentar(n)}
+                          disabled={bloqueado}
+                          title={t(n.descricao)}
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                          data-testid={`paleta-${n.type}`}
+                        >
+                          <Icone size={14} className="shrink-0 text-muted-foreground" aria-hidden />
+                          <span className="truncate">{t(n.rotulo)}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
               </ul>
             </div>
           ))}
@@ -309,18 +351,31 @@ function Quadro({ flowId }: { flowId: string }) {
           <ReactFlow
             nodes={nosComErro}
             edges={arestas}
-            onNodesChange={aoMudarNos}
-            onEdgesChange={aoMudarArestas}
-            onConnect={aoLigar}
-            onNodeClick={(_, n) => setSelecionado(n.id)}
-            onPaneClick={() => setSelecionado(null)}
+            onNodesChange={bloqueado ? undefined : aoMudarNos}
+            onEdgesChange={bloqueado ? undefined : aoMudarArestas}
+            onConnect={bloqueado ? undefined : aoLigar}
+            onNodeClick={bloqueado ? undefined : (_, n) => setSelecionado(n.id)}
+            onPaneClick={bloqueado ? undefined : () => setSelecionado(null)}
             nodeTypes={tiposDeNo}
+            nodesDraggable={!bloqueado}
+            nodesConnectable={!bloqueado}
+            elementsSelectable={!bloqueado}
+            panOnDrag={!bloqueado}
+            zoomOnScroll={!bloqueado}
             fitView
-            proOptions={{ hideAttribution: false }}
+            // Sem MiniMap e com a atribuição escondida: o CSS default do
+            // @xyflow/react pinta os dois com fundo claro
+            // (var(--xy-minimap-background-color-default) e
+            // --xy-attribution-background-color-default), e este repo não tem
+            // override de tema escuro para nenhuma variável --xy-* — apareciam
+            // como um retângulo claro sólido no canto inferior direito, sobre
+            // o canvas escuro. O construtor irmão (follow-up,
+            // app/app/ai/followups/[id]/_components/FlowCanvas.tsx) já evita o
+            // MiniMap de propósito; aqui alinha ao mesmo precedente.
+            proOptions={{ hideAttribution: true }}
           >
             <Background />
             <Controls />
-            <MiniMap pannable zoomable />
           </ReactFlow>
         </div>
 
@@ -346,44 +401,3 @@ function Quadro({ flowId }: { flowId: string }) {
   );
 }
 
-/**
- * Config com que cada bloco NASCE. Não é enfeite: um bloco que nasce com config
- * inválida não desenha as saídas, e a pessoa não tem onde ligar a primeira
- * linha — o quadro parece quebrado no primeiro uso.
- */
-function configInicial(tipo: string): Record<string, unknown> {
-  switch (tipo) {
-    case "logic.if":
-      return {
-        saidas: [
-          {
-            id: "s1",
-            label: "Score acima de 70",
-            quando: { combinador: "and", itens: [{ campo: "lead.score", op: "gt", valor: 70 }] },
-          },
-        ],
-      };
-    case "logic.wait":
-      return { duracao_ms: 300_000 };
-    case "logic.end":
-      return { desfecho: "concluido" };
-    case "crm.add_tag":
-      return { tag: "" };
-    case "crm.assign_owner":
-      return { user_id: "{{vars.dono_escolhido}}" };
-    case "crm.owner_responded":
-      return { contar_a_partir_de: "desde_o_inicio_do_fluxo" };
-    case "routing.round_robin":
-    case "routing.redistribute":
-      return { quando_ninguem: "tentar_depois", tentar_de_novo_em_ms: 300_000 };
-    case "whatsapp.notify_user":
-      return {
-        destinatario: { tipo: "dono_do_lead" },
-        mensagem: "Novo lead: {{lead.title}}",
-      };
-    case "notify.internal":
-      return { titulo: "", corpo: "", severidade: "warn" };
-    default:
-      return {};
-  }
-}

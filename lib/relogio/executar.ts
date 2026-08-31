@@ -1,4 +1,7 @@
 import { recoverStuckMessages } from "@/app/api/v1/cron/recover-stuck-messages/route";
+import { criarDisparoDb } from "@/lib/bulk-send/db";
+import { enviarUmDoDisparo } from "@/lib/bulk-send/enviar";
+import { houveEfeito, rodarTiqueDeDisparo } from "@/lib/bulk-send/motor";
 import { idsDoContatoEGemeos } from "@/lib/channels/contato-por-telefone";
 import { drainEventLog } from "@/lib/event-log/drain";
 import { ensureHandlersRegistered } from "@/lib/event-log/register-handlers";
@@ -154,6 +157,22 @@ export async function executarTickDoRelogio(): Promise<{
     const summary = await recoverStuckMessages(admin, new Date(), "relogio");
     if (summary.failed > 0) mexeu = true;
     return summary;
+  });
+
+  await uma("bulk-send-worker", async () => {
+    // Orçamento MENOR que o do cron dedicado (40s): aqui o tique divide a
+    // requisição com quatro outras tarefas, e estourar o tempo do relógio
+    // inteiro por causa do disparo faria as outras pararem de rodar. O que
+    // sobra fica em `next_send_at` — a campanha é o cursor, nada se perde.
+    const resumo = await rodarTiqueDeDisparo({
+      db: criarDisparoDb(admin),
+      relogio: () => new Date(),
+      dormir: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      enviar: enviarUmDoDisparo,
+      orcamentoMs: 10_000,
+    });
+    if (houveEfeito(resumo)) mexeu = true;
+    return resumo;
   });
 
   return { tarefas, mexeu };

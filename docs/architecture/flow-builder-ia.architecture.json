@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Criar fluxo com IA — dentro do editor, nunca uma tela nova",
+    "subtitle": "o schema de geração nasce do registry, a posição vem de BFS puro, e a geração nunca grava o banco",
+    "output": "flow-builder-ia.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que o operador vê" },
+    { "id": "cliente", "label": "No navegador" },
+    { "id": "borda", "label": "Borda HTTP" },
+    { "id": "regra", "label": "Regra pura (roda nos dois lados)" },
+    { "id": "config", "label": "Configuração do tenant" },
+    { "id": "banco", "label": "Banco" }
+  ],
+  "mainPath": [
+    "botao",
+    "interpretar",
+    "perguntas",
+    "gerar",
+    "schema",
+    "stream",
+    "canvas",
+    "salvar"
+  ],
+  "nodes": [
+    {
+      "id": "botao",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "\"Criar com IA\" no editor",
+      "sublabel": "FlowCanvas.tsx · mesmo cabeçalho de Salvar/Publicar, nunca rota própria"
+    },
+    {
+      "id": "construtor",
+      "lane": "cliente",
+      "col": 2,
+      "type": "frontend",
+      "label": "ConstrutorComIa.tsx",
+      "sublabel": "4 estados: entrada → perguntas → construindo → concluído · estado só no navegador"
+    },
+    {
+      "id": "interpretar",
+      "lane": "borda",
+      "col": 3,
+      "type": "api",
+      "label": "POST /flows/:id/ai/interpretar",
+      "sublabel": "generateObject não-streaming · devolve pergunta OU resumo"
+    },
+    {
+      "id": "perguntas",
+      "lane": "humano",
+      "col": 3,
+      "type": "frontend",
+      "label": "Pergunta por múltipla escolha",
+      "sublabel": "nunca texto livre — a IA propõe opções, a pessoa escolhe"
+    },
+    {
+      "id": "gerar",
+      "lane": "borda",
+      "col": 4,
+      "type": "api",
+      "label": "POST /flows/:id/ai/gerar",
+      "sublabel": "streamObject().toTextStreamResponse() — primeiro streaming do produto"
+    },
+    {
+      "id": "orcamento",
+      "lane": "config",
+      "col": 3,
+      "type": "lib",
+      "label": "orcamentoPermite (budget-gate.ts)",
+      "sublabel": "reusa decidirOrcamento do seam · recusa ANTES de gastar token"
+    },
+    {
+      "id": "binding",
+      "lane": "config",
+      "col": 3,
+      "type": "database",
+      "label": "ai_purpose_bindings (por tenant)",
+      "sublabel": "/app/ai/providers · o admin da EMPRESA escolhe o modelo, não um admin de plataforma"
+    },
+    {
+      "id": "schema",
+      "lane": "regra",
+      "col": 4,
+      "type": "lib",
+      "label": "generation-schema.ts",
+      "sublabel": "discriminated union montado do REGISTRY · roda no cliente E no servidor"
+    },
+    {
+      "id": "registry",
+      "lane": "regra",
+      "col": 5,
+      "type": "lib",
+      "label": "lib/flow-engine/registry.ts",
+      "sublabel": "os 11 tipos de nó — fonte única, também usada pela paleta manual"
+    },
+    {
+      "id": "stream",
+      "lane": "cliente",
+      "col": 5,
+      "type": "lib",
+      "label": "useObject (@ai-sdk/react)",
+      "sublabel": "objeto PARCIAL a cada pedaço · mesmo schema do servidor, zero parsing de SSE à mão"
+    },
+    {
+      "id": "layout",
+      "lane": "regra",
+      "col": 6,
+      "type": "lib",
+      "label": "auto-layout.ts",
+      "sublabel": "BFS a partir do trigger · a IA NUNCA escolhe posição"
+    },
+    {
+      "id": "canvas",
+      "lane": "humano",
+      "col": 7,
+      "type": "frontend",
+      "label": "O canvas REAL, travado",
+      "sublabel": "nós aparecem ao vivo · nodesDraggable/Connectable/panOnDrag=false durante a construção"
+    },
+    {
+      "id": "salvar",
+      "lane": "borda",
+      "col": 8,
+      "type": "api",
+      "label": "PATCH /flows/:id (Salvar rascunho)",
+      "sublabel": "o botão de SEMPRE — o mesmo que um fluxo montado à mão usa"
+    },
+    {
+      "id": "draft",
+      "lane": "banco",
+      "col": 9,
+      "type": "table",
+      "label": "flows.draft_graph",
+      "sublabel": "a geração NUNCA escreve aqui direto — só o clique em Salvar. audit flow.ai_generated é o único rastro da geração (registraEm:\"nenhum\" em llm_calls é dívida declarada)"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "botao", "to": "construtor", "label": "abre o painel sobre o canvas" },
+    { "id": "e2", "from": "construtor", "to": "interpretar", "label": "pedido + histórico" },
+    { "id": "e3", "from": "interpretar", "to": "orcamento", "label": "confere ANTES de chamar o modelo" },
+    { "id": "e4", "from": "interpretar", "to": "binding", "label": "resolverModeloDoPonto" },
+    { "id": "e5", "from": "interpretar", "to": "perguntas", "label": "kind: perguntar" },
+    { "id": "e6", "from": "perguntas", "to": "construtor", "label": "resposta escolhida vira histórico" },
+    { "id": "e7", "from": "construtor", "to": "interpretar", "label": "chama de novo com o histórico" },
+    { "id": "e8", "from": "interpretar", "to": "gerar", "label": "kind: pronto → botão Montar" },
+    { "id": "e9", "from": "gerar", "to": "orcamento", "label": "confere de novo" },
+    { "id": "e10", "from": "gerar", "to": "schema", "label": "streamObject valida contra isto" },
+    { "id": "e11", "from": "schema", "to": "registry", "label": "uma variante por tipo — nunca copiado à mão" },
+    { "id": "e12", "from": "gerar", "to": "stream", "label": "texto de stream" },
+    { "id": "e13", "from": "stream", "to": "schema", "label": "o MESMO schema, rodando no navegador" },
+    { "id": "e14", "from": "stream", "to": "layout", "label": "a cada pedaço novo" },
+    { "id": "e15", "from": "layout", "to": "canvas", "label": "posições calculadas, nunca pedidas à IA" },
+    { "id": "e16", "from": "canvas", "to": "salvar", "label": "clique manual, igual a sempre" },
+    { "id": "e17", "from": "salvar", "to": "draft", "label": "só aqui o grafo é persistido" },
+    { "id": "e18", "from": "gerar", "to": "draft", "label": "audit fire-and-forget · nunca grava o grafo em si" },
+    { "id": "e19", "from": "draft", "to": "canvas", "label": "semeia o quadro ao abrir o fluxo" },
+    { "id": "e20", "from": "binding", "to": "gerar", "label": "gerar TAMBÉM resolve pelo mesmo binding" },
+    { "id": "e21", "from": "registry", "to": "canvas", "label": "a MESMA fonte que a paleta manual (NoDoFluxo) usa" }
+  ],
+  "naoLigacoes": [
+    {
+      "de": "gerar",
+      "para": "draft",
+      "porque": "A rota de streaming NUNCA escreve flows.draft_graph. Só o clique humano em 'Salvar rascunho' persiste — mesma doutrina de montarQuadro.ts no onboarding ('o que se grava é o que a pessoa está vendo'). Um caminho de gravação paralelo divergiria do que o editor manual garante."
+    },
+    {
+      "de": "binding",
+      "para": "platform_admin",
+      "porque": "Decisão explícita do dono do produto: o modelo é escolhido pelo admin da EMPRESA (tenant, /app/ai/providers), reusando ai_purpose_bindings — não um mecanismo novo de admin de plataforma (que exigiria tabela singleton no molde de platform_google_oauth)."
+    },
+    {
+      "de": "gerar",
+      "para": "llm_calls",
+      "porque": "registraEm:\"nenhum\", DECLARADO. InvocationKind (lib/ai/log-invocation.ts) é fechado e travado contra o CHECK de ai_invocations por um invariante deliberado — alargá-lo para caber estes dois pontos quebraria aquele invariante sem necessidade, já que llm_calls.purpose já é texto livre sem CHECK."
+    }
+  ]
+}
