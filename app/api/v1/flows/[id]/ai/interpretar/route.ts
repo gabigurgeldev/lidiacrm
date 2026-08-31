@@ -28,11 +28,13 @@ import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 export const dynamic = "force-dynamic";
 
 /**
- * A rota fala com um provedor de IA, e o cabeçalho acima chamá-la de "rápida e
- * barata" mede o TAMANHO do trabalho, não o tempo de resposta de terceiro. Sem
- * este teto, o padrão do runtime corta a chamada muito antes de um provedor
- * lento terminar, e a conexão morre sem que nada seja escrito — que é
- * exatamente a forma de um 502 sem uma linha de log.
+ * VALE NA VERCEL, NÃO NO SELF-HOST — e a diferença já enganou uma investigação.
+ *
+ * `maxDuration` é semântica de função serverless. `next.config.ts` usa
+ * `output: "standalone"` fora da Vercel, e ali o processo é um servidor Node
+ * comum: quem limita o tempo é o proxy à frente (`Caddyfile`), não esta linha.
+ * Ela fica porque a rota TAMBÉM roda na Vercel, mas não conte com ela para
+ * diagnosticar corte de tempo em VPS — lá o número que importa é o do Caddy.
  */
 export const maxDuration = 120;
 
@@ -51,21 +53,69 @@ const entradaSchema = z.strictObject({
     .default([]),
 });
 
-const saidaSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("perguntar"),
-    pergunta: z.string().min(1).max(300).describe("Uma pergunta objetiva, em português."),
-    opcoes: z.array(z.string().min(1).max(80)).min(2).max(5),
-  }),
-  z.object({
-    kind: z.literal("pronto"),
-    resumo: z
-      .string()
-      .min(1)
-      .max(400)
-      .describe("Resumo do plano em 1-2 frases, para a pessoa confirmar."),
-  }),
-]);
+/**
+ * OBJETO NA RAIZ, NUNCA UNIÃO — e isto não é preferência de estilo.
+ *
+ * Este schema era `z.discriminatedUnion("kind", [...])`, que vira `anyOf` no
+ * TOPO do JSON Schema. Structured Outputs de APIs compatíveis com OpenAI — que
+ * é o que a OpenRouter expõe, e a OpenRouter é o caminho recomendado do
+ * self-host — não aceitam `anyOf` no nível raiz. O resultado era "Criar fluxo
+ * com IA" quebrado do primeiro dia, para todo mundo, sem exceção.
+ *
+ * O sintoma dependia do modelo e nenhuma das duas frases apontava para o
+ * schema, que é a razão de o defeito ter sobrevivido a duas correções erradas:
+ *
+ *   anthropic/claude-haiku-4-5     "could not parse the response"    ~6s
+ *   google/gemini-2.5-flash-lite   "response did not match schema"   ~1s
+ *
+ * A união aninhada continua permitida — `ai/gerar` usa uma dentro de `nodes`
+ * (lib/flow-engine/ai/generation-schema.ts) e sempre funcionou. A proibição é
+ * só da raiz.
+ *
+ * O preço de achatar é que o schema deixa de garantir a coerência por tipo:
+ * `perguntar` sem `pergunta` passa a ser representável. Quem garante agora é
+ * `coerente()`, logo abaixo — a validação mudou de lugar, não desapareceu.
+ */
+const saidaSchema = z.object({
+  kind: z
+    .enum(["perguntar", "pronto"])
+    .describe(
+      "'perguntar' se ainda falta informação para montar o fluxo; 'pronto' se já dá para montar.",
+    ),
+  pergunta: z
+    .string()
+    .max(300)
+    .optional()
+    .describe("Obrigatório quando kind='perguntar'. Uma pergunta objetiva, em português."),
+  opcoes: z
+    .array(z.string().max(80))
+    .max(5)
+    .optional()
+    .describe("Obrigatório quando kind='perguntar'. De 2 a 5 respostas possíveis."),
+  resumo: z
+    .string()
+    .max(400)
+    .optional()
+    .describe(
+      "Obrigatório quando kind='pronto'. Resumo do plano em 1-2 frases, para a pessoa confirmar.",
+    ),
+});
+
+type Saida = z.infer<typeof saidaSchema>;
+
+/**
+ * O que o `discriminatedUnion` garantia antes de o schema ser achatado.
+ *
+ * Sem isto, um `kind: "perguntar"` sem opções chegaria à tela como uma pergunta
+ * de múltipla escolha SEM escolhas — beco sem saída, e pior que um erro, porque
+ * parece que funcionou.
+ */
+function coerente(s: Saida): boolean {
+  if (s.kind === "perguntar") {
+    return (s.pergunta?.trim().length ?? 0) > 0 && (s.opcoes?.length ?? 0) >= 2;
+  }
+  return (s.resumo?.trim().length ?? 0) > 0;
+}
 
 export async function POST(
   req: NextRequest,
@@ -112,7 +162,10 @@ export async function POST(
   logger.info("flow.ai.interpretar.inicio", {
     organizationId: authz.org.orgId,
     requestId,
-    modelo: resolvido.modelId,
+    // Canônico, NÃO o id enviado ao provedor: a tradução para o nome que a
+    // OpenRouter usa acontece depois, dentro do provider. Ver idNaOpenRouter.
+    modeloCanonico: resolvido.modelId,
+    origem: resolvido.origem,
   });
 
   try {
@@ -128,7 +181,34 @@ export async function POST(
       // meio; 400 é folgado para o teto de 300/400 caracteres dos campos.
       maxOutputTokens: 600,
     });
-    logger.info("flow.ai.interpretar.fim", { requestId, ms: Date.now() - t0 });
+
+    if (!coerente(gerado.object)) {
+      // Trata como falha do provedor, e não como sucesso pela metade: mandar
+      // para a tela uma pergunta sem opções seria pior que o erro, porque ela
+      // não parece um erro.
+      logger.error("flow.ai.interpretar.incoerente", {
+        organizationId: authz.org.orgId,
+        requestId,
+        ms: Date.now() - t0,
+        // Canônico, NÃO o id enviado ao provedor: a tradução para o nome que a
+        // OpenRouter usa acontece depois, dentro do provider. Ver idNaOpenRouter.
+        modeloCanonico: resolvido.modelId,
+        origem: resolvido.origem,
+        kind: gerado.object.kind,
+      });
+      return fail(
+        "ai_provider_error",
+        "A resposta da IA veio incompleta. Tente descrever de outro jeito.",
+        502,
+        { requestId },
+      );
+    }
+
+    logger.info("flow.ai.interpretar.fim", {
+      requestId,
+      ms: Date.now() - t0,
+      kind: gerado.object.kind,
+    });
     return ok(gerado.object, { requestId });
   } catch (err) {
     // A causa vai para o LOG além da resposta: `details` só chega a quem abriu
@@ -137,7 +217,10 @@ export async function POST(
       organizationId: authz.org.orgId,
       requestId,
       ms: Date.now() - t0,
-      modelo: resolvido.modelId,
+      // Canônico, NÃO o id enviado ao provedor: a tradução para o nome que a
+      // OpenRouter usa acontece depois, dentro do provider. Ver idNaOpenRouter.
+      modeloCanonico: resolvido.modelId,
+      origem: resolvido.origem,
       causa: err instanceof Error ? err.message : String(err),
     });
     return fail(
