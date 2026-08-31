@@ -1,12 +1,10 @@
-import Link from "next/link";
-
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { ROLE_RANK } from "@/lib/auth/types";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TeamMembersClient } from "./_components/TeamMembersClient";
 import { AttendantsClient } from "./_components/AttendantsClient";
+import { BotaoCriarMembro } from "./_components/BotaoCriarMembro";
 
 export const dynamic = "force-dynamic";
 
@@ -51,11 +49,13 @@ export default async function TeamPage({
             {t("Gestão de membros, roles e atendimento do tenant.")}
           </p>
         </div>
-        {isAdmin ? (
-          <Button asChild className="shrink-0">
-            <Link href="/app/team/invite">Convidar membros</Link>
-          </Button>
-        ) : null}
+        {/*
+          "Criar usuário" no lugar de "Convidar membros". O convite dependia de
+          `RESEND_API_KEY`; sem ela — o estado de toda instalação recém-feita — a
+          tela de convite terminava exibindo um link cru para copiar à mão, e é
+          justamente no dia da instalação que se monta o time.
+        */}
+        {isAdmin ? <BotaoCriarMembro /> : null}
       </header>
 
       <Tabs defaultValue={abaInicial} className="flex flex-1 flex-col">

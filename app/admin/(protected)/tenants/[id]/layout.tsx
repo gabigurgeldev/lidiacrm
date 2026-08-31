@@ -43,7 +43,10 @@ interface TabItem {
 const TABS: TabItem[] = [
   { label: "Visão Geral", href: "", disabled: false },
   { label: "Saúde", href: "/health", disabled: false },
-  { label: "Equipe", href: "/team", disabled: true },
+  // Deixou de ser "em breve": é onde se cria a pessoa que vai usar o tenant.
+  // Sem ela, criar uma organização pelo painel produzia um lugar em que ninguém
+  // conseguia entrar — o `owner_email` do formulário virava só um hash no audit.
+  { label: "Equipe", href: "/team", disabled: false },
   { label: "Uso", href: "/usage", disabled: true },
 ];
 

@@ -59,6 +59,11 @@ export const AUDIT_ACTIONS = [
   "lgpd.anonymize_executed",
   "member.invited",
   "member.accepted",
+  // Pessoa criada direto por quem administra, com e-mail e senha, sem convite.
+  // Distinta de `member.invited` de propósito: são eventos com donos diferentes
+  // — no convite quem completa é o convidado, aqui quem completa é quem cria —
+  // e juntá-los apagaria de quem foi a decisão de dar acesso.
+  "member.created",
   "member.role_changed",
   "member.revoked",
   "token.created",
@@ -141,6 +146,11 @@ export const AUDIT_ACTIONS = [
   "incident.resolved",
   "platform_admin.usage_viewed",
   "platform_admin.users_listed",
+  // Pessoa criada pelo painel da plataforma, dentro de um tenant. Separada de
+  // `member.created` de propósito: esta atravessa a fronteira de organização, e
+  // quem lê a trilha da plataforma precisa vê-la sem cruzar com a trilha do
+  // tenant. As duas são emitidas na mesma operação.
+  "platform_admin.user_created",
   "platform_admin.user_viewed",
   "platform_admin.platform_admins_listed",
   "mcp.tool_called",

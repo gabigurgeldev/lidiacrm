@@ -23,6 +23,21 @@ export const inviteMemberSchema = z.object({
 });
 export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
 
+/**
+ * Criar a pessoa direto, com senha, em vez de mandar convite.
+ *
+ * `min(8)` é a MESMA régua de `lib/auth/schemas.ts` — a senha definida aqui é a
+ * senha com que a pessoa vai entrar pelo login normal, então exigir aqui algo
+ * diferente do que o login exige seria duas réguas para a mesma coisa.
+ */
+export const criarMembroSchema = z.object({
+  email: z.string().email(),
+  senha: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
+  role: z.enum(ROLES),
+  nome: z.string().trim().min(1).max(120).optional(),
+});
+export type CriarMembroInput = z.infer<typeof criarMembroSchema>;
+
 export const acceptInviteSchema = z.object({
   token: z.string().min(20),
 });

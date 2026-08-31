@@ -35,6 +35,12 @@ const formSchema = z.object({
   cnpj: z.string().optional().or(z.literal("")),
   plan: z.enum(["standard", "pro", "enterprise"]),
   owner_email: z.string().email("E-mail inválido"),
+  /**
+   * Com a senha, o dono nasce junto e já entra. Sem ela, o tenant nascia sem
+   * NINGUÉM dentro: o e-mail virava só um hash no audit, e a organização
+   * ficava inalcançável até alguém criar a pessoa pela aba Equipe.
+   */
+  owner_password: z.string().min(8, "Mínimo de 8 caracteres"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -87,6 +93,7 @@ export function NewTenantForm() {
       cnpj: "",
       plan: "standard",
       owner_email: "",
+      owner_password: "",
     },
   });
 
@@ -125,6 +132,7 @@ export function NewTenantForm() {
         cnpj: values.cnpj || undefined,
         plan: values.plan,
         owner_email: values.owner_email,
+        owner_password: values.owner_password,
       });
 
       toast.success(t("Tenant criado com sucesso!"));
@@ -266,6 +274,32 @@ export function NewTenantForm() {
               />
               {errors.owner_email && (
                 <p className="text-xs text-error-fg">{t(errors.owner_email.message ?? "")}</p>
+              )}
+            </div>
+
+            {/* owner_password */}
+            <div className="space-y-1.5">
+              <Label htmlFor="owner_password">
+                {t("Senha do responsável")} <span className="text-error-fg">*</span>
+              </Label>
+              {/*
+                Texto claro de propósito: quem cria o tenant precisa LER a senha
+                para repassá-la ao responsável. Mascarar aqui só produziria erro
+                de digitação numa senha que a própria pessoa acabou de inventar.
+              */}
+              <Input
+                id="owner_password"
+                type="text"
+                autoComplete="off"
+                {...register("owner_password")}
+                aria-invalid={!!errors.owner_password}
+              />
+              {errors.owner_password ? (
+                <p className="text-xs text-error-fg">{t(errors.owner_password.message ?? "")}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {t("O responsável entra com este e-mail e senha. Nenhum e-mail é enviado.")}
+                </p>
               )}
             </div>
 

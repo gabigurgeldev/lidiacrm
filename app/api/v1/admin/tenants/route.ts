@@ -4,6 +4,8 @@ import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { criarUsuarioNaOrganizacao } from "@/lib/auth/criar-usuario";
+import { logger } from "@/lib/logger";
 import { randomUUID } from "node:crypto";
 
 // ---------------------------------------------------------------------------
@@ -28,6 +30,17 @@ const createSchema = z.object({
   cnpj: z.string().optional(),
   plan: z.enum(["standard", "pro", "enterprise"]).default("standard"),
   owner_email: z.string().email(),
+  /**
+   * Com a senha, o dono é CRIADO junto e já entra. Sem ela, o tenant nasce sem
+   * ninguém dentro — que era o comportamento único até aqui: `owner_email` era
+   * coletado, virava um hash no audit, e nenhuma conta ou vínculo nascia. Ou
+   * seja, criar tenant pelo painel produzia uma organização em que ninguém
+   * conseguia entrar.
+   *
+   * Opcional, e não obrigatório, para não quebrar quem já chama esta rota por
+   * API sem senha.
+   */
+  owner_password: z.string().min(8).optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -188,7 +201,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const { display_name, slug, legal_name, cnpj, plan, owner_email } = parsed.data;
+  const { display_name, slug, legal_name, cnpj, plan, owner_email, owner_password } =
+    parsed.data;
   const admin = createAdminClient();
 
   const { data: org, error: insertError } = await admin
@@ -217,6 +231,47 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // O dono, se veio senha. Depois do audit de criação da organização seria
+  // tarde: quem lê a trilha veria o tenant nascer e a pessoa aparecer sem
+  // ligação clara. Aqui as duas linhas saem na mesma sequência.
+  let donoCriado: string | null = null;
+  if (owner_password) {
+    const r = await criarUsuarioNaOrganizacao({
+      admin,
+      organizationId: org.id,
+      atorUserId: adminCtx.user.id,
+      email: owner_email,
+      senha: owner_password,
+      // `admin` do tenant: é o dono. Sem isto ele não conseguiria nem criar o
+      // resto do time, e a organização voltaria a ser inalcançável na prática.
+      papel: "admin",
+      requestId,
+    });
+    if (r.ok) {
+      donoCriado = r.userId;
+    } else {
+      // A organização JÁ existe neste ponto, e desfazê-la para reportar erro do
+      // dono seria pior: o slug ficaria livre de novo e quem opera perderia o
+      // que já deu certo. Reporta o parcial, com o que falta fazer.
+      logger.error("admin.tenant.dono_nao_criado", {
+        organizationId: org.id,
+        requestId,
+        motivo: r.motivo,
+      });
+      return ok(
+        {
+          id: org.id,
+          slug: org.slug,
+          display_name: org.display_name,
+          owner_created: false,
+          aviso:
+            "A organização foi criada, mas o dono não. Crie a pessoa pela aba Equipe do tenant.",
+        },
+        { status: 201, requestId },
+      );
+    }
+  }
+
   void audit({
     action: "tenant.created_by_platform_admin",
     actorUserId: adminCtx.user.id,
@@ -239,7 +294,12 @@ export async function POST(req: NextRequest) {
   });
 
   return ok(
-    { id: org.id, slug: org.slug, display_name: org.display_name },
+    {
+      id: org.id,
+      slug: org.slug,
+      display_name: org.display_name,
+      owner_created: donoCriado !== null,
+    },
     { status: 201, requestId },
   );
 }

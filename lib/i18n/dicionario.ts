@@ -4973,6 +4973,27 @@ export const DICIONARIO: Traducoes = {
     es: "Gestión de miembros, roles y atención del tenant.",
   },
   "Convidar membros": { es: "Invitar miembros" },
+  // Criar pessoa direto, no lugar do convite por e-mail.
+  "Criar usuário": { es: "Crear usuario" },
+  Papel: { es: "Rol" },
+  opcional: { es: "opcional" },
+  "A pessoa entra imediatamente com o e-mail e a senha que você definir aqui. Não é enviado nenhum e-mail.":
+    { es: "La persona entra de inmediato con el correo y la contraseña que definas aquí. No se envía ningún correo." },
+  "Mínimo de 8 caracteres. Fica visível para você poder repassá-la.":
+    { es: "Mínimo de 8 caracteres. Queda visible para que puedas comunicarla." },
+  "Acesso criado. Passe o e-mail e a senha para a pessoa.":
+    { es: "Acceso creado. Entrega el correo y la contraseña a la persona." },
+  "Esta pessoa já tinha conta nesta instalação e agora faz parte da equipe. Ela entra com a senha que já usava — a senha digitada aqui não foi aplicada.":
+    { es: "Esta persona ya tenía cuenta en esta instalación y ahora forma parte del equipo. Entra con la contraseña que ya usaba: la contraseña escrita aquí no se aplicó." },
+  "Senha do responsável": { es: "Contraseña del responsable" },
+  "O responsável entra com este e-mail e senha. Nenhum e-mail é enviado.":
+    { es: "El responsable entra con este correo y contraseña. No se envía ningún correo." },
+  "A pessoa passa a fazer parte desta organização e entra com o e-mail e a senha definidos aqui. Nenhum e-mail é enviado.":
+    { es: "La persona pasa a formar parte de esta organización y entra con el correo y la contraseña definidos aquí. No se envía ningún correo." },
+  "Para o dono da organização, escolha Administrador — é quem consegue criar o restante do time.":
+    { es: "Para el dueño de la organización, elige Administrador: es quien puede crear al resto del equipo." },
+  "Esta pessoa já tinha conta nesta instalação e agora faz parte desta organização. Ela entra com a senha que já usava — a senha digitada aqui não foi aplicada.":
+    { es: "Esta persona ya tenía cuenta en esta instalación y ahora forma parte de esta organización. Entra con la contraseña que ya usaba: la contraseña escrita aquí no se aplicó." },
   "Membros": { es: "Miembros" },
   "A gestão de atendimento está disponível para gerentes e administradores.": {
     es: "La gestión de atención está disponible para gerentes y administradores.",

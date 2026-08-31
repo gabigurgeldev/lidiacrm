@@ -13,6 +13,12 @@ export interface CreateTenantPayload {
   cnpj?: string;
   plan?: "standard" | "pro" | "enterprise";
   owner_email: string;
+  /**
+   * Com a senha, o dono nasce junto e já consegue entrar. Opcional no tipo
+   * porque a rota a aceita ausente — antes dela, o tenant nascia sem ninguém
+   * dentro e o `owner_email` virava só um hash no audit.
+   */
+  owner_password?: string;
 }
 
 export interface CreateTenantResponse {

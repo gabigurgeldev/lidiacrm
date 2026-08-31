@@ -272,7 +272,6 @@ não.
 - `/app/settings/security/mfa` (#66)
 - `/app/settings/security/sessions` (#67)
 - `/app/settings/tenant/vocabulary` (#69)
-- `/admin/tenants/[id]/team` (#80)
 - `/admin/tenants/[id]/usage` (#81)
 - `/admin/lgpd/requests` (#83) — só o detalhe existe (`/admin/lgpd/requests/[id]`), alcançado de `/admin/lgpd`
 - `/maintenance` (#95)
