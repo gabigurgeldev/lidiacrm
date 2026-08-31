@@ -30,7 +30,12 @@ import { decryptKey, byteaToBuffer } from "@/lib/crypto/aes_gcm";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-import { OPENROUTER_BASE_URL, resolveLanguageModel, type ModelId } from "./gateway";
+import {
+  OPENROUTER_BASE_URL,
+  idNaOpenRouter,
+  resolveLanguageModel,
+  type ModelId,
+} from "./gateway";
 
 export interface ModeloResolvido {
   model: LanguageModel;
@@ -173,7 +178,13 @@ function instanciar(
     case "google":
       return createGoogleGenerativeAI({ apiKey })(modelId);
     case "openrouter":
-      return createOpenAI({ apiKey, baseURL: baseUrl ?? OPENROUTER_BASE_URL })(modelId);
+      // Mesma tradução de id do caminho por env (`resolveLanguageModel`). Sem
+      // ela, quem escolhesse o classificador PELO PAINEL cairia no mesmo buraco
+      // que o padrão caiu: id inexistente lá, resposta que não parseia, e um
+      // erro que não aponta para lugar nenhum.
+      return createOpenAI({ apiKey, baseURL: baseUrl ?? OPENROUTER_BASE_URL })(
+        idNaOpenRouter(modelId),
+      );
     default:
       return null;
   }

@@ -59,13 +59,45 @@ export function isAiGatewayConfigured(): boolean {
  * Ordem de resolução, do mais específico ao mais genérico:
  *   1. Gateway da Vercel  -> devolve a string; o gateway roteia e fatura
  *   2. OpenRouter         -> provider OpenAI-compatível apontado ao endpoint
- *      dela. Os ids da OpenRouter já são `provider/modelo`, então o mesmo id
- *      canônico serve sem tradução.
+ *      dela, com o id passado por `idNaOpenRouter()`. A forma `provider/modelo`
+ *      coincide, mas coincidir de forma NÃO é coincidir de valor — ver o mapa.
  *   3. Provider direto     -> Anthropic ou OpenAI, conforme o prefixo do id
  *
  * Devolve null quando nada está configurado, para o chamador PULAR com motivo
  * claro em vez de estourar com erro de rede lá dentro.
  */
+/**
+ * Ids canônicos que a OpenRouter escreve DIFERENTE.
+ *
+ * Este mapa existe porque a afirmação contrária estava escrita no cabeçalho
+ * desta função — "o mesmo id canônico serve sem tradução" — e era falsa para o
+ * classificador. A OpenRouter nomeia `anthropic/claude-haiku-4.5`, com PONTO;
+ * o id canônico daqui usa hífen. Um id que não existe lá não dá erro de
+ * autenticação nem de rede: a resposta simplesmente não é o objeto esperado, e
+ * o sintoma que chega à pessoa é `No object generated: could not parse the
+ * response` — que não aponta para lugar nenhum.
+ *
+ * O alcance era toda instalação self-host com `OPENROUTER_API_KEY`, que é o
+ * caminho recomendado: criar fluxo com IA falhava sempre, desde o primeiro dia.
+ *
+ * Só entram aqui os ids que DIVERGEM. `anthropic/claude-sonnet-5` e
+ * `anthropic/claude-opus-5` existem lá com o mesmo nome e passam direto —
+ * mapear o que já coincide criaria uma segunda fonte de verdade para envelhecer.
+ *
+ * Para reconferir contra o catálogo real, em vez de confiar nesta lista:
+ *
+ *   curl -s https://openrouter.ai/api/v1/models \
+ *     | python3 -c "import sys,json;[print(m['id']) for m in json.load(sys.stdin)['data'] if m['id'].startswith('anthropic/')]"
+ */
+const IDS_NA_OPENROUTER: Readonly<Record<string, string>> = {
+  "anthropic/claude-haiku-4-5": "anthropic/claude-haiku-4.5",
+};
+
+/** O id canônico, traduzido para como a OpenRouter o nomeia. */
+export function idNaOpenRouter(id: string): string {
+  return IDS_NA_OPENROUTER[id] ?? id;
+}
+
 export function resolveLanguageModel(model: ModelId): LanguageModel | null {
   const id = String(model);
 
@@ -75,7 +107,7 @@ export function resolveLanguageModel(model: ModelId): LanguageModel | null {
     return createOpenAI({
       apiKey: env.OPENROUTER_API_KEY,
       baseURL: env.OPENROUTER_BASE_URL || OPENROUTER_BASE_URL,
-    })(id);
+    })(idNaOpenRouter(id));
   }
 
   if (id.startsWith("anthropic/") && env.ANTHROPIC_API_KEY) {
