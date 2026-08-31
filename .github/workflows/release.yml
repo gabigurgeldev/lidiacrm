@@ -18,10 +18,26 @@ name: release
 # Por isso o ato 2 não confia: ele espera a publicação e CONFERE as três imagens
 # no registro, falhando alto se não aparecerem.
 
+# ── DESLIGADO DO AUTOMÁTICO NESTE FORK ────────────────────────────────────────
+# O gatilho `push: branches: [main]` existia aqui e foi removido de propósito.
+# Ele disparava o ato 2 a CADA push na main, e o ato 2 morre na primeira linha
+# (`actions/create-github-app-token@v2` → "[@octokit/auth-app] appId option is
+# required") porque este fork não tem os secrets RELEASE_APP_ID e
+# RELEASE_APP_PRIVATE_KEY — eles pertencem ao GitHub App do repositório de
+# origem, e um App novo só nasce pela interface do GitHub.
+#
+# O efeito era um X vermelho permanente em todo commit da main, sinalizando
+# quebra onde não havia nenhuma. Ruído constante custa mais que o silêncio:
+# depois do terceiro vermelho ignorado, o quarto — que talvez importasse —
+# também é ignorado.
+#
+# Nada se perde aqui, porque este fork não depende mais de tag para implantar:
+# `deploy-vps.yml` sobe o topo da main direto. Quem quiser voltar a cortar
+# release por número precisa de DUAS coisas, nesta ordem: criar o GitHub App e
+# gravar os dois secrets, e só então devolver o `push:` abaixo. Devolver o
+# gatilho sozinho traz o vermelho de volta sem trazer a release.
 on:
   workflow_dispatch: {}
-  push:
-    branches: [main]
 
 # O GITHUB_TOKEN aqui só clona e lê. Todo escopo de escrita vem do App, o que
 # mantém `tests/unit/workflows-tem-permissions.test.ts` sem entrada nova.
