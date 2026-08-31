@@ -8,6 +8,66 @@ Se você roda o DeskcommCRM numa VPS, **leia a seção da versão para a qual es
 
 ## [Não lançado]
 
+## [1.13.0] — 2026-08-31
+
+### Adicionado
+
+- **Falar com uma lista inteira pelo WhatsApp, sem queimar o número** Até agora o CRM sabia mandar mensagem para uma pessoa de cada vez. Quem tinha
+  quatrocentos clientes numa planilha só tinha dois caminhos: abrir quatrocentas
+  conversas à mão, ou usar outra ferramenta por fora.
+
+  Agora existe Disparo em massa, no menu de Atendimento. Você sobe uma planilha em
+  CSV, escolhe por qual número enviar, escreve a mensagem, define de quanto em
+  quanto tempo ela sai, e acompanha o resultado pessoa a pessoa.
+
+  O que mais importa nessa tela não é o envio: é o que ela mostra antes dele.
+  Assim que a planilha é lida, aparece quantas pessoas vão receber e quantas
+  ficaram de fora, com o motivo de cada uma — sem telefone, pediram para não
+  receber, repetidas na própria planilha. Ver isso antes de apertar o botão pode
+  mudar a campanha inteira; descobrir depois não muda mais nada. Quem já está na
+  sua base entra normalmente, sem virar contato duplicado.
+
+  O ritmo tem um piso, e ele não é negociável. Você pode mandar mais devagar do
+  que o mínimo, nunca mais rápido: enviar em rajada é o que faz o WhatsApp
+  bloquear um número. O sistema também respeita o horário de envio que você
+  configurou em Conexões e o limite diário de números novos, que mandam pouco por
+  dia de propósito enquanto estão sendo aquecidos. Quando o disparo para por
+  algum desses motivos, a tela diz qual é, a que horas ele volta sozinho, e leva
+  ao lugar onde essa regra se ajusta.
+
+  Se alguém responder pedindo para parar no meio do disparo, essa pessoa é tirada
+  da fila na hora — não na campanha seguinte. E para quem pediu para parar a tela
+  não oferece "tentar de novo": só quem falhou por problema de conexão pode ser
+  reenviado, com um botão que reaproveita a mesma lista sem repetir ninguém que já
+  recebeu.
+
+  O disparo continua de onde parou se o servidor reiniciar, e nunca manda a mesma
+  mensagem duas vezes para a mesma pessoa.
+
+  Quem usa o número oficial do WhatsApp (o canal da Meta) vê a tela avisar que
+  aquele número só entrega modelo aprovado — o disparo por modelo continua sendo
+  feito pela tela de Conexões, por enquanto.
+
+- **Descreva o fluxo que você quer, e a IA monta ele para você conferir** O editor de Fluxos tinha dois problemas visuais: aparecia um retângulo branco
+  vazio no canto do quadro, e nenhum bloco da lista lateral tinha ícone — só
+  texto, difícil de reconhecer de relance. Os dois estão corrigidos.
+
+  E o editor ganhou um caminho novo, no mesmo lugar de sempre: o botão "Criar
+  com IA", ao lado de Salvar e Publicar. Você descreve o que quer em português —
+  "quando um lead novo entrar, espera 10 minutos e avisa o vendedor no
+  WhatsApp" — e a IA lê o pedido. Se faltar alguma decisão que só você sabe
+  responder, ela pergunta, sempre com opções para escolher, nunca um campo em
+  branco para preencher. Quando tem o suficiente, ela monta o fluxo na sua
+  frente: os blocos aparecem no próprio quadro, um a um, em tempo real, e a
+  tela fica travada até terminar — sem risco de mexer em algo pela metade.
+
+  Terminada a montagem, nada é publicado sozinho. O fluxo fica como rascunho,
+  igual a qualquer um montado à mão: você confere os blocos, ajusta o que
+  quiser, e só sai do papel quando você aperta Salvar e depois Publicar.
+
+  O modelo de IA que faz esse trabalho é o mesmo que você já configura em Uso
+  de IA › Provedores — nenhuma configuração nova para aprender.
+
 ## [1.12.0] — 2026-08-30
 
 ### Adicionado
@@ -1628,7 +1688,8 @@ Primeira versão marcada do DeskcommCRM. O projeto vinha sendo desenvolvido publ
 
 - **Node 22 é obrigatório para desenvolvimento.** A suíte de invariantes instancia o cliente do Supabase, que exige o `WebSocket` global — nativo apenas a partir do Node 22. Isso não afeta quem apenas hospeda: a VPS roda a imagem pronta.
 
-[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.12.0...HEAD
+[Não lançado]: https://github.com/melgarafael/DeskcommCRM/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/melgarafael/DeskcommCRM/compare/v1.10.1...v1.11.0
 [1.10.1]: https://github.com/melgarafael/DeskcommCRM/compare/v1.10.0...v1.10.1
