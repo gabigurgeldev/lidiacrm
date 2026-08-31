@@ -5,6 +5,9 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { useT } from "@/hooks/i18n/useT";
 import type { FlowBranch } from "@/lib/flow-engine/types";
 import { cn } from "@/lib/utils";
+import { Question } from "@/lib/ui/icons";
+
+import { ICONE_DA_CATEGORIA, ICONE_DO_TIPO } from "./nodeIcons";
 
 export interface DadosDoNo extends Record<string, unknown> {
   rotulo: string;
@@ -12,6 +15,12 @@ export interface DadosDoNo extends Record<string, unknown> {
   categoria: string;
   branches: FlowBranch[];
   erros?: string[];
+  /**
+   * `true` só nos instantes seguintes a este nó ter sido criado por streaming
+   * da IA — dispara a entrada animada (pop-in) e volta a `false`/`undefined`
+   * sozinho. Nó criado manualmente nunca passa por aqui.
+   */
+  recemAdicionado?: boolean;
 }
 
 /** Uma cor por categoria. A cor diz o que o bloco FAZ antes de a pessoa ler. */
@@ -37,6 +46,12 @@ export function NoDoFluxo({ id, data, selected }: NodeProps) {
   const d = data as DadosDoNo;
   const temErro = (d.erros?.length ?? 0) > 0;
   const ehGatilho = d.categoria === "trigger";
+  // Acesso de propriedade, nunca chamada de função: o linter do React
+  // Compiler (`react-hooks/static-components`) aceita `mapa[chave]` como
+  // referência estável dentro do render — igual a `visual.icon` no precedente
+  // do follow-up (NodeCard.tsx) — mas acusa "componente criado durante a
+  // renderização" para QUALQUER chamada de função, mesmo memoizada.
+  const Icone = ICONE_DO_TIPO[d.tipo] ?? ICONE_DA_CATEGORIA[d.categoria] ?? Question;
 
   return (
     <div
@@ -45,6 +60,9 @@ export function NoDoFluxo({ id, data, selected }: NodeProps) {
         COR_DA_CATEGORIA[d.categoria] ?? "border-l-muted",
         selected === true && "ring-2 ring-primary ring-offset-1",
         temErro && "border-destructive ring-2 ring-destructive ring-offset-1",
+        // Pop-in do nó que a IA acabou de criar em streaming — ver o
+        // comentário de `recemAdicionado` na interface acima.
+        d.recemAdicionado === true && "animate-in fade-in zoom-in-95 duration-300",
       )}
       data-testid={`no-${id}`}
       title={temErro ? d.erros!.join("; ") : undefined}
@@ -52,9 +70,12 @@ export function NoDoFluxo({ id, data, selected }: NodeProps) {
       {/* O gatilho não recebe ligação: nada pode voltar para o começo. */}
       {!ehGatilho && <Handle type="target" position={Position.Top} />}
 
-      <div className="px-3 py-2">
-        <p className="truncate text-sm font-medium">{d.rotulo}</p>
-        <p className="truncate text-xs text-muted-foreground">{t(d.tipo)}</p>
+      <div className="flex items-start gap-2 px-3 py-2">
+        <Icone size={16} className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{d.rotulo}</p>
+          <p className="truncate text-xs text-muted-foreground">{t(d.tipo)}</p>
+        </div>
       </div>
 
       {temErro && (

@@ -735,6 +735,88 @@ GitHub dispara no horário é do GitHub.
 
 ---
 
+## J20 — Montar um fluxo descrevendo o que se quer, em vez de arrastar bloco a bloco `[P1]`
+
+**Por que P1, não P0:** o editor visual (J-nenhuma ainda documentada — o
+Flow Engine, migration 0203, não tinha jornada registrada até aqui) já
+permite montar qualquer fluxo à mão; a criação por IA é um ATALHO, não o único
+caminho. Sobe para P1 e não fica em P2 porque é a primeira feature de
+streaming do produto — o modo de falha mais provável (canvas travado, stream
+que nunca termina) não é cosmético.
+
+**O que existia antes desta entrega:** dois bugs visuais no editor
+(`app/app/flows/[id]/_components/FlowCanvas.tsx`) — um `<MiniMap>` do
+`@xyflow/react` sem tema escuro aparecendo como retângulo branco sólido no
+canto inferior direito (o CSS default do pacote usa uma variável clara sem
+override, e o irmão mais antigo — o construtor de follow-up — já evitava o
+MiniMap de propósito), e nenhum ícone em nenhum dos 11 blocos da paleta.
+
+**O que entrou:** os dois bugs corrigidos (ícones vêm de um mapa novo,
+`nodeIcons.ts`, casado pelo `type`/`category` que a API já devolvia), mais um
+botão "Criar com IA" DENTRO do mesmo editor — nunca uma tela separada, por
+pedido explícito do dono do produto. A pessoa descreve o que quer, a IA faz
+até uma pergunta de esclarecimento por vez (sempre por múltipla escolha,
+nunca texto livre) e, quando tem o suficiente, monta o grafo em streaming de
+verdade: os nós aparecem no canvas real conforme a IA os produz, com a tela
+travada para interação até terminar.
+
+**As duas decisões de arquitetura que mudam o resultado:**
+
+1. **O schema que a IA usa nasce do REGISTRY**, não é escrito à mão
+   (`lib/flow-engine/ai/generation-schema.ts`) — um discriminated union com
+   uma variante por tipo de nó hoje registrado, cada uma com o `configSchema`
+   exato daquele tipo embutido. Um 12º tipo registrado amanhã entra
+   automaticamente. `position` nunca é pedida à IA — vem de
+   `lib/flow-engine/ai/auto-layout.ts` (BFS puro a partir do trigger), porque
+   layout espacial é a única coisa que um modelo de texto faz mal de graça.
+2. **A geração NÃO grava o banco.** A rota de streaming só devolve o grafo;
+   quem persiste é o "Salvar rascunho" de sempre — mesma doutrina de
+   `montarQuadro.ts` no onboarding ("o que se grava é o que a pessoa está
+   vendo"). Nada de caminho de gravação paralelo para fluxo gerado por IA.
+
+Spec: `tests/e2e/flow-builder-ia.spec.ts` (`SPECS_PARTE_1`).
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J20.1 | O botão vive dentro do editor | aparece no mesmo cabeçalho de Salvar/Publicar, sem navegar | NÃO MEDIDO |
+| J20.2 | Painel abre sobre o canvas | sem trocar de URL | NÃO MEDIDO |
+| J20.3 | Sem provedor de IA configurado | frase amigável, nunca erro cru | NÃO MEDIDO |
+| J20.4 | Fechar o painel após erro | canvas volta a responder, paleta clicável | NÃO MEDIDO |
+
+**⚠️ NÃO MEDIDO — mesma causa do J19: Docker não sobe nesta máquina.**
+`pnpm test:db` nunca rodou, então a migration nenhuma (esta entrega não tem
+migration nova, mas o app inteiro depende de baseline aplicado) e a spec e2e
+acima nunca foram executadas de verdade. Declarado, não escondido.
+
+**O que ESTÁ medido, por instrumento:**
+
+- `lib/flow-engine/ai/auto-layout.test.ts` (7 casos) — BFS determinístico,
+  ramificação, nó órfão nunca sobreposto;
+- `lib/flow-engine/ai/generation-schema.test.ts` (5 casos) — o schema aceita
+  o exemplo canônico de CADA um dos 11 tipos registrados (achou e corrigiu um
+  defeito real: os exemplos de `crm.add_tag` e `notify.internal` violavam o
+  próprio `configSchema` deles — passava despercebido porque `branches()`
+  desses dois tipos não lê `config`);
+- `lib/flow-engine/ai/budget-gate.test.ts` (6 casos) — o mapeamento de campos
+  entre `BudgetStatus` e `EntradaDeOrcamento` está correto nos dois sentidos
+  (modo `off`/`avisar`/`bloquear`, teto zerado, org repassada corretamente);
+- `tests/unit/pontos-de-ia-completude.test.ts` — os dois pontos novos
+  (`flow_ai_interpretar`, `flow_ai_gerar`) entram no registro E são
+  detectados como emitidos (via `FORA_DO_SEAM`, porque `resolverModeloDoPonto`
+  é chamado posicionalmente, não com `purpose: 'x'`).
+
+**Dívida DECLARADA, não esquecida — `registraEm: "nenhum"` nos dois pontos.**
+`lib/ai/log-invocation.ts`'s `InvocationKind` é um union FECHADO que
+`tests/invariants/vocabulario-banco-x-typescript.test.ts` trava
+deliberadamente contra o CHECK da tabela `ai_invocations` — depreciada, mas
+ainda existente. Alargar o union para caber os dois pontos novos quebraria
+esse invariante sem abrir superfície nova nenhuma (`llm_calls.purpose` já é
+texto livre, sem CHECK). Custo/latência desta feature não aparecem em
+`llm_calls` por ora; o `audit()` (`flow.ai_generated`/`flow.ai_generation_failed`)
+é o único rastro até essa frente ser resolvida.
+
+---
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

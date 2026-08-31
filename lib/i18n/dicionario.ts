@@ -6454,6 +6454,27 @@ export const DICIONARIO: Traducoes = {
   "Rodando": { es: "Corriendo" },
   "Parou com erro": { es: "Se detuvo con error" },
 
+  // ─── Criar fluxo com IA (dentro do editor de fluxo) ───
+  "Criar com IA": { es: "Crear con IA" },
+  "Criar fluxo com IA": { es: "Crear flujo con IA" },
+  "Ex.: quando um lead novo entrar, espera 10 minutos e, se ninguém tiver falado com ele, avisa o vendedor no WhatsApp.":
+    {
+      es: "Ej.: cuando entre un lead nuevo, esperá 10 minutos y, si nadie le habló todavía, avisale al vendedor por WhatsApp.",
+    },
+  "Pensando…": { es: "Pensando…" },
+  "Montar o fluxo": { es: "Armar el flujo" },
+  "Construindo o fluxo… {n} blocos até agora.": { es: "Armando el flujo… {n} bloques hasta ahora." },
+  "Fluxo montado com {n} blocos — confira e publique quando quiser.":
+    { es: "Flujo armado con {n} bloques — revisalo y publicalo cuando quieras." },
+  "Pronto. Confira os blocos no quadro, ajuste o que quiser e salve o rascunho.":
+    { es: "Listo. Revisá los bloques en el tablero, ajustá lo que quieras y guardá el borrador." },
+  "A conversa se perde se você sair desta tela antes de montar o fluxo.":
+    { es: "La conversación se pierde si salís de esta pantalla antes de armar el flujo." },
+  "Não consegui entender o pedido.": { es: "No pude entender el pedido." },
+  "A geração falhou. Tente de novo.": { es: "La generación falló. Intentá de nuevo." },
+  "A IA não conseguiu terminar o fluxo. Tente descrever de outro jeito.":
+    { es: "La IA no pudo terminar el flujo. Intentá describirlo de otra forma." },
+
 };
 
 /**

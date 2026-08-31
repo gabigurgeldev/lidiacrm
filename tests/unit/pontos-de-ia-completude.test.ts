@@ -98,6 +98,17 @@ const FORA_DO_SEAM: Record<string, { arquivo: string; marcador: string }> = {
     arquivo: "lib/ai/runtime/agent.ts",
     marcador: "buildModel",
   },
+  // Os dois pontos do Flow Engine chamam `resolverModeloDoPonto`
+  // POSICIONALMENTE (mesmo molde de `ai-sentiment-worker.ts` acima), não
+  // `purpose: 'x'` — a varredura textual não os alcança de propósito.
+  flow_ai_interpretar: {
+    arquivo: "app/api/v1/flows/[id]/ai/interpretar/route.ts",
+    marcador: "resolverModeloDoPonto",
+  },
+  flow_ai_gerar: {
+    arquivo: "app/api/v1/flows/[id]/ai/gerar/route.ts",
+    marcador: "resolverModeloDoPonto",
+  },
 };
 
 describe("registro de pontos de IA × código", () => {

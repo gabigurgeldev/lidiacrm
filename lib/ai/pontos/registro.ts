@@ -479,6 +479,46 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
       "O sistema erra a hora de resumir a conversa: resume cedo demais e perde contexto, ou tarde demais e a resposta é recusada.",
     registraEm: "nenhum",
   },
+
+  // ───────────────────────── Melhorar e testar ──────────────────────────────
+  // Criar fluxo por linguagem natural, no editor de fluxo (/app/flows/[id]).
+  // É configuração/ferramenta de quem monta a automação, não atendimento ao
+  // cliente final — por isso o papel é "melhorar", ao lado do ensaio de agente
+  // e do resumo de histórico, não "atender".
+  {
+    id: "flow_ai_interpretar",
+    rotulo: "Entender o pedido de fluxo",
+    oQueFaz:
+      "Lê o que você digitou ao criar um fluxo com IA e decide se precisa perguntar algo antes de montar.",
+    papel: "melhorar",
+    exige: {},
+    // `resolverModeloDoPonto` chamado POSICIONALMENTE (mesmo molde de
+    // workers/ai-sentiment-worker.ts), não `purpose: 'x'` — por isso este
+    // ponto entra em FORA_DO_SEAM em
+    // tests/unit/pontos-de-ia-completude.test.ts, e não na varredura textual.
+    emissor: "app/api/v1/flows/[id]/ai/interpretar/route.ts",
+    sintomaDeFalha: "O botão 'Criar com IA' não avança depois de você escrever o pedido.",
+    // `InvocationKind` (lib/ai/log-invocation.ts) é fechado e ESPELHA
+    // DELIBERADAMENTE o CHECK da tabela `ai_invocations`, hoje depreciada
+    // (tests/invariants/vocabulario-banco-x-typescript.test.ts trava os dois
+    // juntos). Alargar o union para caber este ponto quebraria aquele
+    // invariante sem abrir superfície nova nenhuma — `llm_calls.purpose` já é
+    // texto livre sem CHECK. Dívida DECLARADA, não esquecida: ver a Frente 2
+    // que o comentário de `DestinoDeTelemetria` já promete.
+    registraEm: "nenhum",
+  },
+  {
+    id: "flow_ai_gerar",
+    rotulo: "Montar o fluxo",
+    oQueFaz:
+      "Transforma o pedido — e as respostas que você deu às perguntas — num fluxo de automação para você revisar e publicar.",
+    papel: "melhorar",
+    exige: {},
+    emissor: "app/api/v1/flows/[id]/ai/gerar/route.ts",
+    sintomaDeFalha: "O fluxo não aparece no quadro, ou aparece incompleto.",
+    // Mesma razão do ponto acima.
+    registraEm: "nenhum",
+  },
 ] as const;
 
 /** Índice por id, para quem resolve um binding. */

@@ -86,6 +86,13 @@ export const ApiErrorCodes = {
   waha_error: "waha_error",
   ai_provider_error: "ai_provider_error",
   nuvemshop_error: "nuvemshop_error",
+
+  // 402 — a organização decidiu parar de gastar
+  // Reusa a MESMA decisão do gate de orçamento do seam (`decidirOrcamento`,
+  // lib/agent-engine/edge/llm/orcamento.ts), aplicada aqui a uma chamada de
+  // IA disparada por clique humano (ver lib/flow-engine/ai/budget-gate.ts) —
+  // nunca uma segunda régua de "acabou o dinheiro".
+  ai_budget_exceeded: "ai_budget_exceeded",
 } as const;
 
 export type ApiErrorCode = (typeof ApiErrorCodes)[keyof typeof ApiErrorCodes];
