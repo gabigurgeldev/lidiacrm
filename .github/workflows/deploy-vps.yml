@@ -48,28 +48,40 @@ jobs:
       github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     steps:
-      - name: Chamar o webhook de deploy do EasyPanel
+      - name: Mandar o EasyPanel implantar
         env:
-          WEBHOOK: ${{ secrets.EASYPANEL_DEPLOY_URL }}
+          PAINEL: ${{ secrets.EASYPANEL_URL }}
+          CHAVE: ${{ secrets.EASYPANEL_API_KEY }}
+          PROJETO: ${{ vars.EASYPANEL_PROJETO || 'lidiacrm' }}
+          SERVICO: ${{ vars.EASYPANEL_SERVICO || 'crm' }}
         run: |
           set -euo pipefail
 
-          if [ -z "${WEBHOOK:-}" ]; then
-            echo "::error::secret EASYPANEL_DEPLOY_URL ausente — o deploy automático está desligado."
-            echo "::error::Pegue a URL em: EasyPanel → projeto → serviço → Deploy → Webhook."
+          if [ -z "${PAINEL:-}" ] || [ -z "${CHAVE:-}" ]; then
+            echo "::error::secrets EASYPANEL_URL e/ou EASYPANEL_API_KEY ausentes — o deploy automático está desligado."
+            echo "::error::A chave sai em: EasyPanel → Settings → API tokens."
             exit 1
           fi
 
-          # `--fail-with-body` para que um 4xx/5xx do painel apareça no log em vez
-          # de virar sucesso silencioso: um deploy que não disparou tem de ser
-          # vermelho aqui, senão o modo de falha volta a ser "a VPS ficou velha e
-          # ninguém soube".
+          # A API do painel, e NÃO o webhook `/api/deploy/<token>`: aquele token
+          # é o do serviço, o endpoint recusa com `404 {"message":"Invalid
+          # Token"}`, e o primeiro deploy automático deste workflow morreu
+          # exatamente assim. Medido nos dois: `services.compose.deployService`
+          # responde `200 {}`.
+          #
+          # `--fail-with-body` para que um 4xx/5xx apareça no log em vez de virar
+          # sucesso silencioso: deploy que não disparou tem de ser vermelho aqui,
+          # senão o modo de falha volta a ser "a VPS ficou velha e ninguém soube".
           codigo=$(curl -sS --fail-with-body -X POST \
             -o resposta.txt -w '%{http_code}' \
             --max-time 60 --retry 3 --retry-delay 5 --retry-connrefused \
-            "$WEBHOOK")
+            -H "Authorization: Bearer ${CHAVE}" \
+            -H "Content-Type: application/json" \
+            -d "{\"json\":{\"projectName\":\"${PROJETO}\",\"serviceName\":\"${SERVICO}\"}}" \
+            "${PAINEL}/api/trpc/services.compose.deployService")
 
           echo "HTTP $codigo"
           head -c 500 resposta.txt || true
           echo
           echo "Deploy disparado para o commit ${{ github.event.workflow_run.head_sha }}."
+          echo "Para conferir: /api/v1/health do CRM deve passar a reportar esse SHA em version."
