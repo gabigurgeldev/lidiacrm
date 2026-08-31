@@ -18,6 +18,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
+import { logger } from "@/lib/logger";
 import { requireRole } from "@/lib/auth/require-role";
 import { orcamentoPermite } from "@/lib/flow-engine/ai/budget-gate";
 import { promptDeInterpretacao, promptDoUsuario } from "@/lib/flow-engine/ai/prompt";
@@ -25,6 +26,15 @@ import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * A rota fala com um provedor de IA, e o cabeçalho acima chamá-la de "rápida e
+ * barata" mede o TAMANHO do trabalho, não o tempo de resposta de terceiro. Sem
+ * este teto, o padrão do runtime corta a chamada muito antes de um provedor
+ * lento terminar, e a conexão morre sem que nada seja escrito — que é
+ * exatamente a forma de um 502 sem uma linha de log.
+ */
+export const maxDuration = 120;
 
 const PURPOSE = "flow_ai_interpretar";
 
@@ -90,6 +100,21 @@ export async function POST(
     );
   }
 
+  // Os dois logs abaixo existem porque a ausência deles custou três idas e
+  // vindas com quem estava na tela: a chamada falhava com 502, o contêiner não
+  // reiniciava, e o log do app não tinha UMA linha sobre esta rota — não dava
+  // para distinguir "o provedor demorou" de "o pedido nunca chegou aqui".
+  //
+  // Com eles, a diferença fica legível no `docker logs`: só o `inicio` significa
+  // que a resposta morreu no caminho (proxy ou teto de tempo); `inicio` +
+  // `fim` com `ms` alto significa que o provedor é o lento.
+  const t0 = Date.now();
+  logger.info("flow.ai.interpretar.inicio", {
+    organizationId: authz.org.orgId,
+    requestId,
+    modelo: resolvido.modelId,
+  });
+
   try {
     const gerado = await generateObject({
       model: resolvido.model,
@@ -103,8 +128,18 @@ export async function POST(
       // meio; 400 é folgado para o teto de 300/400 caracteres dos campos.
       maxOutputTokens: 600,
     });
+    logger.info("flow.ai.interpretar.fim", { requestId, ms: Date.now() - t0 });
     return ok(gerado.object, { requestId });
   } catch (err) {
+    // A causa vai para o LOG além da resposta: `details` só chega a quem abriu
+    // o DevTools, e a pessoa que reporta o problema raramente é essa.
+    logger.error("flow.ai.interpretar.falhou", {
+      organizationId: authz.org.orgId,
+      requestId,
+      ms: Date.now() - t0,
+      modelo: resolvido.modelId,
+      causa: err instanceof Error ? err.message : String(err),
+    });
     return fail(
       "ai_provider_error",
       "Não consegui entender o pedido. Tente descrever de outro jeito.",

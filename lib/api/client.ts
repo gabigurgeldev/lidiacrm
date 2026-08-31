@@ -15,14 +15,23 @@ export type RequestOpts = {
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_ATTEMPTS = 3;
+/** Sempre retentáveis: o servidor pediu espera, e o corpo é irrelevante. */
+const RETRYABLE_STATUSES = new Set([429, 503]);
+
 /**
- * 502 e 504 entraram junto com 429/503 porque descrevem exatamente a janela em
- * que um deploy troca o contêiner: por alguns segundos o proxy não acha ninguém
- * atrás do domínio e responde a PRÓPRIA página de erro. Sem eles, qualquer
- * pessoa que clicasse durante uma implantação recebia falha definitiva numa
- * indisponibilidade que dura menos que o backoff.
+ * 502 e 504 são retentáveis SOMENTE quando o corpo não é um erro da nossa API.
+ *
+ * A distinção não é preciosismo — ela separa dois eventos opostos que dividem o
+ * mesmo número. Quando quem responde é o proxy (durante a troca de contêiner de
+ * um deploy, por exemplo), o corpo é uma página e tentar de novo resolve, porque
+ * a indisponibilidade dura menos que o backoff. Mas nossas rotas de IA usam 502
+ * para dizer "o provedor recusou", e ali repetir é o pior a fazer: três
+ * chamadas ao modelo, três vezes o custo e a espera, para chegar à mesma recusa.
+ *
+ * O primeiro desenho desta lista tratava 502 como sempre retentável e teria
+ * feito exatamente isso com `flows/[id]/ai/interpretar`.
  */
-const RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
+const RETRYABLE_SE_NAO_FOR_ERRO_NOSSO = new Set([502, 504]);
 
 /** Acima disso, um corpo de erro é despejo de página, não frase para alguém ler. */
 const MAX_MENSAGEM_DE_CORPO = 200;
@@ -194,17 +203,22 @@ async function request<T>(
         return parsed;
       }
 
-      // Retry on 429/503
-      if (RETRYABLE_STATUSES.has(res.status) && attempt < MAX_ATTEMPTS) {
+      // O corpo é lido ANTES da decisão de retry porque, em 502/504, é ele que
+      // diz de quem veio a resposta — e portanto se repetir faz sentido.
+      const errBody = await readBodySafe(res);
+      const ehErroNosso = isApiErrorBody(errBody);
+
+      const podeRepetir =
+        RETRYABLE_STATUSES.has(res.status) ||
+        (RETRYABLE_SE_NAO_FOR_ERRO_NOSSO.has(res.status) && !ehErroNosso);
+
+      if (podeRepetir && attempt < MAX_ATTEMPTS) {
         const retryAfter = parseRetryAfterSeconds(res.headers.get("Retry-After"));
         const delay = retryAfter !== null ? retryAfter * 1000 : backoffMs(attempt);
         await sleep(delay, opts.signal);
         continue;
       }
-
-      // Non-retry error: parse and throw
-      const errBody = await readBodySafe(res);
-      if (isApiErrorBody(errBody)) {
+      if (ehErroNosso && isApiErrorBody(errBody)) {
         const e = errBody.error;
         throw new ApiError(
           res.status,

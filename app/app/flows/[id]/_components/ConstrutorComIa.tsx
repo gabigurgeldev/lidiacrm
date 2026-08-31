@@ -225,6 +225,11 @@ export function ConstrutorComIa({
       const resposta = await apiClient.post<{ data: RespostaInterpretar }>(
         `/api/v1/flows/${flowId}/ai/interpretar`,
         { pedido, historico: historicoAtual },
+        // O teto padrão do cliente é 10s, medida boa para uma rota nossa e
+        // curta demais para uma que espera um provedor de IA responder: a
+        // chamada era abandonada no meio, e o que a pessoa via não tinha nada a
+        // ver com o que estava acontecendo do outro lado.
+        { timeoutMs: 120_000 },
       );
       if (resposta.data.kind === "perguntar") {
         setPerguntaAtual({

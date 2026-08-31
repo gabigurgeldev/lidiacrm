@@ -128,7 +128,7 @@ describe("apiClient", () => {
     });
   });
 
-  it("t9: 502 e 504 são tentados de novo — é a janela em que o deploy troca o contêiner", async () => {
+  it("t9: 502 de PROXY é tentado de novo — é a janela em que o deploy troca o contêiner", async () => {
     fetchMock
       .mockResolvedValueOnce(new Response("<html>bad gateway</html>", { status: 502 }))
       .mockResolvedValueOnce(jsonResponse(200, { data: { ok: true } }));
@@ -136,6 +136,29 @@ describe("apiClient", () => {
     const r = await apiClient.get<{ data: { ok: boolean } }>("/x");
     expect(r).toEqual({ data: { ok: true } });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * O mesmo 502, vindo de nós, NÃO é repetido — e a diferença é dinheiro.
+   *
+   * `flows/[id]/ai/interpretar` responde 502 com `ai_provider_error` quando o
+   * modelo recusa. Tratar esse número como sempre-retentável (foi o primeiro
+   * desenho, e este teste existe por causa dele) faria três chamadas ao modelo,
+   * três vezes o custo e a espera, para chegar à mesma recusa.
+   */
+  it("t9b: 502 com corpo de erro NOSSO não é repetido — repetir custaria três chamadas ao modelo", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(502, {
+        error: { code: "ai_provider_error", message: "Não consegui entender o pedido." },
+      }),
+    );
+
+    await expect(apiClient.get("/x")).rejects.toMatchObject({
+      status: 502,
+      code: "ai_provider_error",
+      message: "Não consegui entender o pedido.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("t10: texto de erro curto e legível CONTINUA sendo mostrado", async () => {
