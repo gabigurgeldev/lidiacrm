@@ -132,7 +132,9 @@ test.describe("disparo em massa", () => {
     expect(erroBloqueio, "não deu para bloquear o contato de teste").toBeNull();
 
     // ─── Passo 2 (continuação): conexão e mensagem ─────────────────────────
-    const conexao = page.locator("button", { hasText: /segundos entre mensagens/i }).first();
+    // A UI escreve o intervalo abreviado ("No mínimo 6s entre mensagens."), nunca
+    // o número por extenso — o regex casa com o texto real do botão.
+    const conexao = page.locator("button", { hasText: /entre mensagens/i }).first();
     await expect(
       conexao,
       "nenhuma conexão de WhatsApp no ambiente de teste — rode o seed de canal",
