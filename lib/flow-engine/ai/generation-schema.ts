@@ -36,10 +36,67 @@
  */
 import { z } from "zod";
 
+import { OPERADORES } from "../condicoes";
 import { flowEdgeSchema } from "../graph-schema";
 import { garantirNosRegistrados } from "../register-all";
 import { todosOsNos } from "../registry";
 import type { FlowNodeDefinition } from "../types";
+
+/**
+ * CONFIG SIMPLIFICADO PARA GERAÇÃO — subconjunto do runtime, nunca outra forma.
+ *
+ * O `configSchema` de runtime de `logic.if` embute `grupoSchema`, que é
+ * `z.lazy` recursivo (`lib/flow-engine/condicoes.ts`). Convertido para JSON
+ * Schema, isso vira `$defs` com uma auto-referência `$ref` — e provedores de
+ * saída estruturada não lidam com isso: o Gemini não suporta `$ref`/`$defs`, e
+ * a chamada falha inteira. Junto vinha `valor: z.unknown()`, que emite um
+ * schema VAZIO (`{}`, sem `type`), recusado em modo estrito.
+ *
+ * Medido: o JSON Schema completo tem 8.645 bytes, com `oneOf` de 11 variantes,
+ * `$ref` recursivo e `{}` — contra ~250 bytes do worker de sentimento, que
+ * sempre funcionou.
+ *
+ * A regra que torna isto seguro: o que a IA pode gerar é um SUBCONJUNTO ESTRITO
+ * do que o runtime aceita. Uma condição de um nível só (`itens` apenas com
+ * regras, sem grupos aninhados) é um valor perfeitamente válido para
+ * `grupoSchema` — quem gerar assim passa na validação de runtime sem tradução
+ * nenhuma. O que se perde é a IA propor condições aninhadas de várias camadas,
+ * que ela quase nunca propõe e que a pessoa monta na tela em seguida.
+ */
+const regraParaGeracao = z.strictObject({
+  campo: z.string().min(1).max(120).describe("Caminho por ponto, ex.: 'lead.score', 'vars.tentativas'."),
+  op: z.enum(OPERADORES),
+  // Tipado de propósito: `z.unknown()` do runtime vira `{}` no JSON Schema, que
+  // é justamente o que o modo estrito recusa. Estes três cobrem o que a IA
+  // propõe na prática, e todos são valores válidos para o runtime.
+  valor: z.union([z.string(), z.number(), z.boolean()]).optional(),
+});
+
+const ifConfigParaGeracao = z.strictObject({
+  saidas: z
+    .array(
+      z.strictObject({
+        id: z.string().min(1).max(64),
+        label: z.string().min(1).max(60),
+        quando: z.strictObject({
+          combinador: z.enum(["and", "or"]),
+          negar: z.boolean().optional(),
+          // Sem recursão: só regras. Ver o cabeçalho acima.
+          itens: z.array(regraParaGeracao).min(1).max(20),
+        }),
+      }),
+    )
+    .min(1)
+    .max(8),
+});
+
+/**
+ * Override por tipo de nó. Vazio para todos os outros — só entra aqui o nó cujo
+ * schema de runtime é hostil à saída estruturada, e com a justificativa acima.
+ */
+const CONFIG_PARA_GERACAO: Readonly<Record<string, z.ZodTypeAny>> = {
+  "logic.if": ifConfigParaGeracao,
+};
 
 /** Uma variante do union — um tipo de nó, com o `configSchema` dele embutido. */
 function variantePara(def: FlowNodeDefinition<never>) {
@@ -55,7 +112,7 @@ function variantePara(def: FlowNodeDefinition<never>) {
       .min(1)
       .max(80)
       .describe(`Rótulo em português que aparece no bloco. Ex.: "${def.rotulo}".`),
-    config: def.configSchema,
+    config: CONFIG_PARA_GERACAO[def.type] ?? def.configSchema,
   });
 }
 

@@ -38,8 +38,9 @@ import { z } from "zod";
 
 import { fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { requireRole } from "@/lib/auth/require-role";
-import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
+import { DEFAULT_BOT_MODEL } from "@/lib/ai/gateway";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { orcamentoPermite } from "@/lib/flow-engine/ai/budget-gate";
 import { montarSchemaDeGeracao } from "@/lib/flow-engine/ai/generation-schema";
@@ -83,7 +84,13 @@ export async function POST(
     });
   }
 
-  const resolvido = await resolverModeloDoPonto(PURPOSE, authz.org.orgId, DEFAULT_CLASSIFIER_MODEL);
+  // DEFAULT_BOT_MODEL, não o CLASSIFIER: esta rota monta um fluxo inteiro — até
+  // 60 nós, 11 tipos, com arestas coerentes entre eles —, que é o trabalho mais
+  // pesado de IA do produto. O classificador estava aqui por cópia da rota
+  // irmã (`interpretar`), onde ele é a escolha certa porque a tarefa é decidir
+  // entre duas saídas curtas. Só afeta quem NÃO configurou o ponto no painel,
+  // que é justamente a instalação recém-instalada.
+  const resolvido = await resolverModeloDoPonto(PURPOSE, authz.org.orgId, DEFAULT_BOT_MODEL);
   if (!resolvido) {
     return fail(
       "ai_provider_error",
@@ -93,21 +100,104 @@ export async function POST(
     );
   }
 
+  // Instrumentação: esta rota não registrava NADA, e isso custou caro. Quando o
+  // passo falhou em produção, o log do app não tinha uma linha sobre ela e o
+  // `api_audit_log` tinha ZERO — o que, por si só, já foi a primeira pista
+  // (o `onFinish` audita a falha, então audit vazio significa que ele nem
+  // chegou a rodar).
+  const t0 = Date.now();
+  logger.info("flow.ai.gerar.inicio", {
+    organizationId: authz.org.orgId,
+    requestId,
+    flowId,
+    // Canônico, NÃO o id enviado ao provedor — a tradução para o nome da
+    // OpenRouter acontece dentro do provider (ver idNaOpenRouter).
+    modeloCanonico: resolvido.modelId,
+    origem: resolvido.origem,
+  });
+
   const resultado = streamObject({
     model: resolvido.model,
     schema: montarSchemaDeGeracao(),
     system: promptDeGeracao(),
     prompt: promptDoUsuario(lido.data.pedido, lido.data.historico),
     temperature: 0.2,
+    /**
+     * SEM ISTO, O ERRO DO STREAM NÃO EXISTE EM LUGAR NENHUM.
+     *
+     * `streamObject` já enviou os cabeçalhos 200 quando o modelo falha, então a
+     * falha não pode virar status HTTP: ela vira um stream truncado, e o SDK
+     * engole a exceção. A tela dizia só "A IA não conseguiu terminar o fluxo",
+     * o servidor não dizia nada, e não havia como saber se o culpado era o
+     * modelo, o schema ou o proxy.
+     *
+     * Este callback é o ÚNICO ponto em que essa causa é observável.
+     */
+    onError: ({ error }) => {
+      logger.error("flow.ai.gerar.erro_no_stream", {
+        organizationId: authz.org.orgId,
+        requestId,
+        flowId,
+        ms: Date.now() - t0,
+        modeloCanonico: resolvido.modelId,
+        causa: error instanceof Error ? error.message : String(error),
+      });
+      void audit({
+        action: "flow.ai_generation_failed",
+        actorUserId: authz.user.id,
+        organizationId: authz.org.orgId,
+        resourceType: "flow",
+        resourceId: flowId,
+        requestId,
+        metadata: {
+          onde: "stream",
+          causa: error instanceof Error ? error.message : String(error),
+          modelo: resolvido.modelId,
+        },
+      });
+    },
     // Um fluxo cabe em até 60 nós (teto do schema); 4000 é folgado para isso
     // sem virar cheque em branco — a lição de `ai-sentiment-worker.ts` é que
     // pouco tokens trunca o JSON no meio, não que muito tokens seja de graça.
     maxOutputTokens: 4000,
+    /**
+     * MODO ESTRITO DESLIGADO — o schema deste ponto não cabe nele.
+     *
+     * Structured Outputs em modo estrito impõe regras que este schema viola por
+     * construção, e medi-las foi o que fechou o diagnóstico: `z.discriminatedUnion`
+     * emite `oneOf` (o estrito aceita só `anyOf`), campos com `default` ficam
+     * fora de `required` (o estrito exige TODAS), e a raiz não declara
+     * `additionalProperties: false`.
+     *
+     * Consertar as três no schema significaria deformá-lo para agradar um
+     * formato de terceiro — e ele é a fonte de verdade dos blocos do produto,
+     * usada também pelo runtime e pela tela. Desligar o estrito mantém a
+     * validação onde ela importa: o objeto continua conferido contra o Zod, no
+     * servidor e no cliente, depois que chega.
+     *
+     * `openai` é o nome do provider mesmo apontando para a OpenRouter — ela é
+     * OpenAI-compatível e o cliente é `createOpenAI` (ver lib/ai/gateway.ts).
+     */
+    providerOptions: { openai: { strictJsonSchema: false } },
     onFinish: ({ object, error, usage }) => {
       // Fire-and-forget, fora do caminho de resposta: o stream já foi
       // entregue ao cliente independente deste bloco. Falha aqui não pode
       // derrubar a geração que a pessoa já está vendo terminar.
       if (error || !object) {
+        // `!object` sem `error` é o caso traiçoeiro: o stream TERMINOU, sem
+        // exceção, e mesmo assim não há objeto — resposta truncada ou que não
+        // satisfaz o schema. Registrar os dois separadamente é o que permite
+        // distinguir "o modelo recusou" de "veio pela metade".
+        logger.error("flow.ai.gerar.sem_objeto", {
+          organizationId: authz.org.orgId,
+          requestId,
+          flowId,
+          ms: Date.now() - t0,
+          modeloCanonico: resolvido.modelId,
+          teveErro: Boolean(error),
+          causa: error instanceof Error ? error.message : error ? String(error) : "objeto ausente",
+          tokens_saida: usage?.outputTokens ?? null,
+        });
         void audit({
           action: "flow.ai_generation_failed",
           actorUserId: authz.user.id,
@@ -115,10 +205,25 @@ export async function POST(
           resourceType: "flow",
           resourceId: flowId,
           requestId,
-          metadata: { causa: error instanceof Error ? error.message : String(error) },
+          metadata: {
+            onde: "onFinish",
+            causa: error instanceof Error ? error.message : String(error),
+          },
         });
         return;
       }
+
+      logger.info("flow.ai.gerar.fim", {
+        organizationId: authz.org.orgId,
+        requestId,
+        flowId,
+        ms: Date.now() - t0,
+        // As contagens separam "veio inteiro" de "veio pela metade" sem precisar
+        // do objeto: um fluxo com 1 nó e 0 arestas é truncamento, não sucesso.
+        nos: object.nodes.length,
+        arestas: object.edges.length,
+        tokens_saida: usage?.outputTokens ?? null,
+      });
       void audit({
         action: "flow.ai_generated",
         actorUserId: authz.user.id,
