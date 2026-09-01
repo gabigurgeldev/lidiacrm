@@ -62,6 +62,69 @@ function portaFalsa(
   };
 }
 
+/**
+ * Um plano COM RAMO — o caso do `logic.if`, que é onde o defeito de rótulo mora.
+ */
+const planoComRamo: PlanoDeFluxo = {
+  blocos: [
+    { id: "t1", tipo: "trigger.lead_created", rotulo: "Lead novo", intencao: "início" },
+    { id: "se", tipo: "logic.if", rotulo: "Decidir", intencao: "duas saídas" },
+    { id: "a", tipo: "crm.add_tag", rotulo: "Marcar", intencao: "marcar" },
+    { id: "b", tipo: "logic.end", rotulo: "Fim", intencao: "terminar" },
+  ],
+  ligacoes: [
+    { de: "t1", para: "se" },
+    { de: "se", para: "a", ramo: "Ainda não respondeu" },
+    { de: "se", para: "b", ramo: "Já respondeu" },
+  ],
+};
+
+describe("os rótulos de ramo chegam à etapa 2", () => {
+  /**
+   * POR QUE ISTO É UM TESTE, e não confiança no prompt.
+   *
+   * MEDIDO contra o provedor real, no mesmo fluxo: a etapa 1 escreveu os ramos
+   * "Ainda não respondeu"/"Já respondeu" e a etapa 2, que não os via, escreveu
+   * as saídas "Sem resposta"/"Já respondido". Nenhum par casa — e o casamento
+   * por rótulo de `resolverRamo` é o caminho normal da reconciliação. Ele caía
+   * no desempate por ORDEM, que acertou por sorte.
+   *
+   * Uma aresta no ramo errado não quebra nada visível: o grafo desenha bonito,
+   * `analisarGrafo` não reclama, e o primeiro lead segue pelo caminho errado.
+   */
+  it("o prompt do bloco que decide carrega os rótulos que o PLANO declarou", async () => {
+    const prompts = new Map<string, string>();
+    const porta = portaFalsa((pedido) => {
+      prompts.set(pedido.rotulo, pedido.prompt);
+      return { ok: true, objeto: { saidas: [{ id: "s1", label: "x" }] } };
+    });
+
+    await gerarConfigs(porta, planoComRamo, "pedido");
+
+    const doSe = [...prompts.entries()].find(([rotulo]) => rotulo.startsWith("se:"))?.[1] ?? "";
+    expect(doSe).toContain("Ainda não respondeu");
+    expect(doSe).toContain("Já respondeu");
+    // A ORDEM importa tanto quanto a presença: `resolverRamo` usa a posição como
+    // rede, e as duas regras só concordam se a ordem for a mesma.
+    expect(doSe.indexOf("Ainda não respondeu")).toBeLessThan(doSe.indexOf("Já respondeu"));
+  });
+
+  it("um bloco sem ramo nenhum não ganha a exigência", async () => {
+    // Guarda de vacuidade e de custo: a frase é instrução para o modelo, e
+    // mandá-la num bloco sem saídas nomeadas é ruído pago em token.
+    const prompts = new Map<string, string>();
+    const porta = portaFalsa((pedido) => {
+      prompts.set(pedido.rotulo, pedido.prompt);
+      return { ok: true, objeto: { tag: "novo" } };
+    });
+
+    await gerarConfigs(porta, planoComRamo, "pedido");
+
+    const doA = [...prompts.entries()].find(([rotulo]) => rotulo.startsWith("a:"))?.[1] ?? "";
+    expect(doA).not.toContain("DEVEM se chamar");
+  });
+});
+
 describe("gerarConfigs", () => {
   it("um bloco que falha vira exemplo e NÃO derruba os irmãos", async () => {
     const porta = portaFalsa((pedido) => {

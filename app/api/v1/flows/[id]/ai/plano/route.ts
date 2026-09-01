@@ -1,7 +1,7 @@
 /**
  * POST /api/v1/flows/[id]/ai/plano — ETAPA 1: quais blocos, em que ordem.
  *
- * ═══ Por que esta rota é síncrona, e a irmã (`montar`) é stream ═══
+ * ═══ Por que esta rota é síncrona ═══
  *
  * Aqui é onde as falhas moram: provedor fora do ar, orçamento estourado, schema
  * recusado, id de modelo que não existe no catálogo. Todas acontecem ANTES de
@@ -14,6 +14,12 @@
  * truncado, e o SDK o engole. A pessoa recebia "A IA não conseguiu terminar o
  * fluxo" para qualquer causa — inclusive para "não há provedor configurado",
  * que tem conserto de um clique.
+ *
+ * ⚠️ ESTE PARÁGRAFO DIZIA "e a irmã (`montar`) é stream". NÃO DIZ MAIS: a rota
+ * de montagem deixou de ser SSE, pelo motivo escrito no cabeçalho dela — o
+ * stream não atravessava o proxy da VPS, e a tela travava em "Montando N
+ * blocos…" para sempre. Hoje as duas são JSON, e esta continua sendo a que
+ * responde primeiro justamente porque é curta (~11s medidos).
  *
  * ═══ Sem escrita no banco ═══
  *

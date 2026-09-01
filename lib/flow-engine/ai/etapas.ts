@@ -84,6 +84,27 @@ function vizinhosDe(plano: PlanoDeFluxo, bloco: BlocoDoPlano): string {
   return partes.length > 0 ? partes.join(" ") : "é o primeiro bloco do fluxo";
 }
 
+/**
+ * Os rótulos de ramo que o PLANO já decidiu para as ligações saindo deste bloco.
+ *
+ * Sem eles a etapa 2 inventa os seus, e os dois lados não casam — o defeito
+ * inteiro está no cabeçalho de `promptDoBloco`. A ordem é a das ligações no
+ * plano, que é a mesma ordem em que `resolverRamo` faz o desempate posicional:
+ * as duas regras passam a concordar por construção em vez de por sorte.
+ */
+function ramosDoBloco(plano: PlanoDeFluxo, bloco: BlocoDoPlano): string[] {
+  const vistos = new Set<string>();
+  const ramos: string[] = [];
+  for (const ligacao of plano.ligacoes) {
+    if (ligacao.de !== bloco.id) continue;
+    const ramo = ligacao.ramo?.trim();
+    if (!ramo || vistos.has(ramo)) continue;
+    vistos.add(ramo);
+    ramos.push(ramo);
+  }
+  return ramos;
+}
+
 async function configDeUmBloco(
   porta: PortaDeModelo,
   plano: PlanoDeFluxo,
@@ -117,6 +138,7 @@ async function configDeUmBloco(
         rotulo: bloco.rotulo,
         intencao: bloco.intencao,
         vizinhos: vizinhosDe(plano, bloco),
+        ramos: ramosDoBloco(plano, bloco),
       }),
       maxOutputTokens: TOKENS_POR_CONFIG,
       rotulo: `${bloco.id}:${bloco.tipo}`,

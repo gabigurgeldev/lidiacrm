@@ -11,6 +11,23 @@ export type RequestOpts = {
   timeoutMs?: number;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  /**
+   * Desliga a repetição automática desta chamada. Uma tentativa, e ponto.
+   *
+   * ⚠️ EXISTE PARA CHAMADA CARA E LONGA, e o caso que a criou é concreto: a
+   * montagem de um fluxo com IA faz N chamadas ao provedor e pode levar ~25s.
+   * Se ela estourar o teto de tempo, o laço abaixo tenta MAIS DUAS VEZES — nove
+   * minutos de espera e três vezes o custo no provedor, para chegar ao mesmo
+   * lugar, com a pessoa olhando uma tela parada.
+   *
+   * É o mesmo argumento que a lista `RETRYABLE_SE_NAO_FOR_ERRO_NOSSO` já faz
+   * para o 502 das rotas de IA ("repetir é o pior a fazer"), aplicado ao
+   * timeout, que aquela lista não alcança porque nem chega a haver resposta.
+   *
+   * Não é o padrão: repetir é certo para a chamada curta e barata, que é a
+   * esmagadora maioria.
+   */
+  semRepetir?: boolean;
 };
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -178,8 +195,9 @@ async function request<T>(
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   let lastError: unknown;
+  const tentativas = opts.semRepetir === true ? 1 : MAX_ATTEMPTS;
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= tentativas; attempt++) {
     const timeoutController = new AbortController();
     const timer = setTimeout(() => timeoutController.abort(), timeoutMs);
     const signal = combineSignals([timeoutController.signal, opts.signal]);
@@ -212,7 +230,7 @@ async function request<T>(
         RETRYABLE_STATUSES.has(res.status) ||
         (RETRYABLE_SE_NAO_FOR_ERRO_NOSSO.has(res.status) && !ehErroNosso);
 
-      if (podeRepetir && attempt < MAX_ATTEMPTS) {
+      if (podeRepetir && attempt < tentativas) {
         const retryAfter = parseRetryAfterSeconds(res.headers.get("Retry-After"));
         const delay = retryAfter !== null ? retryAfter * 1000 : backoffMs(attempt);
         await sleep(delay, opts.signal);
@@ -250,7 +268,7 @@ async function request<T>(
       }
       // Network error / timeout — retry
       lastError = err;
-      if (attempt < MAX_ATTEMPTS) {
+      if (attempt < tentativas) {
         await sleep(backoffMs(attempt), opts.signal);
         continue;
       }

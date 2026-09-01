@@ -6651,7 +6651,16 @@ export const DICIONARIO: Traducoes = {
   "Planejar": { es: "Planificar" },
   "Montar": { es: "Armar" },
   "Planejando os blocos…": { es: "Planificando los bloques…" },
-  "Montando {feitos} de {total} blocos…": { es: "Armando {feitos} de {total} bloques…" },
+  // ⚠️ "Montando {feitos} de {total} blocos…" SAIU. A rota de montagem deixou de
+  // ser um stream, e sem os eventos por bloco não existe `{feitos}` para contar
+  // — mostrar um número inventado seria mentir sobre onde a geração está.
+  "Montando {total} blocos — isso leva alguns segundos…":
+    { es: "Armando {total} bloques — esto tarda unos segundos…" },
+  "Os {n} blocos ficaram no quadro com valores padrão. Você pode fechar e preencher à mão, ou tentar montar de novo.":
+    {
+      es: "Los {n} bloques quedaron en el tablero con valores por defecto. Podés cerrar y completarlos a mano, o intentar armar de nuevo.",
+    },
+  "Fechar e preencher à mão": { es: "Cerrar y completar a mano" },
   "{n} blocos vieram com valores padrão — revise antes de publicar.":
     { es: "{n} bloques quedaron con valores por defecto — revisalos antes de publicar." },
 

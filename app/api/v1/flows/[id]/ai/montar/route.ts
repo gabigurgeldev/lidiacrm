@@ -1,16 +1,47 @@
 /**
- * POST /api/v1/flows/[id]/ai/montar — ETAPA 2: preenche cada bloco, ao vivo.
+ * POST /api/v1/flows/[id]/ai/montar — ETAPA 2: preenche cada bloco do plano.
  *
- * ═══ Por que aqui pode ser stream, e na etapa 1 não podia ═══
+ * ═══ ⚠️ ESTA ROTA ERA UM STREAM SSE, E DEIXOU DE SER ═══
  *
- * Depois desta linha não existe mais falha fatal. Todo erro conhecido —
- * provedor fora do ar, orçamento, plano inválido, nenhum provedor configurado —
- * já foi respondido com status HTTP pela rota `plano`. O que sobra é uma
- * sequência de chamadas pequenas, e a que falhar cai no `configExemploDoTipo`:
- * o pior caso desta rota é um grafo com alguns blocos em valores padrão, nunca
- * uma tela vazia. Por isso abrir os cabeçalhos 200 aqui é seguro, e era
- * exatamente o que NÃO era seguro no caminho anterior, que abria o stream antes
- * de saber se o provedor sequer existia.
+ * A versão anterior devolvia `text/event-stream`: esqueleto primeiro, cada bloco
+ * "acendendo" no canvas quando o config dele ficava pronto, com heartbeat de 10s
+ * para nenhum proxy cortar por ociosidade. Era bonito e não chegava ao usuário.
+ *
+ * MEDIDO, e o sintoma localiza a falha sozinho: numa VPS real a tela travava em
+ * "Montando N blocos…" para sempre. Essa frase só é desenhada DEPOIS que a rota
+ * irmã (`ai/plano`) respondeu — o `total` vem de `plano.blocos.length`. Ou seja,
+ * o POST **JSON** da etapa 1 atravessava o proxy do cliente e funcionava; o que
+ * morria era o stream, a única resposta `text/event-stream` do produto inteiro.
+ *
+ * Contra o provedor real (`pnpm ia:diagnostico`, OpenRouter), NENHUMA chamada ao
+ * modelo falhava: plano em 11,0s e configs de `logic.wait`, `logic.if`,
+ * `whatsapp.notify_user` e `crm.add_tag` entre 4,1 e 5,0s, todos 200 e
+ * `finishReason: "stop"`. O defeito não estava no provedor nem no schema — os
+ * dois lugares onde as quatro correções anteriores procuraram. Estava no
+ * TRANSPORTE.
+ *
+ * O heartbeat não salvava porque ele só resolve teto de OCIOSIDADE. Contra um
+ * proxy que bufferiza a resposta (o cliente não recebe evento nenhum e a barra
+ * fica em 0) ou que tem teto de DURAÇÃO TOTAL, ele não faz nada. E o produto é
+ * self-host: o proxy é de outra pessoa, e ninguém aqui o configura.
+ *
+ * Hoje é um POST JSON como qualquer outro. Decisão do dono do produto: a IA
+ * monta e a pessoa confere depois, em vez de assistir.
+ *
+ * ═══ O que se GANHA junto ═══
+ *
+ * Falha volta a ser status HTTP com `details.causa`. Num stream, depois dos
+ * cabeçalhos 200, nenhuma causa vira status: vira stream truncado, e o cliente
+ * mostra a mesma frase genérica para tudo. Era a doença que esta frente inteira
+ * veio curar, e o stream a reintroduzia pela porta dos fundos.
+ *
+ * ═══ O que se PERDE, dito por inteiro ═══
+ *
+ * O progresso ao vivo, e o teto de tempo passa a ser o da resposta. Com
+ * `CONCORRENCIA_PADRAO = 4` e ~4,5s por config: 8 blocos ≈ 10s, 20 blocos ≈ 25s.
+ * Folgado sob um teto de 60s; apertado sob um de 30s com fluxo grande. Por isso
+ * o cliente NÃO desfaz o canvas quando esta rota falha — o esqueleto fica lá,
+ * com valores padrão, e a pessoa preenche à mão. Ver `useGeracaoDeFluxo.ts`.
  *
  * ═══ O plano vem no corpo — e é revalidado ═══
  *
@@ -29,19 +60,12 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 
-import { fail } from "@/lib/api/wrappers";
+import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { orcamentoPermite } from "@/lib/flow-engine/ai/budget-gate";
-import {
-  CABECALHOS_SSE,
-  HEARTBEAT,
-  HEARTBEAT_MS,
-  serializarEvento,
-  type EventoDeGeracao,
-} from "@/lib/flow-engine/ai/eventos";
 import { gerarConfigs } from "@/lib/flow-engine/ai/etapas";
 import { portaComFallback, resolverCadeia } from "@/lib/flow-engine/ai/modelo-com-fallback";
 import { montarSchemaDePlano, type PlanoDeFluxo } from "@/lib/flow-engine/ai/plan-schema";
@@ -51,7 +75,8 @@ export const dynamic = "force-dynamic";
 
 /**
  * VALE NA VERCEL, NÃO NO SELF-HOST. Em `output: "standalone"` quem limita é o
- * proxy à frente — e é o heartbeat, não este número, que impede o corte lá.
+ * proxy à frente — e, sem o heartbeat, agora é ele quem decide o teto de
+ * verdade. Ver o parágrafo "o que se perde" no cabeçalho.
  */
 export const maxDuration = 300;
 
@@ -126,141 +151,107 @@ export async function POST(
     flowId,
   });
 
-  const codificador = new TextEncoder();
-  const corpo = new ReadableStream<Uint8Array>({
-    async start(controle) {
-      const enviar = (evento: EventoDeGeracao) => {
-        try {
-          controle.enqueue(codificador.encode(serializarEvento(evento)));
-        } catch {
-          // Cliente já foi embora. `req.signal` cuida de parar as chamadas.
-        }
-      };
-      // Bytes a cada 10s: é o que impede um proxy de cortar a conexão por
-      // ociosidade sem exigir diretiva nova no Caddyfile de quem já instalou.
-      const pulso = setInterval(() => {
-        try {
-          controle.enqueue(codificador.encode(HEARTBEAT));
-        } catch {
-          /* idem */
-        }
-      }, HEARTBEAT_MS);
+  try {
+    // `req.signal` continua sendo passado: fechar a aba no meio da geração para
+    // as chamadas em voo, e sem isso o provedor seguiria sendo pago por um
+    // resultado que ninguém vai ler.
+    const { configs, telemetria } = await gerarConfigs(porta, plano, lido.data.pedido, {
+      sinal: req.signal,
+    });
 
-      try {
-        // O esqueleto primeiro: o canvas desenha o fluxo INTEIRO em segundos, e
-        // os blocos acendem depois. No caminho antigo os nós pingavam um a um
-        // durante todo o tempo da chamada, e um erro no fim apagava todos.
-        enviar({ tipo: "plano", blocos: plano.blocos, ligacoes: plano.ligacoes });
+    const montado = planoParaGrafo(plano, configs as ReadonlyMap<string, ConfigResolvida>);
 
-        const { configs, telemetria } = await gerarConfigs(
-          porta,
-          plano,
-          lido.data.pedido,
-          { sinal: req.signal },
-          ({ id, resolvida, restantes }) => {
-            enviar({ tipo: "bloco", id, origem: resolvida.origem, restantes });
-          },
-        );
-
-        const montado = planoParaGrafo(plano, configs as ReadonlyMap<string, ConfigResolvida>);
-        if (!montado.valido) {
-          logger.error("flow.ai.montar.grafo_invalido", {
-            organizationId: authz.org.orgId,
-            requestId,
-            flowId,
-            ms: Date.now() - t0,
-            causa: montado.descartes.map((d) => `${d.o_que}: ${d.motivo}`).join(" | "),
-            finishReason: telemetria.finishReasons,
-            warnings: telemetria.warnings,
-          });
-          enviar({
-            tipo: "erro",
-            codigo: "grafo_invalido",
-            mensagem: "Não sobrou nenhum bloco válido no plano. Tente descrever de outro jeito.",
-          });
-          void audit({
-            action: "flow.ai_generation_failed",
-            actorUserId: authz.user.id,
-            organizationId: authz.org.orgId,
-            resourceType: "flow",
-            resourceId: flowId,
-            requestId,
-            metadata: { onde: "montagem", descartes: montado.descartes.slice(0, 10) },
-          });
-          return;
-        }
-
-        enviar({ tipo: "grafo", grafo: montado.grafo });
-        enviar({
-          tipo: "fim",
-          nos: montado.grafo.nodes.length,
-          arestas: montado.grafo.edges.length,
-          comExemplo: montado.comExemplo,
-        });
-
-        logger.info("flow.ai.montar.fim", {
-          organizationId: authz.org.orgId,
+    if (!montado.valido) {
+      logger.error("flow.ai.montar.grafo_invalido", {
+        organizationId: authz.org.orgId,
+        requestId,
+        flowId,
+        ms: Date.now() - t0,
+        causa: montado.descartes.map((d) => `${d.o_que}: ${d.motivo}`).join(" | "),
+        finishReason: telemetria.finishReasons,
+        warnings: telemetria.warnings,
+      });
+      void audit({
+        action: "flow.ai_generation_failed",
+        actorUserId: authz.user.id,
+        organizationId: authz.org.orgId,
+        resourceType: "flow",
+        resourceId: flowId,
+        requestId,
+        metadata: { onde: "montagem", descartes: montado.descartes.slice(0, 10) },
+      });
+      // 422 e não 502: o provedor respondeu: o que não deu foi o CONTEÚDO caber
+      // no que este produto sabe montar. `details.causa` chega à tela e diz o
+      // que foi descartado, em vez da frase genérica de antes.
+      return fail(
+        "ai_generation_empty",
+        "Não sobrou nenhum bloco válido no plano. Tente descrever de outro jeito.",
+        422,
+        {
           requestId,
-          flowId,
-          ms: Date.now() - t0,
-          modeloCanonico: cadeia.primario.modelId,
-          nos: montado.grafo.nodes.length,
-          arestas: montado.grafo.edges.length,
-          // Contagem separada de propósito: "montou" com metade dos blocos em
-          // valores padrão é um resultado diferente de "montou", e um número
-          // que sobe aqui acusa provedor recusando o formato de config.
-          comExemplo: montado.comExemplo,
-          descartes: montado.descartes.length,
-          chamadas: telemetria.chamadas,
-          // Agregado: um punhado de "length" acusa teto de tokens curto por
-          // config; um "erro" repetido acusa provedor recusando o formato.
-          finishReason: telemetria.finishReasons,
-          warnings: telemetria.warnings,
-        });
-        void audit({
-          action: "flow.ai_generated",
-          actorUserId: authz.user.id,
-          organizationId: authz.org.orgId,
-          resourceType: "flow",
-          resourceId: flowId,
-          requestId,
-          metadata: {
-            nos: montado.grafo.nodes.length,
-            arestas: montado.grafo.edges.length,
-            comExemplo: montado.comExemplo,
-            modelo: cadeia.primario.modelId,
-          },
-        });
-      } catch (err) {
-        // Só chega aqui o inesperado: `gerarConfigs` não lança por bloco, e a
-        // montagem é determinística. Ainda assim, um throw sem este bloco
-        // viraria stream truncado sem uma linha em lugar nenhum — que é a
-        // doença que esta frente veio curar.
-        logger.error("flow.ai.montar.estourou", {
-          organizationId: authz.org.orgId,
-          requestId,
-          flowId,
-          ms: Date.now() - t0,
-          causa: err instanceof Error ? err.message : String(err),
-        });
-        enviar({
-          tipo: "erro",
-          codigo: "erro_interno",
-          mensagem: "A montagem falhou no meio. Tente de novo.",
-        });
-      } finally {
-        clearInterval(pulso);
-        try {
-          controle.close();
-        } catch {
-          /* já fechado pelo cliente */
-        }
-      }
-    },
-  });
+          details: { causa: montado.descartes.map((d) => `${d.o_que}: ${d.motivo}`).slice(0, 5) },
+        },
+      );
+    }
 
-  return new Response(corpo, {
-    status: 200,
-    headers: { ...CABECALHOS_SSE, "X-Request-Id": requestId },
-  });
+    logger.info("flow.ai.montar.fim", {
+      organizationId: authz.org.orgId,
+      requestId,
+      flowId,
+      ms: Date.now() - t0,
+      modeloCanonico: cadeia.primario.modelId,
+      nos: montado.grafo.nodes.length,
+      arestas: montado.grafo.edges.length,
+      // Contagem separada de propósito: "montou" com metade dos blocos em
+      // valores padrão é um resultado diferente de "montou", e um número que
+      // sobe aqui acusa provedor recusando o formato de config.
+      comExemplo: montado.comExemplo,
+      descartes: montado.descartes.length,
+      chamadas: telemetria.chamadas,
+      // Agregado: um punhado de "length" acusa teto de tokens curto por config;
+      // um "erro" repetido acusa provedor recusando o formato.
+      finishReason: telemetria.finishReasons,
+      warnings: telemetria.warnings,
+    });
+    void audit({
+      action: "flow.ai_generated",
+      actorUserId: authz.user.id,
+      organizationId: authz.org.orgId,
+      resourceType: "flow",
+      resourceId: flowId,
+      requestId,
+      metadata: {
+        nos: montado.grafo.nodes.length,
+        arestas: montado.grafo.edges.length,
+        comExemplo: montado.comExemplo,
+        modelo: cadeia.primario.modelId,
+      },
+    });
+
+    return ok(
+      {
+        grafo: montado.grafo,
+        comExemplo: montado.comExemplo,
+        descartes: montado.descartes,
+      },
+      { requestId },
+    );
+  } catch (err) {
+    // Só chega aqui o inesperado: `gerarConfigs` não lança por bloco, e a
+    // montagem é determinística. Ainda assim, sem este bloco um throw viraria
+    // 500 sem uma linha em lugar nenhum — que é a doença que esta frente veio
+    // curar.
+    const causa = err instanceof Error ? err.message : String(err);
+    logger.error("flow.ai.montar.estourou", {
+      organizationId: authz.org.orgId,
+      requestId,
+      flowId,
+      ms: Date.now() - t0,
+      causa,
+    });
+    return fail("ai_provider_error", "A montagem falhou no meio. Tente de novo.", 502, {
+      requestId,
+      details: { causa },
+    });
+  }
 }

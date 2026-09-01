@@ -110,6 +110,68 @@ describe("planoParaGrafo", () => {
     expect(analisarGrafo(grafo).erros).toEqual([]);
   });
 
+  it("o RÓTULO vence a ordem — mesmo com as saídas invertidas no config", () => {
+    /**
+     * O caso que separa as duas regras, e ele não existia.
+     *
+     * Os testes vizinhos provam que o rótulo casa e que a ordem é a rede, mas
+     * nos dois a ordem e o rótulo apontam para o MESMO lugar: uma implementação
+     * que ignorasse o rótulo e usasse só a posição passaria em ambos.
+     *
+     * Aqui o config declara as saídas ao contrário da ordem das ligações. Pela
+     * posição, cada aresta iria para o ramo errado; pelo rótulo, cada uma vai
+     * para o seu. É a garantia de que o conserto da etapa 2 — mandar os rótulos
+     * do plano para dentro do prompt do config — tem quem o receba.
+     */
+    const plano: PlanoDeFluxo = {
+      blocos: [
+        { id: "t1", tipo: "trigger.lead_created", rotulo: "Lead novo", intencao: "início" },
+        { id: "se", tipo: "logic.if", rotulo: "Decide", intencao: "decidir" },
+        { id: "quente", tipo: "crm.add_tag", rotulo: "Marca", intencao: "etiquetar" },
+        { id: "fim", tipo: "logic.end", rotulo: "Fim", intencao: "terminar" },
+      ],
+      ligacoes: [
+        { de: "t1", para: "se" },
+        { de: "se", para: "quente", ramo: "Score alto" },
+        { de: "se", para: "fim", ramo: "Score baixo" },
+      ],
+    };
+    const { grafo, valido } = planoParaGrafo(
+      plano,
+      new Map([
+        ["t1", config({})],
+        [
+          "se",
+          config({
+            // INVERTIDAS de propósito: "Score baixo" é a saída[0].
+            saidas: [
+              {
+                id: "s_baixo",
+                label: "Score baixo",
+                quando: { combinador: "and", itens: [{ campo: "lead.score", op: "lt", valor: 70 }] },
+              },
+              {
+                id: "s_alto",
+                label: "Score alto",
+                quando: { combinador: "and", itens: [{ campo: "lead.score", op: "gt", valor: 70 }] },
+              },
+            ],
+          }),
+        ],
+        ["quente", config({ tag: "quente" })],
+        ["fim", config({ desfecho: "concluido" })],
+      ]),
+    );
+
+    expect(valido).toBe(true);
+    expect(
+      grafo.edges.find((e) => e.target === "quente")?.branch_id,
+      "pela ORDEM esta aresta iria para s_baixo — o rótulo é que a salva",
+    ).toBe("s_alto");
+    expect(grafo.edges.find((e) => e.target === "fim")?.branch_id).toBe("s_baixo");
+    expect(analisarGrafo(grafo).erros).toEqual([]);
+  });
+
   it("cai na ORDEM quando o rótulo do plano não bate com o do config", () => {
     const plano: PlanoDeFluxo = {
       blocos: [

@@ -190,16 +190,29 @@ export function CartaoDeOpcao({
 
 // ───────────────────────────── progresso da montagem ─────────────────────────
 
-export function ProgressoDaMontagem({
-  concluidos,
-  total,
-  rotulo,
-}: {
-  concluidos: number;
-  total: number;
-  rotulo: string;
-}) {
-  const pct = total > 0 ? Math.min(100, Math.round((concluidos / total) * 100)) : 0;
+/**
+ * O progresso da montagem — INDETERMINADO, e é o desenho honesto agora.
+ *
+ * ⚠️ ERA UMA BARRA COM PORCENTAGEM (`concluidos / total`), alimentada pelos
+ * eventos SSE da rota de montagem. O stream saiu do produto: numa VPS real ele
+ * nunca chegava ao navegador, e a tela travava em "Montando N blocos…" para
+ * sempre — ver o cabeçalho de `useGeracaoDeFluxo.ts`.
+ *
+ * Sem os eventos não existe fração para mostrar, e inventar uma (uma barra que
+ * anda sozinha por tempo) seria pior que não ter: ela mentiria sobre onde a
+ * geração está, que é exatamente o defeito que esta frente veio consertar.
+ *
+ * `role="progressbar"` SEM `aria-valuenow` é a forma que o ARIA define para
+ * "indeterminado" — o leitor de tela anuncia "em progresso" em vez de ler uma
+ * porcentagem falsa.
+ *
+ * A animação é CSS à mão (`.barra-indeterminada`, em `app/globals.css`), e não
+ * uma classe utilitária: `tailwindcss-animate` NÃO está instalado neste repo
+ * (`plugins: []` no tailwind.config.ts). As classes `animate-in`/`fade-in` usadas
+ * acima neste mesmo arquivo não existem e não fazem nada — é uma dívida herdada,
+ * e não vale a pena somar mais uma a ela.
+ */
+export function ProgressoDaMontagem({ rotulo }: { rotulo: string }) {
   return (
     <div className="flex flex-col gap-2" data-testid="ia-progresso">
       <div className="flex items-center gap-2 text-sm">
@@ -208,15 +221,10 @@ export function ProgressoDaMontagem({
       </div>
       <div
         role="progressbar"
-        aria-valuenow={pct}
-        aria-valuemin={0}
-        aria-valuemax={100}
+        aria-label={rotulo}
         className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
       >
-        <div
-          className="h-full rounded-full bg-primary transition-[width] duration-500"
-          style={{ width: `${pct}%` }}
-        />
+        <div className="barra-indeterminada h-full w-1/3 rounded-full bg-primary" />
       </div>
     </div>
   );

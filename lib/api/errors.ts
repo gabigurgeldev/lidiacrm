@@ -111,6 +111,12 @@ export const ApiErrorCodes = {
   // IA disparada por clique humano (ver lib/flow-engine/ai/budget-gate.ts) —
   // nunca uma segunda régua de "acabou o dinheiro".
   ai_budget_exceeded: "ai_budget_exceeded",
+
+  // 422 — o provedor respondeu, e o que veio não vira fluxo.
+  // Separado de `ai_provider_error` porque o conserto é do lado da PESSOA
+  // (descrever de outro jeito), não do lado da instalação. Confundir os dois
+  // mandava quem só precisava reescrever o pedido conferir chave de API.
+  ai_generation_empty: "ai_generation_empty",
 } as const;
 
 export type ApiErrorCode = (typeof ApiErrorCodes)[keyof typeof ApiErrorCodes];

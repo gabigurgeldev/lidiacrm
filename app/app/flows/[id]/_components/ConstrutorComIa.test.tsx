@@ -5,20 +5,23 @@
  *
  * É prova de COMPORTAMENTO da tela: clicar, ver o cartão de opção, ver o
  * esqueleto chegar ao canvas antes dos configs, ver o aviso de "valores padrão"
- * aparecer, ver a causa do servidor na tela em vez de uma frase genérica.
+ * aparecer, ver a causa do servidor na tela em vez de uma frase genérica, e —
+ * o caso novo — ver que uma falha na montagem NÃO apaga o esqueleto.
  *
  * NÃO é a prova pela tela que a doutrina de QA Visual exige — aquela é
  * Playwright em ambiente fresco estilo VPS. Ela não foi executada nesta sessão:
- * o Docker não sobe nesta máquina (`docker info` não encontra o daemon), então
- * não há banco do `baseline.sql` para o app conversar. A spec existe
+ * o Docker não sobe nesta máquina (`docker ps` não encontra o daemon), então não
+ * há banco do `baseline.sql` para o app conversar. A spec existe
  * (`tests/e2e/flow-builder-ia-montagem.spec.ts`) e está declarada no CI; o que
  * falta é a EXECUÇÃO, e ela está declarada como não medida no
  * `docs/testing/user-journey-map.md`.
  *
- * O valor deste arquivo é cobrir, sem depender de Docker, os três
- * comportamentos que o defeito original tornou críticos: a causa real do erro
- * chegar à tela, a aceitação parcial ser ANUNCIADA, e o esqueleto aparecer
- * antes dos configs.
+ * ## ⚠️ ESTE ARQUIVO STUBAVA `fetch` COM UM STREAM SSE
+ *
+ * A rota de montagem deixou de ser `text/event-stream` — numa VPS real o stream
+ * não atravessava o proxy e a tela travava em "Montando N blocos…" para sempre.
+ * As duas etapas passaram a ser POST JSON, então as duas passam pelo
+ * `apiClient`, e o `fetch` global saiu daqui junto com o SSE.
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -70,30 +73,19 @@ const GRAFO = {
   ],
 };
 
-function streamSse(eventos: readonly unknown[]): Response {
-  const texto = eventos.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
-  const codificador = new TextEncoder();
-  const body = new ReadableStream<Uint8Array>({
-    start(c) {
-      c.enqueue(codificador.encode(texto));
-      c.close();
-    },
-  });
-  return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
-}
-
 function montarTela() {
   const canvas = vi.fn();
   const bloqueio = vi.fn();
+  const anterior = { nos: [{ id: "velho" }], arestas: [] } as never;
   render(
     <ConstrutorComIa
       flowId="11111111-1111-4111-8111-111111111111"
       onAtualizarCanvas={canvas}
-      grafoAntesDeGerar={() => ({ nos: [], arestas: [] })}
+      grafoAntesDeGerar={() => anterior}
       onMudarBloqueio={bloqueio}
     />,
   );
-  return { canvas, bloqueio };
+  return { canvas, bloqueio, anterior };
 }
 
 /** Vai da porta fechada até o botão "Montar o fluxo" aparecer. */
@@ -106,7 +98,6 @@ async function ateOResumo(user: ReturnType<typeof userEvent.setup>) {
 describe("ConstrutorComIa", () => {
   beforeEach(() => {
     postMock.mockReset();
-    vi.unstubAllGlobals();
   });
 
   it("mostra a pergunta como CARTÕES de escolha única, navegáveis por teclado", async () => {
@@ -127,20 +118,12 @@ describe("ConstrutorComIa", () => {
 
   it("o esqueleto chega ao canvas ANTES de qualquer config", async () => {
     const user = userEvent.setup();
+    let liberar: (v: unknown) => void = () => {};
     postMock
       .mockResolvedValueOnce({ data: { kind: "pronto", resumo: "Monto 3 blocos." } })
-      .mockResolvedValueOnce({ data: PLANO });
-
-    // O stream demora; a asserção é que o canvas já recebeu os 3 nós antes dele.
-    let liberar: () => void = () => {};
-    const espera = new Promise<void>((r) => (liberar = r));
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => {
-        await espera;
-        return streamSse([{ tipo: "grafo", grafo: GRAFO }, { tipo: "fim", nos: 3, arestas: 2, comExemplo: 0 }]);
-      }),
-    );
+      .mockResolvedValueOnce({ data: PLANO })
+      // A montagem demora; a asserção é que o canvas já recebeu os 3 nós antes.
+      .mockImplementationOnce(() => new Promise((r) => (liberar = r)));
 
     const { canvas } = montarTela();
     await ateOResumo(user);
@@ -153,26 +136,15 @@ describe("ConstrutorComIa", () => {
       "o canvas precisa receber o fluxo inteiro assim que o PLANO chega — é o que " +
         "faz o fluxo aparecer em segundos em vez de gotejar por um minuto",
     ).toHaveLength(3);
-    liberar();
+    liberar({ data: { grafo: GRAFO, comExemplo: 0, descartes: [] } });
   });
 
   it("anuncia quantos blocos vieram com valores padrão", async () => {
     const user = userEvent.setup();
     postMock
       .mockResolvedValueOnce({ data: { kind: "pronto", resumo: "Monto 3 blocos." } })
-      .mockResolvedValueOnce({ data: PLANO });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        streamSse([
-          { tipo: "bloco", id: "t1", origem: "ia", restantes: 2 },
-          { tipo: "bloco", id: "w1", origem: "exemplo", restantes: 1 },
-          { tipo: "bloco", id: "tag", origem: "ia", restantes: 0 },
-          { tipo: "grafo", grafo: GRAFO },
-          { tipo: "fim", nos: 3, arestas: 2, comExemplo: 1 },
-        ]),
-      ),
-    );
+      .mockResolvedValueOnce({ data: PLANO })
+      .mockResolvedValueOnce({ data: { grafo: GRAFO, comExemplo: 1, descartes: [] } });
 
     montarTela();
     await ateOResumo(user);
@@ -200,5 +172,34 @@ describe("ConstrutorComIa", () => {
     expect(erro).toHaveTextContent(/Nenhum provedor de IA/);
     // E a tela destrava: erro não pode deixar a paleta e o Salvar mortos.
     await waitFor(() => expect(bloqueio).toHaveBeenLastCalledWith(false));
+  });
+
+  it("falhar a MONTAGEM não apaga o esqueleto do quadro", async () => {
+    // O caso que a troca de transporte tornou possível — e obrigatório.
+    //
+    // Antes, qualquer falha restaurava o snapshot anterior e a pessoa perdia até
+    // o esqueleto: um grafo válido, com os blocos certos ligados, em valores
+    // padrão, que ela poderia terminar à mão. Apagar trabalho utilizável para
+    // mostrar uma mensagem de erro é o oposto do que este painel deve fazer.
+    const user = userEvent.setup();
+    postMock
+      .mockResolvedValueOnce({ data: { kind: "pronto", resumo: "Monto 3 blocos." } })
+      .mockResolvedValueOnce({ data: PLANO })
+      .mockRejectedValueOnce(new Error("A montagem falhou no meio. Tente de novo."));
+
+    const { canvas, anterior } = montarTela();
+    await ateOResumo(user);
+    await user.click(await screen.findByTestId("ia-montar"));
+
+    // A tela DIZ que os blocos ficaram lá — sem esta frase a pessoa lê "falhou",
+    // fecha o painel e não repara no fluxo que sobrou.
+    const nota = await screen.findByTestId("ia-so-esqueleto");
+    expect(nota).toHaveTextContent("3");
+    expect(screen.getByTestId("ia-preencher-a-mao")).toBeInTheDocument();
+
+    // E a asserção que separa "diz" de "faz": o canvas NUNCA volta ao estado
+    // anterior. Sem ela, a frase acima poderia estar mentindo.
+    const voltouAoAnterior = canvas.mock.calls.some((c) => c[0] === anterior);
+    expect(voltouAoAnterior, "o esqueleto não pode ser desfeito por uma falha").toBe(false);
   });
 });

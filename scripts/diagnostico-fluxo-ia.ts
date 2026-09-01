@@ -41,6 +41,7 @@
  *   pnpm ia:diagnostico --etapa=plano  --modo=ambos
  *   pnpm ia:diagnostico --etapa=plano  --modo=cru --require-parameters
  *   pnpm ia:diagnostico --etapa=config --tipo=logic.if --modo=sdk --org=<uuid>
+ *   pnpm ia:diagnostico --etapa=config --tipo=logic.if --ramos="Já respondeu,Sem resposta"
  */
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -73,6 +74,14 @@ export interface Opcoes {
   pedido: string;
   requireParameters: boolean;
   bytes: number;
+  /**
+   * Os rótulos de saída que o PLANO declarou para este bloco.
+   *
+   * A produção passa isto desde que o rótulo de ramo parou de ser inventado duas
+   * vezes (ver `promptDoBloco`). Uma sonda que não passasse mediria um pedido
+   * que ninguém faz — e é justamente com `logic.if` que ela é mais usada.
+   */
+  ramos: string[];
 }
 
 /** As chaves que nunca podem aparecer na saída, em nenhuma forma. */
@@ -127,6 +136,10 @@ export function lerOpcoes(argv: readonly string[]): Opcoes {
     pedido: mapa.get("pedido") ?? PEDIDO_PADRAO,
     requireParameters: mapa.has("require-parameters"),
     bytes: Number(mapa.get("bytes") ?? 4000),
+    ramos: (mapa.get("ramos") ?? "")
+      .split(",")
+      .map((r) => r.trim())
+      .filter((r) => r.length > 0),
   };
 }
 
@@ -169,6 +182,7 @@ export function pedidoDaEtapa(o: Opcoes): PedidoDaEtapa {
       rotulo: def.rotulo,
       intencao: o.pedido,
       vizinhos: "é o primeiro bloco do fluxo",
+      ramos: o.ramos,
     }),
     maxOutputTokens: 800,
   };

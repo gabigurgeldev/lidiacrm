@@ -28,12 +28,16 @@ import type { DadosDoNo } from "./NoDoFluxo";
  *
  * ═══ Duas etapas, não uma ═══
  *
- * `ai/plano` decide QUAIS blocos (resposta JSON curta, erro com status HTTP de
- * verdade) e `ai/montar` preenche cada um (stream de eventos nossos). O
- * caminho anterior pedia o grafo inteiro numa resposta só, com um schema de
- * 8.645 bytes e união de 11 variantes: um `config` divergente entre vinte
- * blocos apagava o fluxo inteiro, e qualquer causa — inclusive "não há provedor
- * configurado" — chegava aqui como a mesma frase genérica.
+ * `ai/plano` decide QUAIS blocos e `ai/montar` preenche cada um. As DUAS são
+ * respostas JSON com status HTTP de verdade. O caminho anterior pedia o grafo
+ * inteiro numa resposta só, com um schema de 8.645 bytes e união de 11
+ * variantes: um `config` divergente entre vinte blocos apagava o fluxo inteiro,
+ * e qualquer causa — inclusive "não há provedor configurado" — chegava aqui como
+ * a mesma frase genérica.
+ *
+ * ⚠️ `ai/montar` ERA UM STREAM SSE, com os blocos acendendo um a um. Numa VPS
+ * real ele nunca chegava ao navegador e a tela travava em "Montando N blocos…"
+ * para sempre. O diagnóstico e a medição estão em `ia/useGeracaoDeFluxo.ts`.
  *
  * ═══ Por que o histórico da conversa some ao fechar o painel ═══
  *
@@ -173,7 +177,14 @@ export function ConstrutorComIa({
     }
     if (geracao.fase === "falhou") {
       onMudarBloqueio(false);
-      if (snapshotAntesDeGerar.current) onAtualizarCanvas(snapshotAntesDeGerar.current);
+      // ⚠️ SÓ DESFAZ QUANDO NÃO SOBROU NADA. Antes, qualquer falha restaurava o
+      // snapshot e a pessoa perdia até o esqueleto — um grafo válido, com os
+      // blocos certos em valores padrão, que ela poderia terminar à mão. Apagar
+      // trabalho utilizável para mostrar uma mensagem de erro é o oposto do que
+      // este painel deve fazer.
+      if (!geracao.somenteEsqueleto && snapshotAntesDeGerar.current) {
+        onAtualizarCanvas(snapshotAntesDeGerar.current);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [geracao.fase, passo]);
@@ -402,20 +413,42 @@ export function ConstrutorComIa({
                 {erroVisivel}
               </p>
             )}
+
+            {/* A MONTAGEM FALHOU E O ESQUELETO FICOU NO QUADRO.
+                Dizer isso é o ponto: sem esta frase a pessoa lê "falhou", fecha
+                o painel e não repara que os blocos certos já estão lá, ligados,
+                esperando os campos. Um erro que esconde o trabalho que sobrou é
+                pior que o erro. */}
+            {geracao.somenteEsqueleto && (
+              <div className="flex flex-col gap-2" data-testid="ia-so-esqueleto">
+                <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                  <Warning className="mt-0.5 size-3 shrink-0" />
+                  {t(
+                    "Os {n} blocos ficaram no quadro com valores padrão. Você pode fechar e preencher à mão, ou tentar montar de novo.",
+                  ).replace("{n}", String(geracao.total))}
+                </p>
+                <Button variant="outline" onClick={fechar} data-testid="ia-preencher-a-mao">
+                  {t("Fechar e preencher à mão")}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
         {passoVisivel === "construindo" && (
           <div className="flex flex-col gap-3 py-1">
+            {/* Sem os eventos por bloco não existe fração honesta para mostrar.
+                O rótulo diz QUANTOS blocos estão sendo montados, que é a
+                informação que a pessoa tem como usar — e não uma porcentagem
+                inventada. */}
             <ProgressoDaMontagem
-              concluidos={geracao.concluidos}
-              total={geracao.total}
               rotulo={
                 geracao.fase === "planejando"
                   ? t("Planejando os blocos…")
-                  : t("Montando {feitos} de {total} blocos…")
-                      .replace("{feitos}", String(geracao.concluidos))
-                      .replace("{total}", String(geracao.total))
+                  : t("Montando {total} blocos — isso leva alguns segundos…").replace(
+                      "{total}",
+                      String(geracao.total),
+                    )
               }
             />
             <Button variant="ghost" size="sm" onClick={cancelar} data-testid="ia-cancelar">

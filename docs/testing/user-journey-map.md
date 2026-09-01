@@ -869,7 +869,57 @@ Specs: `tests/e2e/flow-builder-ia.spec.ts` e
 | J20.2 | Painel abre sobre o canvas | sem trocar de URL | NÃO MEDIDO |
 | J20.3 | Sem provedor de IA configurado | frase amigável, nunca erro cru | NÃO MEDIDO |
 | J20.4 | Fechar o painel após erro | canvas volta a responder, paleta clicável | NÃO MEDIDO |
-| J20.5 | Montagem por etapas (rotas interceptadas) | esqueleto em segundos, blocos acendendo, aviso de valores padrão, Salvar persiste | NÃO MEDIDO |
+| J20.5 | Montagem por etapas (rotas interceptadas) | esqueleto em segundos, aviso de valores padrão, Salvar persiste | NÃO MEDIDO |
+| J20.6 | A montagem falha e o esqueleto FICA no quadro | a tela diz que os N blocos ficaram com valores padrão, oferece "Fechar e preencher à mão", e o canvas NÃO volta ao estado anterior | **PASS** (unit `ConstrutorComIa.test.tsx`) · e2e escrito, NÃO EXECUTADO |
+
+### ⚠️ 2026-09-01 — O STREAM SAIU DO PRODUTO, e o motivo é uma medição
+
+O parágrafo acima ("monta o grafo em streaming de verdade: os nós aparecem no
+canvas real conforme a IA os produz") **descreve o que existia até esta data**.
+Não existe mais.
+
+**O sintoma, relatado por quem usa:** a tela travava em "Montando N blocos…"
+para sempre. Sem erro, sem mensagem, sem fim.
+
+**A localização, que sai do próprio sintoma:** essa frase só é desenhada
+DEPOIS que a rota `ai/plano` respondeu — o `total` vem de `plano.blocos.length`.
+Logo, o POST **JSON** da etapa 1 atravessava o proxy da VPS e funcionava; o que
+morria era a etapa 2, a **única** resposta `text/event-stream` do produto
+inteiro.
+
+**Medido contra o provedor real** (`pnpm ia:diagnostico`, OpenRouter, chave de
+quem tem o problema): NENHUMA chamada ao modelo falha.
+
+| etapa | modelo | resultado |
+|---|---|---|
+| plano | `anthropic/claude-sonnet-5` | 200, `finishReason: stop`, 8 blocos, **11,0s** |
+| config `logic.wait` | idem | 200, `{"duracao_ms":600000}`, 4,5s |
+| config `logic.if` | idem | 200, duas saídas com condição, 5,0s |
+| config `whatsapp.notify_user` | idem | 200, destinatário + mensagem, 4,1s |
+| config `crm.add_tag` | idem | 200, `{"tag":"sem-resposta"}`, 4,2s |
+| classificador (`interpretar`) | `anthropic/claude-haiku-4.5` | 200, 1,4s |
+
+As quatro correções anteriores procuraram no modelo, no schema e no nome do
+provedor. O defeito estava no **transporte** — e o heartbeat de 10s não salvava
+porque ele só resolve teto de OCIOSIDADE, não proxy que bufferiza nem teto de
+duração total.
+
+**O que entrou no lugar:** as duas etapas são POST JSON. Perde-se o progresso
+bloco a bloco; ganha-se falha com status HTTP e `details.causa` (num stream,
+depois dos cabeçalhos 200, nenhuma causa vira status), e ganha-se a etapa 3
+abaixo.
+
+**O segundo defeito, achado pela mesma sonda:** o rótulo de saída de um
+`logic.if` era inventado duas vezes, em chamadas diferentes — plano disse
+`"Ainda não respondeu"/"Já respondeu"`, config disse `"Sem resposta"/"Já
+respondido"`. Nenhum par casa, e `resolverRamo` caía no desempate por ORDEM, que
+acertou por sorte. Quando não acertar, a aresta vai para o ramo errado em
+silêncio. Corrigido mandando os rótulos do plano para dentro do prompt do config.
+
+**O que continua NÃO MEDIDO:** a jornada pela tela em ambiente fresco estilo VPS.
+Docker não sobe nesta máquina (`docker ps` não encontra o daemon) e o
+`.env.local` não tem Supabase. A spec `flow-builder-ia-montagem.spec.ts` foi
+reescrita para JSON e ganhou o caso de falha, mas **não foi executada aqui**.
 
 **⚠️ NÃO MEDIDO — mesma causa do J21: Docker não sobe nesta máquina.**
 `pnpm test:db` nunca rodou, então a migration nenhuma (esta entrega não tem

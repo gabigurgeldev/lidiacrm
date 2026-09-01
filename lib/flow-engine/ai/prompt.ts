@@ -116,18 +116,53 @@ Regras:
   outras variáveis.`;
 }
 
-/** O pedido da etapa 2: o bloco, a intenção dele, e o fluxo em volta em uma linha. */
+/**
+ * O pedido da etapa 2: o bloco, a intenção dele, e o fluxo em volta em uma linha.
+ *
+ * ═══ ⚠️ `ramos` NÃO É ENFEITE — ele conserta um defeito medido ═══
+ *
+ * O rótulo de uma saída de `logic.if` era inventado DUAS VEZES, em chamadas
+ * diferentes: a etapa 1 escrevia o `ramo` de cada ligação, e a etapa 2 escrevia
+ * o `saidas[].label` do config, sem saber o que a etapa 1 tinha escrito. Medido
+ * contra o provedor real, no mesmo fluxo:
+ *
+ *     plano  (etapa 1) → ramo "Ainda não respondeu" / "Já respondeu"
+ *     config (etapa 2) → label "Sem resposta"        / "Já respondido"
+ *
+ * Nenhum dos dois pares casa. `resolverRamo` (plan-to-graph.ts) então caía no
+ * desempate por ORDEM — que acertou por sorte, porque as ligações saíram na
+ * mesma ordem das saídas. Quando não saírem, a aresta vai para o ramo errado em
+ * SILÊNCIO: o grafo desenha bonito, `analisarGrafo` não reclama, e o primeiro
+ * lead segue pelo caminho errado.
+ *
+ * Passando os rótulos que o plano já decidiu, o casamento por rótulo acerta por
+ * construção e o desempate por ordem volta a ser o que deveria ser: uma rede,
+ * não o caminho normal. A rede continua lá — nada foi removido de lá.
+ */
 export function promptDoBloco(args: {
   pedido: string;
   rotulo: string;
   intencao: string;
   vizinhos: string;
+  /** Os `ramo` que o plano declarou saindo deste bloco, na ordem das ligações. */
+  ramos?: readonly string[];
 }): string {
+  const ramos = args.ramos ?? [];
+  const exigenciaDeRamos =
+    ramos.length > 0
+      ? `
+
+As saídas deste bloco DEVEM se chamar exatamente assim, nesta ordem: ` +
+        `${ramos.map((r) => `"${r}"`).join(", ")}. ` +
+        `Use esses textos, letra por letra, no campo "label" de cada saída — ` +
+        `o resto do fluxo já está ligado por esses nomes.`
+      : "";
+
   return `Pedido original da pessoa: ${args.pedido}
 
 Bloco a preencher: "${args.rotulo}"
 O que ele faz neste fluxo: ${args.intencao}
-Onde ele fica: ${args.vizinhos}`;
+Onde ele fica: ${args.vizinhos}${exigenciaDeRamos}`;
 }
 
 export function promptDoUsuario(pedido: string, historico: readonly Mensagem[]): string {

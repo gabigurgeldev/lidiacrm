@@ -161,6 +161,33 @@ describe("apiClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * O IRMÃO DO t9b, para o caso que aquela lista não alcança: o TIMEOUT.
+   *
+   * `RETRYABLE_SE_NAO_FOR_ERRO_NOSSO` decide olhando o CORPO da resposta — e
+   * num estouro de teto não há resposta nenhuma para olhar. A montagem de um
+   * fluxo com IA faz N chamadas ao provedor e pode levar ~25s; se ela estourar,
+   * o laço tentaria mais duas vezes: nove minutos de espera e três gerações
+   * pagas, com a pessoa olhando uma tela parada.
+   *
+   * O erro de rede sem `semRepetir` CONTINUA sendo repetido — é o caso do t9 e
+   * é o certo para a chamada curta, que é a esmagadora maioria. O caso abaixo
+   * prova os dois lados: sem a opção repete, com a opção não repete.
+   */
+  it("t9c: erro de rede repete por padrão, e NÃO repete com `semRepetir`", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await expect(apiClient.get("/x")).rejects.toThrow();
+    expect(fetchMock, "sem a opção, o padrão de três tentativas vale").toHaveBeenCalledTimes(3);
+
+    fetchMock.mockClear();
+    await expect(apiClient.post("/x", {}, { semRepetir: true })).rejects.toThrow();
+    expect(
+      fetchMock,
+      "com a opção, uma tentativa e ponto — repetir aqui custaria três gerações pagas",
+    ).toHaveBeenCalledTimes(1);
+  });
+
   it("t10: texto de erro curto e legível CONTINUA sendo mostrado", async () => {
     // A recusa é do despejo de página, não de toda resposta não-JSON: uma frase
     // curta do servidor ainda é a melhor mensagem disponível.

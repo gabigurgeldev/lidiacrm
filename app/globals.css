@@ -1005,3 +1005,36 @@
 .app-sidebar[data-collapsed="true"] .nav-logo {
   max-width: 2.5rem;
 }
+
+/* ---- Barra de progresso INDETERMINADA (montagem do fluxo com IA) ----------
+   O painel "Criar fluxo com IA" perdeu a fração de progresso quando a rota de
+   montagem deixou de ser um stream: sem os eventos por bloco, não existe
+   `concluidos / total` para desenhar, e inventar uma fração seria mentir sobre
+   onde a geração está.
+
+   CSS à mão, e não `animate-*` do `tailwindcss-animate`: esse plugin NÃO está
+   instalado (`plugins: []` no tailwind.config.ts). É o mesmo motivo de
+   `.card-pulse` e `.agenda-coluna-horarios` acima existirem à mão.
+
+   `transform` e não `margin-left`/`left`: só ele é composto pela GPU, e esta
+   animação roda durante ~25 segundos numa tela em que o resto está parado —
+   animar uma propriedade de layout ali custaria reflow a 60fps sem motivo. */
+@keyframes barra-indeterminada {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(300%); }
+}
+
+.barra-indeterminada {
+  animation: barra-indeterminada 1.4s var(--ease-in-out) infinite;
+}
+
+/* Movimento reduzido: a barra PARA, mas continua existindo e visível — o sinal
+   de "estou trabalhando" não pode sumir para quem desligou animação. Quem
+   carrega o sinal aí é o `animate-pulse` do ícone ao lado, que o Tailwind emite
+   de verdade (é utilitário do core, não do plugin ausente). */
+@media (prefers-reduced-motion: reduce) {
+  .barra-indeterminada {
+    animation: none;
+    width: 100%;
+  }
+}
