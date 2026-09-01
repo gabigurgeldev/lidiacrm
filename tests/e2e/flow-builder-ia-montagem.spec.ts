@@ -91,14 +91,29 @@ const GRAFO = {
  */
 const MONTAGEM = { grafo: GRAFO, comExemplo: 1, descartes: [] };
 
-/** Cria um fluxo pela tela e abre o editor dele. */
-async function abrirFluxoNovo(page: Page): Promise<void> {
-  await page.goto("/app/flows");
-  const nome = `E2E montagem ${Date.now()}`;
-  await page.getByTestId("campo-nome-do-fluxo").fill(nome);
-  await page.getByTestId("form-novo-fluxo").getByRole("button", { name: /criar fluxo/i }).click();
-  await page.getByRole("link", { name: nome }).click();
-  await page.waitForURL(/\/app\/flows\/[0-9a-f-]{36}/);
+/**
+ * Cria um fluxo PELA API e abre o editor dele. Devolve o id.
+ *
+ * ⚠️ PELA API, E NÃO PELO FORMULÁRIO — e o motivo foi medido no CI.
+ *
+ * A spec irmã (`flow-builder-ia.spec.ts`) cria o dela pela TELA, e as duas
+ * rodam em paralelo. As duas criações caíram na mesma janela de segundos, o
+ * botão "Criar fluxo" da irmã ficou `disabled` e a linha dela nunca apareceu na
+ * lista — o snapshot da falha mostra SÓ o fluxo desta spec. Provar o formulário
+ * é o trabalho DELA; aqui o fluxo é só o palco da montagem, então criá-lo pela
+ * API tira a disputa sem tirar cobertura de ninguém.
+ *
+ * O id volta porque o fim do primeiro teste precisa dele para esperar o PATCH
+ * de "Salvar rascunho" — ver o comentário lá embaixo.
+ */
+async function abrirFluxoNovo(page: Page): Promise<string> {
+  const criado = await page.request.post("/api/v1/flows", {
+    data: { name: `E2E montagem ${Date.now()}` },
+  });
+  expect(criado.ok(), `criar fluxo falhou: ${criado.status()}`).toBe(true);
+  const { data: fluxo } = (await criado.json()) as { data: { id: string } };
+  await page.goto(`/app/flows/${fluxo.id}`);
+  return fluxo.id;
 }
 
 /** As duas rotas que antecedem a montagem, sempre iguais. */
@@ -142,7 +157,8 @@ test.describe("montar fluxo com IA (rotas interceptadas)", () => {
       }),
     );
 
-    await abrirFluxoNovo(page);
+    const fluxoId = await abrirFluxoNovo(page);
+
     await page.getByTestId("abrir-construtor-ia").click();
     // O trilho de passos existe desde o primeiro momento — a versão anterior
     // não dizia em que ponto da conversa a pessoa estava.
@@ -171,7 +187,16 @@ test.describe("montar fluxo com IA (rotas interceptadas)", () => {
     // ─── "Salvar rascunho" persiste o que está no quadro ───────────────────
     // O caminho de gravação continua sendo o de sempre: a geração nunca
     // escreve `draft_graph` por conta própria.
+    // Esperar a resposta do PATCH antes de recarregar. Sem isto o `reload()`
+    // aborta a requisição em voo e o teste mede um fluxo que nunca chegou a ser
+    // gravado — foi exatamente o que reprovou no CI, DEPOIS de toda a montagem
+    // ter funcionado.
+    const salvou = page.waitForResponse(
+      (r) => r.request().method() === "PATCH" && r.url().includes(`/api/v1/flows/${fluxoId}`),
+    );
     await page.getByTestId("salvar-rascunho").click();
+    expect((await salvou).ok()).toBe(true);
+
     await page.reload();
     for (const id of ["t1", "w1", "tag", "fim"]) {
       await expect(page.getByTestId(`no-${id}`)).toBeVisible({ timeout: 20_000 });
