@@ -179,7 +179,7 @@ jobs:
         notificacoes-diz-o-que-falta.spec.ts
         relogio-http-cron-externo.spec.ts
         disparo-em-massa.spec.ts
-        flow-builder-ia.spec.ts
+        flow-builder-ia.spec.ts flow-builder-ia-montagem.spec.ts
       # ⚠️ A ORDEM DESTA LISTA NÃO DECIDE A ORDEM DE EXECUÇÃO. O Playwright
       # ordena os arquivos por CAMINHO, não pela ordem em que são passados na
       # linha de comando. Medido no run 31838253496: `marca-logo.spec.ts` estava

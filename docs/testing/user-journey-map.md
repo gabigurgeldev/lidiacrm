@@ -838,19 +838,30 @@ travada para interação até terminar.
 
 **As duas decisões de arquitetura que mudam o resultado:**
 
-1. **O schema que a IA usa nasce do REGISTRY**, não é escrito à mão
-   (`lib/flow-engine/ai/generation-schema.ts`) — um discriminated union com
-   uma variante por tipo de nó hoje registrado, cada uma com o `configSchema`
-   exato daquele tipo embutido. Um 12º tipo registrado amanhã entra
+1. **O que a IA recebe nasce do REGISTRY**, nunca escrito à mão. O formato
+   mudou em 2026-09-01: era UM pedido com o grafo inteiro — `generation-schema.ts`,
+   uma união de 11 variantes com o `configSchema` de cada tipo embutido, 8.645
+   bytes de JSON Schema. Esse arquivo não existe mais. Hoje são DUAS etapas:
+   `plan-schema.ts` pede só quais blocos e em que ordem (`tipo` é um enum
+   derivado do registry — sem união nenhuma, 1.779 bytes) e
+   `config-para-geracao.ts` dá o schema de UM tipo por vez, na etapa que
+   preenche cada bloco. Um 12º tipo registrado amanhã entra nas duas
    automaticamente. `position` nunca é pedida à IA — vem de
    `lib/flow-engine/ai/auto-layout.ts` (BFS puro a partir do trigger), porque
    layout espacial é a única coisa que um modelo de texto faz mal de graça.
+
+   **Por que mudou:** com um pedido só, a resposta era conferida de uma vez, e
+   todo `configSchema` é `z.strictObject` — um bloco com um campo a mais
+   derrubava o objeto inteiro: 59 nós perfeitos + 1 defeituoso = zero nós, com a
+   frase "A IA não conseguiu terminar o fluxo" na tela. Por etapas, o bloco que
+   falha recebe `configExemploDoTipo` e os irmãos seguem.
 2. **A geração NÃO grava o banco.** A rota de streaming só devolve o grafo;
    quem persiste é o "Salvar rascunho" de sempre — mesma doutrina de
    `montarQuadro.ts` no onboarding ("o que se grava é o que a pessoa está
    vendo"). Nada de caminho de gravação paralelo para fluxo gerado por IA.
 
-Spec: `tests/e2e/flow-builder-ia.spec.ts` (`SPECS_PARTE_1`).
+Specs: `tests/e2e/flow-builder-ia.spec.ts` e
+`tests/e2e/flow-builder-ia-montagem.spec.ts` (as duas em `SPECS_PARTE_1`).
 
 | # | Caso | Expectativa | Resultado |
 |---|------|-------------|-----------|
@@ -858,6 +869,7 @@ Spec: `tests/e2e/flow-builder-ia.spec.ts` (`SPECS_PARTE_1`).
 | J20.2 | Painel abre sobre o canvas | sem trocar de URL | NÃO MEDIDO |
 | J20.3 | Sem provedor de IA configurado | frase amigável, nunca erro cru | NÃO MEDIDO |
 | J20.4 | Fechar o painel após erro | canvas volta a responder, paleta clicável | NÃO MEDIDO |
+| J20.5 | Montagem por etapas (rotas interceptadas) | esqueleto em segundos, blocos acendendo, aviso de valores padrão, Salvar persiste | NÃO MEDIDO |
 
 **⚠️ NÃO MEDIDO — mesma causa do J21: Docker não sobe nesta máquina.**
 `pnpm test:db` nunca rodou, então a migration nenhuma (esta entrega não tem
@@ -868,11 +880,21 @@ acima nunca foram executadas de verdade. Declarado, não escondido.
 
 - `lib/flow-engine/ai/auto-layout.test.ts` (7 casos) — BFS determinístico,
   ramificação, nó órfão nunca sobreposto;
-- `lib/flow-engine/ai/generation-schema.test.ts` (5 casos) — o schema aceita
-  o exemplo canônico de CADA um dos 11 tipos registrados (achou e corrigiu um
-  defeito real: os exemplos de `crm.add_tag` e `notify.internal` violavam o
-  próprio `configSchema` deles — passava despercebido porque `branches()`
-  desses dois tipos não lê `config`);
+- `lib/flow-engine/ai/config-gerado-cabe-no-runtime.test.ts` — o exemplo
+  canônico de CADA tipo registrado passa no schema de geração E no
+  `configSchema` de runtime (sucessor do `generation-schema.test.ts`, que
+  media a mesma coisa no schema único; ele achou um defeito real na época: os
+  exemplos de `crm.add_tag` e `notify.internal` violavam o próprio
+  `configSchema` deles — passava despercebido porque `branches()` desses dois
+  tipos não lê `config`. Agora o exemplo é o VALOR DE QUEDA da geração, então
+  um exemplo inválido chegaria ao editor da pessoa);
+- `lib/flow-engine/ai/plan-to-graph.test.ts` (8 casos) — a montagem
+  determinística: reconciliação do rótulo do ramo com o `branch_id` real,
+  aceitação parcial, aresta órfã, id repetido;
+- `lib/flow-engine/ai/etapas.test.ts` (7 casos) — um bloco que falha vira
+  valores padrão sem derrubar os irmãos, concorrência limitada, cancelamento;
+- `app/app/flows/[id]/_components/ia/lerEventos.test.ts` (6 casos) — chunk
+  partido no meio da linha e no meio de um caractere UTF-8;
 - `lib/flow-engine/ai/budget-gate.test.ts` (6 casos) — o mapeamento de campos
   entre `BudgetStatus` e `EntradaDeOrcamento` está correto nos dois sentidos
   (modo `off`/`avisar`/`bloquear`, teto zerado, org repassada corretamente);

@@ -8,20 +8,40 @@
     "quality_profile": "standard"
   },
   "lanes": [
-    { "id": "humano", "label": "O que o operador vê" },
-    { "id": "cliente", "label": "No navegador" },
-    { "id": "borda", "label": "Borda HTTP" },
-    { "id": "regra", "label": "Regra pura (roda nos dois lados)" },
-    { "id": "config", "label": "Configuração do tenant" },
-    { "id": "banco", "label": "Banco" }
+    {
+      "id": "humano",
+      "label": "O que o operador vê"
+    },
+    {
+      "id": "cliente",
+      "label": "No navegador"
+    },
+    {
+      "id": "borda",
+      "label": "Borda HTTP"
+    },
+    {
+      "id": "regra",
+      "label": "Regra pura (roda nos dois lados)"
+    },
+    {
+      "id": "config",
+      "label": "Configuração do tenant"
+    },
+    {
+      "id": "banco",
+      "label": "Banco"
+    }
   ],
   "mainPath": [
     "botao",
     "interpretar",
     "perguntas",
-    "gerar",
-    "schema",
-    "stream",
+    "plano",
+    "montar",
+    "plan_schema",
+    "leitor",
+    "montagem",
     "canvas",
     "salvar"
   ],
@@ -40,7 +60,7 @@
       "col": 2,
       "type": "frontend",
       "label": "ConstrutorComIa.tsx",
-      "sublabel": "4 estados: entrada → perguntas → construindo → concluído · estado só no navegador"
+      "sublabel": "entrada → perguntas → montando → concluído · estado só no navegador"
     },
     {
       "id": "interpretar",
@@ -59,12 +79,12 @@
       "sublabel": "nunca texto livre — a IA propõe opções, a pessoa escolhe"
     },
     {
-      "id": "gerar",
+      "id": "plano",
       "lane": "borda",
       "col": 4,
       "type": "api",
-      "label": "POST /flows/:id/ai/gerar",
-      "sublabel": "streamObject().toTextStreamResponse() — primeiro streaming do produto"
+      "label": "POST /flows/:id/ai/plano",
+      "sublabel": "generateObject · schema sem união (enum de tipos) · erro vira status HTTP de verdade"
     },
     {
       "id": "orcamento",
@@ -83,12 +103,12 @@
       "sublabel": "/app/ai/providers · o admin da EMPRESA escolhe o modelo, não um admin de plataforma"
     },
     {
-      "id": "schema",
+      "id": "plan_schema",
       "lane": "regra",
       "col": 4,
       "type": "lib",
-      "label": "generation-schema.ts",
-      "sublabel": "discriminated union montado do REGISTRY · roda no cliente E no servidor"
+      "label": "plan-schema.ts + config-para-geracao.ts",
+      "sublabel": "plano SEM união (1.779 bytes) · config por tipo, um de cada vez — o schema de 8.645 bytes com anyOf de 11 saiu"
     },
     {
       "id": "registry",
@@ -99,12 +119,12 @@
       "sublabel": "os 11 tipos de nó — fonte única, também usada pela paleta manual"
     },
     {
-      "id": "stream",
+      "id": "leitor",
       "lane": "cliente",
       "col": 5,
       "type": "lib",
-      "label": "useObject (@ai-sdk/react)",
-      "sublabel": "objeto PARCIAL a cada pedaço · mesmo schema do servidor, zero parsing de SSE à mão"
+      "label": "lerEventos.ts (SSE)",
+      "sublabel": "eventos discretos: plano → bloco × N → grafo → fim · chunk partido e UTF-8 partido cobertos por teste"
     },
     {
       "id": "layout",
@@ -137,30 +157,181 @@
       "type": "table",
       "label": "flows.draft_graph",
       "sublabel": "a geração NUNCA escreve aqui direto — só o clique em Salvar. audit flow.ai_generated é o único rastro da geração (registraEm:\"nenhum\" em llm_calls é dívida declarada)"
+    },
+    {
+      "id": "montar",
+      "lane": "borda",
+      "col": 5,
+      "type": "api",
+      "label": "POST /flows/:id/ai/montar",
+      "sublabel": "SSE com heartbeat de 10s · um config por bloco, 4 por vez · bloco que falha vira valores padrão"
+    },
+    {
+      "id": "montagem",
+      "lane": "regra",
+      "col": 6,
+      "type": "lib",
+      "label": "plan-to-graph.ts",
+      "sublabel": "determinístico · reconcilia o RÓTULO do ramo com o branch_id real · bloco sem config recebe configExemploDoTipo"
     }
   ],
   "edges": [
-    { "id": "e1", "from": "botao", "to": "construtor", "label": "abre o painel sobre o canvas" },
-    { "id": "e2", "from": "construtor", "to": "interpretar", "label": "pedido + histórico" },
-    { "id": "e3", "from": "interpretar", "to": "orcamento", "label": "confere ANTES de chamar o modelo" },
-    { "id": "e4", "from": "interpretar", "to": "binding", "label": "resolverModeloDoPonto" },
-    { "id": "e5", "from": "interpretar", "to": "perguntas", "label": "kind: perguntar" },
-    { "id": "e6", "from": "perguntas", "to": "construtor", "label": "resposta escolhida vira histórico" },
-    { "id": "e7", "from": "construtor", "to": "interpretar", "label": "chama de novo com o histórico" },
-    { "id": "e8", "from": "interpretar", "to": "gerar", "label": "kind: pronto → botão Montar" },
-    { "id": "e9", "from": "gerar", "to": "orcamento", "label": "confere de novo" },
-    { "id": "e10", "from": "gerar", "to": "schema", "label": "streamObject valida contra isto" },
-    { "id": "e11", "from": "schema", "to": "registry", "label": "uma variante por tipo — nunca copiado à mão" },
-    { "id": "e12", "from": "gerar", "to": "stream", "label": "texto de stream" },
-    { "id": "e13", "from": "stream", "to": "schema", "label": "o MESMO schema, rodando no navegador" },
-    { "id": "e14", "from": "stream", "to": "layout", "label": "a cada pedaço novo" },
-    { "id": "e15", "from": "layout", "to": "canvas", "label": "posições calculadas, nunca pedidas à IA" },
-    { "id": "e16", "from": "canvas", "to": "salvar", "label": "clique manual, igual a sempre" },
-    { "id": "e17", "from": "salvar", "to": "draft", "label": "só aqui o grafo é persistido" },
-    { "id": "e18", "from": "gerar", "to": "draft", "label": "audit fire-and-forget · nunca grava o grafo em si" },
-    { "id": "e19", "from": "draft", "to": "canvas", "label": "semeia o quadro ao abrir o fluxo" },
-    { "id": "e20", "from": "binding", "to": "gerar", "label": "gerar TAMBÉM resolve pelo mesmo binding" },
-    { "id": "e21", "from": "registry", "to": "canvas", "label": "a MESMA fonte que a paleta manual (NoDoFluxo) usa" }
+    {
+      "id": "e1",
+      "from": "botao",
+      "to": "construtor",
+      "label": "abre o painel sobre o canvas"
+    },
+    {
+      "id": "e2",
+      "from": "construtor",
+      "to": "interpretar",
+      "label": "pedido + histórico"
+    },
+    {
+      "id": "e3",
+      "from": "interpretar",
+      "to": "orcamento",
+      "label": "confere ANTES de chamar o modelo"
+    },
+    {
+      "id": "e4",
+      "from": "interpretar",
+      "to": "binding",
+      "label": "resolverModeloDoPonto"
+    },
+    {
+      "id": "e5",
+      "from": "interpretar",
+      "to": "perguntas",
+      "label": "kind: perguntar"
+    },
+    {
+      "id": "e6",
+      "from": "perguntas",
+      "to": "construtor",
+      "label": "resposta escolhida vira histórico"
+    },
+    {
+      "id": "e7",
+      "from": "construtor",
+      "to": "interpretar",
+      "label": "chama de novo com o histórico"
+    },
+    {
+      "id": "e8",
+      "from": "interpretar",
+      "to": "plano",
+      "label": "kind: pronto → botão Montar"
+    },
+    {
+      "id": "e9",
+      "from": "plano",
+      "to": "orcamento",
+      "label": "confere de novo"
+    },
+    {
+      "id": "e10",
+      "from": "plano",
+      "to": "plan_schema",
+      "label": "pede o plano contra este schema"
+    },
+    {
+      "id": "e11",
+      "from": "plan_schema",
+      "to": "registry",
+      "label": "uma variante por tipo — nunca copiado à mão"
+    },
+    {
+      "id": "e12",
+      "from": "plano",
+      "to": "construtor",
+      "label": "plano em JSON — erro aqui é status HTTP, não stream truncado"
+    },
+    {
+      "id": "e13",
+      "from": "leitor",
+      "to": "montagem",
+      "label": "grafo pronto, já validado no servidor"
+    },
+    {
+      "id": "e14",
+      "from": "montagem",
+      "to": "layout",
+      "label": "posições do BFS"
+    },
+    {
+      "id": "e15",
+      "from": "layout",
+      "to": "canvas",
+      "label": "posições calculadas, nunca pedidas à IA"
+    },
+    {
+      "id": "e16",
+      "from": "canvas",
+      "to": "salvar",
+      "label": "clique manual, igual a sempre"
+    },
+    {
+      "id": "e17",
+      "from": "salvar",
+      "to": "draft",
+      "label": "só aqui o grafo é persistido"
+    },
+    {
+      "id": "e18",
+      "from": "montar",
+      "to": "draft",
+      "label": "audit fire-and-forget · nunca grava o grafo em si"
+    },
+    {
+      "id": "e19",
+      "from": "draft",
+      "to": "canvas",
+      "label": "semeia o quadro ao abrir o fluxo"
+    },
+    {
+      "id": "e20",
+      "from": "binding",
+      "to": "plano",
+      "label": "gerar TAMBÉM resolve pelo mesmo binding"
+    },
+    {
+      "id": "e21",
+      "from": "registry",
+      "to": "canvas",
+      "label": "a MESMA fonte que a paleta manual (NoDoFluxo) usa"
+    },
+    {
+      "id": "e22",
+      "from": "construtor",
+      "to": "montar",
+      "label": "o plano volta no corpo — revalidado contra o registry"
+    },
+    {
+      "id": "e23",
+      "from": "montar",
+      "to": "plan_schema",
+      "label": "um config por bloco, com o schema daquele tipo"
+    },
+    {
+      "id": "e24",
+      "from": "montar",
+      "to": "leitor",
+      "label": "eventos SSE"
+    },
+    {
+      "id": "e25",
+      "from": "montar",
+      "to": "montagem",
+      "label": "plano + configs viram grafo, sem modelo nenhum"
+    },
+    {
+      "id": "e26",
+      "from": "binding",
+      "to": "montar",
+      "label": "mesma cadeia de modelo, com reserva"
+    }
   ],
   "naoLigacoes": [
     {
@@ -177,6 +348,11 @@
       "de": "gerar",
       "para": "llm_calls",
       "porque": "registraEm:\"nenhum\", DECLARADO. InvocationKind (lib/ai/log-invocation.ts) é fechado e travado contra o CHECK de ai_invocations por um invariante deliberado — alargá-lo para caber estes dois pontos quebraria aquele invariante sem necessidade, já que llm_calls.purpose já é texto livre sem CHECK."
+    },
+    {
+      "de": "montar",
+      "para": "draft",
+      "porque": "a montagem NUNCA grava o grafo — quem persiste é o clique em Salvar rascunho, igual a um fluxo montado à mão"
     }
   ]
 }

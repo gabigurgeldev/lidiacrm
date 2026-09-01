@@ -106,8 +106,12 @@ const FORA_DO_SEAM: Record<string, { arquivo: string; marcador: string }> = {
     marcador: "resolverModeloDoPonto",
   },
   flow_ai_gerar: {
-    arquivo: "app/api/v1/flows/[id]/ai/gerar/route.ts",
-    marcador: "resolverModeloDoPonto",
+    // A geração virou DUAS rotas (`plano` decide os blocos, `montar` preenche
+    // cada um) e as duas resolvem o modelo por `resolverCadeia`, que envolve
+    // `resolverModeloDoPonto`. O marcador acompanha: apontar para o nome antigo
+    // deixaria a cerca verde medindo uma chamada que não existe mais.
+    arquivo: "app/api/v1/flows/[id]/ai/plano/route.ts",
+    marcador: "resolverCadeia",
   },
 };
 

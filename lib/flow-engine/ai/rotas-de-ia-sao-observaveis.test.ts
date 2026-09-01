@@ -33,7 +33,6 @@ const RAIZ = process.cwd();
 /** Rotas HTTP que chamam um modelo. Completude vigiada pelo último caso. */
 const ROTAS = [
   "app/api/v1/flows/[id]/ai/interpretar/route.ts",
-  "app/api/v1/flows/[id]/ai/gerar/route.ts",
   "app/api/v1/flows/[id]/ai/plano/route.ts",
   "app/api/v1/flows/[id]/ai/montar/route.ts",
 ];

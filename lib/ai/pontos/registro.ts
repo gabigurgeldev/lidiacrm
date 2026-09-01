@@ -514,7 +514,7 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
       "Transforma o pedido — e as respostas que você deu às perguntas — num fluxo de automação para você revisar e publicar.",
     papel: "melhorar",
     exige: {},
-    emissor: "app/api/v1/flows/[id]/ai/gerar/route.ts",
+    emissor: "app/api/v1/flows/[id]/ai/plano/route.ts",
     sintomaDeFalha: "O fluxo não aparece no quadro, ou aparece incompleto.",
     // Mesma razão do ponto acima.
     registraEm: "nenhum",

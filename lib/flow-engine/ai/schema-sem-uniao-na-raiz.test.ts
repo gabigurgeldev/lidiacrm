@@ -28,7 +28,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { montarSchemaDeGeracao } from "./generation-schema";
+import { montarSchemaDePlano } from "./plan-schema";
 
 const RAIZ = process.cwd();
 
@@ -39,7 +39,6 @@ const RAIZ = process.cwd();
  */
 const ARQUIVOS = [
   "app/api/v1/flows/[id]/ai/interpretar/route.ts",
-  "app/api/v1/flows/[id]/ai/gerar/route.ts",
   // A geração por etapas chama o provedor por UMA porta, e é ela que emite —
   // as rotas `plano`/`montar` não chamam `generateObject` diretamente.
   "lib/flow-engine/ai/modelo-com-fallback.ts",
@@ -97,16 +96,13 @@ describe("schema de saída de IA", () => {
   });
 
   /**
-   * O schema de `ai/gerar` é montado em runtime a partir do registry de nós,
-   * então a varredura de texto não o alcança — e ele é o maior do produto.
+   * O schema do plano é montado em runtime a partir do registry, então a
+   * varredura de texto não o alcança — e ele é o schema que vai ao provedor.
    * Aqui a checagem é sobre o objeto Zod de verdade.
    */
-  it("o schema de geração tem OBJETO na raiz, com a união aninhada dentro", () => {
-    const schema = montarSchemaDeGeracao();
+  it("o schema do plano tem OBJETO na raiz", () => {
+    const schema = montarSchemaDePlano();
     expect(schema.constructor.name).toBe("ZodObject");
-
-    // A união segue existindo — ela é legítima aqui, dentro de `nodes`.
-    const forma = schema.shape;
-    expect(Object.keys(forma).sort()).toEqual(["edges", "nodes"]);
+    expect(Object.keys(schema.shape).sort()).toEqual(["blocos", "ligacoes"]);
   });
 });
