@@ -1,6 +1,5 @@
 "use client";
 
-import { useObject } from "@ai-sdk/react";
 import type { Edge, Node } from "@xyflow/react";
 import * as React from "react";
 import { toast } from "sonner";
@@ -9,37 +8,42 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
-import { autoLayout } from "@/lib/flow-engine/ai/auto-layout";
-import { montarSchemaDeGeracao } from "@/lib/flow-engine/ai/generation-schema";
-import { garantirNosRegistrados } from "@/lib/flow-engine/register-all";
 import { buscarNo } from "@/lib/flow-engine/registry";
+import type { FlowGraph } from "@/lib/flow-engine/graph-schema";
 import { Sparkle, Warning, X } from "@/lib/ui/icons";
 
+import {
+  Bolha,
+  CartaoDeOpcao,
+  PassosDaGeracao,
+  Pensando,
+  ProgressoDaMontagem,
+  type PassoDoTrilho,
+} from "./ia/Pecas";
+import { useGeracaoDeFluxo, type Mensagem } from "./ia/useGeracaoDeFluxo";
 import type { DadosDoNo } from "./NoDoFluxo";
 
 /**
  * O painel "Criar com IA" — DENTRO do mesmo editor, nunca uma tela separada.
  *
- * Quatro estados internos: `entrada` (a pessoa descreve o que quer) →
- * `perguntas` (0 a N rodadas de esclarecimento, sempre por múltipla escolha)
- * → `construindo` (streaming de verdade: o CANVAS REAL recebe os nós
- * conforme a IA os produz, travado para interação) → `concluido`.
+ * ═══ Duas etapas, não uma ═══
+ *
+ * `ai/plano` decide QUAIS blocos (resposta JSON curta, erro com status HTTP de
+ * verdade) e `ai/montar` preenche cada um (stream de eventos nossos). O
+ * caminho anterior pedia o grafo inteiro numa resposta só, com um schema de
+ * 8.645 bytes e união de 11 variantes: um `config` divergente entre vinte
+ * blocos apagava o fluxo inteiro, e qualquer causa — inclusive "não há provedor
+ * configurado" — chegava aqui como a mesma frase genérica.
  *
  * ═══ Por que o histórico da conversa some ao fechar o painel ═══
  *
- * Decisão do dono do produto: sem tabela nova para isto. O estado vive só
- * neste componente (`useState`); recarregar a página ou navegar para outro
- * fluxo perde a conversa — a pessoa recomeça. O que NÃO se perde é o próprio
- * fluxo: uma vez que os nós entram no canvas, eles são `nos`/`arestas` do
- * `Quadro` como qualquer outro, e "Salvar rascunho" funciona normal.
+ * Decisão do dono do produto: sem tabela nova para isto. O estado vive só neste
+ * componente; recarregar a página perde a conversa. O que NÃO se perde é o
+ * fluxo: uma vez no canvas, os nós são `nos`/`arestas` como quaisquer outros, e
+ * "Salvar rascunho" funciona normal.
  */
 
 type Passo = "fechado" | "entrada" | "perguntas" | "construindo" | "concluido";
-
-interface Mensagem {
-  papel: "usuario" | "ia";
-  texto: string;
-}
 
 interface RespostaInterpretar {
   kind: "perguntar" | "pronto";
@@ -49,87 +53,45 @@ interface RespostaInterpretar {
 }
 
 /**
- * O schema de geração serve às DUAS pontas (`useObject` aqui, `streamObject`
- * na rota) porque `montarSchemaDeGeracao` é TypeScript puro sem I/O — o
- * mesmo registry que a paleta do editor já importa no cliente hoje.
- */
-function useSchemaDeGeracao() {
-  return React.useMemo(() => {
-    garantirNosRegistrados();
-    return montarSchemaDeGeracao();
-  }, []);
-}
-
-type NoParcial = { id?: string; type?: string; label?: string; config?: unknown };
-type ArestaParcial = { id?: string; source?: string; target?: string; branch_id?: string };
-
-/**
- * Converte o objeto PARCIAL (ainda incompleto, chegando aos pedaços) no
- * `nos`/`arestas` que o `<ReactFlow>` de verdade desenha.
+ * O grafo do servidor vira o `nos`/`arestas` que o `<ReactFlow>` desenha.
  *
- * Um nó só entra quando tem `id` E `type` — sem os dois não há o que
- * desenhar nem onde ancorar uma aresta. `config`/`label` incompletos caem em
- * `{}`/no rótulo do registry, a MESMA tolerância que `ramosDoTipo`
- * (FlowCanvas.tsx) já pratica para nó em edição manual.
+ * Substitui o `paraReactFlowParcial` de antes, que existia para lidar com um
+ * objeto PARCIAL chegando aos pedaços. Agora o grafo chega inteiro e já
+ * validado (`flowGraphSchema` no servidor), então a tolerância a campo ausente
+ * deixou de ser necessária — o que sobra é traduzir a forma.
  */
-function paraReactFlowParcial(
-  nosParciais: readonly (NoParcial | undefined)[],
-  arestasParciais: readonly (ArestaParcial | undefined)[],
-): { nos: Node[]; arestas: Edge[] } {
-  const prontos = nosParciais.filter(
-    (n): n is NoParcial & { id: string; type: string } =>
-      n !== undefined && typeof n.id === "string" && typeof n.type === "string",
-  );
-
-  const posicoes = autoLayout(
-    prontos.map((n) => ({ id: n.id, type: n.type })),
-    arestasParciais
-      .filter(
-        (a): a is ArestaParcial & { source: string; target: string } =>
-          a !== undefined && typeof a.source === "string" && typeof a.target === "string",
-      )
-      .map((a) => ({ source: a.source, target: a.target })),
-  );
-
-  const nos: Node[] = prontos.map((n) => {
+function paraReactFlow(grafo: FlowGraph): { nos: Node[]; arestas: Edge[] } {
+  const nos: Node[] = grafo.nodes.map((n) => {
     const def = buscarNo(n.type);
-    const config = n.config ?? {};
     let branches: DadosDoNo["branches"] = [];
     try {
-      branches = def?.branches(config as never) ?? [];
+      branches = def?.branches(n.config as never) ?? [];
     } catch {
-      // Config ainda incompleta a meio do streaming — sem saídas por ora,
-      // elas aparecem no próximo pedaço do objeto parcial.
+      // Config que o `branches()` recusa: sem saídas por ora. Mesma tolerância
+      // que `ramosDoTipo` (FlowCanvas.tsx) já pratica no nó em edição manual.
       branches = [];
     }
     return {
       id: n.id,
       type: "fluxo",
-      position: posicoes[n.id] ?? { x: 0, y: 0 },
+      position: n.position,
       data: {
-        rotulo: n.label ?? def?.rotulo ?? n.type,
+        rotulo: n.label,
         tipo: n.type,
         categoria: def?.category ?? "logic",
         branches,
-        config,
+        config: n.config,
         recemAdicionado: true,
       } satisfies DadosDoNo & { config: unknown },
     };
   });
 
-  const idsProntos = new Set(prontos.map((n) => n.id));
-  const arestas: Edge[] = arestasParciais
-    .filter(
-      (a): a is Required<ArestaParcial> =>
-        a !== undefined &&
-        typeof a.id === "string" &&
-        typeof a.source === "string" &&
-        typeof a.target === "string" &&
-        typeof a.branch_id === "string" &&
-        idsProntos.has(a.source) &&
-        idsProntos.has(a.target),
-    )
-    .map((a) => ({ id: a.id, source: a.source, target: a.target, sourceHandle: a.branch_id }));
+  const arestas: Edge[] = grafo.edges.map((a) => ({
+    id: a.id,
+    source: a.source,
+    target: a.target,
+    sourceHandle: a.branch_id,
+  }));
 
   return { nos, arestas };
 }
@@ -140,7 +102,7 @@ export interface ConstrutorComIaProps {
   onAtualizarCanvas: (grafo: { nos: Node[]; arestas: Edge[] }) => void;
   /** O canvas antes de começar a gerar — para "Cancelar" desfazer sem perda. */
   grafoAntesDeGerar: () => { nos: Node[]; arestas: Edge[] };
-  /** A tela inteira (paleta, Salvar, Publicar) escuta isto para travar durante `construindo`. */
+  /** A tela inteira (paleta, Salvar, Publicar) escuta isto para travar durante a montagem. */
   onMudarBloqueio: (bloqueado: boolean) => void;
 }
 
@@ -151,71 +113,80 @@ export function ConstrutorComIa({
   onMudarBloqueio,
 }: ConstrutorComIaProps) {
   const t = useT();
-  const schema = useSchemaDeGeracao();
 
   const [passo, setPasso] = React.useState<Passo>("fechado");
   const [pedido, setPedido] = React.useState("");
   const [historico, setHistorico] = React.useState<Mensagem[]>([]);
-  const [perguntaAtual, setPerguntaAtual] = React.useState<{ texto: string; opcoes: string[] } | null>(
-    null,
-  );
+  const [perguntaAtual, setPerguntaAtual] = React.useState<{
+    texto: string;
+    opcoes: string[];
+  } | null>(null);
+  const [escolhida, setEscolhida] = React.useState<string | null>(null);
   const [resumo, setResumo] = React.useState<string | null>(null);
   const [interpretando, setInterpretando] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
   const snapshotAntesDeGerar = React.useRef<{ nos: Node[]; arestas: Edge[] } | null>(null);
+  const opcoesRef = React.useRef<HTMLDivElement | null>(null);
 
-  const { object, submit, stop, error: erroDeGeracao } = useObject({
-    api: `/api/v1/flows/${flowId}/ai/gerar`,
-    schema,
-    onFinish: ({ object: final }) => {
+  const aplicarGrafo = React.useCallback(
+    (grafo: FlowGraph) => onAtualizarCanvas(paraReactFlow(grafo)),
+    [onAtualizarCanvas],
+  );
+  const geracao = useGeracaoDeFluxo(flowId, aplicarGrafo);
+  /**
+   * O passo VISÍVEL é derivado, não guardado.
+   *
+   * Guardá-lo obrigaria o efeito abaixo a chamar `setPasso` — e `setState`
+   * dentro de efeito é render em cascata, além de duplicar em estado local algo
+   * que `geracao.fase` já diz com precisão. O efeito fica só com o que é de
+   * fato efeito colateral: destravar a tela, avisar, desfazer o canvas.
+   */
+  const passoVisivel: Passo =
+    passo === "construindo" && geracao.fase === "pronto"
+      ? "concluido"
+      : passo === "construindo" && geracao.fase === "falhou"
+        ? "perguntas"
+        : passo;
+
+  /**
+   * O erro da tela: o meu, ou o que o SERVIDOR explicou.
+   *
+   * A frase do servidor é o ponto: ela distingue "nenhum provedor configurado"
+   * — conserto de um clique — de "o modelo recusou o pedido". A tela antiga
+   * trocava as duas por "A geração falhou. Tente de novo.".
+   */
+  const erroVisivel = erro ?? (geracao.fase === "falhou" ? geracao.erro : null);
+
+  // Sincroniza com um sistema EXTERNO (o stream terminou) e faz só efeito
+  // colateral — nenhum `setState`.
+  React.useEffect(() => {
+    if (passo !== "construindo") return;
+    if (geracao.fase === "pronto") {
       onMudarBloqueio(false);
-      if (final) {
-        toast.success(
-          t("Fluxo montado com {n} blocos — confira e publique quando quiser.").replace(
-            "{n}",
-            String(final.nodes.length),
-          ),
-        );
-        setPasso("concluido");
-      } else {
-        toast.error(t("A IA não conseguiu terminar o fluxo. Tente descrever de outro jeito."));
-        if (snapshotAntesDeGerar.current) onAtualizarCanvas(snapshotAntesDeGerar.current);
-        setPasso("entrada");
-      }
-    },
-  });
-
-  // Alimenta o canvas DE VERDADE a cada pedaço novo do streaming — é aqui que
-  // "constrói ao vivo" vira pixel, não só promessa de UI.
-  React.useEffect(() => {
-    if (passo !== "construindo" || !object) return;
-    onAtualizarCanvas(paraReactFlowParcial(object.nodes ?? [], object.edges ?? []));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [object, passo]);
-
-  // Efeito legítimo, não candidato a "computar durante a renderização": ele
-  // sincroniza com um ERRO EXTERNO (o fetch de `useObject` falhou) e reage com
-  // efeitos colaterais de verdade — toast, reverter o canvas do PAI, destravar
-  // a tela — nenhum dos quais é estado derivável no corpo do render. É
-  // exatamente o caso que a doc do React chama de aceitável: "subscribe for
-  // updates from an external system, calling setState in a callback".
-  React.useEffect(() => {
-    if (erroDeGeracao) {
-      toast.error(t("A geração falhou. Tente de novo."));
+      toast.success(
+        t("Fluxo montado com {n} blocos — confira e publique quando quiser.").replace(
+          "{n}",
+          String(geracao.grafo?.nodes.length ?? 0),
+        ),
+      );
+      return;
+    }
+    if (geracao.fase === "falhou") {
       onMudarBloqueio(false);
       if (snapshotAntesDeGerar.current) onAtualizarCanvas(snapshotAntesDeGerar.current);
-      setPasso("entrada");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [erroDeGeracao]);
+  }, [geracao.fase, passo]);
 
   function fechar() {
     setPasso("fechado");
     setPedido("");
     setHistorico([]);
     setPerguntaAtual(null);
+    setEscolhida(null);
     setResumo(null);
     setErro(null);
+    geracao.reiniciar();
   }
 
   async function interpretar(historicoAtual: Mensagem[]) {
@@ -225,10 +196,8 @@ export function ConstrutorComIa({
       const resposta = await apiClient.post<{ data: RespostaInterpretar }>(
         `/api/v1/flows/${flowId}/ai/interpretar`,
         { pedido, historico: historicoAtual },
-        // O teto padrão do cliente é 10s, medida boa para uma rota nossa e
-        // curta demais para uma que espera um provedor de IA responder: a
-        // chamada era abandonada no meio, e o que a pessoa via não tinha nada a
-        // ver com o que estava acontecendo do outro lado.
+        // O teto padrão do cliente é 10s, medida boa para uma rota nossa e curta
+        // demais para uma que espera um provedor de IA responder.
         { timeoutMs: 120_000 },
       );
       if (resposta.data.kind === "perguntar") {
@@ -236,6 +205,7 @@ export function ConstrutorComIa({
           texto: resposta.data.pergunta ?? "",
           opcoes: resposta.data.opcoes ?? [],
         });
+        setEscolhida(null);
         setResumo(null);
         setPasso("perguntas");
       } else {
@@ -257,6 +227,7 @@ export function ConstrutorComIa({
 
   async function escolherOpcao(opcao: string) {
     if (!perguntaAtual) return;
+    setEscolhida(opcao);
     const novoHistorico: Mensagem[] = [
       ...historico,
       { papel: "ia", texto: perguntaAtual.texto },
@@ -267,21 +238,48 @@ export function ConstrutorComIa({
     await interpretar(novoHistorico);
   }
 
+  /** Setas navegam entre os cartões — é uma escolha única, não botões soltos. */
+  function navegarOpcoes(delta: number) {
+    const alvos = opcoesRef.current?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+    if (!alvos || alvos.length === 0) return;
+    const atual = document.activeElement;
+    const indice = [...alvos].findIndex((el) => el === atual);
+    const proximo = (indice + delta + alvos.length) % alvos.length;
+    alvos[proximo]?.focus();
+  }
+
   function comecarAConstruir() {
     snapshotAntesDeGerar.current = grafoAntesDeGerar();
     onMudarBloqueio(true);
+    setErro(null);
     setPasso("construindo");
-    submit({ pedido, historico });
+    void geracao.iniciar(pedido, historico);
   }
 
   function cancelar() {
-    stop();
+    geracao.cancelar();
     onMudarBloqueio(false);
     if (snapshotAntesDeGerar.current) onAtualizarCanvas(snapshotAntesDeGerar.current);
     fechar();
   }
 
-  if (passo === "fechado") {
+  const passoDoTrilho: PassoDoTrilho =
+    passo === "entrada"
+      ? "descrever"
+      : passo === "perguntas"
+        ? "esclarecer"
+        : geracao.fase === "planejando"
+          ? "planejar"
+          : "montar";
+
+  const rotulosDoTrilho: Record<PassoDoTrilho, string> = {
+    descrever: t("Descrever"),
+    esclarecer: t("Ajustar"),
+    planejar: t("Planejar"),
+    montar: t("Montar"),
+  };
+
+  if (passoVisivel === "fechado") {
     return (
       <Button
         variant="outline"
@@ -297,13 +295,13 @@ export function ConstrutorComIa({
 
   return (
     <div
-      className="absolute inset-0 z-10 flex items-start justify-center bg-background/80 p-6 backdrop-blur-sm"
+      className="absolute inset-0 z-10 flex items-start justify-center bg-background/80 p-6 backdrop-blur-sm animate-in fade-in duration-200"
       data-testid="construtor-com-ia"
     >
-      <div className="mt-12 flex w-full max-w-md flex-col gap-4 rounded-lg border bg-background p-4 shadow-lg">
+      <div className="mt-12 flex w-full max-w-md flex-col gap-4 rounded-xl border bg-background p-4 shadow-lg animate-in zoom-in-95 slide-in-from-top-2 duration-300">
         <div className="flex items-center justify-between">
           <p className="flex items-center gap-2 text-sm font-medium">
-            <Sparkle className="size-4" />
+            <Sparkle className="size-4 text-primary" />
             {t("Criar fluxo com IA")}
           </p>
           {passo !== "construindo" && (
@@ -320,7 +318,9 @@ export function ConstrutorComIa({
           )}
         </div>
 
-        {passo === "entrada" && (
+        <PassosDaGeracao atual={passoDoTrilho} rotulos={rotulosDoTrilho} />
+
+        {passoVisivel === "entrada" && (
           <div className="flex flex-col gap-3">
             <Textarea
               autoFocus
@@ -332,9 +332,9 @@ export function ConstrutorComIa({
               )}
               data-testid="ia-pedido"
             />
-            {erro && (
+            {erroVisivel && (
               <p className="text-xs text-destructive" data-testid="ia-erro">
-                {erro}
+                {erroVisivel}
               </p>
             )}
             <Button
@@ -347,42 +347,41 @@ export function ConstrutorComIa({
           </div>
         )}
 
-        {passo === "perguntas" && (
+        {passoVisivel === "perguntas" && (
           <div className="flex flex-col gap-3">
-            {/* Histórico da conversa, tipo chat. */}
-            <div className="flex flex-col gap-2 text-sm">
-              <p className="text-muted-foreground">{pedido}</p>
+            <div className="flex flex-col gap-2">
+              <Bolha papel="usuario">{pedido}</Bolha>
               {historico.map((m, i) => (
-                <p
-                  key={i}
-                  className={m.papel === "ia" ? "font-medium" : "self-end text-muted-foreground"}
-                >
+                <Bolha key={i} papel={m.papel}>
                   {m.texto}
-                </p>
+                </Bolha>
               ))}
             </div>
 
-            {/* Sem isto, entre escolher uma opção e a próxima pergunta chegar,
-                a tela fica sem pergunta, sem resumo e sem sinal nenhum de que
-                algo está acontecendo — parece travada por um instante. */}
-            {interpretando && !perguntaAtual && !resumo && (
-              <p className="text-sm text-muted-foreground">{t("Pensando…")}</p>
-            )}
+            {/* Sem isto, entre escolher uma opção e a próxima pergunta chegar, a
+                tela fica sem pergunta, sem resumo e sem sinal nenhum de que algo
+                está acontecendo — parece travada por um instante. */}
+            {interpretando && !perguntaAtual && !resumo && <Pensando rotulo={t("Pensando…")} />}
 
             {perguntaAtual && (
               <div className="flex flex-col gap-2">
-                <p className="text-sm font-medium">{perguntaAtual.texto}</p>
-                <div className="flex flex-wrap gap-2">
-                  {perguntaAtual.opcoes.map((opcao) => (
-                    <Button
+                <Bolha papel="ia">{perguntaAtual.texto}</Bolha>
+                <div
+                  ref={opcoesRef}
+                  role="radiogroup"
+                  aria-label={perguntaAtual.texto}
+                  className="flex flex-col gap-1.5"
+                >
+                  {perguntaAtual.opcoes.map((opcao, i) => (
+                    <CartaoDeOpcao
                       key={opcao}
-                      variant="outline"
-                      size="sm"
-                      disabled={interpretando}
-                      onClick={() => escolherOpcao(opcao)}
-                    >
-                      {opcao}
-                    </Button>
+                      texto={opcao}
+                      indice={i}
+                      selecionado={escolhida === opcao}
+                      desabilitado={interpretando}
+                      aoEscolher={() => void escolherOpcao(opcao)}
+                      aoNavegar={navegarOpcoes}
+                    />
                   ))}
                 </div>
               </div>
@@ -390,40 +389,66 @@ export function ConstrutorComIa({
 
             {resumo && (
               <div className="flex flex-col gap-3">
-                <p className="text-sm">{resumo}</p>
-                <Button onClick={comecarAConstruir}>{t("Montar o fluxo")}</Button>
+                <Bolha papel="ia">{resumo}</Bolha>
+                <Button onClick={comecarAConstruir} data-testid="ia-montar">
+                  <Sparkle className="mr-2 size-4" />
+                  {t("Montar o fluxo")}
+                </Button>
               </div>
             )}
 
-            {erro && <p className="text-xs text-destructive">{erro}</p>}
+            {erroVisivel && (
+              <p className="text-xs text-destructive" data-testid="ia-erro">
+                {erroVisivel}
+              </p>
+            )}
           </div>
         )}
 
-        {passo === "construindo" && (
-          <div className="flex flex-col items-center gap-3 py-4">
-            <Sparkle className="size-6 animate-pulse text-primary" />
-            <p className="text-sm text-muted-foreground">
-              {t("Construindo o fluxo… {n} blocos até agora.").replace(
-                "{n}",
-                String(object?.nodes?.length ?? 0),
-              )}
-            </p>
-            <Button variant="ghost" size="sm" onClick={cancelar}>
+        {passoVisivel === "construindo" && (
+          <div className="flex flex-col gap-3 py-1">
+            <ProgressoDaMontagem
+              concluidos={geracao.concluidos}
+              total={geracao.total}
+              rotulo={
+                geracao.fase === "planejando"
+                  ? t("Planejando os blocos…")
+                  : t("Montando {feitos} de {total} blocos…")
+                      .replace("{feitos}", String(geracao.concluidos))
+                      .replace("{total}", String(geracao.total))
+              }
+            />
+            <Button variant="ghost" size="sm" onClick={cancelar} data-testid="ia-cancelar">
               {t("Cancelar")}
             </Button>
           </div>
         )}
 
-        {passo === "concluido" && (
+        {passoVisivel === "concluido" && (
           <div className="flex flex-col gap-3">
             <p className="text-sm">
               {t("Pronto. Confira os blocos no quadro, ajuste o que quiser e salve o rascunho.")}
             </p>
+            {/* Dizer isto é o ponto. Um bloco com valores padrão parece pronto e
+                não é — esconder o número repetiria o pecado de parecer que
+                funcionou, que é o que esta frente veio consertar. */}
+            {geracao.comExemplo > 0 && (
+              <p
+                className="flex items-start gap-1.5 text-xs text-muted-foreground"
+                data-testid="ia-aviso-padrao"
+              >
+                <Warning className="mt-0.5 size-3 shrink-0" />
+                {t("{n} blocos vieram com valores padrão — revise antes de publicar.").replace(
+                  "{n}",
+                  String(geracao.comExemplo),
+                )}
+              </p>
+            )}
             <Button onClick={fechar}>{t("Fechar")}</Button>
           </div>
         )}
 
-        {passo !== "construindo" && passo !== "concluido" && (
+        {passoVisivel !== "construindo" && passoVisivel !== "concluido" && (
           <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
             <Warning className="mt-0.5 size-3 shrink-0" />
             {t("A conversa se perde se você sair desta tela antes de montar o fluxo.")}

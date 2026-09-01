@@ -6636,6 +6636,15 @@ export const DICIONARIO: Traducoes = {
   "A geração falhou. Tente de novo.": { es: "La generación falló. Intentá de nuevo." },
   "A IA não conseguiu terminar o fluxo. Tente descrever de outro jeito.":
     { es: "La IA no pudo terminar el flujo. Intentá describirlo de otra forma." },
+  // Trilho de passos e progresso da geração por etapas.
+  "Descrever": { es: "Describir" },
+  "Ajustar": { es: "Ajustar" },
+  "Planejar": { es: "Planificar" },
+  "Montar": { es: "Armar" },
+  "Planejando os blocos…": { es: "Planificando los bloques…" },
+  "Montando {feitos} de {total} blocos…": { es: "Armando {feitos} de {total} bloques…" },
+  "{n} blocos vieram com valores padrão — revise antes de publicar.":
+    { es: "{n} bloques quedaron con valores por defecto — revisalos antes de publicar." },
 
 };
 
