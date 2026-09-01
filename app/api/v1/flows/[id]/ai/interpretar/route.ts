@@ -195,6 +195,12 @@ export async function POST(
         modeloCanonico: resolvido.modelId,
         origem: resolvido.origem,
         kind: gerado.object.kind,
+        // Ver o comentário irmão em `ai/gerar`: "length" acusa o teto de tokens,
+        // "stop" acusa o modelo; e `warnings` é onde o SDK avisa que o provedor
+        // IGNOROU um ajuste (o `response_format`, tipicamente).
+        finishReason: gerado.finishReason,
+        avisos: gerado.warnings?.map((w) => JSON.stringify(w).slice(0, 200)) ?? [],
+        tokens_saida: gerado.usage?.outputTokens ?? null,
       });
       return fail(
         "ai_provider_error",
@@ -208,6 +214,10 @@ export async function POST(
       requestId,
       ms: Date.now() - t0,
       kind: gerado.object.kind,
+      finishReason: gerado.finishReason,
+      avisos: gerado.warnings?.map((w) => JSON.stringify(w).slice(0, 200)) ?? [],
+      tokens_entrada: gerado.usage?.inputTokens ?? null,
+      tokens_saida: gerado.usage?.outputTokens ?? null,
     });
     return ok(gerado.object, { requestId });
   } catch (err) {

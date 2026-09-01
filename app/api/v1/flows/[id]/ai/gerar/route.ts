@@ -48,6 +48,17 @@ import { promptDeGeracao, promptDoUsuario } from "@/lib/flow-engine/ai/prompt";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * VALE NA VERCEL, NÃO NO SELF-HOST — mesma ressalva da rota irmã `interpretar`.
+ *
+ * Faltava aqui, e a assimetria era exatamente ao contrário do que faz sentido: a
+ * rota LEVE (600 tokens de saída, modelo classificador) declarava teto e a rota
+ * PESADA (4000 tokens, até 60 nós, modelo principal) não declarava nenhum. Em
+ * `output: "standalone"` quem limita é o proxy à frente; na Vercel o default
+ * mataria esta chamada muito antes de o modelo terminar.
+ */
+export const maxDuration = 300;
+
 const PURPOSE = "flow_ai_gerar";
 
 const entradaSchema = z.strictObject({
@@ -83,6 +94,39 @@ function detalheDaChamada(error: unknown): Record<string, unknown> {
   if (typeof e.responseBody === "string") saida.resposta = e.responseBody.slice(0, 600);
   if (typeof e.url === "string") saida.url = e.url;
   return saida;
+}
+
+/**
+ * Extrai os CAMINHOS que a validação recusou, quando o erro é do Zod.
+ *
+ * `nodes.17.config.mensagem` diz qual bloco e qual campo derrubaram o objeto
+ * inteiro. Sem isto, um único `config` divergente entre 60 nós perfeitos vira a
+ * mesma frase genérica de sempre, e não há como saber se o modelo errou um
+ * campo ou se o provedor recusou o pedido — que são consertos opostos.
+ *
+ * Sem `any` e sem depender do tipo do SDK: `TypeValidationError` guarda o erro
+ * do Zod em `cause`, e o Zod expõe `issues` com `path`. Teto de 8 caminhos
+ * porque a lista repete o mesmo bloco quando a união tenta as 11 variantes.
+ */
+function caminhosRecusados(error: unknown): string[] {
+  const visto = new Set<string>();
+  const fila: unknown[] = [error];
+  while (fila.length > 0 && visto.size < 8) {
+    const atual = fila.shift();
+    if (typeof atual !== "object" || atual === null) continue;
+    const e = atual as { issues?: unknown; cause?: unknown; value?: unknown };
+    if (Array.isArray(e.issues)) {
+      for (const bruto of e.issues) {
+        if (typeof bruto !== "object" || bruto === null) continue;
+        const issue = bruto as { path?: unknown };
+        if (!Array.isArray(issue.path)) continue;
+        visto.add(issue.path.join("."));
+        if (visto.size >= 8) break;
+      }
+    }
+    if (e.cause !== undefined) fila.push(e.cause);
+  }
+  return [...visto];
 }
 
 export async function POST(
@@ -206,7 +250,20 @@ export async function POST(
      * OpenAI-compatível e o cliente é `createOpenAI` (ver lib/ai/gateway.ts).
      */
     providerOptions: { openai: { strictJsonSchema: false } },
-    onFinish: ({ object, error, usage }) => {
+    /**
+     * `finishReason` e `warnings` são a diferença entre duas causas OPOSTAS que
+     * chegam à tela com a mesma frase — e o SDK já os entregava aqui, de graça,
+     * enquanto esta rota lia só `object`/`error`/`usage` e jogava os dois fora.
+     *
+     *   finishReason: "length"  -> o teto de tokens cortou o JSON no meio
+     *                              (inclusive se o modelo gastou o teto raciocinando)
+     *   finishReason: "stop"    -> o modelo terminou e a VALIDAÇÃO recusou
+     *
+     * `warnings` é onde o SDK avisa que o provedor IGNOROU um ajuste — é assim
+     * que se descobre que a OpenRouter descartou o `response_format` em vez de
+     * adivinhar.
+     */
+    onFinish: ({ object, error, usage, finishReason, warnings, reasoning }) => {
       // Fire-and-forget, fora do caminho de resposta: o stream já foi
       // entregue ao cliente independente deste bloco. Falha aqui não pode
       // derrubar a geração que a pessoa já está vendo terminar.
@@ -223,6 +280,16 @@ export async function POST(
           modeloCanonico: resolvido.modelId,
           teveErro: Boolean(error),
           causa: error instanceof Error ? error.message : error ? String(error) : "objeto ausente",
+          // O discriminador: "length" acusa o teto de tokens; "stop" acusa a
+          // validação. Sem ele, os dois chegam como "sem objeto".
+          finishReason,
+          avisos: warnings?.map((w) => JSON.stringify(w).slice(0, 200)) ?? [],
+          // Quando o modelo raciocina, o teto de tokens é dividido com o
+          // raciocínio — e o JSON pode nem começar. O tamanho aqui é o que
+          // permite ver isso sem ecoar o conteúdo do raciocínio no log.
+          raciocinio_chars: reasoning?.length ?? 0,
+          caminhos_recusados: caminhosRecusados(error),
+          tokens_entrada: usage?.inputTokens ?? null,
           tokens_saida: usage?.outputTokens ?? null,
         });
         void audit({
@@ -249,6 +316,9 @@ export async function POST(
         // do objeto: um fluxo com 1 nó e 0 arestas é truncamento, não sucesso.
         nos: object.nodes.length,
         arestas: object.edges.length,
+        finishReason,
+        avisos: warnings?.map((w) => JSON.stringify(w).slice(0, 200)) ?? [],
+        tokens_entrada: usage?.inputTokens ?? null,
         tokens_saida: usage?.outputTokens ?? null,
       });
       void audit({

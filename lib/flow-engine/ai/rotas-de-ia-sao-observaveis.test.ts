@@ -40,6 +40,42 @@ function fonteDe(rel: string): string {
   return readFileSync(join(RAIZ, rel), "utf8");
 }
 
+/**
+ * A fonte SEM comentários — e isto não é preciosismo.
+ *
+ * Estas rotas são das mais comentadas do repositório: cada correção deixou o
+ * porquê escrito, e os comentários citam os nomes dos campos. Uma cerca que
+ * procure `finishReason` no arquivo inteiro passa a verde com o campo APAGADO
+ * do código, porque o parágrafo que explica o campo continua lá. Medido: a
+ * sabotagem de remover as duas linhas do `logger` não reprovou.
+ *
+ * Regex e não parser de propósito: o alvo é `logger.x({ campo })`, e nenhuma
+ * das rotas tem `//` dentro de string literal.
+ */
+function codigoDe(rel: string): string {
+  return fonteDe(rel)
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
+/**
+ * Os PAYLOADS de `logger.*` — não o arquivo inteiro.
+ *
+ * A diferença é o que separa cerca de teatro. Procurar `finishReason` no
+ * arquivo passa a verde com o campo apagado de todo `logger`, porque o nome
+ * sobrevive na desestruturação do callback (`onFinish: ({ …, finishReason })`)
+ * e no parágrafo que explica o campo. As duas sabotagens foram medidas aqui, e
+ * as duas passaram na versão anterior desta cerca.
+ *
+ * O que interessa é o campo CHEGAR ao log, então é o objeto do `logger` que é
+ * lido — e nada mais.
+ */
+function payloadsDeLog(rel: string): string {
+  const codigo = codigoDe(rel);
+  const blocos = codigo.match(/logger\.(?:info|warn|error)\([\s\S]*?\n(\s*)\}\);/g) ?? [];
+  return blocos.join("\n");
+}
+
 describe("rotas de IA são observáveis", () => {
   it.each(ROTAS)("%s registra o INÍCIO da chamada", (rel) => {
     const fonte = fonteDe(rel);
@@ -68,6 +104,36 @@ describe("rotas de IA são observáveis", () => {
       `${rel}: streamObject sem onError. Os cabeçalhos 200 já saíram quando o modelo ` +
         `falha, então o erro NÃO vira status HTTP — vira stream truncado, e o SDK o ` +
         `engole. onError é o único ponto em que essa causa é observável.`,
+    ).toBe(true);
+  });
+
+  /**
+   * A regra que faltava, e ela custou uma investigação inteira.
+   *
+   * `finishReason` separa duas causas OPOSTAS que chegam à tela com a mesma
+   * frase: `"length"` é o teto de tokens cortando o JSON no meio; `"stop"` é o
+   * modelo terminando e a validação recusando. Uma se conserta com mais tokens,
+   * a outra com outro schema — e sem este campo não há como escolher.
+   *
+   * `warnings` é onde o SDK registra que o provedor IGNOROU um ajuste. É assim
+   * que se descobre que a OpenRouter descartou o `response_format`, em vez de
+   * deduzir isso do silêncio.
+   *
+   * O mais caro deste defeito: os dois campos JÁ vinham do SDK, de graça, nos
+   * dois pontos — e eram descartados na desestruturação.
+   */
+  it.each(ROTAS)("%s registra finishReason e warnings do provedor", (rel) => {
+    const fonte = payloadsDeLog(rel);
+    expect(
+      /finishReason/.test(fonte),
+      `${rel}: não registra 'finishReason'. Sem ele, "o teto de tokens cortou" e ` +
+        `"a validação recusou" chegam ao log como a mesma coisa — e o conserto de ` +
+        `uma não serve para a outra.`,
+    ).toBe(true);
+    expect(
+      /warnings/.test(fonte),
+      `${rel}: não registra os 'warnings' do SDK. É o único lugar em que o provedor ` +
+        `avisa que IGNOROU um ajuste nosso (o response_format, tipicamente).`,
     ).toBe(true);
   });
 
