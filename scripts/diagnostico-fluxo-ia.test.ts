@@ -14,9 +14,48 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { corpoDaChamada, contarUnioes, caminhosRecusados, lerOpcoes, mascarar } from "./diagnostico-fluxo-ia";
+import {
+  caminhosRecusados,
+  contarUnioes,
+  corpoDaChamada,
+  lerOpcoes,
+  mascarar,
+  pedidoDaEtapa,
+} from "./diagnostico-fluxo-ia";
 
 describe("sonda de fluxo com IA", () => {
+  /**
+   * O caso que faltava, e que custou um CI vermelho na `main`.
+   *
+   * A sonda importava `generation-schema.ts`. Quando esse arquivo foi apagado —
+   * a geração passou a ser por etapas —, a sonda parou de RESOLVER: o teste nem
+   * chegava a rodar, morria no import. Nada local pegou, e a razão é estrutural:
+   * `tsconfig.json` exclui `scripts/**`, então `pnpm typecheck` é CEGO para esta
+   * pasta. O único gate que enxerga aqui é o vitest, e só se algum caso tocar
+   * cada etapa de verdade.
+   *
+   * Por isso este caso exercita as DUAS etapas em vez de só importar o módulo:
+   * um import solto sobrevive a `montarSchemaDePlano` virar `undefined`.
+   */
+  it("as duas etapas montam um pedido real — a sonda mede a produção, não a si mesma", () => {
+    const plano = pedidoDaEtapa(lerOpcoes(["--etapa=plano"]));
+    expect(plano.schema).toBeDefined();
+    expect(plano.system).toContain("planeja um fluxo");
+    // Os mesmos tetos das rotas: divergir mediria um pedido que ninguém faz.
+    expect(plano.maxOutputTokens).toBe(1200);
+
+    const config = pedidoDaEtapa(lerOpcoes(["--etapa=config", "--tipo=logic.if"]));
+    expect(config.schema).toBeDefined();
+    expect(config.system).toContain("logic.if");
+    expect(config.maxOutputTokens).toBe(800);
+  });
+
+  it("recusa tipo que não existe em vez de sondar o vazio", () => {
+    expect(() => pedidoDaEtapa(lerOpcoes(["--etapa=config", "--tipo=nao.existe"]))).toThrow(
+      /desconhecido/,
+    );
+  });
+
   it("monta o corpo como o @ai-sdk/openai monta", () => {
     const corpo = corpoDaChamada({
       modelo: "anthropic/claude-sonnet-5",

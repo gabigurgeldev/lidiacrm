@@ -10,15 +10,22 @@
  *
  * Esta sonda existe para que a próxima decisão seja tomada sobre evidência.
  * Ela roda na VPS de quem tem o problema, com a chave de quem tem o problema, e
- * imprime o que o servidor descarta hoje:
+ * imprime o que o servidor não mostra:
  *
  *   --modo=cru   monta o HTTP à mão, EXATAMENTE como o `@ai-sdk/openai` monta,
  *                e imprime status, cabeçalhos e o CORPO BRUTO da resposta. É o
  *                único jeito de ver o que a OpenRouter respondeu sem um SDK
  *                traduzindo o erro para "Provider returned error".
- *   --modo=sdk   roda o caminho real e imprime `finishReason`, `warnings`,
- *                `usage`, o texto acumulado e — quando a validação recusa — os
- *                caminhos do Zod (`nodes.17.config.mensagem`).
+ *   --modo=sdk   roda o caminho REAL (`generateObject`, o mesmo das rotas) e
+ *                imprime `finishReason`, `warnings`, `usage` e — quando a
+ *                validação recusa — os caminhos do Zod.
+ *
+ * ═══ As etapas são as da produção ═══
+ *
+ * `--etapa=plano` mede a etapa 1 (quais blocos) e `--etapa=config` mede a etapa
+ * 2 (os campos de UM bloco). Não há etapa que peça o grafo inteiro: esse
+ * caminho foi removido do produto, e uma sonda que ainda o medisse responderia
+ * sobre um pedido que ninguém faz — pior que sonda nenhuma.
  *
  * ═══ O que ela NÃO faz ═══
  *
@@ -31,26 +38,38 @@
  * inclusive de eco de cabeçalho. Vigiado por `diagnostico-fluxo-ia.test.ts`.
  *
  * Uso:
- *   pnpm ia:diagnostico --etapa=antigo --modo=ambos
- *   pnpm ia:diagnostico --etapa=antigo --modo=cru --require-parameters
- *   pnpm ia:diagnostico --etapa=antigo --modo=sdk --org=<uuid>
+ *   pnpm ia:diagnostico --etapa=plano  --modo=ambos
+ *   pnpm ia:diagnostico --etapa=plano  --modo=cru --require-parameters
+ *   pnpm ia:diagnostico --etapa=config --tipo=logic.if --modo=sdk --org=<uuid>
  */
-import { streamObject } from "ai";
+import { generateObject } from "ai";
 import { z } from "zod";
 
 import { OPENROUTER_BASE_URL, DEFAULT_BOT_MODEL, idNaOpenRouter } from "@/lib/ai/gateway";
-import { montarSchemaDeGeracao } from "@/lib/flow-engine/ai/generation-schema";
-import { promptDeGeracao, promptDoUsuario } from "@/lib/flow-engine/ai/prompt";
+import { schemaDeConfigParaGeracao } from "@/lib/flow-engine/ai/config-para-geracao";
+import { montarSchemaDePlano } from "@/lib/flow-engine/ai/plan-schema";
+import {
+  promptDeConfig,
+  promptDePlano,
+  promptDoBloco,
+  promptDoUsuario,
+} from "@/lib/flow-engine/ai/prompt";
+import { garantirNosRegistrados } from "@/lib/flow-engine/register-all";
+import { buscarNo } from "@/lib/flow-engine/registry";
 
 const PEDIDO_PADRAO =
   "Quando entrar um lead novo, espera 10 minutos; se ninguém tiver falado com ele, " +
   "avisa o vendedor dono do lead no WhatsApp e coloca a etiqueta 'sem resposta'.";
 
+/** O tipo medido por `--etapa=config` quando ninguém passa `--tipo`. */
+const TIPO_PADRAO = "whatsapp.notify_user";
+
 export interface Opcoes {
-  etapa: "antigo";
+  etapa: "plano" | "config";
   modo: "cru" | "sdk" | "ambos";
   orgId: string | null;
   modelo: string | null;
+  tipo: string;
   pedido: string;
   requireParameters: boolean;
   bytes: number;
@@ -99,24 +118,60 @@ export function lerOpcoes(argv: readonly string[]): Opcoes {
     const [chave, ...resto] = bruto.slice(2).split("=");
     mapa.set(chave!, resto.length > 0 ? resto.join("=") : "sim");
   }
-  const etapa = (mapa.get("etapa") ?? "antigo") as Opcoes["etapa"];
-  const modo = (mapa.get("modo") ?? "ambos") as Opcoes["modo"];
   return {
-    etapa,
-    modo,
+    etapa: (mapa.get("etapa") ?? "plano") as Opcoes["etapa"],
+    modo: (mapa.get("modo") ?? "ambos") as Opcoes["modo"],
     orgId: mapa.get("org") ?? null,
     modelo: mapa.get("modelo") ?? null,
+    tipo: mapa.get("tipo") ?? TIPO_PADRAO,
     pedido: mapa.get("pedido") ?? PEDIDO_PADRAO,
     requireParameters: mapa.has("require-parameters"),
     bytes: Number(mapa.get("bytes") ?? 4000),
   };
 }
 
-function schemaDaEtapa(etapa: Opcoes["etapa"]): z.ZodTypeAny {
-  switch (etapa) {
-    case "antigo":
-      return montarSchemaDeGeracao();
+export interface PedidoDaEtapa {
+  schema: z.ZodTypeAny;
+  system: string;
+  prompt: string;
+  maxOutputTokens: number;
+}
+
+/**
+ * O pedido exato que a produção faria naquela etapa.
+ *
+ * Os `maxOutputTokens` são os mesmos das rotas (1200 no plano, 800 por config).
+ * Divergir aqui mediria um pedido diferente do que quebra, que é o modo de
+ * falha mais caro de uma sonda.
+ */
+export function pedidoDaEtapa(o: Opcoes): PedidoDaEtapa {
+  if (o.etapa === "plano") {
+    return {
+      schema: montarSchemaDePlano(),
+      system: promptDePlano(),
+      prompt: promptDoUsuario(o.pedido, []),
+      maxOutputTokens: 1200,
+    };
   }
+
+  garantirNosRegistrados();
+  const def = buscarNo(o.tipo);
+  if (def === undefined) throw new Error(`tipo de bloco desconhecido: ${o.tipo}`);
+  const schema = schemaDeConfigParaGeracao(o.tipo);
+  if (schema === null) {
+    throw new Error(`o tipo ${o.tipo} não tem campo nenhum — a produção nem chama o modelo`);
+  }
+  return {
+    schema,
+    system: promptDeConfig(o.tipo, def.rotulo, def.descricao),
+    prompt: promptDoBloco({
+      pedido: o.pedido,
+      rotulo: def.rotulo,
+      intencao: o.pedido,
+      vizinhos: "é o primeiro bloco do fluxo",
+    }),
+    maxOutputTokens: 800,
+  };
 }
 
 /** Conta `anyOf`/`oneOf` em qualquer profundidade — é a métrica que já mordeu. */
@@ -185,23 +240,23 @@ async function sondaCrua(o: Opcoes, modeloCanonico: string): Promise<void> {
   }
   const base = process.env.OPENROUTER_BASE_URL || OPENROUTER_BASE_URL;
   const modeloNoProvedor = idNaOpenRouter(modeloCanonico);
-  const schema = z.toJSONSchema(schemaDaEtapa(o.etapa), { io: "input" });
-  const unioes = contarUnioes(schema);
+  const pedido = pedidoDaEtapa(o);
+  const schema = z.toJSONSchema(pedido.schema, { io: "input" });
 
   // Os dois ids lado a lado: já houve um defeito inteiro entre o nome canônico
   // e o nome da OpenRouter (hífen aqui, ponto lá), e ele custou um deploy.
   despeja("modelo_canonico", modeloCanonico);
   despeja("modelo_no_provedor", modeloNoProvedor);
   despeja("schema_bytes", JSON.stringify(schema).length);
-  despeja("schema_unioes", unioes);
+  despeja("schema_unioes", contarUnioes(schema));
   despeja("require_parameters", o.requireParameters);
 
   const corpo = corpoDaChamada({
     modelo: modeloNoProvedor,
     schema,
-    system: promptDeGeracao(),
-    prompt: promptDoUsuario(o.pedido, []),
-    maxOutputTokens: 4000,
+    system: pedido.system,
+    prompt: pedido.prompt,
+    maxOutputTokens: pedido.maxOutputTokens,
     requireParameters: o.requireParameters,
   });
 
@@ -220,7 +275,7 @@ async function sondaCrua(o: Opcoes, modeloCanonico: string): Promise<void> {
   despeja("corpo_bruto", texto.slice(0, o.bytes));
 }
 
-/** Os caminhos que o Zod recusou — `nodes.17.config.mensagem` em vez de "falhou". */
+/** Os caminhos que o Zod recusou — `blocos.3.tipo` em vez de "falhou". */
 export function caminhosRecusados(error: unknown, teto = 12): string[] {
   const visto = new Set<string>();
   const fila: unknown[] = [error];
@@ -239,6 +294,19 @@ export function caminhosRecusados(error: unknown, teto = 12): string[] {
     if (e.cause !== undefined) fila.push(e.cause);
   }
   return [...visto];
+}
+
+/** O que o provedor devolveu junto do erro — status e corpo, truncados. */
+function detalheDoErro(err: unknown, bytes: number): Record<string, unknown> {
+  if (typeof err !== "object" || err === null) return {};
+  const e = err as { statusCode?: unknown; responseBody?: unknown; text?: unknown };
+  const saida: Record<string, unknown> = {};
+  if (typeof e.statusCode === "number") saida.status = e.statusCode;
+  if (typeof e.responseBody === "string") saida.corpo = e.responseBody.slice(0, bytes);
+  // `AI_NoObjectGeneratedError` guarda em `text` o que o modelo REALMENTE
+  // respondeu — é o que separa "veio prosa" de "veio JSON recusado".
+  if (typeof e.text === "string") saida.texto_do_modelo = e.text.slice(0, bytes);
+  return saida;
 }
 
 async function sondaPeloSdk(o: Opcoes, modeloCanonico: string): Promise<void> {
@@ -260,72 +328,33 @@ async function sondaPeloSdk(o: Opcoes, modeloCanonico: string): Promise<void> {
   despeja("sdk_modelo", resolvido.modelId);
   despeja("sdk_origem", resolvido.origem);
 
+  const pedido = pedidoDaEtapa(o);
   const t0 = Date.now();
-  let erroDoStream: unknown = null;
-  const resultado = streamObject({
-    model: resolvido.model,
-    schema: schemaDaEtapa(o.etapa) as never,
-    system: promptDeGeracao(),
-    prompt: promptDoUsuario(o.pedido, []),
-    temperature: 0.2,
-    maxOutputTokens: 4000,
-    providerOptions: { openai: { strictJsonSchema: false } },
-    onError: ({ error }) => {
-      erroDoStream = error;
-    },
-  });
-
-  let pedacos = 0;
   try {
-    for await (const _parcial of resultado.partialObjectStream) {
-      pedacos += 1;
-    }
+    // `generateObject` e não `streamObject`: é o que as rotas fazem hoje. A
+    // geração por etapas não usa streaming — cada resposta é pequena e chega
+    // inteira, e é o streaming que transformava erro em stream truncado.
+    const gerado = await generateObject({
+      model: resolvido.model,
+      schema: pedido.schema as z.ZodType<unknown>,
+      system: pedido.system,
+      prompt: pedido.prompt,
+      temperature: 0.2,
+      maxOutputTokens: pedido.maxOutputTokens,
+      providerOptions: { openai: { strictJsonSchema: false } },
+    });
+    despeja("sdk_ms", Date.now() - t0);
+    // O discriminador: "length" acusa teto de tokens; "stop" acusa a validação.
+    despeja("sdk_finishReason", gerado.finishReason);
+    despeja("sdk_warnings", gerado.warnings ?? []);
+    despeja("sdk_usage", gerado.usage ?? {});
+    despeja("sdk_objeto", JSON.stringify(gerado.object).slice(0, o.bytes));
   } catch (err) {
-    erroDoStream = erroDoStream ?? err;
-  }
-
-  const [objeto, finishReason, avisos, uso, texto] = await Promise.all([
-    resultado.object.then(
-      (v) => v as unknown,
-      (e) => {
-        erroDoStream = erroDoStream ?? e;
-        return undefined;
-      },
-    ),
-    resultado.finishReason.catch(() => "indisponivel" as const),
-    resultado.warnings.catch(() => undefined),
-    resultado.usage.catch(() => undefined),
-    // O texto acumulado é o que separa "veio prosa" de "veio JSON recusado".
-    // Sem ele, as duas causas chegam como o mesmo "sem objeto".
-    (async () => {
-      try {
-        let t = "";
-        for await (const parte of resultado.textStream) t += parte;
-        return t;
-      } catch {
-        return "";
-      }
-    })(),
-  ]);
-
-  despeja("sdk_ms", Date.now() - t0);
-  // O discriminador: "length" acusa teto de tokens; "stop" acusa a validação.
-  despeja("sdk_finishReason", finishReason);
-  despeja("sdk_warnings", avisos ?? []);
-  despeja("sdk_usage", uso ?? {});
-  despeja("sdk_pedacos_parciais", pedacos);
-  despeja("sdk_tem_objeto", objeto !== undefined);
-  despeja("sdk_texto_acumulado", texto.slice(0, o.bytes));
-  if (erroDoStream) {
-    despeja(
-      "sdk_erro",
-      erroDoStream instanceof Error ? erroDoStream.message : String(erroDoStream),
-    );
-    despeja("sdk_caminhos_recusados", caminhosRecusados(erroDoStream));
-    const comCorpo = erroDoStream as { statusCode?: unknown; responseBody?: unknown };
-    if (typeof comCorpo.statusCode === "number") despeja("sdk_erro_status", comCorpo.statusCode);
-    if (typeof comCorpo.responseBody === "string") {
-      despeja("sdk_erro_corpo", comCorpo.responseBody.slice(0, o.bytes));
+    despeja("sdk_ms", Date.now() - t0);
+    despeja("sdk_erro", err instanceof Error ? err.message : String(err));
+    despeja("sdk_caminhos_recusados", caminhosRecusados(err));
+    for (const [chave, valor] of Object.entries(detalheDoErro(err, o.bytes))) {
+      despeja(`sdk_erro_${chave}`, valor);
     }
   }
 }
@@ -334,7 +363,10 @@ async function principal(): Promise<void> {
   const o = lerOpcoes(process.argv.slice(2));
   const modeloCanonico = o.modelo ?? DEFAULT_BOT_MODEL;
 
-  fala(`[sonda] etapa=${o.etapa} modo=${o.modo} modelo=${modeloCanonico}`);
+  fala(
+    `[sonda] etapa=${o.etapa}${o.etapa === "config" ? ` tipo=${o.tipo}` : ""} ` +
+      `modo=${o.modo} modelo=${modeloCanonico}`,
+  );
   if (o.modo === "cru" || o.modo === "ambos") await sondaCrua(o, modeloCanonico);
   if (o.modo === "sdk" || o.modo === "ambos") await sondaPeloSdk(o, modeloCanonico);
   fala("[sonda] fim.");

@@ -58,39 +58,13 @@ em português, para a pessoa confirmar que entendeu o que vai ser montado).`;
 }
 
 /**
- * System prompt da Rota B (`gerar`): monta o grafo de verdade.
- */
-export function promptDeGeracao(): string {
-  return `Você monta um fluxo de automação de CRM em formato de grafo.
-
-Os tipos de bloco disponíveis são exatamente estes — nunca invente um tipo
-fora desta lista:
-${manualDosBlocos()}
-
-Regras do grafo:
-- O primeiro bloco é sempre um "trigger" (hoje só existe trigger.lead_created).
-- Toda aresta (edge) sai de um bloco por um "branch_id" — "else" é a saída
-  padrão de todo bloco (o "senão"/"depois disso"). Blocos com decisão (como
-  logic.if) têm saídas extras, com o id que você escolheu para cada uma.
-- Não deixe nenhum caminho "solto" sem motivo: todo bloco que não seja um fim
-  de linha deve ter uma aresta saindo dele.
-- Use "logic.end" para marcar onde o fluxo termina.
-- IDs de bloco são curtos e você mesmo escolhe (ex.: "n1", "checa_score").
-- NÃO invente variáveis de template fora de "{{lead.title}}",
-  "{{lead.score}}", "{{vars.dono_escolhido}}" e campos parecidos de lead/contact.
-
-Monte o fluxo que a pessoa pediu, usando o histórico da conversa (incluindo as
-respostas que ela já deu às suas perguntas) para preencher os detalhes.`;
-}
-
-/**
  * System prompt da ETAPA 1 da geração nova: o plano, sem nenhuma config.
  *
- * A diferença para `promptDeGeracao()` não é de estilo. Ali o modelo tinha de
- * escolher, para cada bloco, uma variante entre 11 formas E preencher os campos
- * daquela forma, tudo numa resposta. Aqui ele só decide QUAIS blocos, em que
- * ordem e ligados como — e o "manual" continua entrando porque escolher o tipo
- * certo exige saber o que cada tipo faz.
+ * A diferença para o pedido antigo — o grafo inteiro numa resposta — não é de
+ * estilo. Ali o modelo tinha de escolher, para cada bloco, uma variante entre 11
+ * formas E preencher os campos daquela forma, tudo numa resposta. Aqui ele só
+ * decide QUAIS blocos, em que ordem e ligados como — e o "manual" continua
+ * entrando porque escolher o tipo certo exige saber o que cada tipo faz.
  */
 export function promptDePlano(): string {
   return `Você planeja um fluxo de automação de CRM.
