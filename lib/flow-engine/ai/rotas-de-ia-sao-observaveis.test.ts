@@ -34,6 +34,7 @@ const RAIZ = process.cwd();
 const ROTAS = [
   "app/api/v1/flows/[id]/ai/interpretar/route.ts",
   "app/api/v1/flows/[id]/ai/gerar/route.ts",
+  "app/api/v1/flows/[id]/ai/plano/route.ts",
 ];
 
 function fonteDe(rel: string): string {
@@ -137,9 +138,17 @@ describe("rotas de IA são observáveis", () => {
     ).toBe(true);
   });
 
+  /**
+   * `portaComFallback` entra na varredura junto com os nomes do SDK.
+   *
+   * Sem isso a cerca envelheceria no exato momento em que a arquitetura mudou:
+   * as rotas da geração por etapas NÃO chamam `generateObject` — elas falam com
+   * o provedor por uma porta, e o nome do SDK vive dentro dela. Uma varredura
+   * que procure só os nomes do SDK deixaria de enxergar toda rota de IA nova.
+   */
   it("a-lista-esta-completa: nenhuma rota de IA fica fora desta cerca", () => {
     const achados = execSync(
-      'git grep -l -E "generateObject|streamObject" -- "app/api/**/route.ts"',
+      'git grep -l -E "generateObject|streamObject|portaComFallback" -- "app/api/**/route.ts"',
       { cwd: RAIZ, encoding: "utf8" },
     )
       .split("\n")

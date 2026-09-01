@@ -40,6 +40,9 @@ const RAIZ = process.cwd();
 const ARQUIVOS = [
   "app/api/v1/flows/[id]/ai/interpretar/route.ts",
   "app/api/v1/flows/[id]/ai/gerar/route.ts",
+  // A geração por etapas chama o provedor por UMA porta, e é ela que emite —
+  // as rotas `plano`/`montar` não chamam `generateObject` diretamente.
+  "lib/flow-engine/ai/modelo-com-fallback.ts",
   "workers/ai-sentiment-worker.ts",
 ];
 

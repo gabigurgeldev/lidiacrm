@@ -83,6 +83,79 @@ Monte o fluxo que a pessoa pediu, usando o histórico da conversa (incluindo as
 respostas que ela já deu às suas perguntas) para preencher os detalhes.`;
 }
 
+/**
+ * System prompt da ETAPA 1 da geração nova: o plano, sem nenhuma config.
+ *
+ * A diferença para `promptDeGeracao()` não é de estilo. Ali o modelo tinha de
+ * escolher, para cada bloco, uma variante entre 11 formas E preencher os campos
+ * daquela forma, tudo numa resposta. Aqui ele só decide QUAIS blocos, em que
+ * ordem e ligados como — e o "manual" continua entrando porque escolher o tipo
+ * certo exige saber o que cada tipo faz.
+ */
+export function promptDePlano(): string {
+  return `Você planeja um fluxo de automação de CRM.
+
+Os tipos de bloco disponíveis são exatamente estes — nunca invente um tipo
+fora desta lista:
+${manualDosBlocos()}
+
+Sua tarefa AGORA é listar os blocos e as ligações. NÃO preencha os campos de
+cada bloco — isso é o passo seguinte. Para cada bloco, escreva uma "intenção":
+uma frase dizendo o que ele faz neste fluxo, JÁ COM os valores que a pessoa
+pediu (o tempo de espera, o texto da mensagem, o nome da etiqueta). Essa frase
+é o que vai permitir preencher os campos depois.
+
+Regras do plano:
+- O primeiro bloco é sempre um gatilho (hoje só existe trigger.lead_created).
+- Todo bloco que não é fim de linha tem pelo menos uma ligação saindo dele.
+- Use "logic.end" para marcar onde o fluxo termina.
+- Em blocos que decidem (logic.if), diga na intenção QUAIS são as saídas e o
+  que cada uma significa, e use o rótulo da saída no campo "ramo" da ligação.
+- IDs de bloco são curtos e você mesmo escolhe (ex.: "n1", "checa_score").
+- Prefira o fluxo mais simples que atenda ao pedido: menos blocos, menos ramos.
+
+Monte o plano que a pessoa pediu, usando o histórico da conversa (incluindo as
+respostas que ela já deu às suas perguntas).`;
+}
+
+/**
+ * System prompt da ETAPA 2: os campos de UM bloco, isolado.
+ *
+ * O bloco chega sem o grafo em volta — de propósito. Arrastar o fluxo inteiro
+ * para dentro de cada chamada devolveria o problema que a etapa 1 resolveu (um
+ * pedido grande, com muitas formas possíveis) multiplicado pelo número de
+ * blocos. O que sobrevive do contexto é a `intencao`, escrita na etapa 1
+ * exatamente para isso.
+ */
+export function promptDeConfig(tipo: string, rotulo: string, descricao: string): string {
+  return `Você preenche os campos de UM bloco de um fluxo de automação de CRM.
+
+O bloco é do tipo "${tipo}" ("${rotulo}"): ${descricao}
+Exemplo de preenchimento válido: ${JSON.stringify(configExemploDoTipo(tipo))}
+
+Regras:
+- Responda SOMENTE os campos deste bloco. Não invente campo que não existe.
+- Use os valores que a intenção do bloco descreve. Onde a intenção não disser,
+  escolha um padrão sensato e comum para um CRM.
+- Em textos de mensagem, você pode usar "{{lead.title}}", "{{lead.score}}",
+  "{{vars.dono_escolhido}}" e campos parecidos de lead/contact. Não invente
+  outras variáveis.`;
+}
+
+/** O pedido da etapa 2: o bloco, a intenção dele, e o fluxo em volta em uma linha. */
+export function promptDoBloco(args: {
+  pedido: string;
+  rotulo: string;
+  intencao: string;
+  vizinhos: string;
+}): string {
+  return `Pedido original da pessoa: ${args.pedido}
+
+Bloco a preencher: "${args.rotulo}"
+O que ele faz neste fluxo: ${args.intencao}
+Onde ele fica: ${args.vizinhos}`;
+}
+
 export function promptDoUsuario(pedido: string, historico: readonly Mensagem[]): string {
   return `Pedido original: ${pedido}\n\nConversa até agora:\n${historicoComoTexto(historico)}`;
 }

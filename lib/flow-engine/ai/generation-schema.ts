@@ -36,91 +36,20 @@
  */
 import { z } from "zod";
 
-import { OPERADORES } from "../condicoes";
 import { flowEdgeSchema } from "../graph-schema";
 import { garantirNosRegistrados } from "../register-all";
 import { todosOsNos } from "../registry";
 import type { FlowNodeDefinition } from "../types";
+import { CONFIG_PARA_GERACAO } from "./config-para-geracao";
 
 /**
- * CONFIG SIMPLIFICADO PARA GERAÇÃO — subconjunto do runtime, nunca outra forma.
+ * As formas simplificadas por tipo vivem em `config-para-geracao.ts`.
  *
- * O `configSchema` de runtime de `logic.if` embute `grupoSchema`, que é
- * `z.lazy` recursivo (`lib/flow-engine/condicoes.ts`). Convertido para JSON
- * Schema, isso vira `$defs` com uma auto-referência `$ref` — e provedores de
- * saída estruturada não lidam com isso: o Gemini não suporta `$ref`/`$defs`, e
- * a chamada falha inteira. Junto vinha `valor: z.unknown()`, que emite um
- * schema VAZIO (`{}`, sem `type`), recusado em modo estrito.
- *
- * Medido: o JSON Schema completo tem 8.645 bytes, com `oneOf` de 11 variantes,
- * `$ref` recursivo e `{}` — contra ~250 bytes do worker de sentimento, que
- * sempre funcionou.
- *
- * A regra que torna isto seguro: o que a IA pode gerar é um SUBCONJUNTO ESTRITO
- * do que o runtime aceita. Uma condição de um nível só (`itens` apenas com
- * regras, sem grupos aninhados) é um valor perfeitamente válido para
- * `grupoSchema` — quem gerar assim passa na validação de runtime sem tradução
- * nenhuma. O que se perde é a IA propor condições aninhadas de várias camadas,
- * que ela quase nunca propõe e que a pessoa monta na tela em seguida.
+ * Elas saíram daqui quando a geração passou a ter uma etapa que pede o config
+ * de UM bloco por vez: as duas etapas precisam da mesma resposta para "qual é o
+ * schema de config que um provedor aceita?", e duas cópias dessa resposta
+ * seriam duas fontes de verdade para a regra mais frágil do produto.
  */
-const regraParaGeracao = z.strictObject({
-  campo: z.string().min(1).max(120).describe("Caminho por ponto, ex.: 'lead.score', 'vars.tentativas'."),
-  op: z.enum(OPERADORES),
-  // Tipado de propósito: `z.unknown()` do runtime vira `{}` no JSON Schema, que
-  // é justamente o que o modo estrito recusa. Estes três cobrem o que a IA
-  // propõe na prática, e todos são valores válidos para o runtime.
-  valor: z.union([z.string(), z.number(), z.boolean()]).optional(),
-});
-
-const ifConfigParaGeracao = z.strictObject({
-  saidas: z
-    .array(
-      z.strictObject({
-        id: z.string().min(1).max(64),
-        label: z.string().min(1).max(60),
-        quando: z.strictObject({
-          combinador: z.enum(["and", "or"]),
-          negar: z.boolean().optional(),
-          // Sem recursão: só regras. Ver o cabeçalho acima.
-          itens: z.array(regraParaGeracao).min(1).max(20),
-        }),
-      }),
-    )
-    .min(1)
-    .max(8),
-});
-
-/**
- * Override por tipo de nó. Vazio para todos os outros — só entra aqui o nó cujo
- * schema de runtime é hostil à saída estruturada, e com a justificativa acima.
- */
-/**
- * `whatsapp.notify_user`: sem a união do `destinatario`.
- *
- * Dois motivos, e o segundo importa mais que a compatibilidade. O primeiro é a
- * forma: `destinatario` é `discriminatedUnion`, que emite `oneOf` — recusado por
- * saída estruturada.
- *
- * O segundo: a variante `{ tipo: "usuario" }` é RECUSADA PELO PRÓPRIO MOTOR.
- * `lib/flow-engine/nodes/avisos.ts` devolve
- * `{ kind: "dead", reason: "destinatario_fixo_ainda_nao_suportado" }` ao
- * executá-la. Ou seja, era uma forma que a IA podia gerar e que morreria em
- * execução — o fluxo nasceria bonito na tela e falharia calado no primeiro lead.
- * Oferecer à IA só o que o motor sabe rodar é o comportamento correto,
- * independente de provedor.
- */
-const notifyUserConfigParaGeracao = z.strictObject({
-  destinatario: z
-    .strictObject({ tipo: z.literal("dono_do_lead") })
-    .default({ tipo: "dono_do_lead" })
-    .describe("Sempre o dono do lead — é o único destinatário que o motor executa hoje."),
-  mensagem: z.string().min(1).max(4000),
-});
-
-const CONFIG_PARA_GERACAO: Readonly<Record<string, z.ZodTypeAny>> = {
-  "logic.if": ifConfigParaGeracao,
-  "whatsapp.notify_user": notifyUserConfigParaGeracao,
-};
 
 /** Uma variante do union — um tipo de nó, com o `configSchema` dele embutido. */
 function variantePara(def: FlowNodeDefinition<never>) {
