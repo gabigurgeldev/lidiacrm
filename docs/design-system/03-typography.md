@@ -1,5 +1,34 @@
 # 03 — Tipografia
 
+> ## ⚠️ 2026-09-01 — O PRODUTO PASSOU A USAR **INTER**. ESTA PÁGINA DESCREVE O QUE FOI TROCADO.
+>
+> `app/layout.tsx` — que é o que o app autenticado carrega — serve **Inter**
+> desde o redesenho da navegação. A troca foi decisão do dono do produto,
+> tomada explicitamente, e **rompe o lock da v1.0**: trocar uma das cinco
+> escolhas exigia RFC, e não houve uma. Está registrado aqui em vez de ficar
+> combinado em outro lugar, porque uma página de design system que afirma
+> "Atkinson" enquanto o produto entrega Inter é pior que a troca em si.
+>
+> **O que se perdeu, dito por inteiro:** a Atkinson foi desenhada pelo Braille
+> Institute para separar glifos ambíguos, e a razão nº 1 abaixo continua válida —
+> `0`/`O` e `1`/`l`/`I` num CRM cheio de identificador e telefone. A Inter cobre
+> parte disso com `cv11` (o `l` com cauda, o `1` com base), ligado no `body` do
+> `app/globals.css`; **não cobre o resto**.
+>
+> **O que se ganhou:** o eixo de peso. A Atkinson só existe em 400 e 700 — a
+> própria seção "Pesos disponíveis" abaixo diz isto —, e a hierarquia da barra
+> lateral usa 500 e 600. Com ela, esses pesos eram SINTETIZADOS pelo navegador,
+> que é como se produz um falso-negrito. A escala tipográfica desta página
+> assume 500/600 em vários stops e nunca teve como entregá-los.
+>
+> **O que NÃO mudou:** `app/design/` (o catálogo do design system) e a vitrine
+> seguem na Atkinson de propósito — lá ela é AMOSTRA, e trocá-la apagaria a
+> única página que a documenta. IBM Plex Mono para dados, idem.
+>
+> **Para reverter**, se a decisão for outra: `app/layout.tsx` (a fonte),
+> `tailwind.config.ts` (`fontFamily.sans`) e o `body` de `app/globals.css`.
+> São três lugares, e nenhum outro arquivo do produto nomeia fonte.
+
 > **Source of truth:** `app/design/lib/fonts.ts` (`atkinson`, `plexMono`), `app/design/lib/tokens.ts` → `TYPOS.atkinson`
 
 ## Por que Atkinson Hyperlegible

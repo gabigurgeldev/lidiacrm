@@ -31,7 +31,7 @@ mentindo, ou é refeito do zero com outra identidade.
 
 - Paleta lida de `app/globals.css` (creme `#faf9f6`, sage `#506d48`, texto
   `#1c1a16`). O card usa a identidade real do produto, não uma criada para ele.
-- Tipografia: Atkinson Hyperlegible (títulos) + IBM Plex Mono (rótulos), as
+- Tipografia: Inter (títulos) + IBM Plex Mono (rótulos) — era Atkinson Hyperlegible até 2026-09-01, ver o aviso em `docs/design-system/03-typography.md`; as
   mesmas da aplicação.
 - O painel direito é a doutrina do sistema vivo virando imagem: o rastro que uma
   demanda deixa ao atravessar o sistema, terminando no follow-up — o mecanismo

@@ -21,7 +21,7 @@ Quando duas decisões parecem igualmente boas, esta lista é a tiebreaker:
 1. **Clarity > decoration.** Se um elemento não comunica, ele sai. Sombras decorativas, gradients, ícones que repetem o label — fora.
 2. **Calm > vibrant.** Saturação alta cansa; contraste calibrado é mais legível que contraste máximo. Nenhum accent passa de stop 600 em áreas grandes.
 3. **Consistency > novelty.** Uma escolha boa repetida 100 vezes é melhor que 100 escolhas únicas. Componentes têm variants finitos e nomeados.
-4. **Accessibility > aesthetic.** WCAG AA é piso, não teto. Atkinson Hyperlegible foi escolhida pela disambiguação de glifos. Focus rings sempre 2px visíveis.
+4. **Accessibility > aesthetic.** WCAG AA é piso, não teto. Focus rings sempre 2px visíveis. ⚠️ A tipografia deixou de ser Atkinson Hyperlegible em 2026-09-01 — a disambiguação de glifos que ela dava por desenho hoje é parcial, via `cv11` da Inter. Ver o aviso no topo de [`03-typography.md`](./03-typography.md).
 5. **Intentional density.** Aerada é default; densidade só comprime quando o conteúdo justifica (tabela de dados). Whitespace não é desperdício, é respiração.
 
 ## Estrutura da documentação
@@ -38,7 +38,8 @@ Leia 00 → 09 sequencial uma vez. Depois consulte por demanda via tabela do `RE
 
 ## Versionamento
 
-- **v1.0 — locked em 2026-04-28.** As 5 escolhas (Sage, Atkinson, Aerada, Phosphor, IBM Plex Mono) estão fechadas até v2.0. PRs que tentem trocar uma delas precisam de RFC.
+- **v1.0 — locked em 2026-04-28.** As 5 escolhas (Sage, Atkinson, Aerada, Phosphor, IBM Plex Mono) estavam fechadas até v2.0, e PRs que tentassem trocar uma delas precisariam de RFC.
+- **⚠️ 2026-09-01 — o lock foi rompido em UMA delas, sem RFC.** A tipografia do produto passou a ser **Inter**, por decisão do dono do produto, no redesenho da navegação. As outras quatro seguem em vigor. O motivo, o que se perdeu e como reverter estão no topo de [`03-typography.md`](./03-typography.md) — não em prosa combinada fora do repo.
 - Patches são aceitos para: novos ícones, novos exemplos de microcopy, ajustes de hex em ±2 pontos de luminosidade quando WCAG falhar, novos componentes derivados.
 - Histórico de mudanças vai em `CHANGELOG.md` quando houver primeira mudança.
 

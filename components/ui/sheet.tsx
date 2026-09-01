@@ -52,16 +52,28 @@ const sheetVariants = cva(
 
 interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
-    VariantProps<typeof sheetVariants> {}
+    VariantProps<typeof sheetVariants> {
+  /**
+   * Classe para o VÉU de fundo, que o chamador não alcançava de jeito nenhum:
+   * o `<SheetOverlay/>` é montado aqui dentro e nenhuma prop chegava até ele.
+   *
+   * Nasceu com a gaveta de navegação, que precisa animar o véu junto com o
+   * painel. As classes `data-[state=open]:animate-in` acima são de
+   * `tailwindcss-animate`, que NÃO está instalado neste repo (`plugins: []` no
+   * tailwind.config.ts) — elas não existem, não avisam e não fazem nada, e é
+   * por isso que todos os Sheets do produto aparecem prontos em vez de deslizar.
+   */
+  overlayClassName?: string
+}
 
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ side = "right", className, children, ...props }, ref) => {
+>(({ side = "right", className, overlayClassName, children, ...props }, ref) => {
   const t = useT()
   return (
     <SheetPortal>
-      <SheetOverlay />
+      <SheetOverlay className={overlayClassName} />
       <SheetPrimitive.Content
         ref={ref}
         className={cn(sheetVariants({ side }), className)}

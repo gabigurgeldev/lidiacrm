@@ -440,9 +440,23 @@
     overflow-x: hidden;
     background-color: var(--color-bg);
     color: var(--color-text);
-    font-family: var(--font-atkinson), ui-sans-serif, system-ui, -apple-system,
-      "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    /* ⚠️ `var(--font-inter, ui-sans-serif)`, COM FALLBACK DENTRO DA VARIÁVEL.
+       Medido num chromium: sem ele, quando `--font-inter` não está definida a
+       declaração INTEIRA fica inválida em tempo de valor computado e o
+       navegador cai no valor inicial — SERIF. A pilha de reserva escrita ao
+       lado não chega a ser consultada; ela existe para quando a variável está
+       definida e a fonte não carregou, que é outro caso.
+       Importa num produto self-host: a Inter é servida pelo próprio servidor,
+       e uma instalação sem acesso a ela não pode virar um CRM em Times. */
+    font-family: var(--font-inter, ui-sans-serif), -apple-system, BlinkMacSystemFont,
+      "SF Pro Text", ui-sans-serif, system-ui, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+    /* `cv11` é o `l` com cauda e o `1` com base — as duas formas que a Inter
+       confunde por padrão e que a Atkinson, que estava aqui antes, separava por
+       desenho. Num CRM cheio de identificador e telefone, isso não é detalhe
+       tipográfico. `ss01` mantém o `a` de uma barra; `calt`/`rlig` são as
+       ligaduras contextuais de sempre. */
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1, "cv11" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -660,4 +674,334 @@
     transition: none;
     transform: none;
   }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CASCA DA NAVEGAÇÃO — sidebar, cabeçalho de grupo, header, gaveta
+
+   POR QUE ISTO É CSS À MÃO, E NÃO CLASSES DO TAILWIND.
+
+   `tailwindcss-animate` NÃO está instalado neste repo (`plugins: []` no
+   tailwind.config.ts). `animate-in`, `slide-in-from-left`, `accordion-down` e
+   afins são classes que não existem — elas não avisam, não quebram o build e
+   não fazem nada. Foi por isso que os seis Sheets em produção abriam sem
+   transição nenhuma. O precedente local para movimento é `.card-pulse` e
+   `.agenda-coluna-horarios`, logo acima; este bloco segue os dois.
+
+   Tudo aqui lê TOKEN, nunca hex. A cor de destaque é trocada em runtime pelo
+   revendedor (`lib/branding/css.ts` injeta um `<style>` no layout): um verde
+   literal deixaria a instalação vendida em azul com um menu verde.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.app-sidebar {
+  --nav-largura: 264px;
+  --nav-item-altura: 40px;
+  --nav-raio: 10px;
+  width: var(--nav-largura);
+  transition: width var(--duration-base) var(--ease-out);
+}
+
+.app-sidebar[data-collapsed="true"] {
+  --nav-largura: 72px;
+}
+
+/* TABLET (768–1023): compacta por LARGURA DE TELA, sem tocar no cookie.
+   O cookie é a preferência de quem usa o laptop; sobrescrevê-lo aqui faria o
+   iPad decidir como a barra abre no notebook da mesma pessoa. Mesmo desenho do
+   `@media (max-width: 1023px)` da agenda, alguns blocos acima. */
+@media (max-width: 1023px) {
+  .app-sidebar {
+    --nav-largura: 72px;
+  }
+}
+
+/* O que some quando a barra é estreita. Uma regra por origem de estreiteza —
+   a lista de seletores é a mesma, e é curta de propósito. */
+.app-sidebar[data-collapsed="true"] .nav-rotulo,
+.app-sidebar[data-collapsed="true"] .nav-chevron {
+  display: none;
+}
+.app-sidebar[data-collapsed="true"] .nav-item,
+.app-sidebar[data-collapsed="true"] .nav-secao-titulo {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+/* Estreita, a barra não tem coluna de filhos: o filete de aninhamento vira
+   um risco solto no meio do nada. */
+.app-sidebar[data-collapsed="true"] .nav-grupo-corpo {
+  border-left-color: transparent;
+  margin-left: 0;
+  padding-left: 0;
+}
+@media (max-width: 1023px) {
+  .app-sidebar .nav-rotulo,
+  .app-sidebar .nav-chevron {
+    display: none;
+  }
+  .app-sidebar .nav-item,
+  .app-sidebar .nav-secao-titulo {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .app-sidebar .nav-grupo-corpo {
+    border-left-color: transparent;
+    margin-left: 0;
+    padding-left: 0;
+  }
+}
+
+/* ---- Item e cabeçalho de grupo: a mesma família visual ------------------- */
+
+.nav-item,
+.nav-secao-titulo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--nav-item-altura);
+  padding: 0 10px;
+  border-radius: var(--nav-raio);
+  color: var(--color-text-muted);
+  text-align: left;
+  transition:
+    background-color 150ms var(--ease-out),
+    color 150ms var(--ease-out);
+}
+
+.nav-secao-titulo {
+  min-height: 36px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+}
+
+.nav-item {
+  position: relative;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.004em;
+}
+
+.nav-item:hover,
+.nav-secao-titulo:hover {
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text);
+}
+
+/* ESTADO ATIVO — um menu selecionado do macOS, não um bloco chapado.
+   12% da accent sobre a superfície, ícone na accent cheia e uma marca de 3px na
+   borda esquerda. `color-mix` porque a accent é uma variável trocada em runtime:
+   uma segunda variável com o valor "suave" precisaria ser derivada pelo mesmo
+   injetor, e aí seriam dois lugares para a marca do revendedor errar. */
+.nav-item[data-ativo="true"] {
+  background-color: color-mix(in oklab, var(--color-accent) 12%, transparent);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.nav-item[data-ativo="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 60%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background-color: var(--color-accent);
+}
+
+.nav-item[data-ativo="true"] .nav-icone {
+  color: var(--color-accent);
+}
+
+/* ---- O corpo que recolhe ------------------------------------------------- */
+
+/* `height` medido, e NÃO `grid-template-rows: 0fr → 1fr`.
+   O comentário de `.agenda-coluna-horarios` registra a medição: animar trilha de
+   grid funciona no Chrome e falha calado no Safari, e este produto roda no
+   celular de quem é dono do negócio. `var(--nav-altura, auto)` deixa o primeiro
+   render do servidor correto antes de qualquer JS ter medido nada. */
+.nav-grupo-corpo {
+  height: 0;
+  opacity: 0;
+  overflow: hidden;
+  margin-left: 19px;
+  padding-left: 8px;
+  border-left: 1px solid var(--color-border);
+  /* `visibility` é o que tira os itens fechados do leitor de tela E do Tab —
+     `overflow: hidden` esconde só do olho. O atraso de 180ms mantém o conteúdo
+     visível durante o fechamento; na abertura ele volta sem atraso nenhum. */
+  visibility: hidden;
+  transition:
+    height 180ms var(--ease-out),
+    opacity 140ms var(--ease-out),
+    visibility 0s linear 180ms;
+}
+
+.nav-grupo-corpo[data-aberto="true"] {
+  height: var(--nav-altura, auto);
+  opacity: 1;
+  visibility: visible;
+  transition:
+    height 180ms var(--ease-out),
+    opacity 140ms var(--ease-out),
+    visibility 0s;
+}
+
+.nav-chevron {
+  margin-left: auto;
+  transition: transform 180ms var(--ease-out);
+}
+
+.nav-secao-titulo[aria-expanded="true"] .nav-chevron {
+  transform: rotate(90deg);
+}
+
+/* A área que rola: barra fina e quase invisível, e só quando o ponteiro está
+   dentro. A regra global de `::-webkit-scrollbar` desenha 10px, que numa coluna
+   de 264px é uma faixa cinza permanente ao lado do texto. */
+.nav-rolagem {
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+.nav-rolagem::-webkit-scrollbar {
+  width: 6px;
+}
+.nav-rolagem::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border: none;
+}
+.nav-rolagem:hover::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-strong);
+}
+
+/* ---- Header -------------------------------------------------------------- */
+
+/* Vidro MODERADO: 82% do fundo, não um vidro de tela de bloqueio. É um CRM
+   empresarial — o que passa por trás não pode competir com o que se lê. */
+.app-header {
+  background-color: color-mix(in oklab, var(--color-bg) 82%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Campo de busca no estilo Spotlight. Foco com borda na accent e um anel de 3px
+   a 18% — o `:focus-visible` global desenha outline em cima de qualquer coisa,
+   então aqui a mudança é de BORDA, para os dois não brigarem. */
+.busca-global {
+  height: 38px;
+  border-radius: var(--nav-raio);
+  background-color: var(--color-surface-elevated);
+  border: 1px solid transparent;
+  color: var(--color-text-muted);
+  transition:
+    border-color 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out),
+    background-color 150ms var(--ease-out);
+}
+.busca-global:hover {
+  border-color: var(--color-border);
+}
+.busca-global:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 18%, transparent);
+}
+
+/* ---- Gaveta do celular --------------------------------------------------- */
+
+/* O Sheet do Radix marca `data-state` nos dois elementos; sem
+   `tailwindcss-animate` ninguém escutava. Estas duas regras são o que faz a
+   gaveta DESLIZAR em vez de aparecer pronta. */
+.nav-drawer[data-state="open"] {
+  animation: nav-drawer-entra 220ms var(--ease-out);
+}
+.nav-drawer[data-state="closed"] {
+  animation: nav-drawer-sai 180ms var(--ease-out);
+}
+.nav-drawer-overlay[data-state="open"] {
+  animation: nav-fade-entra 220ms var(--ease-out);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.nav-drawer-overlay[data-state="closed"] {
+  animation: nav-fade-sai 180ms var(--ease-out);
+}
+
+@keyframes nav-drawer-entra {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes nav-drawer-sai {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-100%); }
+}
+@keyframes nav-fade-entra {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes nav-fade-sai {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* ---- Popovers e menus da casca ------------------------------------------- */
+
+.nav-popover[data-state="open"] {
+  animation: nav-popover-entra 160ms var(--ease-out);
+}
+@keyframes nav-popover-entra {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ---- Movimento reduzido -------------------------------------------------- */
+
+/* Mesmo DESTINO, sem o percurso — nunca uma versão pior do produto. O grupo
+   aberto continua aberto, a gaveta continua chegando, o chevron continua
+   apontando para o outro lado; só não há caminho entre um estado e o outro. */
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar,
+  .nav-item,
+  .nav-secao-titulo,
+  .nav-chevron,
+  .busca-global {
+    transition: none;
+  }
+  .nav-grupo-corpo {
+    transition: visibility 0s;
+  }
+  .nav-drawer[data-state="open"],
+  .nav-drawer[data-state="closed"],
+  .nav-drawer-overlay[data-state="open"],
+  .nav-drawer-overlay[data-state="closed"],
+  .nav-popover[data-state="open"] {
+    animation: none;
+  }
+}
+
+/* ---- Marca no topo, na faixa em que só o CSS sabe que a barra é estreita ----
+   Entre 768 e 1023 a barra tem 72px e o cookie continua dizendo "expandida" —
+   é o tablet compactando sozinho. O `SidebarBrand` não tem como saber disso (a
+   decisão dele é de JS, e está explicada no cabeçalho do componente), então
+   aqui o nome sai e o logo é limitado à largura que sobra. Sem estas duas
+   regras, um logo em faixa de 160px empurra a barra inteira. */
+.nav-logo {
+  max-width: 10rem;
+}
+
+@media (max-width: 1023px) {
+  .app-sidebar .nav-marca-nome {
+    display: none;
+  }
+  .app-sidebar .nav-logo {
+    max-width: 2.5rem;
+  }
+}
+
+.app-sidebar[data-collapsed="true"] .nav-logo {
+  max-width: 2.5rem;
 }

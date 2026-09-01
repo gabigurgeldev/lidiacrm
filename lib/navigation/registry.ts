@@ -9,6 +9,7 @@ import {
   CalendarBlank,
   ChartBar,
   ChartLineUp,
+  ChatText,
   ClipboardText,
   ClockCountdown,
   ClockCounterClockwise,
@@ -16,7 +17,10 @@ import {
   Flag,
   FlowArrow,
   Funnel,
+  FunnelSimple,
   Gauge,
+  Gear,
+  Headset,
   Inbox,
   Kanban,
   Key,
@@ -33,6 +37,8 @@ import {
   ScalesSimple,
   ShieldCheck,
   Signpost,
+  Sparkle,
+  SquaresFour,
   Storefront,
   UserCircle,
   Users,
@@ -61,10 +67,21 @@ export interface NavGroup {
   id: NavGroupId;
   label: string;
   /**
+   * Ícone do CABEÇALHO do grupo. Nasceu com o cabeçalho recolhível: o título
+   * deixou de ser um `<h2>` de 10px em CAPS e virou um botão da mesma família
+   * visual dos itens — e um botão dessa família sem ícone fica desalinhado da
+   * coluna que os filhos desenham.
+   *
+   * Obrigatório, e não opcional: `tests/unit/navegacao-registry.test.ts` reprova
+   * grupo sem ícone. Opcional deixaria o primeiro grupo novo nascer torto sem
+   * ninguém perceber.
+   */
+  icon: PhosphorIcon;
+  /**
    * Hub do grupo, quando ele tem telas demais para caber no sidebar.
-   * O rótulo é declarado junto do href porque não é derivável: "Ver tudo em IA"
-   * é útil, "Ver tudo em Organização" seria gratuito quando a tela já se chama
-   * Configurações e o usuário a conhece por esse nome.
+   * O rótulo é declarado junto do href porque não é derivável: "Central de IA"
+   * e "Configurações" são os nomes por que o usuário procura essas telas, e
+   * nenhum dos dois sai do `label` do grupo por regra nenhuma.
    */
   hub?: { href: string; label: string };
 }
@@ -99,17 +116,37 @@ export interface NavDestination {
  * dava para chegar.
  */
 export const NAV_GROUPS: NavGroup[] = [
-  { id: "atendimento", label: "Atendimento" },
-  { id: "crm", label: "CRM" },
-  { id: "ia", label: "Agente de IA", hub: { href: "/app/ai", label: "Ver tudo em IA" } },
-  { id: "canais", label: "Canais" },
-  { id: "analise", label: "Análise" },
+  { id: "atendimento", label: "Atendimento", icon: Headset },
+  { id: "crm", label: "CRM", icon: Funnel },
+  {
+    // ⚠️ ERA "Agente de IA". Virou "Inteligência Artificial" porque o grupo
+    // deixou de conter só o agente: Provedores, Uso e orçamento e Execuções são
+    // do sistema inteiro, não de um agente. O nome antigo mandava procurar o
+    // gasto de IA em outro lugar — e não havia outro lugar.
+    id: "ia",
+    label: "Inteligência Artificial",
+    icon: Sparkle,
+    // ⚠️ O RÓTULO DO HUB TAMBÉM MUDOU: era "Ver tudo em IA". Com o cabeçalho do
+    // grupo agora clicável, "Ver tudo em X" descrevia um gesto que o próprio
+    // cabeçalho passou a fazer — dois controles vizinhos prometendo a mesma
+    // coisa. "Central de IA" nomeia o DESTINO, que é o que ele sempre foi.
+    hub: { href: "/app/ai", label: "Central de IA" },
+  },
+  { id: "canais", label: "Canais", icon: Plugs },
+  // `Gauge`, e não `ChartBar`: `ChartBar` é o ícone de Desempenho, que mora
+  // DENTRO deste grupo. Cabeçalho com o mesmo desenho de um filho lê como erro
+  // de montagem — é a regra que `navegacao-registry.test.ts` passou a cobrar.
+  { id: "analise", label: "Análise", icon: Gauge },
   {
     id: "organizacao",
     label: "Organização",
+    icon: Gear,
     hub: { href: "/app/settings", label: "Configurações" },
   },
 ];
+
+/** Ícone do item que leva ao hub de um grupo, dentro do próprio grupo. */
+export const ICONE_DO_HUB: PhosphorIcon = SquaresFour;
 
 /**
  * Grupo cujo hub vive no RODAPÉ fixo do sidebar, fora da área que rola.
@@ -180,7 +217,9 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     href: "/app/templates",
     label: "Respostas rápidas",
     description: "Scripts salvos para responder mais rápido, seus ou da equipe.",
-    icon: FileText,
+    // ⚠️ ERA `FileText`. O que se guarda aqui é FALA, não documento — e o
+    // `FileText` seguia idêntico ao de telas que mostram arquivo de verdade.
+    icon: ChatText,
     group: "atendimento",
     sidebar: true,
   },
@@ -285,7 +324,9 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     href: "/app/settings/tenant/pipelines",
     label: "Etapas do funil",
     description: "As colunas de cada funil, o vocabulário do negócio e os motivos de perda.",
-    icon: Funnel,
+    // `Funnel` subiu para o cabeçalho do grupo CRM; aqui fica a versão simples.
+    // Ícone repetido entre um grupo e um filho dele lê como erro de montagem.
+    icon: FunnelSimple,
     group: "crm",
     minRole: "manager",
     sidebar: true,

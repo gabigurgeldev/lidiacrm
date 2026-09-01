@@ -132,4 +132,14 @@ export {
   GoogleLogo,
   MapPin,
   ArrowsOutSimple,
+  // casca da navegação (redesign): ícone de GRUPO no sidebar, chevron do
+  // recolhimento e os dois destinos cujo ícone disputava sentido com o vizinho.
+  //
+  // `Radar` foi pedido para /app/radar e NÃO EXISTE no Phosphor 2.1 (conferido
+  // no `dist/ssr` instalado). O destino segue com `ClockCountdown`, que é o que
+  // a tela faz: mostrar quem esfriou com o relógio correndo.
+  Headset,
+  ChatText,
+  SquaresFour,
+  FunnelSimple,
 } from "@phosphor-icons/react/dist/ssr";

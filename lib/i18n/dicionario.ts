@@ -46,6 +46,9 @@ export const DICIONARIO: Traducoes = {
   Atendimento: { es: "Atención" },
   CRM: { es: "CRM" },
   "Agente de IA": { es: "Agente de IA" },
+  // ⚠️ O GRUPO SE CHAMA "Inteligência Artificial" desde o redesenho da barra —
+  // "Agente de IA" fica porque a expressão ainda aparece em texto de tela.
+  "Inteligência Artificial": { es: "Inteligencia Artificial" },
   Canais: { es: "Canales" },
   Análise: { es: "Análisis" },
   Organização: { es: "Organización" },
@@ -69,6 +72,9 @@ export const DICIONARIO: Traducoes = {
   "Follow-ups": { es: "Seguimientos" },
   Roteadores: { es: "Enrutadores" },
   "Ver tudo em IA": { es: "Ver todo en IA" },
+  // O rótulo do hub do grupo de IA. "Ver tudo em X" descrevia o gesto que o
+  // cabeçalho recolhível passou a fazer; este nomeia o DESTINO.
+  "Central de IA": { es: "Central de IA" },
   Conexões: { es: "Conexiones" },
   Webhooks: { es: "Webhooks" },
   Desempenho: { es: "Rendimiento" },
@@ -260,6 +266,9 @@ export const DICIONARIO: Traducoes = {
   },
   // ─── Shell persistente (sidebar, topbar, ⌘K, menu do usuário) ───
   "Navegação principal": { es: "Navegación principal" },
+  // Cabeçalho: a busca do topo e o rótulo do caminho ("Você está em").
+  "Buscar no": { es: "Buscar en" },
+  "Você está em": { es: "Estás en" },
   "Expandir sidebar": { es: "Expandir barra lateral" },
   "Recolher sidebar": { es: "Contraer barra lateral" },
   Versão: { es: "Versión" },

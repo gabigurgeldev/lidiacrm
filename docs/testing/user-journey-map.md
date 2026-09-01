@@ -915,6 +915,64 @@ texto livre, sem CHECK). Custo/latência desta feature não aparecem em
 
 ---
 
+## J22 — Achar uma tela no menu, em cada tamanho de tela `[P0]` (2026-09-01)
+
+A barra lateral mostrava as 20 telas de uma vez, sem hierarquia visual, e os
+títulos de seção eram `<h2>` de 10px em CAPS que não faziam nada. O redesenho
+tornou cada assunto recolhível, refez o cabeçalho e trocou a fonte do produto.
+
+**O que muda no risco:** recolher esconde. Uma tela que existe e está dentro de
+um grupo fechado é, para quem não sabe que o grupo existe, uma tela que não
+existe. Os casos abaixo medem os dois lados — que o grupo esconde de verdade
+quando fechado, e que o grupo da tela em que se está NUNCA está fechado.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J22.1 | Grupo fechado esconde os itens | `visibility: hidden` e altura 0 no corpo do grupo, medido por `getComputedStyle` | **PASS** — bancada de CSS (ver abaixo) |
+| J22.2 | O grupo da tela aberta nasce expandido | chegar por link direto ou ⌘K acende o grupo do destino | **PASS** (unit `grupos-abertos-cookie`, `sidebar-grupos`) |
+| J22.3 | O arranjo sobrevive ao F5 | cookie lido no SSR; sem flash de "tudo aberto" fechando depois | **NÃO MEDIDO NA TELA** — a regra está sob unit; o pisca só aparece com servidor de pé |
+| J22.4 | 1440×900 e 1280×768, barra expandida | 264px, rótulos visíveis, item de 40px, raio 10px | **PASS** — 264 / block / 40 / 10px |
+| J22.5 | 1024×768 com a preferência "recolhida" | 72px, rótulos com `display:none` | **PASS** — 72 / none |
+| J22.6 | 820×1180 e 768×1024 (tablet) com a preferência "expandida" | compacta **por CSS**, sem reescrever o cookie do laptop | **PASS** — `data-collapsed="false"` e largura 72 |
+| J22.7 | Item ativo não é bloco chapado | fundo translúcido (alfa 0,12) + marca lateral de 3px | **PASS** — `oklab(… / 0.12)`, `::before` de 3px |
+| J22.8 | Sem estouro horizontal em nenhum dos cinco | `body.scrollWidth − documentElement.clientWidth == 0` | **PASS** nos cinco |
+| J22.9 | 430×932 e 390×844: gaveta desliza, fecha ao navegar | overlay com blur, `translateX`, `onNavigate` fecha | **NÃO MEDIDO NA TELA** — precisa de servidor |
+| J22.10 | Papéis: `agent` não vê o cabeçalho de um grupo vazio | grupo Canais some inteiro, título incluído | **PASS** (unit `sidebar-grupos`) |
+| J22.11 | Cabeçalho: breadcrumb, busca, ações, avatar | caminho vem do registro; ⌘K segue o mesmo | **NÃO MEDIDO NA TELA** — só sob unit (`breadcrumb-do-registro`) |
+| J22.12 | Teclado: ↑↓ percorrem, →← abrem e fecham o grupo | WCAG 2.1.1 | **PASS** (unit `sidebar-grupos`) |
+
+### A bancada de CSS, e o que ela NÃO é
+
+Docker Desktop não estava de pé nesta máquina e não há `.env.local` com Supabase,
+então a receita de VPS fresca (baseline + `bootstrap-owner` + WAHA + Redis +
+`next start`) **não pôde ser executada**. O que foi feito no lugar, para não
+deixar as afirmações de CSS sem medida nenhuma:
+
+1. o markup REAL do componente foi despejado por um render de teste;
+2. o CSS do produto foi compilado com o Tailwind CLI a partir de `app/globals.css`;
+3. os dois foram abertos num **chromium de verdade** nos cinco viewports acima e
+   medidos com `getBoundingClientRect` / `getComputedStyle`.
+
+Isso mede o par markup + folha de estilo, que é onde vivem todas as afirmações de
+tamanho, cor e visibilidade. **Não** mede rota, sessão, permissão em runtime,
+gaveta do celular, cabeçalho, nem o pisca do primeiro render — para isso vale o
+que está em `tests/e2e/navegacao.spec.ts`, que roda no CI com o ambiente de pé.
+
+Dois defeitos foram achados PELA bancada, e nenhum deles apareceria em teste de
+componente:
+
+- **A fonte caía em serif.** `font-family: var(--font-inter), …` fica inválida em
+  tempo de valor computado quando a variável não está definida, e o navegador
+  volta ao valor inicial — a pilha de reserva escrita ao lado nunca chega a ser
+  consultada. Consertado com `var(--font-inter, ui-sans-serif)`.
+- **Grupo aberto podia ficar preso em altura zero.** A altura é medida em
+  `offsetHeight`, que devolve 0 quando o componente monta dentro de um ancestral
+  `display: none` — que é exatamente o caso da barra no celular
+  (`hidden md:block`). Gravar esse 0 prendia o grupo aberto e vazio. Consertado
+  descartando o zero e deixando o CSS cair em `height: auto`.
+
+---
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

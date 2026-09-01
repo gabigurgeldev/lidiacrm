@@ -256,7 +256,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       : null;
 
   // Altura da grade: a conta desconta TUDO que fica acima e abaixo dela.
-  //   3.5rem            TopBar (`h-14`, em components/shell/TopBar.tsx)
+  //   3.5rem            cabeçalho (`h-14`, em components/shell/header/AppHeader.tsx)
   //   2 * --space-6     padding do <main> do AppShell (`p-6`, em cima e embaixo)
   //
   // Com `100vh-3.5rem` o padding ficava de fora e a grade media 48px a MAIS que a

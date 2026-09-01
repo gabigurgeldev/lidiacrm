@@ -7,7 +7,7 @@
  * O `<head>` pertence ao layout raiz, que é o mesmo de `/login`, da tela de erro
  * e do onboarding. Um bloco emitido lá sobreviveria ao logout: sair é Server
  * Action + `redirect("/login")` disparado por `startTransition`
- * (`components/shell/UserMenu.tsx`), ou seja, navegação client-side — nada no
+ * (`components/shell/header/ProfileMenu.tsx`), ou seja, navegação client-side — nada no
  * caminho força full reload, e o `<head>` não desmonta. A cor do cliente final
  * continuaria pintando a tela de entrada de todo mundo.
  *

@@ -125,9 +125,20 @@ describe("os elos que somem sem barulho", () => {
   it("a barra lateral traduz — ela aparece em TODA tela", () => {
     // Sem ela, escolher espanhol não mudaria nada visível no primeiro clique, e
     // o operador concluiria que a opção segue sendo decorativa.
-    const fonte = readFileSync("components/shell/Sidebar.tsx", "utf8");
+    //
+    // ⚠️ O CAMINHO MUDOU: a barra virou uma pasta (`components/shell/sidebar/`)
+    // quando os grupos passaram a recolher, e `components/shell/Sidebar.tsx` é
+    // hoje uma fachada de oito linhas. Este caso continuava verde apontando para
+    // ela? Não — ele quebrou, e é por isso que está corrigido aqui em vez de
+    // apodrecer. Uma varredura de FONTE amarra o teste ao caminho do arquivo.
+    //
+    // Ele é evidência de SÍMBOLO presente, não de comportamento. Quem prova o
+    // comportamento é `tests/unit/sidebar-grupos.test.tsx`, no caso que renderiza
+    // a barra em espanhol e lê o texto traduzido na tela. Este fica como a rede
+    // barata que pega o `t()` esquecido num item novo.
+    const fonte = readFileSync("components/shell/sidebar/AppSidebar.tsx", "utf8");
     expect(fonte).toMatch(/const t = useT\(\);/);
-    expect(fonte).toMatch(/\{t\(item\.label\)\}/);
+    expect(fonte).toMatch(/t\(item\.label\)/);
   });
 
   it("o inbox traduz o que se usa o dia inteiro", () => {

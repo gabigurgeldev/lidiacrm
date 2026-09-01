@@ -21,6 +21,7 @@ import {
 } from "@/components/app/ImpersonateBanner";
 import { ConexaoCaidaBanner } from "@/components/app/ConexaoCaidaBanner";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
+import { COOKIE_GRUPOS, lerGruposAbertos } from "@/lib/navigation/grupos-abertos";
 import { listarConexoesCaidas, type ConexaoCaida } from "@/lib/channels/health";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -120,6 +121,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Read sidebar collapsed state SSR to avoid flash.
   const store = await cookies();
   const collapsed = store.get("sidebar_collapsed")?.value === "1";
+  /**
+   * Os grupos que a pessoa deixou abertos, pela MESMA razão da linha acima e no
+   * mesmo `cookies()`: sem ler aqui, o servidor pintaria a barra com todos os
+   * grupos abertos e o navegador os fecharia meio segundo depois, em toda
+   * navegação de página inteira. A regra de leitura (e por que não é
+   * `localStorage`) mora em `lib/navigation/grupos-abertos.ts`.
+   */
+  const gruposAbertos = lerGruposAbertos(store.get(COOKIE_GRUPOS)?.value);
 
   // Impersonate (S-11.07): verify cookie server-side and resolve tenant name.
   // Middleware already validates HMAC + expiry on /app/*; we re-verify here as
@@ -154,7 +163,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     user.id,
     activeOrg?.orgId,
   );
-  const shell = <AppShell sidebarCollapsed={collapsed}>{children}</AppShell>;
+  const shell = (
+    <AppShell sidebarCollapsed={collapsed} gruposAbertosSalvos={gruposAbertos}>
+      {children}
+    </AppShell>
+  );
 
   return (
     // O idioma envolve a árvore inteira e recebe o código PRONTO — ele não

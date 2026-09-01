@@ -35,7 +35,20 @@ import { describe, expect, it } from "vitest";
  * defeito.
  */
 
-const BARRA = readFileSync("components/shell/Sidebar.tsx", "utf8")
+/**
+ * ⚠️ O CAMINHO MUDOU, e o modo como ele quebrou vale o parágrafo.
+ *
+ * `components/shell/Sidebar.tsx` virou uma fachada de oito linhas quando a barra
+ * foi quebrada em `components/shell/sidebar/` — o `<aside>` com as classes mora
+ * hoje em `AppSidebar.tsx`. Dos quatro casos abaixo, dois passaram a falhar…
+ * e o PRIMEIRO passou a ser um falso verde: "não é `fixed`" é trivialmente
+ * verdade num arquivo que não tem classe nenhuma.
+ *
+ * É o modo de falha característico de gate que varre FONTE: ele segue o caminho
+ * do arquivo, não o comportamento. Por isso o caso de vacuidade abaixo — sem
+ * ele, a próxima mudança de caminho deixa esta rede inteira verde e vazia.
+ */
+const BARRA = readFileSync("components/shell/sidebar/AppSidebar.tsx", "utf8")
   .replace(/\/\*[\s\S]*?\*\//g, "")
   .replace(/\/\/.*$/gm, "");
 const CASCA = readFileSync("app/app/_components/AppShell.tsx", "utf8")
@@ -43,6 +56,14 @@ const CASCA = readFileSync("app/app/_components/AppShell.tsx", "utf8")
   .replace(/\/\/.*$/gm, "");
 
 describe("a barra ocupa lugar, em vez de flutuar", () => {
+  it("a varredura está lendo o arquivo que desenha a barra", () => {
+    // Guarda de vacuidade: "não é `fixed`" passa em qualquer arquivo que não
+    // tenha classe nenhuma — inclusive num que a refatoração esvaziou. Sem
+    // isto, mudar o caminho da barra apaga esta rede em silêncio.
+    expect(BARRA).toMatch(/<aside/);
+    expect(BARRA).toMatch(/app-sidebar/);
+  });
+
   it("não é `fixed`", () => {
     // `fixed` é o que a tira do fluxo e obriga alguém a compensar por fora.
     expect(BARRA, "a barra voltou a flutuar").not.toMatch(/\bfixed\b/);

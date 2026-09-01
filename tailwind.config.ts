@@ -119,11 +119,22 @@ const config: Config = {
         },
       },
       fontFamily: {
+        // A pilha que o pedido do produto fixou: Inter primeiro, e depois o
+        // que o sistema já tem. `-apple-system`/`BlinkMacSystemFont` resolvem
+        // para San Francisco no macOS e no iOS — a mesma família que serve de
+        // referência visual —, e nada aqui DEPENDE de fonte da Apple instalada:
+        // a Inter é servida pelo `next/font`, então a pilha só é usada enquanto
+        // ela carrega ou se o download falhar.
         sans: [
-          "var(--font-atkinson)",
+          // Com fallback DENTRO da variável: sem ele, uma árvore que não recebeu
+          // a classe do `next/font` invalida a declaração inteira e cai em serif.
+          // Medido — ver o comentário do `body` em app/globals.css.
+          "var(--font-inter, ui-sans-serif)",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "SF Pro Text",
           "ui-sans-serif",
           "system-ui",
-          "-apple-system",
           "Segoe UI",
           "Roboto",
           "sans-serif",

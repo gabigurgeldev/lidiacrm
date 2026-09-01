@@ -33,7 +33,7 @@ export function FlowBuilder({ flowId }: { flowId: string }) {
       // da paleta (FlowCanvas.tsx) nunca tem uma altura finita contra a qual
       // rolar, e o navegador rola a PÁGINA inteira em vez da paleta.
       //
-      // `100dvh` menos o `h-14` do TopBar (components/shell/TopBar.tsx:10,
+      // `100dvh` menos o `h-14` do cabeçalho (components/shell/header/AppHeader.tsx,
       // 56px) e o `p-6` vertical do `<main>` (AppShell.tsx:44, 24px×2 = 48px):
       // 56 + 48 = 104px. Local a este editor de propósito — mudar `AppShell`
       // globalmente afetaria toda tela logada.

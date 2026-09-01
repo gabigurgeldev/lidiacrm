@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Atkinson_Hyperlegible, IBM_Plex_Mono } from "next/font/google";
+import { IBM_Plex_Mono, Inter } from "next/font/google";
 import { headers } from "next/headers";
 import { Toaster } from "sonner";
 import { coresDaBarraDoNavegador } from "@/lib/branding/barra-do-navegador";
@@ -25,11 +25,29 @@ import { Providers } from "./providers";
 import { PublicEnvScript } from "./public-env-script";
 import "./globals.css";
 
-const atkinson = Atkinson_Hyperlegible({
+/**
+ * A fonte do PRODUTO.
+ *
+ * ⚠️ ERA `Atkinson_Hyperlegible`, e a troca é uma decisão do dono do produto,
+ * não um capricho de acabamento — vale registrar o que se perdeu junto com o
+ * que se ganhou. A Atkinson foi desenhada pelo Braille Institute para
+ * legibilidade em baixa visão: as formas ambíguas (I/l/1, O/0, b/d) são
+ * separadas de propósito. A Inter não vai tão longe nisso, mas cobre parte do
+ * caminho com `cv11` (o `l` com cauda) e `ss01`, ligados no `body` do
+ * `globals.css`, e traz o que a Atkinson não tem: eixo de peso completo (a
+ * Atkinson só existe em 400 e 700 — a hierarquia de 500/600 que o sidebar usa
+ * era SINTETIZADA pelo navegador) e métricas apertadas o bastante para uma
+ * navegação densa.
+ *
+ * O catálogo do design system (`app/design/`) segue com a Atkinson de propósito:
+ * lá ela é AMOSTRA, e trocá-la apagaria a única página que a documenta.
+ */
+const inter = Inter({
   subsets: ["latin", "latin-ext"],
-  weight: ["400", "700"],
+  // O eixo inteiro: a barra usa 500 e 600, e o `<h1>` das telas usa 700.
+  weight: ["400", "500", "600", "700"],
   display: "swap",
-  variable: "--font-atkinson",
+  variable: "--font-inter",
 });
 
 const plexMono = IBM_Plex_Mono({
@@ -278,7 +296,7 @@ export default function RootLayout({
       lang="pt-BR"
       data-theme="light"
       suppressHydrationWarning
-      className={`${atkinson.variable} ${plexMono.variable}`}
+      className={`${inter.variable} ${plexMono.variable}`}
     >
       <head>
         {/* Primeiro de tudo: a cor da instalação, antes do CSS e do script de tema. */}

@@ -35,6 +35,27 @@ describe("integridade do registro", () => {
     expect(duplicados).toEqual([]);
   });
 
+  it("todo grupo declara um ícone, e ele não é o de um filho seu", () => {
+    // O ícone do grupo nasceu com o cabeçalho recolhível: o título deixou de ser
+    // um `<h2>` de 10px em CAPS e virou um botão da mesma família visual dos
+    // itens — e um botão dessa família sem ícone fica desalinhado da coluna que
+    // os filhos desenham.
+    //
+    // A segunda metade é o que este caso realmente pega: `Análise` nasceu com
+    // `ChartBar`, que é o ícone de Desempenho, um destino DE DENTRO dela. Dois
+    // desenhos iguais na mesma coluna, um recuado do outro, leem como erro de
+    // montagem — e é o tipo de coisa que ninguém nota revisando diff.
+    const semIcone = NAV_GROUPS.filter((g) => !g.icon).map((g) => g.id);
+    expect(semIcone).toEqual([]);
+
+    const colisoes = NAV_GROUPS.flatMap((g) =>
+      NAV_DESTINATIONS.filter((d) => d.group === g.id && d.icon === g.icon).map(
+        (d) => `${g.id}: ${d.href}`,
+      ),
+    );
+    expect(colisoes).toEqual([]);
+  });
+
   it("todo destino aponta para um grupo declarado", () => {
     const ids = new Set(NAV_GROUPS.map((g) => g.id));
     const orfaos = NAV_DESTINATIONS.filter((d) => !ids.has(d.group)).map((d) => d.href);

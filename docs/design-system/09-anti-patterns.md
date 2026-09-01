@@ -6,17 +6,20 @@ Lista canônica do que **não fazer** no DeskcommCRM. Anti-patterns ficam aqui p
 
 ---
 
-## 1. ❌ Inter como font family
+## 1. ~~❌ Inter como font family~~ — REVOGADO em 2026-09-01
 
-**Por quê:** ~70% dos SaaS atuais usam Inter. É correta, mas saturada. Diluição de marca.
-**✅ Sim:** Atkinson Hyperlegible (display + body) + IBM Plex Mono (dados). Ver `03-typography.md`.
+**Este anti-pattern deixou de valer para o PRODUTO.** `app/layout.tsx` serve Inter desde o redesenho da navegação, por decisão do dono do produto. A razão original continua verdadeira (~70% dos SaaS atuais usam Inter; é diluição de marca), e foi pesada contra o eixo de peso que a Atkinson não tem — o argumento inteiro está no topo de `03-typography.md`.
+
+Mantido aqui, riscado em vez de apagado, porque um anti-pattern que some não ensina nada a quem for reabrir a discussão.
+
+**Ainda vale para:** `app/design/` e a vitrine, que seguem na Atkinson como amostra.
 
 ---
 
 ## 2. ❌ Geist Sans, Space Grotesk, ou qualquer Vercel-default
 
-**Por quê:** mesma razão de Inter. Geist é a "nova Inter" de 2024–2025. Anti-genérico exige distância.
-**✅ Sim:** Atkinson.
+**Por quê:** Geist é a "nova Inter" de 2024–2025. Anti-genérico exige distância.
+**✅ Sim:** a Inter que o produto já serve (ver o item 1, revogado) — trocar por Geist seria uma terceira fonte sem ganho nenhum.
 
 ---
 

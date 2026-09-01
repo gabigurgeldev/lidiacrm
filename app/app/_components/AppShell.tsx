@@ -1,24 +1,27 @@
 "use client";
 import type { ReactNode } from "react";
 import { Sidebar } from "@/components/shell/Sidebar";
-import { TopBar } from "@/components/shell/TopBar";
+import { AppHeader } from "@/components/shell/header/AppHeader";
 import { useInboundMessageAlerts } from "@/hooks/notifications/useInboundMessageAlerts";
 import { useCrmAlerts } from "@/hooks/notifications/useCrmAlerts";
 import { useNotifyOpenFromServiceWorker } from "@/lib/notifications/notify_open";
+import type { NavGroupId } from "@/lib/navigation/registry";
 
 interface AppShellProps {
   sidebarCollapsed: boolean;
+  /** O cookie dos grupos, lido no SSR — ver `lib/navigation/grupos-abertos.ts`. */
+  gruposAbertosSalvos: NavGroupId[] | null;
   children: ReactNode;
 }
 
-export function AppShell({ sidebarCollapsed, children }: AppShellProps) {
+export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, children }: AppShellProps) {
   useInboundMessageAlerts();
   useCrmAlerts();
   useNotifyOpenFromServiceWorker();
   return (
     <div className="flex min-h-screen w-full bg-background">
       <div className="hidden md:block">
-        <Sidebar collapsed={sidebarCollapsed} />
+        <Sidebar collapsed={sidebarCollapsed} gruposAbertosSalvos={gruposAbertosSalvos} />
       </div>
       {/*
         `min-w-0` é o que permite a coluna de conteúdo ENCOLHER. Um flex item
@@ -34,14 +37,21 @@ export function AppShell({ sidebarCollapsed, children }: AppShellProps) {
       */}
       {/*
         Sem `md:ml-*`: a barra voltou a ocupar lugar na linha (ver o comentário
-        em `Sidebar.tsx`), então o que sobra para esta coluna é exatamente o que
-        ela não usou. A margem existia para compensar uma barra `fixed`, e era a
-        SEGUNDA medida da mesma coisa — a que discordava e deixava a barra por
-        cima da lista.
+        em `sidebar/AppSidebar.tsx`), então o que sobra para esta coluna é
+        exatamente o que ela não usou. A margem existia para compensar uma barra
+        `fixed`, e era a SEGUNDA medida da mesma coisa — a que discordava e
+        deixava a barra por cima da lista.
       */}
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <TopBar />
-        <main className="flex-1 overflow-auto p-6">{children}</main>
+        <AppHeader gruposAbertosSalvos={gruposAbertosSalvos} />
+        {/*
+          `max-w` na coluna de conteúdo, e não na página: numa tela de 2560px o
+          conteúdo ia de ponta a ponta e a linha de leitura de qualquer texto
+          passava dos 200 caracteres. O `mx-auto` centra o que sobra.
+        */}
+        <main className="flex-1 overflow-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+        </main>
       </div>
     </div>
   );
