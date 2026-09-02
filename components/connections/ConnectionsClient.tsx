@@ -15,7 +15,7 @@ import {
 } from "@/hooks/channels/useChannelSessions";
 import { usePacingKnobs } from "@/hooks/channels/usePacingKnobs";
 import { AntiBanSheet } from "./AntiBanSheet";
-import { Badge } from "@/components/ui/badge";
+import { CartaoDeCanal } from "./CartaoDeCanal";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -312,65 +312,59 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
             const vivaNoTransporte = dependeDoTransporte(c);
             const podeExcluir = wahaConfigured || !vivaNoTransporte;
             return (
-              <Card key={c.id} className="flex flex-col gap-3 p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Phone size={16} className="text-muted-foreground" aria-hidden />
-                      <span className="truncate text-sm font-medium">{channelLabel(c, t)}</span>
-                    </div>
-                    {c.phone_number && c.display_name && (
-                      <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                        {c.phone_number}
-                      </p>
-                    )}
-                  </div>
-                  <Badge variant={info.variant}>{info.label}</Badge>
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  {c.last_health_check_at
+              <CartaoDeCanal
+                key={c.id}
+                nome={channelLabel(c, t)}
+                telefone={c.phone_number}
+                provider={c.provider}
+                modo={c.provider_mode}
+                estado={{ rotulo: info.label, tom: info.variant }}
+                detalhe={
+                  c.last_health_check_at
                     ? `${t("Verificado")} ${new Date(c.last_health_check_at).toLocaleString(tagDoIdioma)}`
-                    : t("Ainda não verificado")}
-                </p>
-                <div className="mt-auto flex gap-2">
-                  {/* Some no canal oficial em vez de aparecer desabilitado: não é
-                      indisponibilidade passageira (como o Excluir sem o serviço no
-                      ar), é uma ação que não existe para esse canal — e o clique
-                      ainda abriria o diálogo de QR, que ele nunca vai ter. */}
-                  {vivaNoTransporte && (
+                    : t("Ainda não verificado")
+                }
+                acoes={
+                  <>
+                    {/* Some no canal oficial em vez de aparecer desabilitado: não é
+                        indisponibilidade passageira (como o Excluir sem o serviço no
+                        ar), é uma ação que não existe para esse canal — e o clique
+                        ainda abriria o diálogo de QR, que ele nunca vai ter. */}
+                    {vivaNoTransporte && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busyId === c.id || !wahaConfigured}
+                        onClick={() => handleReconnect(c)}
+                      >
+                        {busyId === c.id ? (
+                          <CircleNotch size={14} className="animate-spin" aria-hidden />
+                        ) : (
+                          <ArrowsClockwise size={14} aria-hidden />
+                        )}
+                        {t("Reconectar")}
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" onClick={() => setAntiBanId(c.id)}>
+                      <ShieldCheck size={14} aria-hidden />
+                      {t("Proteção de envio")}
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={busyId === c.id || !wahaConfigured}
-                      onClick={() => handleReconnect(c)}
+                      disabled={!podeExcluir}
+                      aria-label={
+                        podeExcluir
+                          ? `${t("Excluir")} ${channelLabel(c, t)}`
+                          : `${t("Excluir")} ${channelLabel(c, t)} — ${t("indisponível enquanto o serviço do WhatsApp não estiver ativo")}`
+                      }
+                      onClick={() => setToDelete(c)}
                     >
-                      {busyId === c.id ? (
-                        <CircleNotch size={14} className="animate-spin" aria-hidden />
-                      ) : (
-                        <ArrowsClockwise size={14} aria-hidden />
-                      )}
-                      {t("Reconectar")}
+                      <Trash size={14} aria-hidden />
                     </Button>
-                  )}
-                  <Button variant="outline" size="sm" onClick={() => setAntiBanId(c.id)}>
-                    <ShieldCheck size={14} aria-hidden />
-                    {t("Proteção de envio")}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!podeExcluir}
-                    aria-label={
-                      podeExcluir
-                        ? `${t("Excluir")} ${channelLabel(c, t)}`
-                        : `${t("Excluir")} ${channelLabel(c, t)} — ${t("indisponível enquanto o serviço do WhatsApp não estiver ativo")}`
-                    }
-                    onClick={() => setToDelete(c)}
-                  >
-                    <Trash size={14} aria-hidden />
-                  </Button>
-                </div>
-              </Card>
+                  </>
+                }
+              />
             );
           })}
         </div>

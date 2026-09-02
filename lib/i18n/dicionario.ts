@@ -88,6 +88,10 @@ export const DICIONARIO: Traducoes = {
   "Buscar mensagens…": { es: "Buscar mensajes…" },
   "Todos os números": { es: "Todos los números" },
   "Todas as tags": { es: "Todas las etiquetas" },
+  // O popover de filtros do inbox: tag e "apenas não lidos" saíram da coluna e
+  // recolheram atrás de um botão — ver `InboxFilters`.
+  "Tag da conversa": { es: "Etiqueta de la conversación" },
+  "Mais filtros": { es: "Más filtros" },
   "Apenas não lidos": { es: "Solo no leídos" },
   Fila: { es: "Cola" },
   Minhas: { es: "Mías" },
@@ -173,6 +177,55 @@ export const DICIONARIO: Traducoes = {
   Bloqueado: { es: "Bloqueado" },
 
   // ─── Conexões ───
+  // Vários números oficiais na mesma conta: o apelido é o que os distingue.
+  "1 número oficial conectado.": { es: "1 número oficial conectado." },
+  "números oficiais conectados.": { es: "números oficiales conectados." },
+  "Conectar outro número": { es: "Conectar otro número" },
+  "Canal oficial": { es: "Canal oficial" },
+  "Nome deste número": { es: "Nombre de este número" },
+  "É por este ID que o número é reconhecido: repetir um já conectado atualiza aquele canal em vez de criar outro.": {
+    es: "Es por este ID que se reconoce el número: repetir uno ya conectado actualiza ese canal en vez de crear otro.",
+  },
+  "Opcional. Sem ele o número herda o nome verificado da Meta — que é o mesmo para todos os números da conta.": {
+    es: "Opcional. Sin él, el número hereda el nombre verificado de Meta — que es el mismo para todos los números de la cuenta.",
+  },
+  Vendas: { es: "Ventas" },
+  "Salvo.": { es: "Guardado." },
+  "Esta tela espelha uma conta só.": { es: "Esta pantalla refleja una sola cuenta." },
+  "Você tem números oficiais em mais de uma conta do WhatsApp Business, e cada conta tem os seus próprios modelos. Os que aparecem aqui são os da conta acima; os das contas": {
+    es: "Tenés números oficiales en más de una cuenta de WhatsApp Business, y cada cuenta tiene sus propias plantillas. Las que aparecen acá son las de la cuenta de arriba; las de las cuentas",
+  },
+  "são gerenciados no painel da Meta.": { es: "se gestionan en el panel de Meta." },
+
+  // ─── Conectar por credencial de CONTA: uma chave, vários números ───
+  "número conectado.": { es: "número conectado." },
+  "números conectados.": { es: "números conectados." },
+  "número conectado por": { es: "número conectado por" },
+  "números conectados por": { es: "números conectados por" },
+  "Conectado, mas sem receber:": { es: "Conectado, pero sin recibir:" },
+  "Tente importar de novo.": { es: "Probá importar de nuevo." },
+  "sem identificador": { es: "sin identificador" },
+  "Chave de API da conta": { es: "Clave de API de la cuenta" },
+  "Guardada cifrada. Não é exibida de volta em nenhum momento.": {
+    es: "Guardada cifrada. No se muestra de vuelta en ningún momento.",
+  },
+  "Consultando o provedor…": { es: "Consultando al proveedor…" },
+  "Ver meus números": { es: "Ver mis números" },
+  "Escolha os números a atender aqui": { es: "Elegí los números a atender acá" },
+  "Cole a chave de API da sua conta. Ela é validada antes de qualquer coisa ser gravada, e o CRM mostra os números que ela alcança para você escolher quais quer atender aqui.": {
+    es: "Pegá la clave de API de tu cuenta. Se valida antes de guardar cualquier cosa, y el CRM muestra los números que alcanza para que elijas cuáles querés atender acá.",
+  },
+  "Cada número traz a própria regra de envio: no oficial, fora da janela de 24 horas só sai modelo aprovado; no ligado por QR não há janela, mas há risco de banimento por volume.": {
+    es: "Cada número trae su propia regla de envío: en el oficial, fuera de la ventana de 24 horas solo sale plantilla aprobada; en el conectado por QR no hay ventana, pero hay riesgo de baneo por volumen.",
+  },
+  "Esta conta não tem nenhum número. Crie uma instância no painel do provedor primeiro.": {
+    es: "Esta cuenta no tiene ningún número. Creá una instancia en el panel del proveedor primero.",
+  },
+  Trazer: { es: "Traer" },
+  "já está aqui": { es: "ya está acá" },
+  // `desconectado` já existe no bloco de funis — chave é o próprio texto, e ela
+  // é a mesma palavra nos dois lugares.
+  conectado: { es: "conectado" },
   "Números por QR": { es: "Números por QR" },
   "API Oficial (Meta)": { es: "API Oficial (Meta)" },
   "Provedor parceiro": { es: "Proveedor asociado" },

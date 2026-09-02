@@ -37,10 +37,19 @@ Mantido aqui, riscado em vez de apagado, porque um anti-pattern que some não en
 
 ---
 
-## 5. ❌ Glassmorphism (`backdrop-filter: blur` em cards/sidebar)
+## 5. ~~❌ Glassmorphism (`backdrop-filter: blur` em cards/sidebar)~~ — REVOGADO em 2026-09-01
 
-**Por quê:** efeito decorativo que custa GPU, não comunica nada funcional, sai de moda. Mais task que valor.
-**✅ Sim:** solid `surface` ou `surface-elevated` com `border-thin`.
+**Este anti-pattern deixou de valer como proibição geral,** por decisão do dono do produto, junto do redesenho das Conexões na linguagem iOS.
+
+A razão original continua verdadeira e não foi esquecida: blur custa GPU **por elemento composto**, e um efeito decorativo que se repete numa lista longa é o pior caso possível. O que mudou é que o produto já servia vidro havia meses — `.app-header` (`app/globals.css`) usa `color-mix(... 82%)` + `blur(16px)` desde o redesenho da navegação, com o comentário "vidro MODERADO, não vidro de tela de bloqueio". Um anti-pattern que o próprio produto viola em produção não protege ninguém: ele só faz a doutrina e o código discordarem, e quem lê a doutrina medir contra a régua errada.
+
+**Onde vidro é permitido:** superfícies de CHASSI — header, cartão agrupado de configuração, barra de abas segmentada. Elementos que existem **uma vez** por tela.
+
+**Onde continua PROIBIDO, e isto não é negociável:** qualquer coisa que se repita por linha — item da lista de conversas, bolha de mensagem, linha de tabela, card dentro de grid rolável. O custo ali é multiplicado pelo número de linhas, e a thread do inbox chega a centenas.
+
+**A regra de intensidade:** opacidade ≥ 80% do fundo e blur ≤ 16px. Vidro que deixa o conteúdo de trás legível vira ruído sobre texto.
+
+**✅ Ainda vale:** quando a dúvida for entre vidro e sólido sem razão funcional, use sólido `surface` / `surface-elevated` com `border-thin`.
 
 ---
 
@@ -128,10 +137,15 @@ Mantido aqui, riscado em vez de apagado, porque um anti-pattern que some não en
 
 ---
 
-## 18. ❌ Tabs com background pill (`bg-accent-soft` no active)
+## 18. ~~❌ Tabs com background pill (`bg-accent-soft` no active)~~ — REVOGADO em 2026-09-01
 
-**Por quê:** padrão tablets-iOS, ocupa visual demais em UI densa.
-**✅ Sim:** underline-style — `border-bottom-color: accent` (2px) + `text-accent`. Ver `06-components.md`.
+**Revogado pela mesma decisão do item 5.** "Padrão tablets-iOS" era a acusação; a linguagem iOS passou a ser a direção escolhida do produto, então a acusação virou descrição.
+
+Como no item 5, a doutrina já estava atrás do código: `components/inbox/InboxFilters.tsx` desenha as abas do inbox com `data-[state=active]:bg-accent-soft` em pílulas `rounded-full` desde que o filtro foi escrito.
+
+**A forma canônica agora é o segmented control** (`.ios-segmentado` em `app/globals.css`): trilho `surface-elevated`, indicador `surface` que desliza, texto ativo `text` e inativo `text-muted`. Não é a pílula `accent` solta — o accent fica para o que é AÇÃO, não para o que é seleção de vista.
+
+**Underline continua válido** onde a navegação é secundária dentro de um cartão já delimitado; os dois convivem. O que não convive é o mesmo nível de navegação usando as duas formas na mesma tela.
 
 ---
 

@@ -11,6 +11,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
 import { cn } from "@/lib/utils";
+import { cabecalhoEscondidoEm } from "@/lib/navigation/casca";
 import {
   gravarGruposAbertos,
   gruposIniciais,
@@ -251,6 +252,16 @@ export function SidebarContent({
         pathname={pathname}
         showCollapseControl={showCollapseControl}
         onNavigate={onNavigate}
+        /*
+          ⚠️ `variante === "barra"` NÃO É REDUNDANTE aqui.
+
+          A gaveta do celular monta o mesmo rodapé, e no celular o cabeçalho
+          CONTINUA na tela mesmo no Inbox — é lá que mora o ☰ que abre esta
+          própria gaveta. Sem esta condição, quem abrisse a gaveta no celular
+          veria sino, idioma, tema e avatar DUPLICADOS: uma vez no cabeçalho
+          atrás dela, outra dentro dela.
+        */
+        mostrarAcoesDeConta={variante === "barra" && cabecalhoEscondidoEm(pathname)}
       />
     </TooltipProvider>
   );

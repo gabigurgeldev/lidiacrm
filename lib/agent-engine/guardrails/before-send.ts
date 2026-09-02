@@ -68,7 +68,7 @@ import { detectHumanPromise } from './human-promise';
 import { detectarVazamentoInterno, renderVetoDeVazamento } from './vazamento-interno';
 // Módulo PURO de propósito (`capabilities`, não `index`): o seam não arrasta o
 // adapter — e com ele o cliente HTTP do canal — para dentro do worker.
-import { capabilitiesOf, DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabilities';
+import { capabilitiesOfSession, DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabilities';
 import { isWindowOpen } from './messaging-window';
 import type { ChannelProvider } from '@/lib/channels/capabilities';
 
@@ -89,6 +89,20 @@ export interface GateContext {
    * para perguntar o que o canal permite.
    */
   provider: ChannelProvider;
+  /**
+   * A MODALIDADE desta sessão, quando o provider hospeda mais de uma.
+   *
+   * Opcional, e `undefined` significa "o provider tem modalidade única, ou o
+   * banco ainda não sabe" — nos dois casos `capabilitiesOfSession` cai na linha
+   * do provider, que é a conservadora em cada eixo.
+   *
+   * Existe porque um provider intermediado abriga instância oficial (janela de
+   * 24h, sem risco de banimento) e número ligado por QR (texto livre, com risco)
+   * na MESMA conta. Perguntar só pelo provider armaria o anti-ban no canal
+   * errado e desarmaria a janela no outro — os dois gates abaixo dependem
+   * exatamente desses dois eixos.
+   */
+  providerMode?: string | null;
   /**
    * Insumo da janela de 24h. Guardamos o CARIMBO, não o veredito: a janela é
    * derivada (ver `messaging-window.ts`), e passar um booleano já decidido faria o
@@ -447,7 +461,7 @@ export const disclosureGate: Gate = {
 export const pacingGate: Gate = {
   name: 'pacing',
   evaluate: (ctx) => {
-    const { banRisk } = capabilitiesOf(ctx.provider);
+    const { banRisk } = capabilitiesOfSession({ provider: ctx.provider, mode: ctx.providerMode });
     const decision = decidePacing({
       now: ctx.now,
       knobs: ctx.pacing.knobs,
@@ -483,7 +497,7 @@ export const pacingGate: Gate = {
 export const messagingWindowGate: Gate = {
   name: 'messaging_window',
   evaluate: (ctx) => {
-    const caps = capabilitiesOf(ctx.provider);
+    const caps = capabilitiesOfSession({ provider: ctx.provider, mode: ctx.providerMode });
     // Canal que fala livre a qualquer hora não tem janela. `skipped`, nunca `pass`
     // silencioso: a diferença entre "não regrediu" e "consigo PROVAR que não
     // regrediu" é esta linha no trace (invariante 4 da doutrina).
@@ -707,7 +721,8 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
 
     // Estado confiável carregado SOB o lock (os contadores de cap/janela de copies
     // são racy — precisam ver o que o worker anterior já efetivou).
-    const provider = await loadChannelProvider(client, args.tenantId, args.channelSessionId);
+    const canal = await loadChannelIdentity(client, args.tenantId, args.channelSessionId);
+    const provider = canal.provider;
     const optedOut = args.optedOutThisTurn || (await readStopFlags(client, args.tenantId, args.leadId));
     const pacingCfg = await loadChannelKnobs(client, args.tenantId, args.channelSessionId, args.log);
     const pacingState = await loadPacingState(client, args.tenantId, args.channelSessionId, {
@@ -744,6 +759,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       body: args.body,
       optedOut,
       provider,
+      providerMode: canal.mode,
       messagingWindow: { lastInboundAt, ...(args.isTemplate === true ? { isTemplate: true } : {}) },
       pacing: { knobs: pacingCfg.knobs, state: pacingState, crmDailyLimit: args.crmDailyLimit, rng: args.rng },
       spinning: { knobs: spinningKnobs, window },
@@ -899,12 +915,50 @@ export async function loadChannelProvider(
   organizationId: string,
   channelSessionId: string,
 ): Promise<ChannelProvider> {
-  const { rows } = await db.query<{ provider: string }>(
-    'select provider from channel_sessions where organization_id = $1 and id = $2',
-    [organizationId, channelSessionId],
-  );
-  const provider = rows[0]?.provider;
-  return provider === undefined ? DEFAULT_CHANNEL_PROVIDER : (provider as ChannelProvider);
+  return (await loadChannelIdentity(db, organizationId, channelSessionId)).provider;
+}
+
+/**
+ * O canal E a modalidade dele — a dupla que decide as regras de envio.
+ *
+ * Separada de `loadChannelProvider` porque os dois gates precisam do par, e o
+ * turno precisa só do provider: mudar a assinatura da função antiga obrigaria
+ * todo chamador a desempacotar um objeto para descartar metade.
+ *
+ * ⚠️ A TOLERÂNCIA A COLUNA AUSENTE é escrita à mão porque aqui não há PostgREST:
+ * este caminho fala `pg` cru, e um `select provider_mode` num clone sem a
+ * migration 0206 devolve 42703 e derruba a cadeia inteira — ou seja, o agente
+ * pararia de enviar. Falhar para o lado do "não sei" custa o fallback
+ * conservador; falhar para o lado do erro custa o atendimento.
+ */
+async function loadChannelIdentity(
+  db: Queryable,
+  organizationId: string,
+  channelSessionId: string,
+): Promise<{ provider: ChannelProvider; mode: string | null }> {
+  const params = [organizationId, channelSessionId];
+  const where = 'where organization_id = $1 and id = $2';
+
+  try {
+    const { rows } = await db.query<{ provider: string; provider_mode: string | null }>(
+      `select provider, provider_mode from channel_sessions ${where}`,
+      params,
+    );
+    const linha = rows[0];
+    return {
+      provider: (linha?.provider ?? DEFAULT_CHANNEL_PROVIDER) as ChannelProvider,
+      mode: linha?.provider_mode ?? null,
+    };
+  } catch {
+    const { rows } = await db.query<{ provider: string }>(
+      `select provider from channel_sessions ${where}`,
+      params,
+    );
+    return {
+      provider: (rows[0]?.provider ?? DEFAULT_CHANNEL_PROVIDER) as ChannelProvider,
+      mode: null,
+    };
+  }
 }
 
 async function readStopFlags(db: Queryable, organizationId: string, contactId: string): Promise<boolean> {

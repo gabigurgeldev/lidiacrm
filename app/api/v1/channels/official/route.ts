@@ -1,6 +1,23 @@
 /**
- * GET  /api/v1/channels/official — estado da conexão oficial + o que colar na Meta.
+ * GET  /api/v1/channels/official — os canais oficiais da org + o que colar na Meta.
  * POST /api/v1/channels/official — VALIDA a credencial e só então grava.
+ *
+ * ─── Por que uma COLEÇÃO, e não um canal ───────────────────────────────────
+ *
+ * Esta rota nasceu singular: `maybeSingle()` na leitura, e uma busca por
+ * `(organização, provider)` na escrita. O efeito não era "o segundo número não
+ * aparece" — era pior. Quem tentasse conectar um segundo número da Meta via o
+ * PRIMEIRO ser sobrescrito: mesma linha, credencial nova, número novo. O canal
+ * antigo continuava recebendo webhook (o token do path não muda) e passava a
+ * enviar pelo número errado.
+ *
+ * O banco nunca foi o limite: a migration 0165 criou um índice único PARCIAL por
+ * `meta_phone_number_id` entre linhas ativas — ou seja, ela já previa VÁRIAS
+ * linhas oficiais por organização, cada uma com o seu número. O limite era só
+ * daqui e da tela.
+ *
+ * A chave de identidade passou a ser o `meta_phone_number_id`, e é isso que
+ * separa "reconectar este número" de "conectar mais um".
  *
  * O `POST` valida contra a Graph API **antes** de persistir. Gravar primeiro e
  * descobrir depois é o que faz o operador achar que conectou e só entender que não na
@@ -41,7 +58,19 @@ const conectarSchema = z.object({
   phone_number_id: z.string().min(5),
   waba_id: z.string().min(5),
   token: z.string().min(20),
+  /**
+   * Como ESTE número se chama na operação ("Vendas", "Suporte").
+   *
+   * Opcional, e o default continua vindo da Meta (`verifiedName`). Com um canal
+   * só o nome verificado bastava; com vários, dois números da mesma empresa
+   * chegam com o MESMO nome verificado e ficam indistinguíveis em todo seletor
+   * do produto. O apelido é o que o operador reconhece.
+   */
+  display_name: z.string().trim().min(1).max(80).optional(),
 });
+
+const COLUNAS =
+  "id, meta_phone_number_id, meta_waba_id, meta_token_encrypted, phone_number, display_name, webhook_path_token, status";
 
 /**
  * Base pública desta instalação — é o que o operador cola no dashboard da Meta.
@@ -60,6 +89,17 @@ function publicBase(req: NextRequest): string {
   );
 }
 
+interface LinhaOficial {
+  id: string;
+  meta_phone_number_id: string | null;
+  meta_waba_id: string | null;
+  meta_token_encrypted: unknown;
+  phone_number: string | null;
+  display_name: string | null;
+  webhook_path_token: string | null;
+  status: string | null;
+}
+
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const requestId = randomUUID();
   const authz = await requireRole("admin", { requestId, resource: "channels_official" });
@@ -76,33 +116,39 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const consultar = () =>
     admin
       .from("channel_sessions")
-      .select("id, meta_phone_number_id, meta_waba_id, meta_token_encrypted, phone_number, display_name, webhook_path_token, status")
+      .select(COLUNAS)
       .eq("organization_id", orgId)
       .eq("provider", CHANNEL_PROVIDER_META);
   const { data } = await queryTolerantToMissingArchived(
-    () => consultar().is(ARCHIVED_AT, null).maybeSingle(),
-    () => consultar().maybeSingle(),
+    () => consultar().is(ARCHIVED_AT, null),
+    () => consultar(),
   );
 
   const base = publicBase(req);
+  const linhas = (data ?? []) as unknown as LinhaOficial[];
+
   return ok({
-    connected: Boolean(data),
-    // `hasToken` em vez do token: uma vez gravado, a tela mostra que EXISTE, nunca
-    // qual é. Devolver o segredo para preencher o campo seria vazá-lo a cada render.
-    hasToken: Boolean(data?.meta_token_encrypted),
-    phoneNumberId: data?.meta_phone_number_id ?? null,
-    wabaId: data?.meta_waba_id ?? null,
-    displayName: data?.display_name ?? null,
-    phoneNumber: data?.phone_number ?? null,
-    status: data?.status ?? null,
-    /** O que o operador precisa colar do NOSSO lado no dashboard da Meta. */
-    webhook: data
-      ? {
-          callbackUrl: `${base}/api/v1/webhooks/meta/${data.webhook_path_token}`,
-          verifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN ?? null,
-          fields: ["messages", "message_template_status_update"],
-        }
-      : null,
+    /**
+     * Um item por número. Cada um com a SUA URL de webhook: o
+     * `webhook_path_token` é por linha, e é ele que diz à Meta em qual canal
+     * entregar. Uma URL só para todos entregaria tudo no primeiro número.
+     */
+    channels: linhas.map((d) => ({
+      id: d.id,
+      // `hasToken` em vez do token: uma vez gravado, a tela mostra que EXISTE, nunca
+      // qual é. Devolver o segredo para preencher o campo seria vazá-lo a cada render.
+      hasToken: Boolean(d.meta_token_encrypted),
+      phoneNumberId: d.meta_phone_number_id,
+      wabaId: d.meta_waba_id,
+      displayName: d.display_name,
+      phoneNumber: d.phone_number,
+      status: d.status,
+      webhook: {
+        callbackUrl: `${base}/api/v1/webhooks/meta/${d.webhook_path_token}`,
+        verifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN ?? null,
+        fields: ["messages", "message_template_status_update"],
+      },
+    })),
   });
 }
 
@@ -119,7 +165,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       requestId,
     });
   }
-  const { phone_number_id, waba_id, token } = parsed.data;
+  const { phone_number_id, waba_id, token, display_name } = parsed.data;
 
   // VALIDA ANTES DE GRAVAR — a rota não sabe com quem fala; ela pergunta se a
   // credencial presta e o canal responde.
@@ -141,16 +187,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // A busca NÃO filtra `archived_at`: um canal oficial excluído é exatamente o
-  // que este POST precisa achar para trazer de volta. Ignorá-lo criaria uma
-  // SEGUNDA linha oficial na org — e a linha velha continuaria segurando o par
-  // (org, número) na trava da 0106.
+  // ⚠️ A busca é pelo NÚMERO, não por "o canal oficial da org".
+  //
+  // É o que separa reconectar de conectar mais um. Buscar só por
+  // `(org, provider)` fazia o segundo número sobrescrever o primeiro — mesma
+  // linha, credencial nova —, e o número antigo seguia recebendo webhook por um
+  // token que agora aponta para outra conta.
+  //
+  // E NÃO filtra `archived_at`: um canal oficial excluído é exatamente o que
+  // este POST precisa achar para trazer de volta. Ignorá-lo criaria uma linha
+  // duplicada, e a antiga continuaria segurando o par (org, número) na trava
+  // parcial da 0107 e o `meta_phone_number_id` na da 0165.
   const buscarExistente = (colunas: string) =>
     admin
       .from("channel_sessions")
       .select(colunas)
       .eq("organization_id", orgId)
       .eq("provider", CHANNEL_PROVIDER_META)
+      .eq("meta_phone_number_id", phone_number_id)
       .maybeSingle();
   const { data: existenteRaw } = await queryTolerantToMissingArchived(
     () => buscarExistente(`id, ${ARCHIVED_AT}`),
@@ -165,7 +219,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     meta_waba_id: waba_id,
     meta_token_encrypted: cifrado,
     phone_number: validacao.displayPhoneNumber ? `+${validacao.displayPhoneNumber.replace(/\D/g, "")}` : null,
-    display_name: validacao.verifiedName ?? "Canal oficial",
+    // O apelido do operador vence o nome verificado da Meta, e o nome verificado
+    // vence o genérico. Dois números da mesma empresa chegam com o MESMO
+    // `verifiedName`: sem o apelido, o seletor mostra duas linhas iguais.
+    display_name: display_name ?? validacao.verifiedName ?? "Canal oficial",
     status: "WORKING",
   };
 

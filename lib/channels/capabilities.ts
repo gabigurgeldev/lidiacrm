@@ -6,9 +6,9 @@
  * nasce de uma diferença real e medida entre WAHA e Meta Cloud; capability que
  * ninguém consome é código morto, e o teste de matriz reprova.
  */
-import type { ChannelCapabilities, ChannelProvider } from "./types";
+import type { ChannelCapabilities, ChannelMode, ChannelProvider } from "./types";
 
-export type { ChannelProvider, ChannelCapabilities };
+export type { ChannelProvider, ChannelCapabilities, ChannelMode };
 
 export const CHANNEL_CAPABILITIES: Record<ChannelProvider, ChannelCapabilities> = {
   // Auto-restrição: falo quando quiser, mas o WhatsApp me bane se eu abusar.
@@ -69,6 +69,79 @@ export const CHANNEL_CAPABILITIES: Record<ChannelProvider, ChannelCapabilities> 
     groups: "limited",
     costPerMessage: true,
   },
+  // Intermediário de CONTA, e o primeiro canal cuja resposta depende da SESSÃO e
+  // não do provider: a mesma conta hospeda instância oficial (janela de 24h,
+  // template aprovado) e número ligado por QR (texto livre, risco de
+  // banimento). Quem sabe qual é qual é `provider_mode`, e quem responde certo é
+  // `capabilitiesOfSession`.
+  //
+  // Esta linha é o que sobra quando a modalidade NÃO foi gravada, e por isso ela
+  // é a CONSERVADORA EM CADA EIXO, não a média nem a mais provável:
+  //
+  //   freeformOutsideWindow: false + requiresTemplates: true  → do lado oficial,
+  //     porque prometer texto livre onde a Meta recusa a ENTREGA faz a mensagem
+  //     sumir sem erro visível, com o cliente esperando.
+  //   banRisk: true + minIntervalMs                           → do lado do QR,
+  //     porque desarmar throttle e warm-up num número que PODE ser banido
+  //     custa o número inteiro, e não uma mensagem.
+  //
+  // Ou seja: os dois eixos erram para o lado seguro ao mesmo tempo, ainda que
+  // essa combinação não descreva nenhuma instância real. É de propósito — o
+  // fallback existe para não fazer estrago, não para adivinhar.
+  stevo: {
+    freeformOutsideWindow: false,
+    requiresTemplates: true,
+    canManageTemplates: true,
+    banRisk: true,
+    minIntervalMs: 6000,
+    voiceNote: "opus-only",
+    groups: "limited",
+    costPerMessage: true,
+  },
+};
+
+/**
+ * As capacidades por MODALIDADE, para os providers que hospedam mais de uma.
+ *
+ * Só entra aqui quem de fato tem duas caras. Um `Record<ChannelProvider, …>`
+ * completo obrigaria a inventar duas linhas idênticas para os canais de
+ * modalidade única — e duas cópias da mesma verdade divergem na primeira
+ * mudança.
+ */
+const CAPACIDADES_POR_MODO: Partial<
+  Record<ChannelProvider, Record<ChannelMode, ChannelCapabilities>>
+> = {
+  stevo: {
+    // Instância oficial: por baixo é a WABA da Meta. A janela de 24h e os
+    // templates aprovados são da Meta, não do intermediário.
+    oficial: {
+      freeformOutsideWindow: false,
+      requiresTemplates: true,
+      canManageTemplates: true,
+      banRisk: false,
+      minIntervalMs: 6000,
+      voiceNote: "opus-only",
+      groups: "limited",
+      costPerMessage: true,
+    },
+    // Número ligado por QR na conta dele: é o WhatsApp comum, com tudo o que
+    // isso implica — sem janela, sem template, e com risco de banimento por
+    // volume. O anti-ban PRECISA estar armado aqui.
+    qr: {
+      freeformOutsideWindow: true,
+      requiresTemplates: false,
+      // Não há WABA por trás: não existe definição aprovada para gerir.
+      canManageTemplates: false,
+      banRisk: true,
+      minIntervalMs: null,
+      // O intermediário exige ogg/opus e NÃO converte — ao contrário do
+      // transporte próprio, que converte. Medido na doc dele, não deduzido da
+      // modalidade: "é por QR" não implica "alguém converte para mim".
+      voiceNote: "opus-only",
+      groups: "limited",
+      costPerMessage: true,
+    },
+  },
 };
 
 /**
@@ -90,6 +163,7 @@ export const DEFAULT_CHANNEL_PROVIDER: ChannelProvider = "waha";
 export const CHANNEL_PROVIDER_WAHA: ChannelProvider = "waha";
 export const CHANNEL_PROVIDER_META: ChannelProvider = "meta_cloud";
 export const CHANNEL_PROVIDER_ZERNIO: ChannelProvider = "zernio";
+export const CHANNEL_PROVIDER_STEVO: ChannelProvider = "stevo";
 
 export function capabilitiesOf(provider: ChannelProvider): ChannelCapabilities {
   const caps = CHANNEL_CAPABILITIES[provider];
@@ -97,4 +171,37 @@ export function capabilitiesOf(provider: ChannelProvider): ChannelCapabilities {
   // barra em compilação; isto barra o que vem do banco em runtime.
   if (!caps) throw new Error(`unknown_channel_provider: ${provider}`);
   return caps;
+}
+
+/**
+ * O que ESTA SESSÃO permite — a pergunta certa quando se tem uma linha em mãos.
+ *
+ * ─── Por que `capabilitiesOf(provider)` não basta mais ─────────────────────
+ *
+ * Porque um provider passou a ter duas caras. A mesma conta intermediada
+ * hospeda instância oficial (janela de 24h, fora dela só modelo aprovado) e
+ * número ligado por QR (texto livre, risco de banimento) — regras OPOSTAS. Uma
+ * função que só recebe o provider responderia a mesma coisa para as duas e
+ * estaria errada em metade dos canais.
+ *
+ * ─── Quando usar cada uma ──────────────────────────────────────────────────
+ *
+ * `capabilitiesOfSession` sempre que houver uma linha de `channel_sessions`
+ * (envio, cadeia `before_send`, janela na tela). `capabilitiesOf` continua para
+ * quem só tem o provider — uma decisão sobre o canal em abstrato, antes de haver
+ * sessão escolhida.
+ *
+ * Modo ausente cai na linha do provider, que é a CONSERVADORA em cada eixo. Não
+ * é o caso comum e não deveria acontecer com a 0206 aplicada; é o que segura um
+ * clone atrasado sem transformar "não sei" em "pode tudo".
+ */
+export function capabilitiesOfSession(sessao: {
+  provider: ChannelProvider;
+  mode?: ChannelMode | string | null;
+}): ChannelCapabilities {
+  const porModo = CAPACIDADES_POR_MODO[sessao.provider];
+  if (porModo && (sessao.mode === "oficial" || sessao.mode === "qr")) {
+    return porModo[sessao.mode];
+  }
+  return capabilitiesOf(sessao.provider);
 }

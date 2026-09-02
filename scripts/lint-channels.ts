@@ -29,7 +29,7 @@
  * silenciosa — se você precisar acrescentar uma, escreva o porquê junto.
  */
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
 // O padrão vive em módulo próprio para poder ser testado sem executar o lint —
 // ver a justificativa das duas fronteiras (issue #118) lá.
@@ -127,7 +127,11 @@ const KNOWN_DEBT: { reason: string; files: string[] }[] = [
       "alias por 3 arquivos sem tirar o nome de lugar nenhum.",
     files: [
       "app/api/v1/ai/pacing/route.ts",
-      "app/api/v1/cron/contact-avatars/route.ts",
+      // `app/api/v1/cron/contact-avatars/route.ts` SAIU: o corpo que lia
+      // `waha_session_name` foi para `lib/channels/sessao-ativa.ts`, que é onde
+      // nomear o transporte é permitido. O cron hoje chama
+      // `sincronizarAvatar()` e não sabe qual canal responde. A catraca só
+      // encolhe — e foi ela que cobrou esta linha.
       // `components/connections/AntiBanSheet.tsx` SAIU desta lista: ele lia
       // `waha_session_name` como último degrau do NOME que o usuário vê, e por
       // isso um canal sem apelido aparecia no painel como `org_2dd5e6ea`. Agora
@@ -185,9 +189,21 @@ const KNOWN_DEBT: { reason: string; files: string[] }[] = [
 
 const DEBT = new Set(KNOWN_DEBT.flatMap((g) => g.files));
 
+/**
+ * ⚠️ O CAMINHO SAI SEMPRE COM `/`, E ISSO NÃO É ESTILO.
+ *
+ * `join()` usa o separador do SISTEMA — `\` no Windows. `ALLOWED` é uma lista de
+ * regex com `/` e `KNOWN_DEBT` é uma lista de strings com `/`, então nesta
+ * máquina NENHUM caminho casava com nenhuma das duas: a catraca apontava os 60
+ * arquivos de dívida conhecida como infratores NOVOS e saía com 1, sempre.
+ *
+ * O efeito não é ruído — é a catraca deixar de existir para quem desenvolve no
+ * Windows. Ela vira um gate que reprova o repositório limpo, e o hábito que isso
+ * cria é ignorá-la. Medido nesta máquina: idêntico na `main` sem mudança nenhuma.
+ */
 function walk(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-    const p = join(dir, e.name);
+    const p = join(dir, e.name).split(sep).join("/");
     if (e.isDirectory()) return e.name === "node_modules" ? [] : walk(p);
     return /\.tsx?$/.test(e.name) ? [p] : [];
   });

@@ -9,6 +9,7 @@ import {
   useTemplates,
   type TemplatePreview,
 } from "@/hooks/channels/useTemplates";
+import { useOfficialChannels } from "@/hooks/channels/useOfficialChannel";
 import { useT } from "@/hooks/i18n/useT";
 
 /** Só APPROVED pode ser disparado — o resto é informação, não opção. */
@@ -59,10 +60,20 @@ function Preview({ preview }: { preview: TemplatePreview }) {
 export function TemplatesClient() {
   const t = useT();
   const { data, isPending } = useTemplates();
+  const { canais: canaisOficiais } = useOfficialChannels();
   const sync = useSyncTemplates();
 
   const waba = data?.data.waba ?? null;
   const templates = data?.data.templates ?? null;
+  // As OUTRAS contas do WhatsApp Business da organização — as que esta tela não
+  // espelha. Vazio no caso comum (um número, ou vários sob a mesma conta).
+  const outrasWabas = [
+    ...new Set(
+      canaisOficiais
+        .map((c) => c.wabaId)
+        .filter((id): id is string => Boolean(id) && id !== waba),
+    ),
+  ];
 
   async function sincronizar() {
     const res = await sync.mutateAsync();
@@ -101,6 +112,24 @@ export function TemplatesClient() {
           {sync.isPending ? t("Sincronizando…") : t("Sincronizar com a Meta")}
         </Button>
       </div>
+
+      {/* Vários números oficiais podem compartilhar uma WABA — é assim que a Meta
+          modela, e nesse caso não há nada a avisar. O que precisa ser dito é o
+          outro caso: WABAs DIFERENTES têm conjuntos de templates diferentes, e
+          esta tela espelha uma só. Sem o aviso, o operador olha uma lista
+          completa e conclui que o modelo do outro número não existe. */}
+      {outrasWabas.length > 0 && (
+        <div className="rounded-md border border-warning bg-warning-bg p-4 text-sm text-warning-fg">
+          <p className="font-medium">{t("Esta tela espelha uma conta só.")}</p>
+          <p className="mt-1">
+            {t(
+              "Você tem números oficiais em mais de uma conta do WhatsApp Business, e cada conta tem os seus próprios modelos. Os que aparecem aqui são os da conta acima; os das contas",
+            )}{" "}
+            <span className="font-mono text-xs">{outrasWabas.join(", ")}</span>{" "}
+            {t("são gerenciados no painel da Meta.")}
+          </p>
+        </div>
+      )}
 
       {templates.length === 0 ? (
         <Card className="p-6">

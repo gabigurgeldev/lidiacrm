@@ -91,6 +91,18 @@
   --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-full: 9999px;
+  /* Cartão agrupado e controle segmentado — a linguagem adotada em 2026-09-01
+     (ver os itens 5 e 18 revogados em docs/design-system/09-anti-patterns.md).
+     Raio próprio em vez de reaproveitar --radius-lg porque ele muda junto com o
+     resto dos cards se alguém mexer lá, e o agrupamento perde a identidade. */
+  --radius-ios: 14px;
+  --radius-ios-sm: 10px;
+  /* Vidro MODERADO. A opacidade é piso de doutrina, não gosto: abaixo de 80% o
+     conteúdo de trás atravessa e vira ruído sobre texto. Derivado por
+     `color-mix` no ponto de uso, então segue o tema sem precisar de espelho nos
+     blocos claro/escuro. */
+  --vidro-opacidade: 86%;
+  --vidro-blur: 16px;
 
   /* Shadows — desaturated, neutral-based */
   --shadow-xs: 0 1px 2px 0 rgba(20, 18, 14, 0.04);
@@ -1037,4 +1049,264 @@
     animation: none;
     width: 100%;
   }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CARTÃO AGRUPADO E SEGMENTADO — a linguagem de "Ajustes" do iOS
+
+   Adotada em 2026-09-01 por decisão do dono do produto; os anti-patterns 5
+   (vidro) e 18 (aba em pílula) foram revogados junto, com o argumento escrito em
+   `docs/design-system/09-anti-patterns.md`. O que NÃO foi revogado continua
+   valendo aqui: sombra é warm (`rgba(20,18,14,X)`), fundo de página nunca é
+   branco puro, e nada disto entra em superfície que se repete por linha.
+
+   ⚠️ VIDRO SÓ EM CHASSI. `.ios-grupo` e `.ios-segmentado` existem uma vez por
+   tela. Uma bolha de mensagem ou um item de lista de conversas NÃO pode usar
+   `backdrop-filter`: o custo é multiplicado pelo número de linhas, e a thread
+   chega a centenas. É a única parte do anti-pattern 5 que sobreviveu, e ela
+   sobreviveu porque é a parte que era verdade.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Cartão agrupado: UMA superfície, várias linhas, divisor interno recuado.
+   O recuo do divisor não é enfeite — ele é o que faz o olho ler as linhas como
+   partes de um mesmo bloco em vez de cartões separados grudados. */
+.ios-grupo {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-ios);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+.ios-grupo > * + * {
+  border-top: 1px solid var(--color-border);
+}
+
+/* Recuo do divisor, alinhado com onde o conteúdo começa depois do ícone. */
+.ios-grupo[data-recuo="icone"] > * + * {
+  border-top-color: transparent;
+  background-image: linear-gradient(to right, transparent 0 3.25rem, var(--color-border) 3.25rem 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  background-position: top left;
+}
+
+.ios-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  min-height: 52px;
+  /* Explícito, nunca `all` (anti-pattern 23, que continua de pé). */
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.ios-linha[data-clicavel="sim"] {
+  cursor: pointer;
+}
+
+.ios-linha[data-clicavel="sim"]:hover {
+  background-color: var(--color-surface-elevated);
+}
+
+/* Vidro de chassi — para cartão de topo e barra flutuante. Fora de `.ios-grupo`
+   porque nem todo agrupamento quer vidro, e vidro sobre vidro empasta. */
+.ios-vidro {
+  background-color: color-mix(in oklab, var(--color-surface) var(--vidro-opacidade), transparent);
+  backdrop-filter: blur(var(--vidro-blur));
+  -webkit-backdrop-filter: blur(var(--vidro-blur));
+}
+
+/* Quem pede menos transparência recebe superfície opaca — não é preferência
+   estética, é acessibilidade declarada pelo sistema. */
+@media (prefers-reduced-transparency: reduce) {
+  .ios-vidro {
+    background-color: var(--color-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Segmented control. O indicador ativo é `surface` sobre trilho
+   `surface-elevated` — NÃO é a pílula `accent`: accent marca AÇÃO, e escolher
+   qual vista se olha não é agir. */
+.ios-segmentado {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+}
+
+/* O estado do gatilho fica em utilitário no componente, não aqui: as classes do
+   `TabsTrigger` do shadcn já pintam o ativo, e duas fontes com a mesma
+   especificidade decidiriam por ordem de camada — que é o tipo de acoplamento
+   que quebra em silêncio no dia em que a ordem do build mudar. Aqui só o
+   TRILHO, que é o que o componente não tem. */
+
+/* Disco do ícone do canal. A cor sai do TOM do canal, não do accent do produto:
+   o verde aqui é a marca do WhatsApp. */
+.ios-disco {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: none;
+  border-radius: var(--radius-full);
+  background-color: var(--color-success-bg);
+  color: var(--color-success-fg);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   INBOX — a conversa com cara de aplicativo de mensagens
+
+   ⚠️ O PAPEL DE PAREDE É DESENHO PRÓPRIO, e a escolha é jurídica antes de ser
+   estética. O padrão de rabiscos do WhatsApp Web é arte da Meta; este produto é
+   self-host e revendido com marca de terceiro, e reproduzir a arte deles dentro
+   dele é passivo, não homenagem. O que se copia é o PRINCÍPIO — a conversa tem
+   chão, as bolhas não flutuam num vazio —, com geometria nossa.
+
+   Tudo aqui lê TOKEN, nunca hex: a cor de destaque é trocada em runtime pelo
+   revendedor (`lib/branding/css.ts`).
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* O chão da conversa. SVG embutido em `data:` porque um arquivo separado seria
+   mais uma requisição e mais um caminho para o `next/image` e o CSP olharem —
+   e o desenho tem 300 bytes. `currentColor` não funciona em `background-image`,
+   então a cor entra pela opacidade sobre a superfície de baixo: o padrão fica
+   claro no tema claro e escuro no escuro, sem duas cópias do SVG. */
+.inbox-papel {
+  background-color: var(--color-bg);
+  background-repeat: repeat;
+  /* A OPACIDADE MORA DENTRO DO SVG (`stroke-opacity`), e não em
+     `background-blend-mode`.
+
+     ⚠️ MEDIDO: com `blend-mode` o padrão simplesmente NÃO APARECIA. Um cinza
+     médio misturado por `soft-light` contra `#161510` devolve quase o próprio
+     fundo — a regra existia, o navegador a aplicava, e a tela ficava lisa. É o
+     pior tipo de CSS: o que passa no gate ("tem `background-image`") e não
+     entrega nada ao olho.
+
+     Com o traço já semitransparente no próprio desenho, o que se vê é o que
+     está escrito. Duas cópias do SVG porque a cor do traço inverte entre os
+     temas — no claro é preto, no escuro é branco —, e isso é uma diferença de
+     desenho, não de opacidade. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='104' height='104' viewBox='0 0 104 104'%3E%3Cg fill='none' stroke='%23000000' stroke-opacity='0.038' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M12 18h10M17 13v10'/%3E%3Ccircle cx='54' cy='20' r='5'/%3E%3Cpath d='M46 54h12M52 48v12'/%3E%3Cpath d='M14 50c4-6 10-6 14 0'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+[data-theme="dark"] .inbox-papel {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='104' height='104' viewBox='0 0 104 104'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='0.034' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M12 18h10M17 13v10'/%3E%3Ccircle cx='54' cy='20' r='5'/%3E%3Cpath d='M46 54h12M52 48v12'/%3E%3Cpath d='M14 50c4-6 10-6 14 0'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  /* Quem pede menos camadas visuais recebe o chão liso. O contraste das bolhas
+     não muda — o padrão nunca foi o que separa a mensagem do fundo. */
+  .inbox-papel,
+  [data-theme="dark"] .inbox-papel {
+    background-image: none;
+  }
+}
+
+/* ---- A bolha ------------------------------------------------------------- */
+
+.bolha {
+  position: relative;
+  border-radius: 12px;
+}
+
+/* O RABO, só na PRIMEIRA mensagem de cada bloco do mesmo autor.
+   É o que transforma uma pilha de retângulos numa conversa: sem ele, dez
+   mensagens seguidas da mesma pessoa parecem dez interrupções.
+
+   `background-color: inherit` porque a cor da bolha vem de classe utilitária
+   (accent para o que sai, superfície para o que entra) e ela é trocada em
+   runtime pelo revendedor — repetir o valor aqui criaria uma segunda fonte que
+   envelhece sozinha. */
+.bolha[data-ponta="true"]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 9px;
+  height: 14px;
+  background-color: inherit;
+}
+
+.bolha[data-lado="entrada"][data-ponta="true"] {
+  border-top-left-radius: 3px;
+}
+.bolha[data-lado="entrada"][data-ponta="true"]::after {
+  left: -8px;
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
+}
+
+.bolha[data-lado="saida"][data-ponta="true"] {
+  border-top-right-radius: 3px;
+}
+.bolha[data-lado="saida"][data-ponta="true"]::after {
+  right: -8px;
+  clip-path: polygon(0 0, 0 100%, 100% 0);
+}
+
+/* ---- A hora dentro da bolha, com o texto correndo em volta ---------------- */
+
+/* O detalhe que mais denuncia "não é WhatsApp": a hora numa linha própria,
+   embaixo, empurrando a bolha para baixo em toda mensagem de duas palavras.
+
+   Só vale para TEXTO PURO. Com mídia, citação ou cartão de contato o metadado
+   volta para o fluxo: sobre uma imagem ele precisaria de sombra própria para
+   ficar legível, e sobre um player de áudio ele cairia em cima do botão.
+
+   O `padding-inline-end` reserva a faixa; o metadado é absoluto e ocupa ela. Os
+   dois números têm de andar juntos — por isso saem do mesmo lugar. */
+.bolha-texto {
+  padding-inline-end: var(--bolha-reserva, 3.25rem);
+}
+
+.bolha-meta-flutuante {
+  position: absolute;
+  inset-inline-end: 0.55rem;
+  inset-block-end: 0.3rem;
+}
+
+/* Quem SAI leva hora + confirmação de leitura; quem ENTRA leva só a hora. */
+.bolha[data-lado="saida"] {
+  --bolha-reserva: 4rem;
+}
+.bolha[data-lado="entrada"] {
+  --bolha-reserva: 2.9rem;
+}
+
+/* O selo de canal entra NA MESMA faixa, então a faixa cresce — senão ele empurra
+   a hora para fora da bolha, que é o defeito que a reserva existe para evitar.
+   Dois ícones de 10px com o `gap` do flex medem ~1.5rem; o terceiro (canal
+   intermediado) leva a conta a ~2.1rem, e é por ele que a reserva é dimensionada:
+   errar para o lado largo abre um vão discreto, errar para o estreito quebra a
+   linha. A classe é posta pela bolha SÓ quando o selo é de fato desenhado —
+   canal desconhecido não paga reserva de algo que não aparece. */
+.bolha[data-com-selo="true"][data-lado="saida"] {
+  --bolha-reserva: 6.1rem;
+}
+.bolha[data-com-selo="true"][data-lado="entrada"] {
+  --bolha-reserva: 5rem;
+}
+
+/* ---- Áudio --------------------------------------------------------------- */
+
+/* As barras da onda. `transform: scaleY` e não `height` porque são ~40 numa
+   bolha e a animação de progresso as repinta a cada `timeupdate`: `height` é
+   layout, `transform` é composição. */
+.onda-barra {
+  transform-origin: center;
+  transition: background-color 120ms var(--ease-out);
+}
+
+/* ---- Separador de data --------------------------------------------------- */
+
+/* Opaco, e não `bg-background/80`: sobre o papel de parede a versão translúcida
+   deixava o padrão passar por dentro do texto da data. */
+.inbox-selo-de-data {
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-xs);
 }

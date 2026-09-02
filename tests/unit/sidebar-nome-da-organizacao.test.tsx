@@ -32,6 +32,23 @@ vi.mock("@/components/connections/ConnectionHealthDot", () => ({
   ConnectionHealthDot: () => null,
 }));
 vi.mock("@/components/shell/VersionFooter", () => ({ VersionFooter: () => null }));
+/**
+ * MOCK NOVO, e ele registra um ACOPLAMENTO que a barra não tinha.
+ *
+ * O rodapé passou a adotar as ações de conta (sino, idioma, tema, avatar)
+ * quando o cabeçalho do app não é desenhado — e a rota mockada acima é
+ * `/app/inbox`, que é exatamente esse caso. `HeaderActions` arrasta
+ * `ThemeProvider` (lança sem ele), `AuthProvider` e o react-query do sino: sem
+ * este mock os sete casos daqui morrem em
+ * "useTheme must be used within <ThemeProvider>", medindo a montagem do
+ * cabeçalho em vez do nome da marca, que é a única pergunta deste arquivo.
+ *
+ * Que o rodapé REALMENTE adota as ações é provado onde essa é a pergunta:
+ * `tests/unit/casca-esconde-o-cabecalho.test.tsx`.
+ */
+vi.mock("@/components/shell/header/HeaderActions", () => ({
+  HeaderActions: () => null,
+}));
 
 /**
  * A marca da INSTALAÇÃO, como o SERVIDOR a entrega.

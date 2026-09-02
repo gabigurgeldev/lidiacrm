@@ -88,12 +88,29 @@ export async function GET(): Promise<NextResponse> {
 
   const sessao = await metaSessionForOrg(r.orgId);
   const admin = createAdminClient();
-  const { data, error } = await admin
+  const consulta = admin
     .from("meta_templates")
     .select(
       "name, language, status, category, rejected_reason, quality_score, parameter_format, contract_hash, components, synced_at",
     )
-    .eq("organization_id", r.orgId)
+    .eq("organization_id", r.orgId);
+  // ⚠️ FILTRA PELA WABA QUE ESTA TELA SINCRONIZA.
+  //
+  // Desde que a organização passou a poder ter mais de um número oficial, ela
+  // pode ter mais de uma WABA — e o espelho `meta_templates` é chaveado por
+  // `(org, waba, nome, idioma)`. Sem este filtro a lista misturava as definições
+  // de todas as WABAs, enquanto o botão de sincronizar puxava as de UMA só
+  // (`metaSessionForOrg` devolve a mais antiga). O operador via um template,
+  // mandava sincronizar, e ele não atualizava nunca — sem nada na tela explicando
+  // por quê. Listar exatamente o que se sincroniza é o mínimo para a tela não
+  // mentir.
+  //
+  // O caso comum não muda: vários números sob a MESMA WABA compartilham os
+  // mesmos templates, que é como a Meta modela isso.
+  const { data, error } = await (sessao?.wabaId
+    ? consulta.eq("waba_id", sessao.wabaId)
+    : consulta
+  )
     .order("status")
     .order("name");
 

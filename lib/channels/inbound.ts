@@ -18,7 +18,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { CHANNEL_PROVIDER_ZERNIO } from "./capabilities";
+import { CHANNEL_PROVIDER_STEVO, CHANNEL_PROVIDER_ZERNIO } from "./capabilities";
+import { ingestStevoInbound } from "./stevo/ingest";
 import { sincronizarSaudeDaConexao } from "./health";
 import {
   atualizarEspelhoDoTemplate,
@@ -70,7 +71,7 @@ export type InboundWebhookOutcome =
  * trabalho — e respondido sem nomear provider do lado de fora.
  */
 export function acceptsInboundWebhook(provider: string): boolean {
-  return provider === CHANNEL_PROVIDER_ZERNIO;
+  return provider === CHANNEL_PROVIDER_ZERNIO || provider === CHANNEL_PROVIDER_STEVO;
 }
 
 export async function handleInboundWebhook(
@@ -82,11 +83,52 @@ export async function handleInboundWebhook(
   switch (provider) {
     case CHANNEL_PROVIDER_ZERNIO:
       return zernioInbound(admin, input);
+    case CHANNEL_PROVIDER_STEVO:
+      return stevoInbound(admin, input);
     default:
       // Token de um canal que não entra por aqui. É configuração trocada, não
       // ataque — mas processar seria ler o payload com o parser errado.
       return { ok: false, code: "provider_mismatch", message: "canal não recebe por esta rota" };
   }
+}
+
+/**
+ * O intermediário de CONTA.
+ *
+ * ⚠️ SEM VERIFICAÇÃO DE ASSINATURA, e isso é uma diferença real em relação ao
+ * irmão acima — não um esquecimento.
+ *
+ * Este provedor não documenta HMAC de webhook em nenhum dos três specs que
+ * publica. O que autentica a entrega é o `webhook_path_token` do caminho: 32 hex
+ * gerados por nós, únicos por linha, rotacionados quando o canal é excluído, e
+ * que só ele conhece porque só ele recebeu a URL (o CRM a registra por API — o
+ * operador nem a vê).
+ *
+ * A diferença concreta para o HMAC: quem observar a URL uma vez pode reenviá-la.
+ * Não há como fechar isso sem o outro lado assinar. Registrado aqui, e não só no
+ * módulo, porque este é o ponto onde alguém decidiria "copiar a verificação do
+ * vizinho" e concluiria que o canal está quebrado quando ela falhasse.
+ *
+ * O corpo cru fica arquivado pela rota (`abrirArquivoDoWebhook`) com o desfecho,
+ * que é o que permite medir o formato real — ver `./stevo/webhook.ts`.
+ */
+async function stevoInbound(
+  admin: SupabaseClient,
+  input: InboundWebhookInput,
+): Promise<InboundWebhookOutcome> {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(input.rawBody);
+  } catch {
+    return { ok: false, code: "invalid_json", message: "invalid_json" };
+  }
+
+  const r = await ingestStevoInbound(admin, {
+    organizationId: input.session.organization_id,
+    channelSessionId: input.session.id,
+    payload,
+  });
+  return { ok: true, body: { ...r } };
 }
 
 async function zernioInbound(

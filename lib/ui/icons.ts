@@ -140,6 +140,14 @@ export {
   // a tela faz: mostrar quem esfriou com o relógio correndo.
   Headset,
   ChatText,
+  // O selo de tipo de conexão do inbox: `WhatsappLogo` é a marca de verdade
+  // (pedido explícito), `SealCheck` marca o canal oficial da Meta.
+  WhatsappLogo,
+  SealCheck,
+  // A silhueta que substitui as iniciais quando o contato não tem foto —
+  // é o desenho que o WhatsApp usa, e ele diz "não temos a foto" em vez de
+  // fingir informação sobre a pessoa.
+  User,
   SquaresFour,
   FunnelSimple,
 } from "@phosphor-icons/react/dist/ssr";

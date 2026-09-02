@@ -67,11 +67,24 @@ interface Consulta {
   filtrosComTerminal: string[];
 }
 
-/** `.eq("x", …)`, `.is(ARCHIVED_AT, null)` → nome da coluna filtrada. */
+/**
+ * `.eq("x", …)`, `.is(ARCHIVED_AT, null)`, `.not(ARCHIVED_AT, "is", null)` →
+ * nome da coluna filtrada.
+ *
+ * `not` entrou junto com o primeiro caso que precisa do OUTRO lado da partição:
+ * a importação de instâncias procura a linha ATIVA e, quando não há, a
+ * ARQUIVADA, para ressuscitá-la. Reconhecer só `is` reprovaria a segunda busca —
+ * que recorta tanto quanto a primeira, no lado complementar.
+ *
+ * Não é afrouxamento: o que este gate cobra é que a consulta leia UM lado da
+ * partição em que o índice único é definido, e `not(archived_at, is, null)` é
+ * exatamente o outro lado. O que continua reprovado é a consulta que não recorta
+ * nada e lê os dois de uma vez — o caso em que `maybeSingle()` casa duas linhas.
+ */
 function colunasFiltradas(trecho: string): string[] {
-  return [...trecho.matchAll(/\.(?:eq|is|in|neq|match)\(\s*(?:"([a-z_]+)"|(ARCHIVED_AT))/g)].map(
-    (m) => m[1] ?? "archived_at",
-  );
+  return [
+    ...trecho.matchAll(/\.(?:eq|is|in|neq|match|not)\(\s*(?:"([a-z_]+)"|(ARCHIVED_AT))/g),
+  ].map((m) => m[1] ?? "archived_at");
 }
 
 /**

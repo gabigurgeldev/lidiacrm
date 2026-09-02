@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/auth/AuthProvider";
+import { useBuscarAvatarDoContato } from "@/hooks/inbox/useBuscarAvatarDoContato";
 import { estadoDaJanela, formatarDecorrido } from "@/lib/channels/janela";
+import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { JanelaFechadaAviso } from "@/components/inbox/JanelaFechadaAviso";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useCloseConversation } from "@/hooks/inbox/useCloseConversation";
@@ -237,10 +239,31 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   // Reusa o `blockedReason` que já existe (contato bloqueado/anonimizado) em vez
   // de um segundo mecanismo de bloqueio: dois caminhos para desabilitar o mesmo
   // composer divergem, e o segundo esquece de cobrir o áudio ou o anexo.
+  // A foto do contato da conversa ABERTA, quando ele nunca teve uma buscada.
+  // Uma por vez e uma vez só — ver o cabeçalho do hook.
+  useBuscarAvatarDoContato(selectedConversation?.contacts ?? null);
+
+  /**
+   * A MODALIDADE do canal desta conversa — o que decide se há janela de 24h num
+   * provider que hospeda instância oficial e número por QR na mesma conta.
+   *
+   * Vem da lista de canais e NÃO do embed da conversa, e a razão é de robustez:
+   * o `select` de `conversations` é compartilhado por quatro handlers e não tem
+   * camada de tolerância a coluna ausente, então uma coluna da migration 0206
+   * ali faria a listagem inteira do inbox falhar (42703) num clone atrasado —
+   * trocaria um relógio por uma tela em branco. `useChannelSessions` é tolerante
+   * de propósito, e o `id` do embed é o que permite casar as duas pontas.
+   */
+  const canaisDaOrg = useChannelSessions().data;
+  const modoDoCanal =
+    canaisDaOrg?.find((c) => c.id === selectedConversation?.channel_sessions?.id)?.provider_mode ??
+    null;
+
   const janela = estadoDaJanela(
     selectedConversation?.channel_sessions?.provider ?? null,
     selectedConversation?.last_inbound_at ?? null,
     agoraJanela,
+    modoDoCanal,
   );
   const motivoDaJanela =
     janela.tipo === "fechada"
@@ -255,24 +278,26 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       ? t("Contato anonimizado — não é possível enviar mensagens.")
       : null;
 
-  // Altura da grade: a conta desconta TUDO que fica acima e abaixo dela.
-  //   3.5rem            cabeçalho (`h-14`, em components/shell/header/AppHeader.tsx)
-  //   2 * --space-6     padding do <main> do AppShell (`p-6`, em cima e embaixo)
+  // ⚠️ A ALTURA DEIXOU DE SER CALCULADA, e o parágrafo que sai daqui vale a
+  // lápide. Ele dizia:
   //
-  // Com `100vh-3.5rem` o padding ficava de fora e a grade media 48px a MAIS que a
-  // tela. Quem pagava a diferença era o composer, que fica no rodapé: nascia
-  // parcialmente abaixo da borda, atrapalhando justo na hora de escrever.
+  //     h-[calc(100dvh - 3.5rem - 2*var(--space-6))]
+  //     3.5rem         cabeçalho (h-14)
+  //     2*--space-6    padding do <main> do AppShell (p-6, em cima e embaixo)
   //
-  // As duas parcelas NÃO estão na mesma unidade, e por isso o padding entra pelo
-  // token e não como `3rem`: o `tailwind.config.ts` remapeia a escala de spacing
-  // para `var(--space-N)` — `--space-6` é `24px` LITERAL (app/globals.css) —, mas
-  // não remapeia o `14`, que segue sendo `3.5rem` de verdade. Escrever a soma como
-  // `6.5rem` só acerta enquanto a raiz for 16px; com acessibilidade de fonte maior
-  // ou menor o composer sai da tela de novo. Pelo token, a conta se auto-corrige
-  // se a escala de espaçamento mudar.
+  // Estava certo, era bem explicado, e mesmo assim quebrou — porque era uma soma
+  // escrita à mão AQUI sobre valores que moram LÁ, sem nada ligando os dois. O
+  // redesenho da navegação trocou o `p-6` uniforme por `py-5` abaixo de `lg`, e
+  // esta conta passou a medir 8px A MAIS que o espaço real. Quem pagava era o
+  // composer, no rodapé: nascia parcialmente fora da tela, justo na hora de
+  // escrever — o mesmo sintoma que a conta existia para evitar.
   //
-  // `dvh` em vez de `vh` porque no celular a `vh` ignora a barra do navegador — o
-  // mesmo corte, só que pior e mudando conforme se rola a página.
+  // Hoje o `AppShell` é `h-dvh` + `overflow-hidden`, a coluna dele é `min-h-0` e
+  // o `<main>` é `flex-1`: "o que sobrou" é uma medida do LAYOUT, não uma soma
+  // que alguém precisa lembrar de atualizar. Aqui só se pede `h-full`.
+  //
+  // E no Inbox o `<main>` não tem padding nenhum (`lib/navigation/casca.ts`), o
+  // que é o que faz a conversa ir de borda a borda.
 
   // TRÊS COLUNAS QUE CABEM — medido, não estimado.
   //
@@ -295,7 +320,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   return (
     <OpenConversationProvider conversationId={selectedId}>
     <div
-      className="grid h-[calc(100dvh-3.5rem-2*var(--space-6))] w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[272px_1fr_296px] 2xl:grid-cols-[300px_1fr_320px]"
+      className="grid h-full w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[272px_1fr_296px] 2xl:grid-cols-[300px_1fr_320px]"
       /*
        * O ESTADO DO TEMPO REAL, LEGÍVEL DE FORA — mesmo par que o dossiê do lead
        * já publica (`LeadDossier`), e pela mesma razão: quando a entrega morre,
@@ -407,7 +432,11 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
           <>
             <ConversationHeader conversation={selectedConversation} />
             <div className="min-h-0 flex-1 overflow-hidden">
-              <ChatThread conversationId={selectedConversation.id} onResponder={setRespondendo} />
+              <ChatThread
+                conversationId={selectedConversation.id}
+                onResponder={setRespondendo}
+                canalDaConversa={selectedConversation.channel_sessions ?? null}
+              />
             </div>
             <RetentionNotice conversationId={selectedConversation.id} />
             {motivoDaJanela && (
