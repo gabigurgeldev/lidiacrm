@@ -86,6 +86,11 @@ test.describe("os blocos do paralelo no construtor", () => {
       "flow.call": "campo-fluxo-chamado",
     };
 
+    // `flow.call` fica de fora deste laço: numa organização recém-criada não há
+    // outro fluxo publicado, então a tela mostra o aviso em vez do seletor — que
+    // é o comportamento certo, e não "o formulário não abriu".
+    delete comCampos["flow.call"];
+
     for (const [tipo, testid] of Object.entries(comCampos)) {
       await page.getByTestId(`paleta-${tipo}`).click();
       // O bloco recém-acrescentado abre o painel já selecionado.
@@ -128,7 +133,10 @@ test.describe("os blocos do paralelo no construtor", () => {
 
     await page.getByTestId("paleta-trigger.lead_created").click();
     await page.getByTestId("paleta-logic.fork").click();
-    await page.getByTestId("campo-encontro-do-fork").fill("bloco_que_nao_existe");
+    // Sem nenhum bloco de reencontro no fluxo, o seletor nem aparece — a tela
+    // diz o que falta em vez de oferecer uma caixa vazia. Publicar assim tem
+    // que ser recusado com a mesma clareza.
+    await expect(page.getByTestId("sem-bloco-de-reencontro")).toBeVisible();
 
     await page.getByTestId("salvar-rascunho").click();
     await page.getByTestId("publicar-fluxo").click();

@@ -1835,17 +1835,27 @@ localmente** — `pnpm test:db` rodou em pg16 (143 arquivos, 1141 casos, verde).
 Quem fecha as duas lacunas é o CI, que usa pg15 no job `invariants` e sobe o
 stack no job `e2e`.
 
-### A suspeita de UX que a medição NÃO resolve
+### A suspeita de UX que a medição levantou — e que foi PAGA
 
-Dois campos foram escritos utilizáveis, não bons, e é honesto dizer qual é o
-problema deles antes que alguém os encontre:
+Dois campos tinham sido escritos utilizáveis, não bons, e a jornada os registrou
+antes que alguém os encontrasse:
 
-- **O reencontro da bifurcação é um campo de texto onde se digita o `id` do
-  bloco de reencontro.** A pessoa vê "Reencontro" no canvas, não `junta`. O
-  certo é um seletor dos blocos `logic.merge` do próprio fluxo.
-- **`flow.call` pede o UUID do fluxo colado à mão.** Mesmo problema, mais forte:
-  ninguém decora UUID.
+- o reencontro da bifurcação era **texto livre pedindo o `id` do bloco**, e a
+  pessoa vê "Reencontro" no quadro, nunca `junta`;
+- `flow.call` pedia o **UUID do fluxo colado à mão**.
 
-Os dois publicam e funcionam; os dois vão irritar. Não entraram nesta entrega
-porque exigem o editor passar a lista de blocos e a de fluxos ao painel, que é
-mudança de contrato do componente.
+Os dois publicavam e funcionavam. Os dois eram impossíveis de acertar sem abrir
+o JSON do grafo.
+
+**Consertados na mesma entrega**, com o editor passando as duas listas ao painel:
+
+| Caso | O que a pessoa faz | Sinal | Estado |
+|---|---|---|---|
+| J23.9 | Escolhe o reencontro | seletor com o RÓTULO do bloco; o id nunca aparece | **MEDIDO** |
+| J23.10 | Não há reencontro no fluxo | a tela diz o que acrescentar, em vez de caixa vazia | **MEDIDO** |
+| J23.11 | Escolhe o fluxo a chamar | seletor com o NOME; o UUID nunca aparece | **MEDIDO** |
+| J23.12 | Só existem rascunhos | não são oferecidos, e a tela explica | **MEDIDO** |
+
+O último caso nasceu de uma sabotagem: o filtro de publicados existia e **nada o
+vigiava**. Oferecer um rascunho produz um bloco que publica e falha na primeira
+execução, com a causa longe de quem montou.

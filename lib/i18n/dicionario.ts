@@ -6384,8 +6384,6 @@ export const DICIONARIO: Traducoes = {
   "Vencido o prazo, o fluxo segue pela saída 'Venceu o prazo'. Toda espera precisa de prazo — sem ele o fluxo ficaria parado para sempre.":
     { es: "Vencido el plazo, el flujo sigue por la salida 'Venció el plazo'. Toda espera necesita plazo — sin él el flujo quedaría detenido para siempre." },
   "Qual fluxo chamar": { es: "Qué flujo llamar" },
-  "O identificador do fluxo, que aparece no endereço da tela dele. Ele precisa estar publicado.":
-    { es: "El identificador del flujo, que aparece en la dirección de su pantalla. Tiene que estar publicado." },
   "Novo caminho": { es: "Nuevo camino" },
   "Como os caminhos se juntam": { es: "Cómo se juntan los caminos" },
   "Esperar todos terminarem": { es: "Esperar a que todos terminen" },
@@ -6395,8 +6393,16 @@ export const DICIONARIO: Traducoes = {
   "O fluxo só continua depois que todos os caminhos chegarem ao reencontro.":
     { es: "El flujo solo continúa después de que todos los caminos lleguen al reencuentro." },
   "Bloco de reencontro": { es: "Bloque de reencuentro" },
-  "O nome do bloco 'Reencontro' onde estes caminhos voltam a ser um só. Sem ele o fluxo não publica.":
-    { es: "El nombre del bloque 'Reencuentro' donde estos caminos vuelven a ser uno solo. Sin él el flujo no se publica." },
+  "Escolha o bloco de reencontro": { es: "Elija el bloque de reencuentro" },
+  "Nenhum bloco de reencontro no fluxo ainda. Acrescente um pela paleta — é ele que junta os caminhos de volta.":
+    { es: "Todavía no hay bloque de reencuentro en el flujo. Agregue uno desde la paleta — es el que junta los caminos de vuelta." },
+  "Onde estes caminhos voltam a ser um só. Sem ele o fluxo não publica.":
+    { es: "Donde estos caminos vuelven a ser uno solo. Sin él el flujo no se publica." },
+  "Escolha o fluxo": { es: "Elija el flujo" },
+  "Nenhum outro fluxo publicado nesta organização. Publique o fluxo que você quer chamar primeiro.":
+    { es: "No hay otro flujo publicado en esta organización. Publique primero el flujo que quiere llamar." },
+  "Ele roda inteiro, e este fluxo continua quando ele terminar.":
+    { es: "Se ejecuta entero, y este flujo continúa cuando él termine." },
   "Nome deste caminho": { es: "Nombre de este camino" },
   "Remover este caminho": { es: "Quitar este camino" },
   "Acrescentar caminho": { es: "Agregar camino" },

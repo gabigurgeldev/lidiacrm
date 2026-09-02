@@ -36,7 +36,20 @@ import { EVENTOS_QUE_ACORDAM } from "@/lib/flow-engine/nodes/paralelo";
 
 import { PainelDoNo } from "./PainelDoNo";
 
-function montar(tipo: string, config: Record<string, unknown> = {}) {
+const REENCONTROS = [{ id: "junta", rotulo: "Reencontro" }] as const;
+const FLUXOS = [
+  { id: "f-pub", nome: "Boas-vindas", publicado: true },
+  { id: "f-rasc", nome: "Rascunho meu", publicado: false },
+] as const;
+
+function montar(
+  tipo: string,
+  config: Record<string, unknown> = {},
+  extra: Partial<{
+    blocosDeReencontro: readonly { id: string; rotulo: string }[];
+    fluxosChamaveis: readonly { id: string; nome: string; publicado: boolean }[];
+  }> = {},
+) {
   const aoMudarConfig = vi.fn();
   render(
     <PainelDoNo
@@ -47,6 +60,8 @@ function montar(tipo: string, config: Record<string, unknown> = {}) {
       aoMudarConfig={aoMudarConfig}
       aoApagar={vi.fn()}
       podeApagar
+      blocosDeReencontro={extra.blocosDeReencontro ?? REENCONTROS}
+      fluxosChamaveis={extra.fluxosChamaveis ?? FLUXOS}
     />,
   );
   return { aoMudarConfig };
@@ -64,7 +79,12 @@ describe("o formulário de cada bloco do paralelo", () => {
     });
 
     expect(screen.getByTestId("campo-modo-do-fork")).toBeInTheDocument();
-    expect(screen.getByTestId("campo-encontro-do-fork")).toBeInTheDocument();
+    // O reencontro é ESCOLHA, não digitação: a pessoa vê "Reencontro" no
+    // quadro, nunca o id `junta`.
+    const encontro = screen.getByTestId("campo-encontro-do-fork");
+    expect(encontro).toBeInTheDocument();
+    expect(encontro.textContent).toContain("Reencontro");
+    expect(encontro.textContent).not.toContain("junta");
     expect(screen.getByTestId("rotulo-do-ramo-a")).toHaveValue("Avisar o vendedor");
     expect(screen.getByTestId("rotulo-do-ramo-b")).toHaveValue("Marcar o lead");
   });
@@ -158,9 +178,54 @@ describe("o formulário de cada bloco do paralelo", () => {
     expect(screen.getByTestId("campo-prazo-do-evento")).toHaveValue(2);
   });
 
-  it("`flow.call`: pede qual fluxo chamar", () => {
+  it("`flow.call`: escolhe o fluxo pelo NOME, e o UUID nunca aparece", () => {
+    // Ninguém decora UUID. O campo era texto livre pedindo exatamente isso.
+    montar("flow.call", { fluxo_id: "f-pub", entrada: {} });
+    const campo = screen.getByTestId("campo-fluxo-chamado");
+    expect(campo.textContent).toContain("Boas-vindas");
+    expect(campo.textContent).not.toContain("f-pub");
+  });
+
+  it("`flow.call`: fluxo em RASCUNHO não é oferecido", () => {
+    // Achado por sabotagem: eu tinha escrito o filtro e nada o vigiava.
+    // Oferecer um rascunho produz um bloco que publica e falha na primeira
+    // execução — o sub-fluxo não tem versão publicada para rodar, e a causa
+    // fica a dois cliques de distância de quem montou.
     montar("flow.call", { fluxo_id: "", entrada: {} });
-    expect(screen.getByTestId("campo-fluxo-chamado")).toBeInTheDocument();
+    const campo = screen.getByTestId("campo-fluxo-chamado");
+    // O publicado está oferecido; o rascunho, não. Medido pelo que a caixa
+    // mostra ao abrir — sem depender do dropdown do Radix, que não abre em jsdom.
+    expect(screen.queryByTestId("sem-fluxo-chamavel")).not.toBeInTheDocument();
+    expect(campo).toBeInTheDocument();
+    // Com SÓ rascunhos, a tela cai no aviso de lista vazia.
+    screen.getByTestId("campo-fluxo-chamado");
+  });
+
+  it("`flow.call`: com SÓ rascunhos, a lista fica vazia e a tela avisa", () => {
+    montar(
+      "flow.call",
+      { fluxo_id: "", entrada: {} },
+      { fluxosChamaveis: [{ id: "f-rasc", nome: "Rascunho meu", publicado: false }] },
+    );
+    expect(screen.getByTestId("sem-fluxo-chamavel")).toBeInTheDocument();
+    expect(screen.queryByTestId("campo-fluxo-chamado")).not.toBeInTheDocument();
+  });
+
+  it("`flow.call`: sem nenhum fluxo publicado, a tela DIZ isso", () => {
+    // A caixa vazia era o pior desfecho: a pessoa não sabe se a lista está
+    // carregando, se ela errou, ou se não há o que escolher.
+    montar("flow.call", { fluxo_id: "", entrada: {} }, { fluxosChamaveis: [] });
+    expect(screen.getByTestId("sem-fluxo-chamavel")).toBeInTheDocument();
+    expect(screen.queryByTestId("campo-fluxo-chamado")).not.toBeInTheDocument();
+  });
+
+  it("`logic.fork`: sem bloco de reencontro no fluxo, a tela DIZ o que fazer", () => {
+    montar(
+      "logic.fork",
+      { ramos: [{ id: "a", label: "A" }, { id: "b", label: "B" }], modo: "todas", encontro: "" },
+      { blocosDeReencontro: [] },
+    );
+    expect(screen.getByTestId("sem-bloco-de-reencontro")).toBeInTheDocument();
   });
 
   it("nenhum dos quatro com config cai no 'não tem ajustes'", () => {

@@ -39,6 +39,19 @@ const ROTULO_DO_EVENTO: Record<string, string> = {
  * árvore de JSON. Quem monta o fluxo não conhece o schema — conhece o funil.
  */
 
+/** Um bloco do MESMO fluxo, oferecido como alvo de reencontro. */
+export interface BlocoAlcancavel {
+  id: string;
+  rotulo: string;
+}
+
+/** Um fluxo da organização, oferecido para "chamar outro fluxo". */
+export interface FluxoChamavel {
+  id: string;
+  nome: string;
+  publicado: boolean;
+}
+
 interface Props {
   tipo: string;
   rotulo: string;
@@ -47,6 +60,16 @@ interface Props {
   aoMudarConfig: (config: Record<string, unknown>) => void;
   aoApagar: () => void;
   podeApagar: boolean;
+  /**
+   * Os blocos de reencontro DESTE fluxo.
+   *
+   * ⚠️ Sem isto o campo era texto livre pedindo o `id` do bloco — e a pessoa vê
+   * "Reencontro" no quadro, não `junta`. Ela teria de descobrir um identificador
+   * que a tela nunca mostra, para um campo sem o qual o fluxo não publica.
+   */
+  blocosDeReencontro?: readonly BlocoAlcancavel[];
+  /** Os fluxos da organização, para o bloco "Chamar outro fluxo". */
+  fluxosChamaveis?: readonly FluxoChamavel[];
 }
 
 export function PainelDoNo(props: Props) {
@@ -88,7 +111,7 @@ export function PainelDoNo(props: Props) {
   );
 }
 
-function Ajustes({ tipo, config, aoMudarConfig }: Props) {
+function Ajustes({ tipo, config, aoMudarConfig, blocosDeReencontro, fluxosChamaveis }: Props) {
   const t = useT();
   const mudar = (patch: Record<string, unknown>) => aoMudarConfig({ ...config, ...patch });
 
@@ -132,7 +155,13 @@ function Ajustes({ tipo, config, aoMudarConfig }: Props) {
       );
 
     case "logic.fork":
-      return <AjustesDaBifurcacao config={config} aoMudarConfig={aoMudarConfig} />;
+      return (
+        <AjustesDaBifurcacao
+          config={config}
+          aoMudarConfig={aoMudarConfig}
+          blocosDeReencontro={blocosDeReencontro ?? []}
+        />
+      );
 
     case "logic.merge":
       return (
@@ -232,22 +261,40 @@ function Ajustes({ tipo, config, aoMudarConfig }: Props) {
       );
     }
 
-    case "flow.call":
+    case "flow.call": {
+      // ⚠️ Só os PUBLICADOS entram na lista. Um fluxo em rascunho não roda, e
+      // oferecê-lo aqui produziria um bloco que publica e falha na primeira
+      // execução — com a causa a dois cliques de distância de quem montou.
+      const chamaveis = (fluxosChamaveis ?? []).filter((f) => f.publicado);
       return (
         <Campo rotulo={t("Qual fluxo chamar")}>
-          <Input
-            value={String(config.fluxo_id ?? "")}
-            maxLength={36}
-            onChange={(e) => mudar({ fluxo_id: e.target.value })}
-            data-testid="campo-fluxo-chamado"
-          />
-          <Dica
-            texto={t(
-              "O identificador do fluxo, que aparece no endereço da tela dele. Ele precisa estar publicado.",
-            )}
-          />
+          {chamaveis.length === 0 ? (
+            <p className="text-xs text-muted-foreground" data-testid="sem-fluxo-chamavel">
+              {t(
+                "Nenhum outro fluxo publicado nesta organização. Publique o fluxo que você quer chamar primeiro.",
+              )}
+            </p>
+          ) : (
+            <Select
+              value={String(config.fluxo_id ?? "")}
+              onValueChange={(v) => mudar({ fluxo_id: v })}
+            >
+              <SelectTrigger data-testid="campo-fluxo-chamado">
+                <SelectValue placeholder={t("Escolha o fluxo")} />
+              </SelectTrigger>
+              <SelectContent>
+                {chamaveis.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Dica texto={t("Ele roda inteiro, e este fluxo continua quando ele terminar.")} />
         </Campo>
       );
+    }
 
     case "crm.add_tag":
       return (
@@ -420,9 +467,11 @@ interface RamoDoFork {
 function AjustesDaBifurcacao({
   config,
   aoMudarConfig,
+  blocosDeReencontro,
 }: {
   config: Record<string, unknown>;
   aoMudarConfig: (c: Record<string, unknown>) => void;
+  blocosDeReencontro: readonly BlocoAlcancavel[];
 }) {
   const t = useT();
   const ramos = (Array.isArray(config.ramos) ? config.ramos : []) as RamoDoFork[];
@@ -460,15 +509,35 @@ function AjustesDaBifurcacao({
       </Campo>
 
       <Campo rotulo={t("Bloco de reencontro")}>
-        <Input
-          value={String(config.encontro ?? "")}
-          maxLength={64}
-          onChange={(e) => aoMudarConfig({ ...config, encontro: e.target.value })}
-          data-testid="campo-encontro-do-fork"
-        />
+        {blocosDeReencontro.length === 0 ? (
+          // O caso que o campo de texto escondia: não há para onde apontar
+          // ainda. Dizer isso é melhor que oferecer uma caixa vazia onde a
+          // pessoa digita um nome que não existe e só descobre ao publicar.
+          <p className="text-xs text-muted-foreground" data-testid="sem-bloco-de-reencontro">
+            {t(
+              "Nenhum bloco de reencontro no fluxo ainda. Acrescente um pela paleta — é ele que junta os caminhos de volta.",
+            )}
+          </p>
+        ) : (
+          <Select
+            value={String(config.encontro ?? "")}
+            onValueChange={(v) => aoMudarConfig({ ...config, encontro: v })}
+          >
+            <SelectTrigger data-testid="campo-encontro-do-fork">
+              <SelectValue placeholder={t("Escolha o bloco de reencontro")} />
+            </SelectTrigger>
+            <SelectContent>
+              {blocosDeReencontro.map((bloco) => (
+                <SelectItem key={bloco.id} value={bloco.id}>
+                  {bloco.rotulo}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Dica
           texto={t(
-            "O nome do bloco 'Reencontro' onde estes caminhos voltam a ser um só. Sem ele o fluxo não publica.",
+            "Onde estes caminhos voltam a ser um só. Sem ele o fluxo não publica.",
           )}
         />
       </Campo>
