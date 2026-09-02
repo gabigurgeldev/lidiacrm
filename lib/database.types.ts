@@ -2367,8 +2367,11 @@ export type Database = {
           organization_id: string
           phone_number: string | null
           provider: string
+          provider_mode: string | null
           status: string
           status_reason: string | null
+          stevo_instance_id: string | null
+          stevo_token_encrypted: string | null
           updated_at: string
           waha_session_name: string | null
           warmup_completed_at: string | null
@@ -2397,8 +2400,11 @@ export type Database = {
           organization_id: string
           phone_number?: string | null
           provider?: string
+          provider_mode?: string | null
           status?: string
           status_reason?: string | null
+          stevo_instance_id?: string | null
+          stevo_token_encrypted?: string | null
           updated_at?: string
           waha_session_name?: string | null
           warmup_completed_at?: string | null
@@ -2427,8 +2433,11 @@ export type Database = {
           organization_id?: string
           phone_number?: string | null
           provider?: string
+          provider_mode?: string | null
           status?: string
           status_reason?: string | null
+          stevo_instance_id?: string | null
+          stevo_token_encrypted?: string | null
           updated_at?: string
           waha_session_name?: string | null
           warmup_completed_at?: string | null

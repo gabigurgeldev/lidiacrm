@@ -3,6 +3,7 @@
  * pede o adapter do provider da conversa e o descritor de capabilities.
  */
 import { metaCloudAdapter } from "./adapters/meta-cloud";
+import { stevoAdapter } from "./adapters/stevo";
 import { wahaAdapter } from "./adapters/waha";
 import { zernioAdapter } from "./adapters/zernio";
 import type { ChannelAdapter, ChannelProvider } from "./types";
@@ -11,6 +12,7 @@ const ADAPTERS: Record<ChannelProvider, ChannelAdapter | null> = {
   waha: wahaAdapter,
   meta_cloud: metaCloudAdapter,
   zernio: zernioAdapter,
+  stevo: stevoAdapter,
 };
 
 /**
@@ -23,7 +25,12 @@ export function getAdapter(provider: ChannelProvider): ChannelAdapter {
   return adapter;
 }
 
-export { capabilitiesOf, CHANNEL_CAPABILITIES, DEFAULT_CHANNEL_PROVIDER } from "./capabilities";
+export {
+  capabilitiesOf,
+  capabilitiesOfSession,
+  CHANNEL_CAPABILITIES,
+  DEFAULT_CHANNEL_PROVIDER,
+} from "./capabilities";
 export { CHANNEL_SESSION_REF_COLUMNS, resolveSessionRef } from "./session-ref";
 export type { ChannelSessionRef } from "./session-ref";
 export type {

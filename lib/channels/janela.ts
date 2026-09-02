@@ -26,7 +26,7 @@
  * `last_inbound_at`, e guardá-la criaria uma segunda verdade que envelhece
  * sozinha — parecendo autoritativa justamente quando já está errada.
  */
-import { capabilitiesOf } from "./capabilities";
+import { capabilitiesOfSession } from "./capabilities";
 import { WINDOW_MS, windowRemainingMs } from "@/lib/agent-engine/guardrails/messaging-window";
 import type { ChannelProvider } from "./types";
 
@@ -57,10 +57,19 @@ export function estadoDaJanela(
   provider: string | null | undefined,
   lastInboundAt: string | null,
   agora: Date,
+  /**
+   * `channel_sessions.provider_mode` — a modalidade, para o provider que hospeda
+   * mais de uma.
+   *
+   * OPCIONAL e no fim de propósito: os chamadores antigos (que sabem que o canal
+   * deles tem modalidade única) não mudam uma linha, e quem tem a informação a
+   * passa. `undefined` cai na linha do provider, que é a conservadora.
+   */
+  modo?: string | null,
 ): EstadoDaJanela {
   if (!provider) return { tipo: "sem_restricao" };
 
-  const caps = capabilitiesOf(provider as ChannelProvider);
+  const caps = capabilitiesOfSession({ provider: provider as ChannelProvider, mode: modo });
   // `freeformOutsideWindow: true` = o canal aceita texto livre a qualquer hora.
   // Mostrar um relógio nele seria inventar uma urgência que não existe.
   if (caps.freeformOutsideWindow) return { tipo: "sem_restricao" };

@@ -31,12 +31,16 @@ export const PARTNER_CHANNEL_PROVIDER: ChannelProvider = CHANNEL_PROVIDER_ZERNIO
 /**
  * Como o canal se chama PARA O USUÁRIO.
  *
- * O nome comercial mora aqui e não na tela por causa do lint — mas a razão é
- * anterior a ele: quem instala reconhece a marca do serviço que contratou, e a
+ * O nome comercial mora nesta pasta e não na tela por causa do lint — mas a razão
+ * é anterior a ele: quem instala reconhece a marca do serviço que contratou, e a
  * tela que diz "provedor parceiro" obriga a adivinhar. O rótulo é dado, não
  * decisão de quem desenha a tela.
+ *
+ * A string em si vive em `tipo-de-conexao.ts` porque o SELO também precisa dela,
+ * e ele não pode importar este arquivo (que fala com o servidor do provider). Duas
+ * constantes com a mesma marca divergiriam na primeira renomeação comercial.
  */
-export const PARTNER_CHANNEL_LABEL = "Zernio";
+export { ROTULO_PARCEIRO_ZERNIO as PARTNER_CHANNEL_LABEL } from "./tipo-de-conexao";
 
 export interface PartnerCredentialsInput {
   accountId: string;

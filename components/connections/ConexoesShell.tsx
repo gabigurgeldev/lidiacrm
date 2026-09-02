@@ -3,12 +3,33 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+import { CanalContaClient } from "./CanalContaClient";
 import { CanalOficialClient } from "./CanalOficialClient";
 import { CanalParceiroClient } from "./CanalParceiroClient";
 import { ConnectionsClient } from "./ConnectionsClient";
 import { TemplatesClient } from "./TemplatesClient";
 import { TemplatesParceiroClient } from "./TemplatesParceiroClient";
 import { useT } from "@/hooks/i18n/useT";
+
+/**
+ * O trilho e o gatilho do segmented control.
+ *
+ * Constantes e não literais repetidos porque esta tela tem TRÊS filas de abas
+ * (a de topo e uma sub-fila em cada canal conectado por credencial), e uma delas
+ * ficando para trás numa mudança de estilo é o defeito visual que ninguém abre
+ * issue para relatar — só acha feio.
+ *
+ * Só a classe, sem utilitários de anulação: `globals.css` injeta as utilities do
+ * Tailwind no topo do arquivo (`@tailwind utilities`, linha 3) e `.ios-segmentado`
+ * vem centenas de linhas DEPOIS com a mesma especificidade — então ela já vence
+ * `bg-muted`, `rounded-lg` e `p-1` do `TabsList` por ordem de cascata. Escrever
+ * `bg-transparent` aqui seria ruído que não faz nada e sugere que faz.
+ *
+ * O que fica de propósito: `max-w-full overflow-x-auto` do componente, que é o
+ * que impede a fila de abas de fazer a PÁGINA rolar na horizontal em 390px.
+ */
+const SEGMENTADO = "ios-segmentado";
+const GATILHO = "rounded-full px-3.5 py-1.5 text-[13px]";
 
 /**
  * Conexões — TODOS os canais em um lugar só.
@@ -53,7 +74,11 @@ export function ConexoesShell({ wahaConfigured }: { wahaConfigured: boolean }) {
 
   return (
     <Tabs value={aba} onValueChange={(v) => irPara(v, sub)} className="flex flex-col gap-4">
-      <TabsList>
+      {/* Segmented control (`.ios-segmentado`) — a forma canônica desde
+          2026-09-01, quando o anti-pattern 18 foi revogado. O trilho vem do CSS;
+          o estado ativo continua vindo das classes do próprio `TabsTrigger`,
+          para não haver duas fontes disputando a mesma pintura. */}
+      <TabsList className={SEGMENTADO}>
         {/* Rótulos pelo que o usuário RECONHECE, não pelo nome técnico do motor por
             trás: ele sabe se leu um QR ou se tem conta na Meta; a sigla do provedor
             não diz nada a quem instalou o sistema para vender.
@@ -64,13 +89,13 @@ export function ConexoesShell({ wahaConfigured }: { wahaConfigured: boolean }) {
             a frase custou menos que abrir exceção no gate, e o gate continua
             estrito: o dia em que alguém escrever o nome do provider aqui DE VERDADE,
             ele reprova igual. */}
-        <TabsTrigger value="numeros">{t("Números por QR")}</TabsTrigger>
-        <TabsTrigger value="oficial">{t("API Oficial (Meta)")}</TabsTrigger>
+        <TabsTrigger value="numeros" className={GATILHO}>{t("Números por QR")}</TabsTrigger>
+        <TabsTrigger value="oficial" className={GATILHO}>{t("API Oficial (Meta)")}</TabsTrigger>
         {/* "Provedor parceiro" e não a marca: o rótulo da marca vem do servidor
             (`lib/channels/connect`), porque a tela não pode nomear provider — e
             porque no dia em que houver um segundo parceiro esta aba não muda.
             Aqui fica o CONCEITO; lá dentro o cartão diz de quem se trata. */}
-        <TabsTrigger value="parceiro">{t("Provedor parceiro")}</TabsTrigger>
+        <TabsTrigger value="parceiro" className={GATILHO}>{t("Provedor parceiro")}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="numeros" className="mt-0">
@@ -84,12 +109,22 @@ export function ConexoesShell({ wahaConfigured }: { wahaConfigured: boolean }) {
             para não colidir com "Templates" da barra lateral, que significa
             OUTRA coisa (respostas rápidas do atendente). */}
         <Tabs value={sub} onValueChange={(v) => irPara("parceiro", v)} className="flex flex-col gap-4">
-          <TabsList>
-            <TabsTrigger value="conexao">{t("Conexão")}</TabsTrigger>
-            <TabsTrigger value="templates">{t("Modelos do parceiro")}</TabsTrigger>
+          <TabsList className={SEGMENTADO}>
+            <TabsTrigger value="conexao" className={GATILHO}>{t("Conexão")}</TabsTrigger>
+            <TabsTrigger value="templates" className={GATILHO}>{t("Modelos do parceiro")}</TabsTrigger>
           </TabsList>
           <TabsContent value="conexao" className="mt-0">
-            <CanalParceiroClient />
+            {/* DUAS formas de conectar por parceiro, e não uma escolha entre
+                elas: um parceiro pede a credencial de UMA conta já ligada à
+                WABA; o outro emite chave de CONTA e devolve a lista de números.
+                Empilhadas em vez de viradas numa terceira aba porque a pergunta
+                do operador é "conectar pelo meu provedor", e ele reconhece o
+                seu pelo nome dentro do cartão — não por uma aba a mais que ele
+                teria de abrir para descobrir qual é. */}
+            <div className="flex flex-col gap-6">
+              <CanalContaClient />
+              <CanalParceiroClient />
+            </div>
           </TabsContent>
           <TabsContent value="templates" className="mt-0">
             <TemplatesParceiroClient />
@@ -99,15 +134,15 @@ export function ConexoesShell({ wahaConfigured }: { wahaConfigured: boolean }) {
 
       <TabsContent value="oficial" className="mt-0">
         <Tabs value={sub} onValueChange={(v) => irPara("oficial", v)} className="flex flex-col gap-4">
-          <TabsList>
-            <TabsTrigger value="conexao">{t("Conexão")}</TabsTrigger>
+          <TabsList className={SEGMENTADO}>
+            <TabsTrigger value="conexao" className={GATILHO}>{t("Conexão")}</TabsTrigger>
             {/* "Templates da Meta", não "Templates": a barra lateral já tem um item
                 com esse nome que significa OUTRA coisa — respostas rápidas salvas
                 pelo atendente (`/app/templates`). Dois conceitos com o mesmo rótulo
                 fazem o operador clicar no errado e concluir que a tela está quebrada.
                 A colisão é anterior a esta mudança; o que dá para fazer aqui é não
                 agravá-la. */}
-            <TabsTrigger value="templates">{t("Templates da Meta")}</TabsTrigger>
+            <TabsTrigger value="templates" className={GATILHO}>{t("Templates da Meta")}</TabsTrigger>
           </TabsList>
           <TabsContent value="conexao" className="mt-0">
             <CanalOficialClient />

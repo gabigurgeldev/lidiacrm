@@ -38,9 +38,19 @@ import { cn } from "@/lib/utils";
 export function JanelaSelo({
   provider,
   lastInboundAt,
+  modo,
 }: {
   provider: string | null | undefined;
   lastInboundAt: string | null;
+  /**
+   * `channel_sessions.provider_mode`, quando o canal tem mais de uma modalidade.
+   *
+   * Sem ele, uma instância OFICIAL de um provider que também hospeda número por
+   * QR cairia no fallback conservador e o selo apareceria como "fechada" onde a
+   * janela ainda está aberta — ou, pior, o contrário. Quem resolve é quem tem a
+   * lista de canais em mãos; este componente só desenha.
+   */
+  modo?: string | null;
 }) {
   const t = useT();
   // O relógio do servidor não serve: o que importa é quanto falta AGORA, na
@@ -51,7 +61,7 @@ export function JanelaSelo({
     return () => clearInterval(t);
   }, []);
 
-  const estado = estadoDaJanela(provider, lastInboundAt, agora);
+  const estado = estadoDaJanela(provider, lastInboundAt, agora, modo);
   if (estado.tipo === "sem_restricao") return null;
 
   if (estado.tipo === "fechada") {

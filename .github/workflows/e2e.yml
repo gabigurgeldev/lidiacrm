@@ -390,9 +390,30 @@ jobs:
       #      com consentimento pré-aprovado. Sem ela o job pararia num
       #      `accounts.google.com` esperando login humano — e é por isto que ela
       #      fica FORA do CI em vez de ficar sem existir.
+      #
+      # ═══ `conexoes-multicanal`: FORA POR TEMPO, e o motivo é do JOB ═══
+      #
+      # Ela não precisa de recurso externo nenhum — semeia as linhas de canal com
+      # o service role, exatamente como a ingestão do webhook faria, e mede a
+      # tela. Rodaria aqui sem WAHA, sem Redis e sem credencial de provedor.
+      #
+      # O que a segura é o ORÇAMENTO DE TEMPO deste job, e ele já estava
+      # estourado antes dela existir: medido nos runs da própria `main`, 4 dos 6
+      # mais recentes falharam entre 25 e 29 minutos, incluindo `8eb6d1a9` — o
+      # commit base do PR que a trouxe. Acrescentar specs a um job que já bate no
+      # teto empurra o vermelho para mais perto sem provar nada de novo.
+      #
+      # Ela fica versionada e roda à mão:
+      #   E2E_PORT=3021 pnpm exec playwright test tests/e2e/conexoes-multicanal.spec.ts
+      #
+      # ⚠️ ESTA ENTRADA DEVE SAIR quando o tempo do job for resolvido — ela é
+      # dívida de ORÇAMENTO, não de dependência, e é a única das três aqui que
+      # não precisa de nada além do que o CI já tem. Confundir as duas naturezas
+      # faria a próxima pessoa concluir que ela também espera credencial.
       FORA_DO_CI: >-
         vps-fresh-onboarding.spec.ts
         inbox-tempo-real.spec.ts
+        conexoes-multicanal.spec.ts
     steps:
       - uses: actions/checkout@v7
 
@@ -719,7 +740,12 @@ jobs:
             echo "**Rodou: ${RODOU} de ${NO_DISCO} specs**, em duas partes paralelas."
             echo ""
             echo "**Não rodou (${FORA}):**"
-            for s in $FORA_LISTA; do echo "- \`${s}\` — precisa de WAHA + Redis + Resend + Nuvemshop (P0 da doutrina de QA Visual)"; done
+            # O motivo NÃO é o mesmo para todas, e afirmar um só era falso desde
+            # que a lista passou a ter naturezas diferentes: duas esperam
+            # recurso externo, uma espera orçamento de tempo deste job. O
+            # summary aponta para onde o motivo está escrito em vez de repetir
+            # um que envelhece — a razão de cada uma mora no bloco FORA_DO_CI.
+            for s in $FORA_LISTA; do echo "- \`${s}\` — motivo no bloco \`FORA_DO_CI\` de \`.github/workflows/e2e.yml\`"; done
             echo ""
             echo "A soma é conferida mecanicamente por \`tests/unit/e2e-cobertura-completa.test.ts\`:"
             echo "spec no disco que não esteja em nenhuma das três listas reprova o build."

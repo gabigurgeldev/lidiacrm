@@ -1,0 +1,257 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Conexões — vários números, quatro canais, uma regra por linha",
+    "subtitle": "por que a modalidade deixou de sair do provider, por que a descoberta de instâncias tem um passo a mais, e como o selo chega até a bolha",
+    "output": "conexoes-multicanal.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que o operador vê" },
+    { "id": "borda", "label": "Borda HTTP" },
+    { "id": "seam", "label": "lib/channels — o único que nomeia provider" },
+    { "id": "provedor", "label": "Fora (o provedor)" },
+    { "id": "banco", "label": "Banco" },
+    { "id": "volta", "label": "O laço de retorno" }
+  ],
+  "mainPath": [
+    "conexoes",
+    "descobrir",
+    "escolher",
+    "importar",
+    "sessoes",
+    "webhookIn",
+    "ingest",
+    "inbox"
+  ],
+  "nodes": [
+    {
+      "id": "conexoes",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "Conexões (3 abas)",
+      "sublabel": "components/connections/ConexoesShell.tsx · segmented control; o cartão é UM só para os quatro canais (CartaoDeCanal)"
+    },
+    {
+      "id": "oficialTela",
+      "lane": "humano",
+      "col": 1,
+      "type": "frontend",
+      "label": "Canal oficial — LISTA",
+      "sublabel": "CanalOficialClient.tsx · era um formulário só; cada número traz a SUA URL de webhook"
+    },
+    {
+      "id": "escolher",
+      "lane": "humano",
+      "col": 3,
+      "type": "frontend",
+      "label": "Escolher quais números atender",
+      "sublabel": "CanalContaClient.tsx · o passo que as outras conexões não têm — a chave alcança números que o operador pode não querer aqui"
+    },
+    {
+      "id": "descobrir",
+      "lane": "borda",
+      "col": 2,
+      "type": "api",
+      "label": "POST /channels/account",
+      "sublabel": "valida a chave e NÃO grava nada · caminho neutro: a rota não pode nomear provider"
+    },
+    {
+      "id": "importar",
+      "lane": "borda",
+      "col": 4,
+      "type": "api",
+      "label": "POST /channels/account/instances",
+      "sublabel": "uma linha por instância · a chave vem no corpo, não fica guardada entre os dois passos"
+    },
+    {
+      "id": "oficialRota",
+      "lane": "borda",
+      "col": 2,
+      "type": "api",
+      "label": "GET/POST /channels/official",
+      "sublabel": "coleção · a identidade é o meta_phone_number_id, e é ISSO que separa reconectar de conectar mais um"
+    },
+    {
+      "id": "webhookIn",
+      "lane": "borda",
+      "col": 5,
+      "type": "api",
+      "label": "POST /webhooks/channel/{token}",
+      "sublabel": "rota NEUTRA já existente · o caminho não cita provider nenhum"
+    },
+    {
+      "id": "conta",
+      "lane": "seam",
+      "col": 3,
+      "type": "lib",
+      "label": "conta-de-instancias.ts",
+      "sublabel": "a fachada: rótulo comercial, validação e importação · é ela que traduz is_official_api em provider_mode"
+    },
+    {
+      "id": "capabilities",
+      "lane": "seam",
+      "col": 4,
+      "type": "lib",
+      "label": "capabilitiesOfSession({provider, mode})",
+      "sublabel": "a mudança estrutural: a regra de envio passou a sair da LINHA, não da identidade do provider"
+    },
+    {
+      "id": "tipo",
+      "lane": "seam",
+      "col": 5,
+      "type": "lib",
+      "label": "conexaoNaTela(provider, modo)",
+      "sublabel": "dois eixos: transporte (qr|oficial) × viaParceiro · desconhecido NÃO desenha selo"
+    },
+    {
+      "id": "adapter",
+      "lane": "seam",
+      "col": 5,
+      "type": "lib",
+      "label": "getAdapter → stevoAdapter",
+      "sublabel": "isConfigured() é true e quem desiste é send(), que LANÇA — null faria o handler gravar 'sent' sem sair"
+    },
+    {
+      "id": "inboundSeam",
+      "lane": "seam",
+      "col": 5,
+      "type": "lib",
+      "label": "handleInboundWebhook",
+      "sublabel": "switch por provider mora aqui · a rota entrega o cru e recebe um desfecho"
+    },
+    {
+      "id": "ingest",
+      "lane": "seam",
+      "col": 6,
+      "type": "lib",
+      "label": "ingestStevoInbound",
+      "sublabel": "reusa fn_upsert_wa_contact/conversation · dedupe por 23505 E por janela de 1min quando falta id"
+    },
+    {
+      "id": "apiConta",
+      "lane": "provedor",
+      "col": 2,
+      "type": "external",
+      "label": "GET /v1/instances",
+      "sublabel": "uma chave de CONTA devolve todas as instâncias, com is_official_api por instância"
+    },
+    {
+      "id": "apiWebhook",
+      "lane": "provedor",
+      "col": 4,
+      "type": "external",
+      "label": "PUT /v1/instances/{id}/webhook",
+      "sublabel": "o CRM aponta o webhook sozinho — é o passo manual que emperra a instalação do canal oficial"
+    },
+    {
+      "id": "apiEnvio",
+      "lane": "provedor",
+      "col": 6,
+      "type": "external",
+      "label": "POST /v1/instances/{id}/messages",
+      "sublabel": "um endpoint serve as DUAS modalidades · sent:false com HTTP 200 é falha"
+    },
+    {
+      "id": "sessoes",
+      "lane": "banco",
+      "col": 4,
+      "type": "table",
+      "label": "channel_sessions (+ provider_mode)",
+      "sublabel": "migration 0206 · provider_mode nullable: null significa 'provider de modalidade única'"
+    },
+    {
+      "id": "handler",
+      "lane": "seam",
+      "col": 6,
+      "type": "lib",
+      "label": "sendMessageHandler",
+      "sublabel": "o ponto ÚNICO de saída, inalterado — o canal novo entrou pelo adapter, não por um caminho próprio"
+    },
+    {
+      "id": "inbox",
+      "lane": "volta",
+      "col": 7,
+      "type": "frontend",
+      "label": "Inbox: lista, cabeçalho e BOLHA",
+      "sublabel": "TipoDeCanal em três variantes · a bolha recebe o canal por prop, nunca consulta"
+    },
+    {
+      "id": "janela",
+      "lane": "volta",
+      "col": 7,
+      "type": "frontend",
+      "label": "JanelaSelo / composer bloqueado",
+      "sublabel": "quem pergunta 'dá para escrever agora?' passou a receber a resposta da SESSÃO"
+    },
+    {
+      "id": "trilha",
+      "lane": "volta",
+      "col": 6,
+      "type": "table",
+      "label": "api_audit_log",
+      "sublabel": "channel.connected na importação (com quais ficaram sem webhook) · channel.renamed no apelido"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "conexoes", "to": "oficialTela", "label": "aba do canal oficial" },
+    { "id": "e2", "from": "conexoes", "to": "escolher", "label": "aba do provedor parceiro" },
+    { "id": "e3", "from": "escolher", "to": "descobrir", "label": "cola a chave da conta" },
+    { "id": "e4", "from": "descobrir", "to": "conta", "label": "a rota não sabe com quem fala" },
+    { "id": "e5", "from": "conta", "to": "apiConta", "label": "valida ANTES de gravar" },
+    { "id": "e6", "from": "apiConta", "to": "escolher", "label": "a lista de números, com a modalidade de cada um" },
+    { "id": "e7", "from": "escolher", "to": "importar", "label": "marca os que quer atender" },
+    { "id": "e8", "from": "importar", "to": "conta", "label": "delega — a rota não nomeia provider" },
+    { "id": "e9", "from": "conta", "to": "sessoes", "label": "uma linha por instância, com provider_mode" },
+    { "id": "e10", "from": "conta", "to": "apiWebhook", "label": "aponta o webhook para esta instalação" },
+    { "id": "e11", "from": "importar", "to": "trilha", "label": "quantas, e quais ficaram sem webhook" },
+    { "id": "e12", "from": "oficialTela", "to": "oficialRota", "label": "conectar outro número / renomear" },
+    { "id": "e13", "from": "oficialRota", "to": "sessoes", "label": "insere quando o número é novo; ressuscita quando é o mesmo" },
+    { "id": "e14", "from": "apiWebhook", "to": "webhookIn", "label": "o provedor passa a entregar aqui" },
+    { "id": "e15", "from": "webhookIn", "to": "inboundSeam", "label": "corpo cru + a sessão do token" },
+    { "id": "e16", "from": "inboundSeam", "to": "ingest", "label": "case do provider" },
+    { "id": "e17", "from": "ingest", "to": "inbox", "label": "contato, conversa e mensagem" },
+    { "id": "e18", "from": "sessoes", "to": "capabilities", "label": "provider + modo" },
+    { "id": "e19", "from": "capabilities", "to": "janela", "label": "tem janela de 24h? cabe texto livre?" },
+    { "id": "e20", "from": "sessoes", "to": "tipo", "label": "provider + modo" },
+    { "id": "e21", "from": "tipo", "to": "inbox", "label": "o selo, em três variantes" },
+    { "id": "e22", "from": "inbox", "to": "handler", "label": "responder" },
+    { "id": "e23", "from": "handler", "to": "adapter", "label": "getAdapter(provider da conversa)" },
+    { "id": "e24", "from": "adapter", "to": "apiEnvio", "label": "um endpoint para as duas modalidades" },
+    {
+      "id": "e25",
+      "from": "ingest",
+      "to": "trilha",
+      "label": "aplicarEfeitosPosEntrada: opt-out, demanda e despacho do agente"
+    }
+  ],
+  "naoLigacoes": [
+    {
+      "de": "tipo",
+      "para": "adapter",
+      "porque": "O selo NÃO pergunta nada ao transporte. Ele é função pura de duas colunas já lidas — e é o que permite desenhá-lo em toda bolha de uma thread de centenas de mensagens sem uma única ida à rede."
+    },
+    {
+      "de": "inbox",
+      "para": "sessoes",
+      "porque": "A bolha não consulta canal. O mapa é resolvido UMA vez pelo ChatThread a partir de useChannelSessions (query já em cache, compartilhada com o seletor de números e o sinal de saúde da barra lateral); a bolha recebe dois campos por prop. Uma conversa de trezentas mensagens montaria trezentas consultas."
+    },
+    {
+      "de": "webhookIn",
+      "para": "hmac",
+      "porque": "Este provedor NÃO documenta assinatura de webhook — o que autentica é o webhook_path_token do caminho, gerado por nós e rotacionado na exclusão. É mais fraco num ponto concreto: quem observar a URL pode reenviá-la. Registrado no cabeçalho de lib/channels/inbound.ts para ninguém 'copiar a verificação do vizinho' e concluir que o canal está quebrado."
+    },
+    {
+      "de": "conexoes",
+      "para": "templatesDaConta",
+      "porque": "A instância oficial deste intermediário TEM definições aprovadas, mas a fonte de templates é escolhida por PROVIDER, e este hospeda as duas modalidades: apontar uma rota faria o número por QR — que não tem definição nenhuma — oferecer um seletor vazio. Escolher pela modalidade exige que o mapa receba a sessão, mudança que atravessa todos os chamadores. Dívida DECLARADA em lib/channels/templates-fonte.ts."
+    },
+    {
+      "de": "handler",
+      "para": "modalidade",
+      "porque": "O adapter não ramifica por modalidade e não deve: ele traduz formato. Quem sabe se cabe texto livre é capabilitiesOfSession, consultada pela cadeia before_send — um `if` de modalidade dentro do adapter seria regra de negócio no tradutor, que é o que a doutrina restricao-de-canal proíbe."
+    }
+  ]
+}

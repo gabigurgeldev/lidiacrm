@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Message } from "@/lib/types/messaging";
 import { CitationButton } from "@/components/ai/CitationButton";
+import { TipoDeCanal } from "@/components/channels/TipoDeCanal";
+import { conexaoNaTela } from "@/lib/channels/tipo-de-conexao";
 import { MediaRenderer } from "@/components/inbox/media/MediaRenderer";
 import { ContactCard } from "@/components/inbox/media/ContactCard";
 import {
@@ -22,6 +24,33 @@ interface Props {
   onResponder?: (m: Message) => void;
   /** A mensagem citada por ESTA, quando houver — desenha o fio. */
   citada?: Message | null;
+  /**
+   * Esta é a primeira de um bloco do mesmo autor?
+   *
+   * ⚠️ É O QUE FAZ UMA PILHA DE RETÂNGULOS VIRAR UMA CONVERSA. Só a primeira do
+   * bloco leva o rabo e o espaçamento cheio; as seguintes colam. Sem isso, dez
+   * mensagens seguidas da mesma pessoa parecem dez interrupções — que é
+   * exatamente como o inbox se lia antes.
+   *
+   * Default `true` porque uma bolha isolada (uma prévia, um teste) é sempre a
+   * primeira do próprio bloco.
+   */
+  primeiraDoBloco?: boolean;
+  /**
+   * POR ONDE esta mensagem passou — o provider da sessão que a carregou, e a
+   * modalidade dele quando houver mais de uma.
+   *
+   * ⚠️ CHEGA POR PROP, e isso é decisão de desempenho, não de gosto: a bolha
+   * não pode consultar a lista de canais, porque uma thread longa montaria a
+   * mesma consulta centenas de vezes. Quem resolve o mapa uma vez é o
+   * `ChatThread`.
+   *
+   * `undefined` = não deu para descobrir (canal excluído sem fallback, resposta
+   * antiga em cache). O selo simplesmente não aparece — afirmar a regra de envio
+   * errada é pior que não afirmar nada.
+   */
+  canalProvider?: string | null;
+  canalModo?: string | null;
 }
 
 function AckIndicator({ status, t }: { status: string; t: (texto: string) => string }) {
@@ -37,7 +66,15 @@ function AckIndicator({ status, t }: { status: string; t: (texto: string) => str
   return null;
 }
 
-export function MessageBubble({ message, debugCitations, onResponder, citada }: Props) {
+export function MessageBubble({
+  message,
+  debugCitations,
+  onResponder,
+  citada,
+  primeiraDoBloco = true,
+  canalProvider,
+  canalModo,
+}: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const isOutbound = message.direction === "outbound";
@@ -57,16 +94,48 @@ export function MessageBubble({ message, debugCitations, onResponder, citada }: 
   const citations = extractCitations(message.metadata);
   const showCitationButton =
     isOutbound && aiGenerated && (debugCitations ?? false);
+  /**
+   * A HORA DENTRO DA BOLHA, com o texto correndo em volta.
+   *
+   * É o detalhe que mais denuncia "não é WhatsApp": a hora numa linha própria
+   * empurra a bolha para baixo em toda mensagem de duas palavras — "Que bom"
+   * virava um retângulo de duas linhas.
+   *
+   * ⚠️ SÓ PARA TEXTO PURO, e cada exclusão foi pesada:
+   *  - com MÍDIA, o metadado flutuaria sobre a imagem e precisaria de sombra
+   *    própria para continuar legível — ou cairia em cima do botão do áudio;
+   *  - com CITAÇÃO, a bolha tem um bloco no topo e a reserva no fim do texto
+   *    abriria um buraco no meio;
+   *  - APAGADA é uma frase do CRM narrando, não fala de ninguém: reservar
+   *    espaço ali daria a ela um enquadramento que ela não pede.
+   */
+  const horaFlutuante =
+    !hasMedia && !isContact && !apagada && !citada && Boolean(message.body?.trim());
+
   const senderLabel = (() => {
     if (!isOutbound) return null;
     if (message.sent_via === "ai") return "IA";
     return null;
   })();
 
+  /**
+   * O selo de canal é desenhado?
+   *
+   * A pergunta é feita AQUI e não só dentro do `TipoDeCanal` porque a bolha
+   * precisa da resposta antes de renderizar: é ela que reserva a faixa da hora
+   * flutuante (`data-com-selo`), e reservar espaço para um selo que não aparece
+   * abriria um vão no fim de toda mensagem de canal desconhecido.
+   */
+  const temSeloDeCanal = conexaoNaTela(canalProvider, canalModo).transporte !== "desconhecido";
+
   return (
     <div
       className={cn(
-        "group flex w-full items-center gap-1 px-4 py-1",
+        "group flex w-full items-center gap-1 px-4",
+        // O respiro entre BLOCOS é o dobro do respiro DENTRO de um bloco. É o
+        // agrupamento inteiro: a mesma pessoa falando três vezes seguidas é um
+        // parágrafo, não três turnos.
+        primeiraDoBloco ? "pt-2" : "pt-0.5",
         isOutbound ? "justify-end" : "justify-start",
       )}
     >
@@ -106,15 +175,29 @@ export function MessageBubble({ message, debugCitations, onResponder, citada }: 
         </button>
       )}
       <div
+        // `data-lado` e `data-ponta` em vez de classes condicionais porque quem
+        // desenha o rabo é um `::after` (app/globals.css, bloco "INBOX"), e
+        // pseudo-elemento não existe no JSX. O rabo herda a cor da bolha com
+        // `background-color: inherit` — repeti-la no CSS criaria uma segunda
+        // fonte para a cor que o revendedor troca em runtime.
+        data-lado={isOutbound ? "saida" : "entrada"}
+        data-ponta={primeiraDoBloco && !isBareSticker ? "true" : "false"}
+        // A faixa reservada para a hora flutuante cresce quando o selo entra
+        // nela. Atributo e não classe porque quem calcula a reserva é o CSS
+        // (`--bolha-reserva`), e a conta tem que ficar do lado de quem a usa.
+        data-com-selo={temSeloDeCanal ? "true" : "false"}
         className={cn(
-          "max-w-[75%] text-sm",
+          // 65% e não 75%: numa coluna larga, uma bolha de três quartos da
+          // largura deixa de parecer uma fala e passa a parecer um bloco de
+          // texto. É a proporção que o WhatsApp usa.
+          "max-w-[65%] text-sm",
           isBareSticker
             ? "px-0 py-0"
             : cn(
-                "rounded-2xl px-3 py-2 shadow-sm",
+                "bolha px-2.5 py-1.5 shadow-sm",
                 isOutbound
-                  ? "rounded-br-sm bg-primary text-primary-foreground"
-                  : "rounded-bl-sm bg-muted text-foreground",
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-surface-elevated text-foreground",
               ),
           isFailed && "border border-destructive",
         )}
@@ -185,17 +268,43 @@ export function MessageBubble({ message, debugCitations, onResponder, citada }: 
             )}
 
             {message.body && !isContact && (
-              <p className="whitespace-pre-wrap break-words leading-snug">{message.body}</p>
+              <p
+                className={cn(
+                  "whitespace-pre-wrap break-words leading-snug",
+                  // A faixa reservada para a hora só existe quando ela vai
+                  // FLUTUAR — ver `horaFlutuante` acima. Com mídia ou citação o
+                  // metadado volta para o fluxo, e reservar espaço ali deixaria
+                  // um buraco no fim do texto.
+                  horaFlutuante && "bolha-texto",
+                )}
+              >
+                {message.body}
+              </p>
             )}
           </>
         )}
 
         <div
           className={cn(
-            "mt-1 flex items-center justify-end gap-1 text-[10px]",
+            "flex items-center justify-end gap-1 text-[10px]",
+            horaFlutuante ? "bolha-meta-flutuante" : "mt-1",
             isOutbound ? "text-primary-foreground/70" : "text-muted-foreground",
           )}
         >
+          {/* DE ONDE VEIO ESTA MENSAGEM — primeiro da fila de metadados porque é
+              o único que responde "sob qual regra isto foi dito". Uma thread pode
+              ter mensagens de antes de o número ser migrado de um canal para
+              outro, e é a mensagem, não a conversa, que guarda por onde passou.
+              Na variante `bolha` o selo é só ícone: o rótulo se repetiria em
+              cada linha e empurraria a hora para fora. */}
+          {temSeloDeCanal && (
+            <TipoDeCanal
+              provider={canalProvider}
+              modo={canalModo}
+              variante="bolha"
+              className={isOutbound ? "text-primary-foreground/70" : undefined}
+            />
+          )}
           {editada && (
             // Ao lado da hora, não no corpo: o texto mostrado JÁ é o novo, e o
             // que falta é avisar que ele mudou. Sem isso, um combinado de preço

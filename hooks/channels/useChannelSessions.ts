@@ -12,6 +12,30 @@ export interface ChannelSession {
    * canal oficial rendia rótulo vazio onde a tela concatenava esse campo.
    */
   waha_session_name: string | null;
+  /**
+   * Como o número foi ligado. Opcional porque a rota o omite quando o banco do
+   * clone ainda não tem a coluna (ver `consultaTolerante` em
+   * `lib/channels/archived.ts`) — e `undefined` ali é uma informação de
+   * verdade: "não dá para afirmar", que a tela desenha como selo nenhum.
+   *
+   * ⚠️ `string` e não uma união de nomes de provider: este arquivo é um hook de
+   * tela, e a doutrina `restricao-de-canal` reserva o NOME do provider a
+   * `lib/channels/`. Quem o interpreta é `tipoDaConexao()`.
+   */
+  provider?: string | null;
+  /**
+   * A MODALIDADE dentro do provider, quando ele hospeda mais de uma.
+   *
+   * Existe porque há provider intermediado em que a mesma conta abriga tanto
+   * instância oficial (janela de 24h, template aprovado) quanto número ligado
+   * por QR (texto livre, risco de banimento) — regras OPOSTAS sob o mesmo nome.
+   * Perguntar só o `provider` daria a resposta certa em metade dos casos.
+   *
+   * `null` para os providers de modalidade única, e `undefined` quando o banco
+   * do clone ainda não tem a coluna. Os dois casos significam "vale o que o
+   * provider disser", e é `tipoDaConexao()` quem decide.
+   */
+  provider_mode?: string | null;
   display_name: string | null;
   phone_number: string | null;
   status: string;

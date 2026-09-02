@@ -3,8 +3,11 @@ import { useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { AvatarDoContato } from "@/components/inbox/AvatarDoContato";
+import { TipoDeCanal } from "@/components/channels/TipoDeCanal";
 import { Badge } from "@/components/ui/badge";
 import { JanelaSelo } from "@/components/inbox/JanelaSelo";
+import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { Phone, ArrowRight } from "@/lib/ui/icons";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
@@ -59,6 +62,17 @@ export function ConversationHeader({ conversation }: Props) {
   const c = conversation.contacts ?? null;
   const displayName = rotuloDoContato(c);
   const phone = c?.phone_number ? phoneForDisplay(c.phone_number) : null;
+  // O canal por onde a conversa entrou. Cai no nome quando não há número (canal
+  // recém-criado ainda não sabe o próprio telefone), e some quando não há
+  // nenhum dos dois — linha "por" vazia seria pior que linha nenhuma.
+  const canal = conversation.channel_sessions ?? null;
+  const rotuloDoCanal = canal?.phone_number ?? canal?.display_name ?? null;
+  // A MODALIDADE vem da lista de canais, não do embed da conversa: o `select` de
+  // `conversations` é compartilhado e sem tolerância a coluna ausente, então uma
+  // coluna da 0206 ali derrubaria a listagem num clone atrasado. A query abaixo
+  // já está em cache (o seletor de números e o sinal de saúde a compartilham).
+  const modoDoCanal =
+    useChannelSessions().data?.find((c) => c.id === canal?.id)?.provider_mode ?? null;
   const status = conversation.status;
   const isMineAssigned = conversation.assigned_to_user_id === user.id;
   const isOpen = status === "open" || conversation.assigned_to_user_id == null;
@@ -128,7 +142,24 @@ export function ConversationHeader({ conversation }: Props) {
     // de antes (uma linha), e quando aperta a barra desce para a linha de baixo.
     // Nenhuma ação some — um menu "mais" esconderia o "Lembrar" que a spec
     // `canais-baseline` clica, e, pior, esconderia ação de quem atende.
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-4 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-4 py-2.5">
+      {/*
+        O ROSTO, que não existia aqui. A lista de conversas mostrava a foto e o
+        cabeçalho — a tela em que se olha para UMA pessoa — não mostrava nada:
+        abrir a conversa era perder o rosto que se acabou de reconhecer na lista.
+
+        `items-start` no invólucro e não `items-center` porque o bloco de
+        identidade tem três linhas (nome, quem comanda, telefone) e o avatar
+        alinha com a primeira, como no WhatsApp.
+      */}
+      <div className="flex min-w-0 items-start gap-3">
+        <AvatarDoContato
+          contactId={c?.id}
+          temFoto={Boolean(c?.avatar_storage_path)}
+          anonimizado={c?.is_anonymized}
+          nome={displayName}
+          className="mt-0.5 h-10 w-10 shrink-0"
+        />
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <h2 className="truncate text-sm font-semibold">{displayName}</h2>
@@ -141,6 +172,7 @@ export function ConversationHeader({ conversation }: Props) {
           <JanelaSelo
             provider={conversation.channel_sessions?.provider ?? null}
             lastInboundAt={conversation.last_inbound_at}
+            modo={modoDoCanal}
           />
           {/* Sem esta marca, a conversa em que o robô está calado tem exatamente
               a mesma cara de uma conversa normal — e ninguém entende por que as
@@ -181,6 +213,24 @@ export function ConversationHeader({ conversation }: Props) {
             <Phone size={11} weight="regular" aria-hidden /> {phone}
           </p>
         )}
+        {/* POR ONDE esta conversa entrou — o número DA EMPRESA, e como ele foi
+            ligado. A linha acima é o telefone do CLIENTE; empilhar as duas sem
+            rótulo faria o operador ler a de baixo como um segundo número dele.
+            Por isso "por" na frente, e por isso o selo do tipo ao lado: quem
+            responde precisa saber sob qual regra vai escrever, e o `JanelaSelo`
+            só aparece quando existe janela a contar. */}
+        {rotuloDoCanal && (
+          <p
+            className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground"
+            data-testid="canal-da-conversa"
+          >
+            <span className="truncate">
+              {t("por")} {rotuloDoCanal}
+            </span>
+            <TipoDeCanal provider={canal?.provider} variante="linha" />
+          </p>
+        )}
+      </div>
       </div>
 
       {/* `shrink-0` saiu daqui: era ele que impunha o piso de largura. Agora a

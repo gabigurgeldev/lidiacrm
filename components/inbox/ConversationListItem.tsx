@@ -6,14 +6,14 @@ import type { Locale } from "date-fns";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
 import { Phone, Robot } from "@/lib/ui/icons";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { AvatarDoContato } from "@/components/inbox/AvatarDoContato";
+import { TipoDeCanal } from "@/components/channels/TipoDeCanal";
 import { Badge } from "@/components/ui/badge";
 import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { comandoDaConversa } from "@/lib/inbox/comando-da-conversa";
 import { cn } from "@/lib/utils";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
-import { phoneForDisplay } from "@/lib/channels/phone-variants";
 
 interface Props {
   conversation: ConversationWithContact;
@@ -56,16 +56,6 @@ const STATUS_DOT: Record<string, string> = {
   archived: "bg-muted-foreground/20",
 };
 
-function initials(name: string | null | undefined, fallback: string): string {
-  const v = (name ?? "").trim();
-  if (!v) return fallback.slice(0, 2).toUpperCase();
-  const parts = v.split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return fallback.slice(0, 2).toUpperCase();
-  if (parts.length === 1) return (parts[0] ?? "").slice(0, 2).toUpperCase();
-  const first = parts[0]?.[0] ?? "";
-  const last = parts[parts.length - 1]?.[0] ?? "";
-  return (first + last).toUpperCase();
-}
 
 function relativeTime(iso: string | null, locale: Locale): string {
   if (!iso) return "";
@@ -101,7 +91,6 @@ export function ConversationListItem({
   const t = useT();
   const c = conversation.contacts ?? null;
   const displayName = rotuloDoContato(c);
-  const phoneFallback = c?.phone_number ? phoneForDisplay(c.phone_number) : "??";
   const tags = c?.tags ?? [];
   const visibleTags = tags.slice(0, 2);
   const overflow = tags.length - visibleTags.length;
@@ -148,22 +137,16 @@ export function ConversationListItem({
       aria-current={isSelected ? "true" : undefined}
     >
       <div className="relative shrink-0">
-        <Avatar className="h-10 w-10">
-          {/* Só monta a <img> quando existe arquivo: sem isso o browser pediria
-              a rota para TODO contato da lista e levaria 404 em cada um sem
-              foto — que é a maioria. O AvatarFallback do Radix já cobre o caso
-              de a imagem não carregar, então as iniciais nunca somem. */}
-          {c?.avatar_storage_path && !c?.is_anonymized ? (
-            <AvatarImage
-              src={`/api/v1/contacts/${c.id}/avatar`}
-              alt=""
-              className="object-cover"
-            />
-          ) : null}
-          <AvatarFallback className="text-xs">
-            {initials(displayName, phoneFallback)}
-          </AvatarFallback>
-        </Avatar>
+        {/* A MESMA regra de foto que o cabeçalho da conversa e o painel de
+            contato — ver `AvatarDoContato`. Eram três lugares prestes a ter
+            três cópias da mesma decisão de três partes. */}
+        <AvatarDoContato
+          contactId={c?.id}
+          temFoto={Boolean(c?.avatar_storage_path)}
+          anonimizado={c?.is_anonymized}
+          nome={displayName}
+          className="h-10 w-10"
+        />
         <span
           className={cn(
             "absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-background",
@@ -228,6 +211,13 @@ export function ConversationListItem({
               {rotuloCanal}
             </Badge>
           )}
+          {/* COMO esse número foi ligado, ao lado de QUAL número é. São duas
+              perguntas, e a segunda é a que muda o que dá para escrever: no canal
+              oficial, fora da janela de 24h só sai modelo aprovado. O selo aparece
+              sob a mesma condição do badge acima — com um canal só não há o que
+              distinguir, e o `TipoDeCanal` cala sozinho quando não dá para
+              afirmar. */}
+          {mostrarCanal && <TipoDeCanal provider={canal?.provider} className="h-4" />}
           {c?.is_blocked && (
             <Badge variant="destructive" className="h-4 px-1.5 text-[10px]">
               {t("Bloqueado")}

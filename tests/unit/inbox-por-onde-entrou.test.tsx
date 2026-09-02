@@ -102,6 +102,17 @@ describe("o elo que some sem barulho", () => {
     );
   });
 
+  it("o embed traz o ID da sessão — sem ele a conversa não casa com canal nenhum", () => {
+    // O embed nasceu com três rótulos e nenhuma chave, e isso limitava a tela a
+    // IMPRIMIR o canal: para ligar a conversa à linha do seletor, ou para a
+    // bolha descobrir por onde a mensagem saiu, é preciso o id. Casar por
+    // telefone falharia justo no canal recém-criado, que ainda não tem número.
+    const fonte = readFileSync("app/api/v1/conversations/_handler.ts", "utf8");
+    expect(fonte, "falta `id` no embed de channel_sessions").toMatch(
+      /channel_sessions:channel_session_id\s*\(\s*id\s*,/,
+    );
+  });
+
   it("a lista decide pelo NÚMERO de canais, não por um literal", () => {
     const fonte = readFileSync("components/inbox/ConversationList.tsx", "utf8");
     expect(fonte).toContain("useChannelSessions");

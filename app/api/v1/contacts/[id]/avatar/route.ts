@@ -18,7 +18,9 @@ import type { NextRequest } from "next/server";
 
 import { fail } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { sincronizarAvatar } from "@/lib/contacts/avatar-do-contato";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ok } from "@/lib/api/wrappers";
 
 export const dynamic = "force-dynamic";
 
@@ -91,4 +93,73 @@ export async function GET(
       "Cache-Control": `private, max-age=${BROWSER_CACHE_SECONDS}`,
     },
   });
+}
+
+/**
+ * POST /api/v1/contacts/{id}/avatar — busca a foto AGORA, e só uma vez.
+ *
+ * ═══ Por que existe, se já há um cron ═══
+ *
+ * O cron varre 25 contatos a cada 10 minutos, na ordem "quem nunca teve foto
+ * primeiro". Numa base de mil contatos, o que a pessoa acabou de abrir pode
+ * estar a muitas rodadas de distância — ela olha para as iniciais e conclui que
+ * o produto não mostra foto. Aqui a conversa aberta pede a dela na hora.
+ *
+ * ═══ As três guardas, e por que cada uma ═══
+ *
+ * 1. **Só quem nunca foi tentado** (`avatar_updated_at IS NULL`). Sem isso, cada
+ *    abertura de conversa viraria uma chamada ao canal — e o inbox reabre a
+ *    mesma conversa dezenas de vezes por dia. É o caminho mais curto para um 429
+ *    do WhatsApp, que derruba o ENVIO junto.
+ * 2. **Nunca em laço, nunca na lista.** Quem chama é a conversa ABERTA, uma por
+ *    vez. Uma lista de 50 linhas pedindo foto na rolagem seria 50 chamadas.
+ * 3. **Contato anonimizado nunca entra.** A função de sincronizar já fecha a
+ *    corrida no UPDATE, mas nem começar é melhor: baixar o rosto de quem pediu
+ *    remoção para depois recusar a gravação ainda é baixá-lo.
+ *
+ * Responde `ok` sempre que o pedido foi legítimo — inclusive quando não havia
+ * foto para buscar. "Não tem foto" é o estado normal da maioria dos contatos, e
+ * transformá-lo em erro faria a tela mostrar um alerta a cada conversa aberta.
+ */
+export async function POST(
+  _req: NextRequest,
+  ctx: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  const requestId = randomUUID();
+  const { id } = await ctx.params;
+
+  const authUser = await loadAuthUser();
+  const activeOrg = authUser ? await resolveActiveOrg(authUser) : null;
+  if (!activeOrg) {
+    return fail("no_active_org", "No active organization.", 403, { requestId });
+  }
+
+  const admin = createAdminClient();
+  // Service role bypassa RLS: o filtro por organization_id é obrigatório e vem
+  // da sessão, nunca do path (doutrina do CLAUDE.md).
+  const { data } = await admin
+    .from("contacts")
+    .select("id, organization_id, wa_identity, avatar_updated_at, is_anonymized")
+    .eq("id", id)
+    .eq("organization_id", activeOrg.orgId)
+    .maybeSingle();
+
+  const contato = data as {
+    id: string;
+    organization_id: string;
+    wa_identity: string | null;
+    avatar_updated_at: string | null;
+    is_anonymized: boolean | null;
+  } | null;
+
+  if (!contato) return fail("not_found", "Contato não encontrado.", 404, { requestId });
+
+  if (contato.is_anonymized || contato.avatar_updated_at !== null) {
+    // Já foi tentado (com foto ou sem), ou é anonimizado. Silêncio, não erro:
+    // ver a guarda 1 no cabeçalho.
+    return ok({ buscou: false }, { requestId });
+  }
+
+  const resultado = await sincronizarAvatar(admin, contato, { requestId });
+  return ok({ buscou: true, resultado }, { requestId });
 }

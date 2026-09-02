@@ -94,7 +94,12 @@ function canalOficial(over: Linha = {}): Linha {
     organization_id: ORG,
     provider: CHANNEL_PROVIDER_META,
     waha_session_name: null,
-    meta_phone_number_id: "999",
+    // O MESMO número que `corpoOficial` envia — e agora isso é significativo: a
+    // rota identifica o canal pelo `meta_phone_number_id`, não por "o canal
+    // oficial da org". Um id diferente aqui deixaria de ser reconexão e viraria
+    // um segundo número, que é outro caso (coberto em
+    // `tests/unit/canal-oficial-multiplos.test.ts`).
+    meta_phone_number_id: "1234567890",
     meta_token_encrypted: null,
     display_name: "Canal oficial",
     phone_number: null,
@@ -302,7 +307,12 @@ describe("POST /api/v1/channels/official — reconectar é ressuscitar", () => {
     expect(db.linhas[0]?.phone_number).toBe("+5531999998888");
   });
 
-  it("ressuscita a MESMA linha — nunca uma segunda linha oficial na org", async () => {
+  it("ressuscita a MESMA linha — nunca uma segunda linha para o MESMO número", async () => {
+    // A frase antiga era "nunca uma segunda linha oficial na org", e ela deixou
+    // de valer de propósito: conectar um segundo NÚMERO oficial passou a criar
+    // uma segunda linha. O que continua proibido — e é o que este caso guarda —
+    // é duplicar o mesmo número, que quebraria o índice único parcial da 0165 e
+    // deixaria duas linhas disputando o mesmo webhook.
     authOk();
     const db = makeDb({ sessions: [canalOficial({ archived_at: ARQUIVADO_EM })] });
     const { POST } = await import("@/app/api/v1/channels/official/route");
@@ -370,7 +380,11 @@ describe("POST /api/v1/channels/official — reconectar é ressuscitar", () => {
 describe("GET /api/v1/channels/official — a tela não chama de conectado o que foi excluído", () => {
   const req = () => new NextRequest("http://localhost/api/v1/channels/official");
 
-  it("⭐ canal oficial EXCLUÍDO: `connected: false` e nenhuma URL de webhook", async () => {
+  // ⚠️ A rota passou a devolver uma LISTA (`data.channels`) quando conectar um
+  // segundo número oficial deixou de sobrescrever o primeiro. "Conectado" virou
+  // "há item na lista"; o que está sendo medido aqui é o mesmo de antes — canal
+  // arquivado não conta —, só que na forma nova.
+  it("⭐ canal oficial EXCLUÍDO some da lista, e com ele a URL de webhook", async () => {
     authOk();
     makeDb({ sessions: [canalOficial({ archived_at: ARQUIVADO_EM, webhook_path_token: "tok" })] });
     const { GET } = await import("@/app/api/v1/channels/official/route");
@@ -378,9 +392,7 @@ describe("GET /api/v1/channels/official — a tela não chama de conectado o que
 
     // A URL rotacionada no arquivamento já não recebe nada: mostrá-la seria
     // mandar o operador colar na Meta um endereço morto.
-    expect(body.data.connected).toBe(false);
-    expect(body.data.webhook).toBeNull();
-    expect(body.data.phoneNumberId).toBeNull();
+    expect(body.data.channels).toEqual([]);
   });
 
   it("canal oficial ativo continua aparecendo como conectado", async () => {
@@ -389,9 +401,9 @@ describe("GET /api/v1/channels/official — a tela não chama de conectado o que
     const { GET } = await import("@/app/api/v1/channels/official/route");
     const body = await (await GET(req())).json();
 
-    expect(body.data.connected).toBe(true);
-    expect(body.data.hasToken).toBe(true);
-    expect(body.data.webhook.callbackUrl).toContain("tok");
+    expect(body.data.channels).toHaveLength(1);
+    expect(body.data.channels[0].hasToken).toBe(true);
+    expect(body.data.channels[0].webhook.callbackUrl).toContain("tok");
   });
 
   it("clone sem a migration 0106: a tela continua enxergando o canal", async () => {
@@ -401,7 +413,7 @@ describe("GET /api/v1/channels/official — a tela não chama de conectado o que
       semColunaArquivada: true,
     });
     const { GET } = await import("@/app/api/v1/channels/official/route");
-    expect((await (await GET(req())).json()).data.connected).toBe(true);
+    expect((await (await GET(req())).json()).data.channels).toHaveLength(1);
   });
 });
 

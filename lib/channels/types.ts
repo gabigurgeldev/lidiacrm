@@ -9,7 +9,21 @@ import type { OutboundMedia } from "@/lib/waha/media-send";
 
 export type { OutboundMedia };
 
-export type ChannelProvider = "waha" | "meta_cloud" | "zernio";
+export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "stevo";
+
+/**
+ * A MODALIDADE de uma sessão, quando o provider hospeda mais de uma.
+ *
+ * Espelha `channel_sessions.provider_mode` (migration 0206). `null` não é
+ * ausência de dado: é a afirmação "este provider tem modalidade única, e ela sai
+ * da identidade dele" — que é o caso de três dos quatro canais.
+ *
+ * Existe porque um provider intermediado abriga, na MESMA conta, instância
+ * oficial (janela de 24h, template aprovado) e número ligado por QR (texto
+ * livre, risco de banimento). Responder pela identidade do provider daria a
+ * resposta certa em metade dos canais dele.
+ */
+export type ChannelMode = "oficial" | "qr";
 
 export interface ChannelCapabilities {
   /** Pode enviar texto livre a qualquer momento? false = exige template fora da janela. */

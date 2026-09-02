@@ -142,8 +142,16 @@ describe("os elos que somem sem barulho", () => {
   it("o `provider` chega pela consulta — sem ele o selo nunca aparece", () => {
     // A coluna fora do `select` não chega, e o cast do embed faz isso NÃO ser
     // erro de tipo: ficaria `undefined` e todo canal viraria "sem restrição".
+    //
+    // A asserção mira o EMBED (`channel_sessions:channel_session_id (...)`) e,
+    // dentro dele, a presença de `provider` — não a lista de colunas inteira.
+    // Fechar nos nomes exatos faz este caso quebrar toda vez que outra coluna
+    // (como `id`, para o avatar sob demanda) entra na mesma consulta por um
+    // motivo que nada tem a ver com a janela de 24h.
     const fonte = readFileSync("app/api/v1/conversations/_handler.ts", "utf8");
-    expect(fonte).toMatch(/channel_sessions:channel_session_id \(phone_number, display_name, provider\)/);
+    const embed = fonte.match(/channel_sessions:channel_session_id\s*\(([^)]*)\)/);
+    expect(embed, "embed de channel_sessions não encontrado na consulta").not.toBeNull();
+    expect(embed![1]).toMatch(/\bprovider\b/);
   });
 
   it("o composer é BLOQUEADO quando a janela fechou", () => {
