@@ -23,6 +23,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { orcamentoPermite } from "@/lib/flow-engine/ai/budget-gate";
 import { promptDeInterpretacao, promptDoUsuario } from "@/lib/flow-engine/ai/prompt";
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
+import { causaDe } from "@/lib/flow-engine/ai/modelo-com-fallback";
 import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 
 export const dynamic = "force-dynamic";
@@ -231,13 +232,16 @@ export async function POST(
       // OpenRouter usa acontece depois, dentro do provider. Ver idNaOpenRouter.
       modeloCanonico: resolvido.modelId,
       origem: resolvido.origem,
-      causa: err instanceof Error ? err.message : String(err),
+      // `causaDe`, e não `err.message`: a mensagem do SDK para uma resposta
+      // cortada fala de PARSE, e foi ela que mandou cinco correções seguidas
+      // procurarem no schema e no provedor. Ver o cabeçalho da função.
+      causa: causaDe(err),
     });
     return fail(
       "ai_provider_error",
       "Não consegui entender o pedido. Tente descrever de outro jeito.",
       502,
-      { requestId, details: { causa: err instanceof Error ? err.message : String(err) } },
+      { requestId, details: { causa: causaDe(err) } },
     );
   }
 }
