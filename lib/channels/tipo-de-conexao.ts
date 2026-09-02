@@ -85,6 +85,20 @@ export const ROTULO_PARCEIRO_ZERNIO = "Zernio";
 export const ROTULO_PARCEIRO_STEVO = "Stevo";
 
 /**
+ * O provider que se conecta por credencial de CONTA.
+ *
+ * Mora NESTE módulo, e não em `conta-de-instancias.ts`, por uma razão de
+ * empacotamento: aquele arquivo fala com o Supabase e com a cifra, então importar
+ * dele a partir de um componente `"use client"` arrasta `next/headers` para o
+ * bundle do navegador — e o build quebra com "This API is only available in
+ * Server Components". Aqui só há constantes e uma função pura.
+ *
+ * `conta-de-instancias.ts` reexporta como `ACCOUNT_CHANNEL_PROVIDER`, para quem
+ * está do lado do servidor continuar lendo o nome que descreve o papel.
+ */
+export const PROVIDER_DA_CONTA: ChannelProvider = "stevo";
+
+/**
  * `"pelo-modo"` = o provider hospeda as duas modalidades e quem decide é a linha.
  *
  * `Record<ChannelProvider, …>` e não um objeto solto: assim o typecheck cobra uma

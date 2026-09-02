@@ -230,7 +230,13 @@ describe("importar", () => {
   });
 
   it("aponta o webhook para a rota NEUTRA desta instalação", async () => {
-    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    // Os parâmetros são DECLARADOS mesmo sem uso: `vi.fn(async () => …)` infere
+    // a lista de argumentos como tupla VAZIA, e aí `mock.calls.at(-1)` não tem
+    // índice 0 nem 1 — o teste compila no `tsc` solto e falha no
+    // `tsconfig.typecheck.json`, que é o que o CI roda.
+    const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+      new Response("{}", { status: 200 }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     const { client } = makeDb();
     await importarInstancias(client as never, {
@@ -244,8 +250,8 @@ describe("importar", () => {
 
     const [url, init] = fetchMock.mock.calls.at(-1)!;
     expect(String(url)).toContain("/webhook");
-    expect((init as RequestInit).method).toBe("PUT");
-    const corpo = JSON.parse(String((init as RequestInit).body));
+    expect(init?.method).toBe("PUT");
+    const corpo = JSON.parse(String(init?.body));
     expect(corpo.url).toBe("https://crm.exemplo/api/v1/webhooks/channel/tok-novo");
     // Sem `SEND_MESSAGE` a mensagem que o operador manda pelo CELULAR não chega
     // ao CRM, e a conversa fica pela metade.

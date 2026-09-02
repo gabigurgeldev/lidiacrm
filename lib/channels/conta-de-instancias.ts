@@ -25,8 +25,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ARCHIVED_AT, colunaAusenteNoErro, queryTolerantToMissingArchived } from "./archived";
-import { CHANNEL_PROVIDER_STEVO } from "./capabilities";
-import { MODO_OFICIAL, MODO_QR, ROTULO_PARCEIRO_STEVO } from "./tipo-de-conexao";
+import {
+  MODO_OFICIAL,
+  MODO_QR,
+  PROVIDER_DA_CONTA,
+  ROTULO_PARCEIRO_STEVO,
+} from "./tipo-de-conexao";
 import { reactivateChannelSession } from "./reactivate";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 import {
@@ -37,8 +41,15 @@ import {
 import { stevoBaseUrl } from "./stevo/credentials";
 import type { ChannelProvider } from "./types";
 
-/** O provider que se conecta desta forma nesta instalação. */
-export const ACCOUNT_CHANNEL_PROVIDER: ChannelProvider = CHANNEL_PROVIDER_STEVO;
+/**
+ * O provider que se conecta desta forma nesta instalação.
+ *
+ * O valor vem de `tipo-de-conexao.ts` (módulo PURO) porque a tela também precisa
+ * dele, e importar deste arquivo a partir de um componente `"use client"`
+ * arrastaria o cliente do Supabase e a cifra para o bundle do navegador — o
+ * build quebra com "next/headers ... only available in Server Components".
+ */
+export const ACCOUNT_CHANNEL_PROVIDER: ChannelProvider = PROVIDER_DA_CONTA;
 
 /**
  * Como ele se chama PARA O USUÁRIO. Vem do servidor porque a tela não pode

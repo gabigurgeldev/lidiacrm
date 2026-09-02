@@ -108,7 +108,7 @@ export const CHANNEL_CAPABILITIES: Record<ChannelProvider, ChannelCapabilities> 
  * modalidade única — e duas cópias da mesma verdade divergem na primeira
  * mudança.
  */
-const CAPACIDADES_POR_MODO: Partial<
+export const CAPACIDADES_POR_MODO: Partial<
   Record<ChannelProvider, Record<ChannelMode, ChannelCapabilities>>
 > = {
   stevo: {

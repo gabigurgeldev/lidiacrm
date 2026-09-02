@@ -8,7 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ACCOUNT_CHANNEL_PROVIDER } from "@/lib/channels/conta-de-instancias";
+// ⚠️ De `tipo-de-conexao` (módulo PURO) e NÃO de `conta-de-instancias`: aquele
+// fala com o Supabase e com a cifra, e importá-lo daqui arrasta `next/headers`
+// para o bundle do navegador — o build quebra com "This API is only available in
+// Server Components". Foi assim que o `build-and-size` reprovou o primeiro PR.
+import { PROVIDER_DA_CONTA } from "@/lib/channels/tipo-de-conexao";
 import { lerEstadoDoCanal } from "@/lib/channels/estado";
 import {
   useConexoesDaConta,
@@ -117,7 +121,7 @@ export function CanalContaClient() {
                 key={c.id}
                 nome={c.nome ?? t("Número sem nome")}
                 telefone={c.telefone}
-                provider={ACCOUNT_CHANNEL_PROVIDER}
+                provider={PROVIDER_DA_CONTA}
                 modo={c.modo}
                 estado={estado ? { rotulo: t(estado.rotulo), tom: estado.tom } : null}
                 detalhe={
@@ -204,7 +208,7 @@ export function CanalContaClient() {
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="truncate text-sm font-medium">{i.nome ?? i.id}</span>
-                    <TipoDeCanal provider={ACCOUNT_CHANNEL_PROVIDER} modo={i.modo} />
+                    <TipoDeCanal provider={PROVIDER_DA_CONTA} modo={i.modo} />
                     {i.importada && (
                       <Badge variant="secondary" className="text-[10px]">
                         {t("já está aqui")}

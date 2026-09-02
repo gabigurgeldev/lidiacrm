@@ -65,6 +65,33 @@ Uma capability nunca é um booleano solto. Ela diz de que família é, porque is
 - **Verificação:** a matriz de capabilities é exaustiva — capability sem linha para algum
   provider reprova o CI. Capability que nenhum provider declara é código morto e sai.
 
+#### A unidade de análise é a SESSÃO, não o provider (revisto em 2026-09-01)
+
+As duas famílias continuam mutuamente exclusivas: nenhum canal REAL é ao mesmo tempo
+auto-restrito e hetero-restrito. O que mudou é onde se mede.
+
+Até o terceiro canal, "provider" e "sessão" eram a mesma coisa: um pareia por QR, os
+outros são oficiais. O quarto quebrou isso — ele é um intermediário de CONTA, e a mesma
+conta hospeda instância oficial (janela de 24h, sem risco de banimento) e número ligado
+por QR (texto livre, com risco). Duas físicas opostas sob um nome só.
+
+Por isso existe `provider_mode` (`channel_sessions`, migration 0206) e
+`capabilitiesOfSession({ provider, mode })`. **Quem tem uma linha em mãos pergunta a
+ela**; `capabilitiesOf(provider)` fica para quem decide sobre o canal em abstrato, antes
+de haver sessão escolhida.
+
+**O fallback declara as duas famílias, e isso é deliberado.** Quando o modo não foi
+gravado — clone que ainda não aplicou a 0206 —, a resposta é a linha do provider, que é a
+CONSERVADORA em cada eixo: `requiresTemplates` do lado hetero e `banRisk` do lado auto.
+Essa combinação não descreve instância real nenhuma. Ela existe para não fazer estrago
+enquanto a modalidade é desconhecida, não para adivinhar qual família vale.
+
+Quando as duas barram ao mesmo tempo nesse estado, o desfecho é **"não sai agora"** —
+nunca "sai errado". É a única resposta segura para uma sessão cuja física não se conhece.
+
+O invariante `tests/unit/channel-capability-matrix.test.ts` mede exclusividade **por
+modalidade** para canais multi-modalidade, e por provider para os de modalidade única.
+
 ### 3. Cortesia não é anti-ban
 
 Restrição que existe **para não incomodar o cliente** (horário comercial, evitar domingo,
