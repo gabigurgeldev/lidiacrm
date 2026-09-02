@@ -26,6 +26,11 @@ export {
   // admin platform
   Buildings,
   FlowArrow,
+  // flow engine: paralelo, reencontro, repeticao, espera por evento
+  ArrowsSplit,
+  ArrowsMerge,
+  Repeat,
+  Hourglass,
   ChatsCircle,
   ClipboardText,
   Scales,

@@ -191,6 +191,17 @@ export function criarFlowAdminClient(admin: SupabaseClient): FlowAdminClient {
       return count ?? 0;
     },
 
+    async relerFrente(id, orgId) {
+      const { data, error } = await admin
+        .from("flow_execution_frames")
+        .select("*")
+        .eq("organization_id", orgId)
+        .eq("id", id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return (data as FrenteRow | null) ?? null;
+    },
+
     async relogioDasFrentesVivas(executionId, orgId) {
       const { data, error } = await admin
         .from("flow_execution_frames")

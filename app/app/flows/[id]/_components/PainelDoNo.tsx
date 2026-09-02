@@ -115,6 +115,116 @@ function Ajustes({ tipo, config, aoMudarConfig }: Props) {
         </Campo>
       );
 
+    case "logic.fork":
+      return <AjustesDaBifurcacao config={config} aoMudarConfig={aoMudarConfig} />;
+
+    case "logic.merge":
+      return (
+        <Aviso
+          texto={t(
+            "Aqui os caminhos que correm ao mesmo tempo voltam a ser um só. Aponte a bifurcação para este bloco.",
+          )}
+        />
+      );
+
+    case "logic.loop": {
+      return (
+        <>
+          <Campo rotulo={t("Lista a percorrer")}>
+            <Input
+              value={String(config.lista ?? "")}
+              maxLength={120}
+              placeholder="vars.itens"
+              onChange={(e) => mudar({ lista: e.target.value })}
+              data-testid="campo-lista-do-laco"
+            />
+            <Dica
+              texto={t(
+                "O caminho da lista guardada por um bloco anterior — por exemplo vars.produtos.",
+              )}
+            />
+          </Campo>
+          <Campo rotulo={t("Repetir no máximo quantas vezes?")}>
+            <Input
+              type="number"
+              min={1}
+              max={100}
+              value={Number(config.max ?? 10)}
+              onChange={(e) =>
+                mudar({ max: Math.min(100, Math.max(1, Number(e.target.value))) })
+              }
+              data-testid="campo-teto-do-laco"
+            />
+            <Dica
+              texto={t(
+                "O teto é obrigatório: é ele que garante que a repetição termina, mesmo se a lista vier maior do que o esperado.",
+              )}
+            />
+          </Campo>
+        </>
+      );
+    }
+
+    case "logic.await_event": {
+      const horas = Math.round(Number(config.prazo_ms ?? 3_600_000) / 3_600_000);
+      return (
+        <>
+          <Campo rotulo={t("Esperar o quê?")}>
+            <Select
+              value={String(config.evento ?? "message.received")}
+              onValueChange={(v) => mudar({ evento: v })}
+            >
+              <SelectTrigger data-testid="campo-evento-esperado">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="message.received">{t("O cliente responder")}</SelectItem>
+                <SelectItem value="lead.stage_changed">{t("O lead mudar de etapa")}</SelectItem>
+                <SelectItem value="lead.won">{t("O lead ser ganho")}</SelectItem>
+                <SelectItem value="lead.lost">{t("O lead ser perdido")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </Campo>
+          <Campo rotulo={t("Esperar por quantas horas?")}>
+            <Input
+              type="number"
+              min={1}
+              max={720}
+              value={horas}
+              onChange={(e) =>
+                mudar({
+                  prazo_ms: Math.min(720, Math.max(1, Number(e.target.value))) * 3_600_000,
+                })
+              }
+              data-testid="campo-prazo-do-evento"
+            />
+            <Dica
+              texto={t(
+                "Vencido o prazo, o fluxo segue pela saída 'Venceu o prazo'. Toda espera precisa de prazo — sem ele o fluxo ficaria parado para sempre.",
+              )}
+            />
+          </Campo>
+        </>
+      );
+    }
+
+    case "flow.call":
+      return (
+        <Campo rotulo={t("Qual fluxo chamar")}>
+          <Input
+            value={String(config.fluxo_id ?? "")}
+            maxLength={36}
+            onChange={(e) => mudar({ fluxo_id: e.target.value })}
+            data-testid="campo-fluxo-chamado"
+          />
+          <Dica
+            texto={t(
+              "O identificador do fluxo, que aparece no endereço da tela dele. Ele precisa estar publicado.",
+            )}
+          />
+        </Campo>
+      );
+
     case "crm.add_tag":
       return (
         <Campo rotulo={t("Marcador")}>
@@ -264,6 +374,117 @@ function Ajustes({ tipo, config, aoMudarConfig }: Props) {
     default:
       return <Aviso texto={t("Este bloco não tem ajustes.")} />;
   }
+}
+
+
+// ────────────────────────────── a bifurcação ─────────────────────────────────
+
+interface RamoDoFork {
+  id: string;
+  label: string;
+}
+
+/**
+ * Os ajustes de "Fazer ao mesmo tempo".
+ *
+ * O campo que parece burocracia e não é: **o reencontro**. Ele é declarado, e
+ * não descoberto pelo sistema, porque adivinhar onde os caminhos se juntam
+ * acerta no desenho simples e erra em silêncio assim que houver duas
+ * bifurcações uma dentro da outra — e errar em silêncio aqui significa um fluxo
+ * que se junta no lugar errado sem nada acusar.
+ */
+function AjustesDaBifurcacao({
+  config,
+  aoMudarConfig,
+}: {
+  config: Record<string, unknown>;
+  aoMudarConfig: (c: Record<string, unknown>) => void;
+}) {
+  const t = useT();
+  const ramos = (Array.isArray(config.ramos) ? config.ramos : []) as RamoDoFork[];
+
+  const trocar = (novos: RamoDoFork[]) => aoMudarConfig({ ...config, ramos: novos });
+
+  const acrescentar = () => {
+    // O id nasce uma vez e nunca muda: é ele que a ligação no quadro guarda.
+    // Derivá-lo do rótulo faria renomear o caminho soltar a linha.
+    trocar([...ramos, { id: `c${Date.now().toString(36)}`, label: t("Novo caminho") }]);
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Campo rotulo={t("Como os caminhos se juntam")}>
+        <Select
+          value={String(config.modo ?? "todas")}
+          onValueChange={(v) => aoMudarConfig({ ...config, modo: v })}
+        >
+          <SelectTrigger data-testid="campo-modo-do-fork">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">{t("Esperar todos terminarem")}</SelectItem>
+            <SelectItem value="primeira">{t("Seguir com o primeiro que terminar")}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Dica
+          texto={
+            String(config.modo ?? "todas") === "primeira"
+              ? t("Quando o primeiro chegar, os outros caminhos são cancelados.")
+              : t("O fluxo só continua depois que todos os caminhos chegarem ao reencontro.")
+          }
+        />
+      </Campo>
+
+      <Campo rotulo={t("Bloco de reencontro")}>
+        <Input
+          value={String(config.encontro ?? "")}
+          maxLength={64}
+          onChange={(e) => aoMudarConfig({ ...config, encontro: e.target.value })}
+          data-testid="campo-encontro-do-fork"
+        />
+        <Dica
+          texto={t(
+            "O nome do bloco 'Reencontro' onde estes caminhos voltam a ser um só. Sem ele o fluxo não publica.",
+          )}
+        />
+      </Campo>
+
+      {ramos.map((ramo, i) => (
+        <div key={ramo.id} className="rounded-md border p-3" data-testid={`ramo-${ramo.id}`}>
+          <Campo rotulo={t("Nome deste caminho")}>
+            <Input
+              value={ramo.label}
+              maxLength={60}
+              onChange={(e) => {
+                const novos = [...ramos];
+                novos[i] = { ...ramo, label: e.target.value };
+                trocar(novos);
+              }}
+              data-testid={`rotulo-do-ramo-${ramo.id}`}
+            />
+          </Campo>
+          {ramos.length > 2 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-2"
+              onClick={() => trocar(ramos.filter((r) => r.id !== ramo.id))}
+              data-testid={`apagar-ramo-${ramo.id}`}
+            >
+              {t("Remover este caminho")}
+            </Button>
+          )}
+        </div>
+      ))}
+
+      {ramos.length < 6 && (
+        <Button type="button" variant="outline" size="sm" onClick={acrescentar} data-testid="add-ramo">
+          {t("Acrescentar caminho")}
+        </Button>
+      )}
+    </div>
+  );
 }
 
 // ─────────────────────────────── a decisão ───────────────────────────────────

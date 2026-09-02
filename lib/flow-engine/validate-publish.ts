@@ -102,17 +102,58 @@ export function validarParaPublicar(grafo: FlowGraph): ResultadoDaValidacao {
 
   if (entrada === undefined) return { ok: erros.length === 0, erros, avisos };
 
-  // ── sem ciclo ────────────────────────────────────────────────────────────
-  // Esta entrega tem UM cursor por execução: um ciclo rodaria para sempre
-  // consumindo `steps_taken` até o teto e morrendo em `dead`. Loop de verdade
-  // é um nó com contador (o `repeat` do follow-up), e ele não está aqui.
-  const ciclo = acharCiclo(nos.map((n) => n.id), arestas);
+  // ── ciclo SEM contador ───────────────────────────────────────────────────
+  //
+  // A regra antiga era "nenhum ciclo", e o motivo estava certo: um ciclo sem fim
+  // consome `steps_taken` até a execução morrer em `dead`. O que mudou é que
+  // agora existe um bloco com contador — `logic.loop` tem `max` obrigatório, e
+  // um ciclo que passa por ele tem fim CONHECIDO antes de começar.
+  //
+  // Por isso a busca roda sobre o grafo COM os nós de laço removidos: tirar
+  // deles as arestas quebra exatamente os ciclos que têm contador, e o que
+  // sobrar é ciclo de verdade — aquele que roda para sempre.
+  const nosDeLaco = new Set(nos.filter((n) => n.type === "logic.loop").map((n) => n.id));
+  const ciclo = acharCiclo(
+    nos.filter((n) => !nosDeLaco.has(n.id)).map((n) => n.id),
+    arestas.filter((a) => !nosDeLaco.has(a.source) && !nosDeLaco.has(a.target)),
+  );
   if (ciclo !== null) {
     erros.push({
       ancora: ciclo,
       codigo: "ciclo",
-      mensagem: "As ligações formam um círculo — o fluxo voltaria ao mesmo bloco para sempre.",
+      mensagem:
+        "As ligações formam um círculo sem fim — o fluxo voltaria ao mesmo bloco para sempre. " +
+        "Para repetir com fim, use o bloco \"Repetir para cada\".",
     });
+  }
+
+  // ── o reencontro de cada bifurcação existe, e é um reencontro ────────────
+  //
+  // `encontro` é declarado pelo fork, não descoberto pelo motor — inferir o
+  // merge por alcançabilidade acerta no grafo simples e erra em silêncio quando
+  // há dois forks aninhados. O preço de declarar é este: alguém tem de conferir
+  // que o alvo existe. Se ninguém confere, o erro aparece só em runtime, como um
+  // fluxo que bifurca e nunca mais se junta — e o motor não tem como distinguir
+  // isso de um fluxo que termina em ramos separados de propósito.
+  for (const no of nos) {
+    if (no.type !== "logic.fork") continue;
+    const alvo = (no.config as { encontro?: unknown }).encontro;
+    const destino = typeof alvo === "string" ? nos.find((n) => n.id === alvo) : undefined;
+    if (destino === undefined) {
+      erros.push({
+        ancora: no.id,
+        codigo: "encontro_inexistente",
+        mensagem: `"${no.label}" bifurca o fluxo mas o bloco de reencontro dele não existe.`,
+      });
+      continue;
+    }
+    if (destino.type !== "logic.merge") {
+      erros.push({
+        ancora: no.id,
+        codigo: "encontro_nao_e_reencontro",
+        mensagem: `O reencontro de "${no.label}" aponta para "${destino.label}", que não é um bloco de reencontro.`,
+      });
+    }
   }
 
   // ── tudo alcançável a partir do início ───────────────────────────────────

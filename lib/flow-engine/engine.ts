@@ -150,6 +150,16 @@ export interface FlowAdminClient {
   /** Quantas frentes desta execução ainda podem andar (`ready` ou `waiting`). */
   frentesVivas(executionId: string, orgId: string): Promise<number>;
   /**
+   * Relê UMA frente. `null` quando sumiu.
+   *
+   * ⚠️ Existe por causa de um defeito medido: as frentes de um tick são lidas
+   * de uma vez, e uma corrida (`modo: "primeira"`) cancela as irmãs NO MEIO
+   * dessa lista. Sem reler antes de caminhar, a perdedora — já marcada como
+   * cancelada no banco — seguia andando na mesma rodada, executando os blocos
+   * do ramo que acabara de perder. Uma cobrança automática pode sair daí.
+   */
+  relerFrente(id: string, orgId: string): Promise<FrenteRow | null>;
+  /**
    * O relógio MAIS PRÓXIMO entre as frentes vivas. `null` quando não há nenhuma.
    *
    * Existe porque `flow_executions.next_eval_at` virou espelho: quem manda no
@@ -348,7 +358,21 @@ async function caminhar(
   const desfechos: string[] = [];
 
   for (const frente of frentes) {
-    await caminharFrente({ execucao, frente, analisado, deps, resumo, globais, portas, desfechos });
+    // Relê antes de caminhar: a frente pode ter sido cancelada por uma IRMÃ
+    // que venceu a corrida mais cedo NESTE MESMO tick.
+    const agora = await deps.db.relerFrente(frente.id, execucao.organization_id);
+    if (agora === null) continue;
+    if (agora.status !== "ready" && agora.status !== "waiting") continue;
+    await caminharFrente({
+      execucao,
+      frente: agora,
+      analisado,
+      deps,
+      resumo,
+      globais,
+      portas,
+      desfechos,
+    });
   }
 
   await talvezEncerrarExecucao(execucao, deps, resumo, desfechos);
@@ -381,6 +405,22 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
     index: p.frente.loop_index,
     total: p.frente.loop_total,
   };
+
+  /**
+   * ESTA volta acordou por PRAZO VENCIDO, e não porque o evento chegou.
+   *
+   * ⚠️ Sem esta marca, `logic.await_event` é um laço infinito silencioso: o
+   * prazo vence, o claim traz a frente de volta, o nó roda outra vez e devolve
+   * `await_event` com um prazo NOVO. A frente dorme mais um prazo, para sempre,
+   * e o ramo "venceu o prazo" que o operador desenhou nunca é percorrido.
+   *
+   * Só vale para o PRIMEIRO nó desta caminhada — o nó em que a frente estava
+   * parada. Depois de avançar, quem manda é o nó novo.
+   */
+  let acordouPorPrazo =
+    p.frente.awaiting_event_type !== null &&
+    p.frente.wait_deadline !== null &&
+    Date.parse(p.frente.wait_deadline) <= agora.getTime();
 
   /** Une o que a frente sabe ao que o motor precisa gravar nela. */
   const frenteAgora = (): FrenteRow => ({
@@ -535,7 +575,7 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
         // Ramo sem saída é o fim daquele caminho, e foi desenhado assim de
         // propósito (a validação de publicação só exige saída em ramo de REGRA).
         await encerrarFrente(p, { node_id: nodeId, vars: locais, steps_taken: passos });
-        await registrarDesfechoDaFrente(p, `sem_saida:${resultado.branch_id}`, contexto);
+        await registrarDesfechoDaFrente(p, `sem_saida:${resultado.branch_id}`, contexto, nodeId);
         return;
       }
       // Recarrega os fatos quando o nó DECLAROU que mexeu no CRM. Sem isto, o
@@ -546,6 +586,7 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
       }
 
       nodeId = aresta.target;
+      acordouPorPrazo = false;
       resumo.avancadas += 1;
       continue;
     }
@@ -583,7 +624,7 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
 
       if (aresta === null) {
         await encerrarFrente(p, { node_id: nodeId, vars: locais, steps_taken: passos });
-        await registrarDesfechoDaFrente(p, `sem_saida:${ramo}`, contexto);
+        await registrarDesfechoDaFrente(p, `sem_saida:${ramo}`, contexto, nodeId);
         return;
       }
       nodeId = aresta.target;
@@ -603,7 +644,7 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
 
       if (destinos.length === 0) {
         await encerrarFrente(p, { node_id: nodeId, vars: locais, steps_taken: passos });
-        await registrarDesfechoDaFrente(p, "fork_sem_saida", contexto);
+        await registrarDesfechoDaFrente(p, "fork_sem_saida", contexto, nodeId);
         return;
       }
 
@@ -654,10 +695,47 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
     }
 
     if (resultado.kind === "await_event") {
+      if (acordouPorPrazo) {
+        // O prazo venceu: sai pelo ramo que o operador desenhou para isso, em
+        // vez de dormir mais um prazo. É AQUI que "venceu o prazo" acontece.
+        acordouPorPrazo = false;
+        passos += 1;
+        const saida = arestaDoRamo(analisado.arestas, nodeId, resultado.branch_on_timeout);
+        await deps.db.registrarPasso({
+          organization_id: execucao.organization_id,
+          execution_id: execucao.id,
+          node_id: nodeId,
+          event_type: "prazo_do_evento_venceu",
+          payload: { evento: resultado.event_type, ramo: resultado.branch_on_timeout },
+          idempotency_key: `${p.frente.id}:${nodeId}:prazo:${passos}`,
+        });
+        // A frente deixa de esperar: manter `awaiting_event_type` faria um
+        // evento atrasado acordá-la depois de ela já ter seguido pelo prazo.
+        await deps.db.atualizarFrente(p.frente.id, execucao.organization_id, {
+          awaiting_event_type: null,
+          awaiting_match: null,
+          wait_deadline: null,
+          updated_at: agora.toISOString(),
+        });
+        p.frente = {
+          ...p.frente,
+          awaiting_event_type: null,
+          awaiting_match: null,
+          wait_deadline: null,
+        };
+        if (saida === null) {
+          await encerrarFrente(p, { node_id: nodeId, vars: locais, steps_taken: passos });
+          await registrarDesfechoDaFrente(p, `sem_saida:${resultado.branch_on_timeout}`, contexto, nodeId);
+          return;
+        }
+        nodeId = saida.target;
+        resumo.avancadas += 1;
+        continue;
+      }
       // `timeout_at` é obrigatório no tipo, e é o que impede a espera por evento
       // de virar uma execução que nada no sistema jamais coleta. O relógio da
       // frente é o prazo: vencido ele, o próprio claim a traz de volta e ela sai
-      // pelo `branch_on_timeout`.
+      // pelo `branch_on_timeout` no bloco acima.
       await deps.db.registrarPasso({
         organization_id: execucao.organization_id,
         execution_id: execucao.id,
@@ -780,7 +858,7 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
         locais = { ...locais, ...(resultado.vars ?? {}) };
       }
       await encerrarFrente(p, { node_id: nodeId, vars: locais, steps_taken: passos });
-      await registrarDesfechoDaFrente(p, resultado.outcome, contexto);
+      await registrarDesfechoDaFrente(p, resultado.outcome, contexto, nodeId);
       return;
     }
 
@@ -861,11 +939,16 @@ async function registrarDesfechoDaFrente(
   p: PasseioDaFrente,
   desfecho: string,
   contexto: Record<string, unknown>,
+  // ⚠️ O nó ONDE A FRENTE PAROU, não o de onde ela partiu. `p.frente.node_id` é
+  // o começo da caminhada, e usá-lo fazia o log dizer que o fluxo terminou no
+  // primeiro bloco do ramo — uma linha de auditoria que aponta para o lugar
+  // errado é pior que nenhuma, porque quem lê acredita nela.
+  ondeParou: string,
 ): Promise<void> {
   await p.deps.db.registrarPasso({
     organization_id: p.execucao.organization_id,
     execution_id: p.execucao.id,
-    node_id: p.frente.node_id,
+    node_id: ondeParou,
     event_type: "frente_concluiu",
     payload: { desfecho },
     idempotency_key: `${p.frente.id}:concluiu`,

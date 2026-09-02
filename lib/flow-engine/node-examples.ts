@@ -27,6 +27,37 @@ export function configExemploDoTipo(tipo: string): Record<string, unknown> {
       return { duracao_ms: 300_000 };
     case "logic.end":
       return { desfecho: "concluido" };
+    case "logic.fork":
+      // `encontro` aponta para o id de um `logic.merge` do MESMO grafo. Como
+      // valor de queda ele nasce apontando para um nó que talvez não exista —
+      // e é por isso que a validação de publicação cobra o alvo antes de o
+      // fluxo poder rodar, em vez de o motor descobrir em runtime.
+      return {
+        ramos: [
+          { id: "caminho_a", label: "Avisar o vendedor" },
+          { id: "caminho_b", label: "Marcar o lead" },
+        ],
+        modo: "todas",
+        encontro: "reencontro",
+      };
+    case "logic.merge":
+      return {};
+    case "logic.loop":
+      return { lista: "vars.itens", max: 10 };
+    case "logic.await_event":
+      return {
+        evento: "message.received",
+        quando: {},
+        // Uma hora. O schema exige no mínimo cinco minutos — abaixo disso o
+        // relógio do worker (1×/min) não distingue uma espera da outra.
+        prazo_ms: 3_600_000,
+      };
+    case "flow.call":
+      // UUID nulo de propósito: como valor de queda ele NÃO pode apontar para
+      // um fluxo real por acidente. A validação de publicação recusa, que é o
+      // comportamento certo — melhor um bloco que não publica do que um que
+      // chama o fluxo errado de alguém.
+      return { fluxo_id: "00000000-0000-0000-0000-000000000000", entrada: {} };
     case "crm.add_tag":
       // Não pode ser `""`: `addTagConfigSchema.tag` exige min(1). Um exemplo
       // vazio passava despercebido no clique manual porque `branches()` deste

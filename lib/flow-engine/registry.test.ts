@@ -87,6 +87,13 @@ describe("todo nó registrado", () => {
     for (const no of todosOsNos()) {
       const ramos = no.branches(exemploDeConfig(no.type) as never);
       if (ramos.length === 0) continue; // logic.end
+      // `logic.fork` é a única exceção, e é por construção: CADA ramo dele vira
+      // uma frente de execução. Um pega-tudo aqui seria um handle no canvas que
+      // a pessoa pode ligar e que nunca abre frente nenhuma — o `execute` só
+      // bifurca pelos ramos declarados em `config.ramos`. Handle que não faz
+      // nada é pior que handle ausente: o desenho promete um caminho que o
+      // motor não percorre, e nada acusa.
+      if (no.type === "logic.fork") continue;
       const ultimo = ramos[ramos.length - 1]!;
       expect(ultimo.id, `${no.type}: último ramo`).toBe("else");
       expect(ultimo.kind, `${no.type}: o último é o pega-tudo`).toBe("fallback");
@@ -156,6 +163,20 @@ function exemploDeConfig(type: string): unknown {
       return { duracao_ms: 300_000 };
     case "logic.end":
       return { desfecho: "fim" };
+    case "logic.fork":
+      return {
+        ramos: [{ id: "a", label: "A" }, { id: "b", label: "B" }],
+        modo: "todas",
+        encontro: "junta",
+      };
+    case "logic.merge":
+      return {};
+    case "logic.loop":
+      return { lista: "vars.itens", max: 5 };
+    case "logic.await_event":
+      return { evento: "message.received", quando: {}, prazo_ms: 3_600_000 };
+    case "flow.call":
+      return { fluxo_id: "00000000-0000-0000-0000-000000000000", entrada: {} };
     case "crm.add_tag":
       return { tag: "x" };
     case "crm.assign_owner":
