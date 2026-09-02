@@ -1847,7 +1847,7 @@ ou ontem, e fora disso imprime `dd/MM/yyyy` — idêntico nos dois idiomas.
 **O que segue fora:** e-mail e o PDF de LGPD, com o motivo escrito em
 `tests/unit/i18n-a-data-segue-o-idioma.test.ts`.
 
-## J23 — Dá para montar um fluxo com caminhos paralelos? (2026-09-02)
+## J24 — Dá para montar um fluxo com caminhos paralelos? (2026-09-02)
 
 Os blocos do paralelo — bifurcar, reencontrar, repetir, esperar acontecer,
 chamar outro fluxo — entraram com motor, schema e validação provados. O que esta
@@ -1861,14 +1861,14 @@ serve para nada.
 
 | Caso | O que a pessoa faz | Sinal esperado | Estado |
 |---|---|---|---|
-| J23.1 | Abre a paleta do editor | os cinco blocos aparecem | NÃO MEDIDO (spec escrita) |
-| J23.2 | Clica em cada bloco | o formulário abre com os campos obrigatórios | **MEDIDO** — `PainelDoNo.paralelo.test.tsx`, 9 casos |
-| J23.3 | Acrescenta um caminho na bifurcação | o caminho novo nasce com id próprio | **MEDIDO** — id não derivado do rótulo |
-| J23.4 | Escolhe como os caminhos se juntam | "esperar todos" / "seguir com o primeiro" | **MEDIDO** |
-| J23.5 | Configura o laço | teto obrigatório, preso entre 1 e 100 na tela | **MEDIDO** |
-| J23.6 | Configura a espera | prazo em HORAS, e todo evento com rótulo humano | **MEDIDO** |
-| J23.7 | Publica com o reencontro apontando para o vazio | recusa legível, falando de reencontro | NÃO MEDIDO (spec escrita) |
-| J23.8 | Publica o fluxo completo | publica | NÃO MEDIDO |
+| J24.1 | Abre a paleta do editor | os cinco blocos aparecem | NÃO MEDIDO (spec escrita) |
+| J24.2 | Clica em cada bloco | o formulário abre com os campos obrigatórios | **MEDIDO** — `PainelDoNo.paralelo.test.tsx`, 9 casos |
+| J24.3 | Acrescenta um caminho na bifurcação | o caminho novo nasce com id próprio | **MEDIDO** — id não derivado do rótulo |
+| J24.4 | Escolhe como os caminhos se juntam | "esperar todos" / "seguir com o primeiro" | **MEDIDO** |
+| J24.5 | Configura o laço | teto obrigatório, preso entre 1 e 100 na tela | **MEDIDO** |
+| J24.6 | Configura a espera | prazo em HORAS, e todo evento com rótulo humano | **MEDIDO** |
+| J24.7 | Publica com o reencontro apontando para o vazio | recusa legível, falando de reencontro | NÃO MEDIDO (spec escrita) |
+| J24.8 | Publica o fluxo completo | publica | NÃO MEDIDO |
 
 ### O que ficou NÃO MEDIDO, e por quê
 
@@ -1901,10 +1901,10 @@ o JSON do grafo.
 
 | Caso | O que a pessoa faz | Sinal | Estado |
 |---|---|---|---|
-| J23.9 | Escolhe o reencontro | seletor com o RÓTULO do bloco; o id nunca aparece | **MEDIDO** |
-| J23.10 | Não há reencontro no fluxo | a tela diz o que acrescentar, em vez de caixa vazia | **MEDIDO** |
-| J23.11 | Escolhe o fluxo a chamar | seletor com o NOME; o UUID nunca aparece | **MEDIDO** |
-| J23.12 | Só existem rascunhos | não são oferecidos, e a tela explica | **MEDIDO** |
+| J24.9 | Escolhe o reencontro | seletor com o RÓTULO do bloco; o id nunca aparece | **MEDIDO** |
+| J24.10 | Não há reencontro no fluxo | a tela diz o que acrescentar, em vez de caixa vazia | **MEDIDO** |
+| J24.11 | Escolhe o fluxo a chamar | seletor com o NOME; o UUID nunca aparece | **MEDIDO** |
+| J24.12 | Só existem rascunhos | não são oferecidos, e a tela explica | **MEDIDO** |
 
 O último caso nasceu de uma sabotagem: o filtro de publicados existia e **nada o
 vigiava**. Oferecer um rascunho produz um bloco que publica e falha na primeira
