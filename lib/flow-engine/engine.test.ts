@@ -19,6 +19,7 @@ import {
 import type { FlowGraph } from "./graph-schema";
 import { esquecerRegistroParaTeste, garantirNosRegistrados } from "./register-all";
 import { limparRegistroParaTeste } from "./registry";
+import type { FrenteNova, FrenteRow } from "./frentes";
 import type { AtendenteElegivel, DesfechoDeEnvio, FatosDaExecucao } from "./types";
 
 const ORG = "org-1";
@@ -96,6 +97,37 @@ interface Mundo {
   score: number | null;
   telefoneDoDono: string | null;
   agora: Date;
+  frentes: Map<string, FrenteRow>;
+  encontros: Map<string, {
+    execution_id: string;
+    fork_node_id: string;
+    join_node_id: string;
+    modo: "todas" | "primeira";
+    esperadas: number;
+    chegadas: number;
+    resolvido_em: string | null;
+  }>;
+  globais: Record<string, unknown>;
+  subFluxosPublicados: Set<string>;
+}
+
+let proximaFrente = 0;
+
+/** Nasce uma frente no mundo falso, com id proprio. */
+function novaFrente(mundo: Mundo, nova: FrenteNova): FrenteRow {
+  proximaFrente += 1;
+  const linha: FrenteRow = {
+    ...nova,
+    id: `frente-${proximaFrente}`,
+    awaiting_event_type: null,
+    awaiting_match: null,
+    wait_deadline: null,
+    loop_node_id: null,
+    loop_index: null,
+    loop_total: null,
+  };
+  mundo.frentes.set(linha.id, linha);
+  return linha;
 }
 
 function mundoNovo(): Mundo {
@@ -116,6 +148,10 @@ function mundoNovo(): Mundo {
     score: 82,
     telefoneDoDono: "+5563999112061",
     agora: new Date("2026-08-30T12:00:00.000Z"),
+    frentes: new Map(),
+    encontros: new Map(),
+    globais: {},
+    subFluxosPublicados: new Set(),
   };
 }
 
@@ -136,6 +172,10 @@ function execucaoNova(): FlowExecutionRow {
     contact_id: "contato-1",
     conversation_id: null,
     started_at: "2026-08-30T12:00:00.000Z",
+    input: {},
+    output: {},
+    parent_execution_id: null,
+    parent_frame_id: null,
   };
 }
 
@@ -207,6 +247,100 @@ function montar(mundo: Mundo, grafo: FlowGraph = grafoDaFatia()) {
         ...(patch.steps_taken !== undefined ? { steps_taken: patch.steps_taken } : {}),
         ...(patch.context !== undefined ? { context: patch.context } : {}),
       });
+    },
+    frentesProntas: async (exec) => {
+      const daExecucao = [...mundo.frentes.values()].filter((f) => f.execution_id === exec.id);
+      const prontas = daExecucao.filter(
+        (f) =>
+          (f.status === "ready" || f.status === "waiting") &&
+          f.next_eval_at !== null &&
+          Date.parse(f.next_eval_at) <= mundo.agora.getTime(),
+      );
+      if (prontas.length > 0) return prontas.map((f) => ({ ...f }));
+      if (daExecucao.length > 0) return [];
+      // A auto-cura da raiz, igual à do adapter: execução sem frente nenhuma é
+      // execução anterior à tabela, e o estado dela é o `current_node_id`.
+      const raiz = novaFrente(mundo, {
+        organization_id: exec.organization_id,
+        execution_id: exec.id,
+        parent_frame_id: null,
+        node_id: exec.current_node_id,
+        status: "ready",
+        next_eval_at: mundo.agora.toISOString(),
+        steps_taken: exec.steps_taken,
+        vars: {},
+        fork_node_id: null,
+      });
+      return [{ ...raiz }];
+    },
+    criarFrentes: async (frentes) => frentes.map((f) => ({ ...novaFrente(mundo, f) })),
+    atualizarFrente: async (id, _orgId, patch) => {
+      const atual = mundo.frentes.get(id);
+      if (atual === undefined) return;
+      mundo.frentes.set(id, { ...atual, ...patch } as FrenteRow);
+    },
+    frentesVivas: async (executionId) =>
+      [...mundo.frentes.values()].filter(
+        (f) => f.execution_id === executionId && (f.status === "ready" || f.status === "waiting"),
+      ).length,
+    relogioDasFrentesVivas: async (executionId) => {
+      const relogios = [...mundo.frentes.values()]
+        .filter(
+          (f) =>
+            f.execution_id === executionId &&
+            (f.status === "ready" || f.status === "waiting") &&
+            f.next_eval_at !== null,
+        )
+        .map((f) => f.next_eval_at!)
+        .sort();
+      return relogios[0] ?? null;
+    },
+    abrirEncontro: async (encontro) => {
+      const chave = `${encontro.execution_id}:${encontro.fork_node_id}`;
+      // `ignoreDuplicates` do upsert real: revisitar o fork num retry não pode
+      // zerar a contagem de quem já chegou.
+      if (mundo.encontros.has(chave)) return;
+      mundo.encontros.set(chave, {
+        ...encontro,
+        chegadas: 0,
+        resolvido_em: null,
+      });
+    },
+    chegarNoEncontroSePreciso: async (input) => {
+      const chave = `${input.execution_id}:${input.fork_node_id}`;
+      const e = mundo.encontros.get(chave);
+      if (e === undefined || e.join_node_id !== input.node_id) return null;
+      // `least(chegadas + 1, esperadas)`, como a RPC: saturar mantém a linha
+      // dentro do CHECK quando uma irmã em voo chega depois da corrida decidida.
+      e.chegadas = Math.min(e.chegadas + 1, e.esperadas);
+      return { modo: e.modo, esperadas: e.esperadas, chegadas: e.chegadas, resolvido_em: e.resolvido_em };
+    },
+    resolverEncontro: async (input) => {
+      const e = mundo.encontros.get(`${input.execution_id}:${input.fork_node_id}`);
+      if (e !== undefined && e.resolvido_em === null) e.resolvido_em = input.em;
+    },
+    cancelarFrentesIrmas: async (input) => {
+      for (const [id, f] of mundo.frentes) {
+        if (f.execution_id !== input.execution_id) continue;
+        if (f.fork_node_id !== input.fork_node_id) continue;
+        if (id === input.excetoFrenteId) continue;
+        if (f.status !== "ready" && f.status !== "waiting") continue;
+        mundo.frentes.set(id, { ...f, status: "cancelled", next_eval_at: null });
+      }
+    },
+    carregarGlobais: async () => mundo.globais,
+    chamarSubFluxo: async (input) => {
+      if (mundo.subFluxosPublicados.has(input.flow_id) === false) return null;
+      const id = `exec-filha-${mundo.frentes.size + mundo.execucoes.size}`;
+      mundo.execucoes.set(id, {
+        ...execucaoNova(),
+        id,
+        flow_id: input.flow_id,
+        input: input.input,
+        parent_execution_id: input.parent_execution_id,
+        parent_frame_id: input.parent_frame_id,
+      });
+      return { execution_id: id };
     },
     nomeDoFluxo: async () => "Fluxo de prova",
     abrirAvisoDeMorte: async (item) => {

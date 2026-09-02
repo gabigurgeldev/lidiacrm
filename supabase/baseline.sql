@@ -18219,3 +18219,49 @@ grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 grant execute on function public.fn_encrypt_oauth(text) to service_role;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 grant execute on function public.fn_update_budget_consumption() to service_role;
+-- ───────────────────── a chegada no encontro, ATÔMICA ───────────────────────
+--
+-- Por que isto é uma função e não um UPDATE do PostgREST: o motor precisa somar
+-- uma chegada E ler o resultado da soma no MESMO comando. Ler-somar-gravar em
+-- dois passos perde uma chegada quando duas frentes irmãs alcançam o merge no
+-- mesmo tick, e o efeito não é um erro — é um merge em modo `todas` que nunca
+-- dispara. Fluxo parado para sempre, sem uma linha em lugar nenhum.
+--
+-- Devolve ZERO linhas quando a frente não está no nó de encontro daquele fork.
+-- É assim que o motor pergunta "cheguei?" e "conte-me" numa viagem só: sem
+-- isso, todo passo de toda frente nascida de fork faria uma consulta extra.
+--
+-- `least(chegadas + 1, esperadas)` em vez de `chegadas + 1` porque o CHECK
+-- `chegadas <= esperadas` é real: numa corrida (`modo = 'primeira'`) as irmãs
+-- são canceladas depois de o vencedor resolver, e uma que já estivesse em voo
+-- estouraria a constraint. Saturar mantém a linha válida, e quem chega tarde
+-- lê `resolvido_em` preenchido e para — que é a decisão certa de qualquer modo.
+create or replace function public.fn_flow_join_arrive(
+  p_org  uuid,
+  p_exec uuid,
+  p_fork text,
+  p_node text
+)
+returns table (modo text, esperadas integer, chegadas integer, resolvido_em timestamptz)
+language sql
+security definer
+set search_path = public
+as $$
+  update public.flow_execution_joins j
+     set chegadas = least(j.chegadas + 1, j.esperadas)
+   where j.organization_id = p_org
+     and j.execution_id    = p_exec
+     and j.fork_node_id    = p_fork
+     and j.join_node_id    = p_node
+  returning j.modo, j.esperadas, j.chegadas, j.resolvido_em;
+$$;
+
+-- Função nova em `public` nasce EXPOSTA por DUAS origens, e tratar só uma
+-- deixaria esta alcançável pela anon key que vai para o browser: (A) o
+-- `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON FUNCTIONS TO anon` do baseline,
+-- que `revoke from public` não remove; (B) o grant a PUBLIC que o Postgres dá a
+-- toda função ao criá-la, que `revoke from anon` não remove.
+revoke execute on function public.fn_flow_join_arrive(uuid, uuid, text, text)
+  from public, anon, authenticated;
+grant  execute on function public.fn_flow_join_arrive(uuid, uuid, text, text)
+  to service_role;
