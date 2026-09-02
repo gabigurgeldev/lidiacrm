@@ -76,7 +76,12 @@ describe("o selo na bolha", () => {
       .join("");
     expect(visivel).not.toContain("QR code");
     // A hora continua sendo o metadado legível; o canal fala por ícone.
-    expect(screen.getByText("09:00")).toBeInTheDocument();
+    //
+    // ⚠️ Por PADRÃO e não pelo valor: `format(…, "HH:mm")` usa o fuso da
+    // máquina, então "09:00" só vale em UTC−3. O CI roda em UTC e este caso
+    // reprovava lá — verde no laptop, vermelho no runner, sem nada a ver com o
+    // que ele mede (que a hora não sumiu ao dar lugar ao selo).
+    expect(screen.getByText(/^\d{2}:\d{2}$/)).toBeInTheDocument();
   });
 
   it("continua legível por leitor de tela, com a consequência prática junto", () => {
