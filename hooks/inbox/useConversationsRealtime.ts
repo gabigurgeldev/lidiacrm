@@ -20,6 +20,12 @@ export interface ContactSummary {
    *  que assina a URL. Opcional: conversas em cache de antes do campo existir. */
   avatar_storage_path?: string | null;
   /**
+   * Quando a foto foi buscada pela última vez. `null` = NUNCA tentado, e é essa
+   * distinção que a conversa aberta usa para pedir a foto na hora em vez de
+   * esperar o cron. Ausente = resposta em cache de antes do campo existir.
+   */
+  avatar_updated_at?: string | null;
+  /**
    * A trava irrevogável pelo agente: ligada, NENHUM envio automático sai (o
    * guard de before-send lê esta coluna). É o sinal mais honesto de "a pessoa
    * está no comando desta conversa" — e o que decide se o botão de devolver o
@@ -36,6 +42,18 @@ export interface ContactSummary {
  * da resposta e qual número ela vai ver respondendo.
  */
 export interface ChannelSummary {
+  /**
+   * O id da linha de `channel_sessions`.
+   *
+   * Opcional porque respostas em cache de antes deste campo existir não o têm —
+   * e quem consome trata a ausência como "não dá para casar", nunca como erro.
+   *
+   * Existe porque sem ele o embed é um punhado de rótulos: a tela não conseguia
+   * ligar a conversa à linha do seletor de números, e a bolha de mensagem não
+   * tinha como descobrir por onde AQUELA mensagem saiu. Casar por telefone
+   * falharia justo no canal que ainda não tem número gravado.
+   */
+  id?: string | null;
   phone_number: string | null;
   display_name: string | null;
   /**

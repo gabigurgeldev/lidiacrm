@@ -196,6 +196,11 @@ export const AUDIT_ACTIONS = [
   // `lib/channels/reactivate.ts` — o único caminho de volta, e é o que faz a
   // frase acima valer para os DOIS casos em vez de para o que lembraram.
   "channel.reactivated",
+  // O apelido do canal mudou. Parece cosmético e não é: com vários números
+  // conectados, o apelido é COMO o operador escolhe por onde responder, e uma
+  // troca silenciosa faz a pessoa seguinte mandar pelo número errado achando que
+  // mandou pelo certo. O histórico precisa saber quem renomeou o quê.
+  "channel.renamed",
   "authz.denied",
   "team.role_changed",
   "leads.bulk_assigned",

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MessageBubble } from "./MessageBubble";
 import { NoteCard } from "./NoteCard";
+import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useMessagesRealtime } from "@/hooks/inbox/useMessagesRealtime";
 import { useConversationNotes } from "@/hooks/inbox/useConversationNotes";
 import { useDeleteNote } from "@/hooks/inbox/useDeleteNote";
@@ -22,6 +23,26 @@ interface Props {
   conversationId: string | null;
   /** Escolher uma mensagem para responder. Sobe até o composer. */
   onResponder?: (m: Message) => void;
+  /**
+   * O canal da conversa, como o embed da listagem o entrega.
+   *
+   * É o FALLBACK do selo de cada bolha: uma mensagem carrega o
+   * `channel_session_id` por onde de fato passou, mas esse canal pode ter sido
+   * excluído — e canal excluído sai da lista de sessões. Sem o fallback, o
+   * histórico inteiro de um número desligado perderia o selo justo quando ele é
+   * mais útil (entender por que aquelas mensagens pararam).
+   *
+   * ⚠️ O fallback NÃO traz `provider_mode`, e isso é escolha, não esquecimento.
+   * O embed de `channel_sessions` em `app/api/v1/conversations/_handler.ts` é um
+   * `select` compartilhado por quatro handlers e sem camada de tolerância a
+   * coluna ausente; acrescentar ali uma coluna da migration 0206 faria a
+   * listagem inteira do inbox falhar (42703) num clone atrasado — trocaria um
+   * selo por uma tela em branco. Quem tem o modo é a lista de sessões, que é
+   * tolerante. A consequência é estreita e honesta: um canal de DUPLA
+   * modalidade que já foi excluído fica sem selo no histórico, que é
+   * exatamente o "não dá para afirmar" que o selo respeita.
+   */
+  canalDaConversa?: { provider?: string | null; provider_mode?: string | null } | null;
 }
 
 /** Onda 5.2: union de item do thread — mensagem real ou nota interna (nunca vai ao cliente). */
@@ -47,10 +68,27 @@ function dayLabel(d: Date, t: (texto: string) => string = (texto) => texto, loca
   return format(d, "dd/MM/yyyy", { locale: locale });
 }
 
-export function ChatThread({ conversationId, onResponder }: Props) {
+export function ChatThread({ conversationId, onResponder, canalDaConversa }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const q = useMessagesRealtime(conversationId);
+  /**
+   * O mapa de canais, resolvido UMA vez para a thread inteira.
+   *
+   * A bolha não consulta nada: uma conversa de trezentas mensagens montaria a
+   * mesma consulta trezentas vezes. Aqui é uma query em cache
+   * (`useChannelSessions` já é compartilhada com o seletor de números e com o
+   * sinal de saúde da barra lateral), e a bolha recebe dois campos por prop.
+   *
+   * Sem `refetchInterval`: quem precisa de canal atualizado a cada 10s é a tela
+   * de Conexões. Aqui o dado só serve para desenhar um selo — repintá-lo em
+   * intervalo custaria render da thread inteira por nada.
+   */
+  const canais = useChannelSessions().data;
+  const canalPorId = useMemo(
+    () => new Map((canais ?? []).map((c) => [c.id, c] as const)),
+    [canais],
+  );
   const notes = useConversationNotes(conversationId);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
@@ -201,8 +239,8 @@ export function ChatThread({ conversationId, onResponder }: Props) {
   }
 
   return (
-    <div {...sinalDoCanal} className="flex h-full flex-col">
-      <div ref={scrollerRef} className="flex-1 overflow-y-auto py-2">
+    <div {...sinalDoCanal} className="inbox-papel flex h-full flex-col">
+      <div ref={scrollerRef} className="nav-rolagem flex-1 overflow-y-auto py-2">
         {q.hasNextPage && (
           <div className="flex justify-center py-2">
             <Button
@@ -219,11 +257,14 @@ export function ChatThread({ conversationId, onResponder }: Props) {
         {groups.map((g) => (
           <div key={g.key} className="space-y-1">
             <div className="sticky top-0 z-10 flex justify-center py-1">
-              <span className="rounded-full bg-background/80 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground backdrop-blur">
+              {/* OPACO, e não `bg-background/80`: sobre o papel de parede a
+                  versão translúcida deixava o padrão passar por dentro do texto
+                  da data — o único lugar da tela onde ele competia com leitura. */}
+              <span className="inbox-selo-de-data rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
                 {dayLabel(g.date, t, localeDaData)}
               </span>
             </div>
-            {g.items.map((item) =>
+            {g.items.map((item, i) =>
               item.kind === "note" ? (
                 <NoteCard
                   key={`note-${item.data.id}`}
@@ -242,11 +283,49 @@ export function ChatThread({ conversationId, onResponder }: Props) {
                   message={item.data}
                   debugCitations={debugCitations}
                   onResponder={onResponder}
+                  // A sessão POR ONDE esta mensagem passou, com o canal da
+                  // conversa como rede: um número excluído sai da lista de
+                  // sessões, e sem a rede o histórico dele perderia o selo.
+                  canalProvider={
+                    (canalPorId.get(item.data.channel_session_id)?.provider ??
+                      canalDaConversa?.provider) ||
+                    null
+                  }
+                  canalModo={
+                    (canalPorId.get(item.data.channel_session_id)?.provider_mode ??
+                      canalDaConversa?.provider_mode) ||
+                    null
+                  }
                   // A citada sai da MESMA lista já carregada: buscar no servidor
                   // por cada citação faria uma consulta por bolha. Quando a
                   // citada é antiga demais e ficou fora da página, o fio some —
                   // que é melhor que segurar a conversa esperando.
                   citada={porId.get(item.data.reply_to_message_id ?? "") ?? null}
+                  /*
+                    ⚠️ O BLOCO QUEBRA EM TRÊS SITUAÇÕES, e as três importam.
+                    Só a primeira de cada bloco leva o rabo e o espaçamento
+                    cheio — é o que faz dez mensagens seguidas da mesma pessoa
+                    lerem-se como um parágrafo em vez de dez interrupções.
+
+                     1. o item anterior é uma NOTA interna. Ela é do CRM, não da
+                        conversa: continuar o bloco por cima dela juntaria duas
+                        falas que não se seguem.
+                     2. o lado mudou (entrou ↔ saiu). O óbvio.
+                     3. quem enviou mudou de NATUREZA — a IA respondendo e o
+                        atendente respondendo saem os dois pela direita, e
+                        agrupá-los apagaria a única marca de que o robô falou.
+
+                    Primeiro item do dia é sempre primeira do bloco: o separador
+                    de data já cortou o fio ali.
+                  */
+                  primeiraDoBloco={(() => {
+                    const anterior = g.items[i - 1];
+                    if (!anterior || anterior.kind === "note") return true;
+                    return (
+                      anterior.data.direction !== item.data.direction ||
+                      anterior.data.sent_via !== item.data.sent_via
+                    );
+                  })()}
                 />
               ),
             )}

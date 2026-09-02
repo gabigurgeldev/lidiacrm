@@ -52,10 +52,30 @@ export interface DbErrorLike {
   message?: string | null;
 }
 
-/** O erro é "a migration 0106 não rodou neste banco" — e não um erro de verdade. */
-export function isArchivedColumnMissing(error: DbErrorLike | null | undefined): boolean {
+/**
+ * O erro é "esta coluna não existe neste banco" — e não um erro de verdade.
+ *
+ * Genérica desde que o seletor do inbox passou a pedir `provider` para dizer se
+ * o número é por QR code ou oficial: um clone que subiu o código sem aquela
+ * migration receberia 42703 no `select` e a lista de números viria VAZIA, que a
+ * tela lê como "nenhum número conectado" — o convite a parear de novo um número
+ * que já está no ar, exatamente o defeito que esta tolerância existe para
+ * impedir.
+ *
+ * O que mantém a detecção estreita continua sendo a mensagem NOMEAR a coluna,
+ * não o código de erro.
+ */
+export function colunaAusenteNoErro(
+  error: DbErrorLike | null | undefined,
+  coluna: string,
+): boolean {
   if (!error) return false;
-  return COLUNA_AUSENTE.has(error.code ?? "") && (error.message ?? "").includes(ARCHIVED_AT);
+  return COLUNA_AUSENTE.has(error.code ?? "") && (error.message ?? "").includes(coluna);
+}
+
+/** O caso que nomeou a função original. Hoje é um apelido do genérico acima. */
+export function isArchivedColumnMissing(error: DbErrorLike | null | undefined): boolean {
+  return colunaAusenteNoErro(error, ARCHIVED_AT);
 }
 
 /**
@@ -70,8 +90,30 @@ export async function queryTolerantToMissingArchived<R extends { error: DbErrorL
   withArchived: () => PromiseLike<R>,
   withoutArchived: () => PromiseLike<R>,
 ): Promise<R & { schemaOutdated: boolean }> {
-  const first = await withArchived();
-  if (!isArchivedColumnMissing(first.error)) return { ...first, schemaOutdated: false };
-  const fallback = await withoutArchived();
-  return { ...fallback, schemaOutdated: true };
+  return consultaTolerante(ARCHIVED_AT, withArchived, withoutArchived);
+}
+
+/**
+ * A mesma dança para QUALQUER coluna que um clone antigo possa não ter.
+ *
+ * As duas closures e não um builder reaproveitado pela mesma razão de sempre: o
+ * cliente do PostgREST é thenable, e reusar o objeto na segunda tentativa
+ * reenviaria a requisição já resolvida.
+ *
+ * `schemaOutdated` é a soma OU: aninhar duas tolerâncias (é o que o seletor de
+ * números faz — `provider` por fora, `archived_at` por dentro) precisa que a
+ * bandeira sobreviva à camada de fora, senão a tela deixa de avisar que o banco
+ * está atrás.
+ */
+export async function consultaTolerante<R extends { error: DbErrorLike | null }>(
+  coluna: string,
+  comAColuna: () => PromiseLike<R & { schemaOutdated?: boolean }>,
+  semAColuna: () => PromiseLike<R & { schemaOutdated?: boolean }>,
+): Promise<R & { schemaOutdated: boolean }> {
+  const primeira = await comAColuna();
+  if (!colunaAusenteNoErro(primeira.error, coluna)) {
+    return { ...primeira, schemaOutdated: primeira.schemaOutdated === true };
+  }
+  const alternativa = await semAColuna();
+  return { ...alternativa, schemaOutdated: true };
 }

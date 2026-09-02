@@ -1023,6 +1023,56 @@ componente:
 
 ---
 
+## J23 — Ter mais de um número, e saber por qual regra cada um fala `[P0]` (2026-09-01)
+
+A tela de Conexões tratava cada forma de conectar como um caso isolado, e cada
+uma cabia um número só. O redesenho unificou o cartão, liberou vários números
+oficiais, acrescentou a conexão por credencial de CONTA (uma chave, várias
+instâncias) e levou o selo de tipo de canal para a lista, o cabeçalho e a bolha.
+
+**O que muda no risco:** com um canal só, errar a regra de envio não tinha como
+aparecer. Com vários — e com um provedor que hospeda instância oficial e número
+por QR na MESMA conta — a regra passou a depender da LINHA, não do provider.
+Errar para o lado do "oficial" trava texto livre num número que não tem janela;
+errar para o lado do "QR" libera envio que a Meta aceita (200) e depois recusa a
+ENTREGA, com a mensagem sumindo sem erro visível.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J23.1 | Conectar um SEGUNDO número oficial | dois cartões, cada um com a sua URL de webhook | **NÃO MEDIDO NA TELA** — spec `conexoes-multicanal` escrita; precisa de servidor + banco fresco |
+| J23.2 | Conectar por cima do MESMO número | atualiza aquele canal, não cria outro | **PASS** (unit `canal-oficial-multiplos`) |
+| J23.3 | Apelido distingue dois números da mesma WABA | `display_name` do operador vence o `verifiedName` | **PASS** (unit `canal-oficial-multiplos`) |
+| J23.4 | Chave de conta recusada | motivo na tela, e NADA gravado | **PASS** (unit `conta-de-instancias-descoberta`) |
+| J23.5 | Rede caída ≠ chave errada | mensagens diferentes, porque as ações são opostas | **PASS** (unit) |
+| J23.6 | `is_official_api` vira `provider_mode` | oficial e QR viram modos diferentes na linha | **PASS** (unit) |
+| J23.7 | Webhook recusado não desfaz a importação | canal fica, e a tela NOMEIA quem ficou sem receber | **PASS** (unit) |
+| J23.8 | Uma linha ativa + uma arquivada do mesmo número | atualiza a ativa; nunca estoura em `PGRST116` | **PASS** (unit) |
+| J23.9 | Capacidades por modalidade | mesma origem, modos diferentes, regras opostas | **PASS** (unit `capacidades-por-sessao`) |
+| J23.10 | Modo ausente (clone sem a 0206) | cai no conservador em CADA eixo | **PASS** (unit) |
+| J23.11 | Selo na lista, no cabeçalho e na bolha | `data-tipo` correto; canal desconhecido não desenha | **PASS** (unit `tipo-de-canal`, `inbox-selo-de-canal-na-bolha`) |
+| J23.12 | A reserva de espaço acompanha o selo | `data-com-selo` liga/desliga a faixa da hora | **PASS** (unit) |
+| J23.13 | Ingestão do canal novo dispara os efeitos | opt-out, demanda e despacho do agente rodam | **PASS** (unit `channel-ingest-stevo`) |
+| J23.14 | Eco do celular do operador | entra como saída, e NÃO dispara os efeitos | **PASS** (unit) |
+| J23.15 | Reentrega sem id no payload | não duplica (janela de 1 min) | **PASS** (unit) |
+
+### O que ficou NÃO MEDIDO, e por quê
+
+- **A tela, com servidor de pé.** A spec `tests/e2e/conexoes-multicanal.spec.ts`
+  existe e está registrada em `SPECS_PARTE_1`, mas não foi executada nesta
+  sessão: a máquina estava com **42 MB livres em C:** quando a entrega ficou
+  pronta, e `next build` + Supabase local não cabem nisso. Registrado aqui em
+  vez de omitido — a doutrina de QA Visual pede a prova pela tela, e ela está
+  devendo.
+- **O formato real do webhook do intermediário.** Nenhum dos três specs
+  publicados pelo provedor descreve o corpo dos eventos que ele entrega. O
+  parser (`lib/channels/stevo/webhook.ts`) foi escrito DEFENSIVO por isso, e os
+  casos de `channel-webhook-stevo` definem o contrato da degradação, não o
+  formato. **Ao capturar um evento de verdade, aperte o parser.**
+- **Envio de verdade pelo canal novo.** Exige credencial real da conta; pertence
+  à `vps-fresh-onboarding`, que é a P0 fora do CI.
+
+---
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

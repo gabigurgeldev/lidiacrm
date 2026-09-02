@@ -13,15 +13,49 @@ import { audit } from "@/lib/audit";
 import { ok, fail } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
 import { requireRole } from "@/lib/auth/require-role";
-import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
+import {
+  ARCHIVED_AT,
+  consultaTolerante,
+  queryTolerantToMissingArchived,
+} from "@/lib/channels/archived";
 import { createChannelSchema } from "@/lib/schemas/channels";
 import { createClient } from "@/lib/supabase/server";
 import { getWahaClient, wahaFriendlyError } from "@/lib/waha/client";
 
 export const dynamic = "force-dynamic";
 
-export const CHANNEL_COLUMNS =
+/**
+ * As colunas que TODO banco tem, por antigo que seja.
+ *
+ * Separadas de `provider` porque ele é do apêndice e um clone pode não ter — e
+ * um `select` que nomeia coluna inexistente devolve 42703, lista vazia, e a
+ * tela lê isso como "nenhum número conectado". Ver `consultaTolerante`.
+ */
+const CHANNEL_COLUMNS_BASE =
   "id, waha_session_name, display_name, phone_number, status, status_reason, last_health_check_at, last_status_change_at, daily_message_limit, is_warmup_complete, created_at";
+
+/**
+ * `provider` entra porque o inbox precisa DIZER que tipo de número é cada um —
+ * conectado por QR code ou canal oficial da Meta. Antes disto a informação
+ * existia no banco e não chegava à tela, e o seletor mostrava dois números
+ * indistinguíveis com regras de envio completamente diferentes (a janela de 24h
+ * vale para um e não para o outro).
+ */
+export const CHANNEL_COLUMNS = `${CHANNEL_COLUMNS_BASE}, provider`;
+
+/**
+ * `provider_mode` entra pelo MESMO motivo do `provider`, um degrau abaixo: há
+ * canal em que a regra de envio não sai da identidade do provider, e sim da
+ * modalidade da linha — a mesma conta intermediada hospeda instância oficial
+ * (janela de 24h) e número ligado por QR (texto livre, risco de banimento). Sem
+ * este campo o selo diria a regra errada em metade dos números desse canal.
+ *
+ * Terceira camada de tolerância, e não um campo a mais na segunda: a coluna vem
+ * da migration 0206 e um clone pode ter `provider` e não ter `provider_mode`.
+ * Juntá-los faria a ausência do mais novo derrubar o mais velho, e o seletor
+ * perderia o selo dos canais que sempre souberam dizer o que são.
+ */
+export const CHANNEL_COLUMNS_COM_MODO = `${CHANNEL_COLUMNS}, provider_mode`;
 
 export async function GET(): Promise<Response> {
   const requestId = randomUUID();
@@ -31,10 +65,10 @@ export async function GET(): Promise<Response> {
   if (!activeOrg) return fail("forbidden_tenant", "Nenhuma organização ativa.", 403, { requestId });
 
   const supabase = await createClient();
-  const base = () =>
+  const base = (colunas: string) =>
     supabase
       .from("channel_sessions")
-      .select(CHANNEL_COLUMNS)
+      .select(colunas)
       .eq("organization_id", activeOrg.orgId);
   // Canais arquivados sobrevivem só como âncora das FKs RESTRICT
   // (conversations/messages). Para o usuário eles foram excluídos.
@@ -44,9 +78,29 @@ export async function GET(): Promise<Response> {
   // devolveria 42703 → 500 → "Nenhum número conectado ainda", convidando o
   // operador a parear de novo um número que já está no ar. Sem a coluna, nada
   // está arquivado, e a lista sem o filtro é a lista certa (ver lib/channels/archived).
-  const { data, error, schemaOutdated } = await queryTolerantToMissingArchived(
-    () => base().is(ARCHIVED_AT, null).order("created_at", { ascending: true }),
-    () => base().order("created_at", { ascending: true }),
+  //
+  // DUAS tolerâncias ANINHADAS, e a ordem importa: `provider` por fora,
+  // `archived_at` por dentro. Ao contrário, um banco sem `provider` cairia na
+  // alternativa da camada de fora e perderia junto o filtro de arquivados —
+  // canal excluído voltaria à lista, que é regressão de verdade, para consertar
+  // uma coluna decorativa. Assim cada ausência custa só a si mesma.
+  const consultar = (colunas: string) => () =>
+    queryTolerantToMissingArchived(
+      () => base(colunas).is(ARCHIVED_AT, null).order("created_at", { ascending: true }),
+      () => base(colunas).order("created_at", { ascending: true }),
+    );
+  // TRÊS tolerâncias aninhadas agora, mesma lógica de antes: `provider_mode`
+  // (0206) por fora, `provider` (0087) no meio, `archived_at` (0106) por dentro.
+  // Cada ausência custa só a si mesma — um clone sem a mais nova continua
+  // recebendo `provider` e o filtro de arquivados.
+  //
+  // `schemaOutdated` é OR acumulativo entre as camadas (ver `consultaTolerante`),
+  // então a faixa de aviso na tela acende para qualquer uma das três.
+  const { data, error, schemaOutdated } = await consultaTolerante(
+    "provider_mode",
+    () =>
+      consultaTolerante("provider", consultar(CHANNEL_COLUMNS_COM_MODO), consultar(CHANNEL_COLUMNS_BASE)),
+    () => consultaTolerante("provider", consultar(CHANNEL_COLUMNS), consultar(CHANNEL_COLUMNS_BASE)),
   );
   if (error) return fail("internal_error", error.message, 500, { requestId });
 

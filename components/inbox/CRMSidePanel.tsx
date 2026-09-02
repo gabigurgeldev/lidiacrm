@@ -8,6 +8,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { Card } from "@/components/ui/card";
+import { AvatarDoContato } from "@/components/inbox/AvatarDoContato";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -491,10 +492,27 @@ export function CRMSidePanel({ conversation }: Props) {
           {t("Contato")}
         </h3>
         <Card className="mt-2 space-y-2 p-3 text-sm">
-          <div className="font-medium">{displayName}</div>
-          {contact?.phone_number && (
-            <div className="text-xs text-muted-foreground">{phoneForDisplay(contact.phone_number)}</div>
-          )}
+          {/* O TERCEIRO lugar onde o rosto aparece — a lista, o cabeçalho e
+              aqui. Este painel responde "quem é essa pessoa?", e era o único dos
+              três que respondia sem mostrar a cara dela. */}
+          <div className="flex items-center gap-2.5">
+            <AvatarDoContato
+              contactId={contactId}
+              temFoto={Boolean(contact?.avatar_storage_path)}
+              anonimizado={contact?.is_anonymized}
+              nome={displayName}
+              className="h-11 w-11 shrink-0"
+              tamanhoDoIcone={20}
+            />
+            <div className="min-w-0">
+              <div className="truncate font-medium">{displayName}</div>
+              {contact?.phone_number && (
+                <div className="truncate text-xs text-muted-foreground">
+                  {phoneForDisplay(contact.phone_number)}
+                </div>
+              )}
+            </div>
+          </div>
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {tags.map((t) => (

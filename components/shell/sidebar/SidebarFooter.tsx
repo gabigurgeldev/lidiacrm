@@ -5,12 +5,27 @@ import { toggleSidebar } from "@/app/actions/shell/toggleSidebar";
 import { VersionFooter } from "@/components/shell/VersionFooter";
 import { SidebarItem } from "@/components/shell/sidebar/SidebarItem";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HeaderActions } from "@/components/shell/header/HeaderActions";
 import { useT } from "@/hooks/i18n/useT";
+import { cn } from "@/lib/utils";
 import { CaretDoubleLeft, CaretDoubleRight, Gear } from "@/lib/ui/icons";
 import { GRUPO_NO_RODAPE, NAV_GROUPS } from "@/lib/navigation/registry";
 
 interface SidebarFooterProps {
   collapsed: boolean;
+  /**
+   * O cabeçalho do app sumiu desta tela, e as ações de conta ficaram órfãs.
+   *
+   * Sino, idioma, tema e avatar moram na barra superior. No Inbox ela não é
+   * desenhada (ver `lib/navigation/casca.ts`), e sem esta prop os quatro
+   * simplesmente deixariam de existir na tela em que a pessoa passa o dia — o
+   * aviso de mensagem nova inclusive.
+   *
+   * ⚠️ UM LUGAR DE CADA VEZ, nunca os dois: quem decide é a MESMA função que a
+   * casca consulta para não desenhar o cabeçalho. Duas regras separadas não
+   * dariam erro — dariam o avatar duas vezes, ou nenhuma, em silêncio.
+   */
+  mostrarAcoesDeConta?: boolean;
   compacto: boolean;
   pathname: string;
   showCollapseControl: boolean;
@@ -38,6 +53,7 @@ export function SidebarFooter({
   pathname,
   showCollapseControl,
   onNavigate,
+  mostrarAcoesDeConta = false,
 }: SidebarFooterProps) {
   const t = useT();
   const [isPending, startTransition] = useTransition();
@@ -63,6 +79,20 @@ export function SidebarFooter({
 
   return (
     <div className="shrink-0 space-y-0.5 border-t p-2">
+      {/*
+        ACIMA de Configurações, e não abaixo: o rodapé se lê de baixo para cima
+        em ordem de raridade — recolher a barra é o que menos se toca, e o sino é
+        o que mais. Estreita, `HeaderActions` já empilha sozinho (os botões são
+        `shrink-0` num flex), então não há caso especial de largura aqui.
+      */}
+      {mostrarAcoesDeConta && (
+        <div
+          className={cn("mb-1 flex items-center gap-0.5 pb-1", compacto && "flex-col")}
+          data-testid="acoes-de-conta-na-barra"
+        >
+          <HeaderActions />
+        </div>
+      )}
       {rodape && (
         <SidebarItem
           href={rodape.href}

@@ -20,7 +20,15 @@ describe("AudioPlayer", () => {
     render(<AudioPlayer messageId="m3" isOutbound={false} />);
     expect(screen.getByRole("button", { name: /reproduzir/i })).toBeInTheDocument();
     expect(screen.getByRole("slider", { name: /progresso/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /velocidade/i })).toHaveTextContent("1x");
+  });
+
+  it("a velocidade NÃO existe antes do primeiro play", () => {
+    // Mudança deliberada, e a asserção é pela AUSÊNCIA de propósito: antes do
+    // play, "1x" não responde pergunta nenhuma — não há som tocando para estar
+    // rápido ou lento. É o que o WhatsApp faz, e é o que tira um controle morto
+    // de uma bolha que já é estreita.
+    render(<AudioPlayer messageId="m3" isOutbound={false} />);
+    expect(screen.queryByRole("button", { name: /velocidade/i })).toBeNull();
   });
 
   it("alterna play/pause", () => {
@@ -30,9 +38,12 @@ describe("AudioPlayer", () => {
     expect(screen.getByRole("button", { name: /pausar/i })).toBeInTheDocument();
   });
 
-  it("cicla a velocidade 1x → 1.5x → 2x → 1x", () => {
+  it("cicla a velocidade 1x → 1.5x → 2x → 1x, DEPOIS do play", () => {
     render(<AudioPlayer messageId="m3" isOutbound={false} />);
+    // O play é o que faz o controle aparecer; sem ele não há o que ciclar.
+    fireEvent.click(screen.getByRole("button", { name: /reproduzir/i }));
     const rate = screen.getByRole("button", { name: /velocidade/i });
+    expect(rate).toHaveTextContent("1x");
     fireEvent.click(rate);
     expect(rate).toHaveTextContent("1.5x");
     fireEvent.click(rate);

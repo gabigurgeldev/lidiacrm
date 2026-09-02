@@ -12,10 +12,16 @@ import { describe, expect, it } from "vitest";
 import {
   CHANNEL_CAPABILITIES,
   capabilitiesOf,
+  CAPACIDADES_POR_MODO,
   type ChannelProvider,
 } from "@/lib/channels/capabilities";
 
-const PROVIDERS = ["waha", "meta_cloud", "zernio"] as const satisfies readonly ChannelProvider[];
+const PROVIDERS = [
+  "waha",
+  "meta_cloud",
+  "zernio",
+  "stevo",
+] as const satisfies readonly ChannelProvider[];
 
 /**
  * Esquecer um provider aqui passa a ser erro de COMPILAÇÃO.
@@ -60,7 +66,7 @@ describe("matriz capability × provider é exaustiva", () => {
     expect(() => capabilitiesOf("telegram" as ChannelProvider)).toThrow(/unknown_channel_provider/);
   });
 
-  it("as duas famílias de restrição são mutuamente exclusivas por provider", () => {
+  it("as duas famílias de restrição são mutuamente exclusivas por SESSÃO", () => {
     // auto-restrição (banRisk) e hetero-restrição (requiresTemplates) nunca coexistem:
     // é o que a doutrina restricao-de-canal.md afirma sobre a física dos canais.
     //
@@ -71,9 +77,54 @@ describe("matriz capability × provider é exaustiva", () => {
     // e decidir o que fazer quando as duas barram ao mesmo tempo (adiar? mudar a
     // forma da mensagem? escalar ao humano?), não silenciar o alarme que descobriu
     // a lacuna.
+    //
+    // ─── A REVISÃO QUE ESTE CASO PEDIU, feita com o contraexemplo na mão ──────
+    //
+    // O quarto canal apareceu e o alarme tocou. A tese da doutrina NÃO caiu: o
+    // que caiu foi a unidade de análise. Ela era o PROVIDER, e passou a ser a
+    // SESSÃO — porque esse canal hospeda, na mesma conta, instância oficial
+    // (janela de 24h, sem risco de banimento) e número ligado por QR (texto
+    // livre, com risco). Cada MODALIDADE respeita a exclusividade; o provider,
+    // como unidade, deixou de ser a coisa certa a medir.
+    //
+    // Por isso a varredura mudou de forma: mede toda modalidade declarada, e
+    // mede a linha do provider apenas para quem tem modalidade ÚNICA — que é
+    // onde "a linha do provider" e "a sessão" são a mesma coisa.
+    //
+    // ─── E o fallback, que declara as duas de propósito ──────────────────────
+    //
+    // A linha de provider de um canal multi-modalidade é fallback: ela só é
+    // consultada quando `provider_mode` não foi gravado (clone sem a migration
+    // 0206). Ela é a conservadora em CADA eixo — não descreve instância real
+    // nenhuma, e é isso que a faz declarar as duas famílias.
+    //
+    // O que acontece quando as duas barram ao mesmo tempo, que é a pergunta que
+    // o parágrafo acima manda responder: o envio livre fora da janela é vetado
+    // pelo `messagingWindowGate` E o ritmo é limitado pelo `pacingGate`. O
+    // desfecho é "não sai agora", nunca "sai errado" — e é deliberado: o
+    // fallback existe para não fazer estrago enquanto a modalidade é
+    // desconhecida, não para adivinhar qual das duas famílias vale.
+    const multiModalidade = new Set(Object.keys(CAPACIDADES_POR_MODO));
+
     for (const p of PROVIDERS) {
+      const porModo = CAPACIDADES_POR_MODO[p];
+      if (porModo) {
+        for (const [modo, c] of Object.entries(porModo)) {
+          expect(
+            c.banRisk && c.requiresTemplates,
+            `${p}/${modo} declara as duas famílias — é uma modalidade REAL, e aí a doutrina está mesmo contrariada`,
+          ).toBe(false);
+        }
+        continue;
+      }
       const c = CHANNEL_CAPABILITIES[p];
       expect(c.banRisk && c.requiresTemplates, `${p} declara as duas famílias`).toBe(false);
     }
+
+    // Controle do instrumento: se a exceção do fallback deixar de existir (o
+    // canal multi-modalidade sumir, ou passar a ter modalidade única), este
+    // `continue` acima vira código morto e a varredura perde o ramo que ela
+    // existe para cobrir — sem ninguém perceber.
+    expect(multiModalidade.size, "nenhum canal multi-modalidade: o ramo por modo virou código morto").toBeGreaterThan(0);
   });
 });

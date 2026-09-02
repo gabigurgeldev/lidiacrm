@@ -42,6 +42,20 @@ const FONTE: Record<ChannelProvider, FonteDeTemplates | null> = {
   waha: null,
   meta_cloud: "oficial",
   zernio: "parceiro",
+  // `null` — e esta é uma decisão, não um esquecimento.
+  //
+  // A instância OFICIAL deste intermediário tem, sim, definições aprovadas (a
+  // WABA é da Meta), e elas vivem na API oficial dele. Mas a fonte é escolhida
+  // aqui pelo PROVIDER, e este provider hospeda as duas modalidades: apontar
+  // para uma rota de templates faria o número ligado por QR — que não tem
+  // definição nenhuma — oferecer um seletor vazio, e o operador concluir que a
+  // sincronização quebrou.
+  //
+  // Escolher pela MODALIDADE exigiria que este mapa recebesse a sessão, e não o
+  // provider — mudança que atravessa todos os chamadores. Enquanto ela não
+  // acontece, `null` é a resposta honesta: a tela não oferece definições que não
+  // pode garantir, e o envio livre (que é o caminho comum aqui) segue intacto.
+  stevo: null,
 };
 
 /** `null` quando este canal não trabalha com definições aprovadas. */

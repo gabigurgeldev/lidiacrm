@@ -49,6 +49,22 @@ vi.mock("@/app/actions/shell/toggleSidebar", () => ({
 vi.mock("@/components/shell/VersionFooter", () => ({
   VersionFooter: () => null,
 }));
+/**
+ * ⚠️ MOCK NOVO, e ele registra um ACOPLAMENTO que a barra não tinha.
+ *
+ * O rodapé passou a adotar as ações de conta (sino, idioma, tema, avatar)
+ * quando o cabeçalho do app não é desenhado — e a rota mockada aqui é
+ * `/app/inbox`, que é exatamente o caso. `HeaderActions` arrasta `ThemeProvider`
+ * (lança sem ele), `AuthProvider` e o react-query do sino: sem este mock, os 16
+ * casos deste arquivo morrem em "useTheme must be used within <ThemeProvider>",
+ * medindo a montagem do cabeçalho em vez da navegação.
+ *
+ * Que o rodapé REALMENTE adota as ações é provado onde essa é a pergunta:
+ * `tests/unit/casca-esconde-o-cabecalho.test.tsx`.
+ */
+vi.mock("@/components/shell/header/HeaderActions", () => ({
+  HeaderActions: () => null,
+}));
 
 function comoPapel(role: ActiveOrg["role"]) {
   authRef.user = { is_platform_admin: false };

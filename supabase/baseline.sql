@@ -9358,37 +9358,21 @@ alter table public.channel_sessions alter column waha_session_name drop not null
 --  que funciona.)
 
 -- ---- vocabulário do terceiro canal (migration 0131) ----
--- Espelho idempotente da 0116. Racional completo no arquivo da migration; o que
--- importa aqui é POR QUE os dois CHECKs são recriados em vez de criados com
--- `exception when duplicate_object`: os blocos acima já os criaram na versão de
--- DOIS providers, e num clone que roda `update.sh` eles JÁ EXISTEM. O
--- `duplicate_object` engoliria a versão nova em silêncio e o banco ficaria
--- recusando a sessão do canal novo com o script tendo passado verde — a
--- falha-em-verde que a doutrina do self-host proíbe.
---
 -- Ordem importa: a coluna nasce ANTES do CHECK que a referencia, e nullable,
--- então nenhuma linha existente a viola. Toda linha pré-existente tem provider
--- 'waha' ou 'meta_cloud' e já satisfaz o ramo correspondente — nada a
--- deduplicar antes das constraints.
+-- então nenhuma linha existente a viola.
 alter table public.channel_sessions
   add column if not exists zernio_account_id text;
 
-alter table public.channel_sessions
-  drop constraint if exists channel_sessions_provider_check;
-
-alter table public.channel_sessions
-  add constraint channel_sessions_provider_check
-  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text]));
-
-alter table public.channel_sessions
-  drop constraint if exists channel_sessions_provider_ref_check;
-
-alter table public.channel_sessions
-  add constraint channel_sessions_provider_ref_check check (
-    (provider = 'waha'       and waha_session_name    is not null) or
-    (provider = 'meta_cloud' and meta_phone_number_id is not null) or
-    (provider = 'zernio'     and zernio_account_id    is not null)
-  );
+-- (constraints channel_sessions_provider_check e channel_sessions_provider_ref_check:
+--  este bloco as reconstruía com a lista de TRÊS providers, e deixou de fazê-lo
+--  quando o quarto canal chegou. A regra é a mesma que a 0087 já seguia e está
+--  escrita em `tests/unit/baseline-constraint-reconstruida.test.ts`: uma
+--  constraint, UM bloco, no fim do arquivo, com o vocabulário FINAL.
+--
+--  O motivo é concreto: num clone que já tem o quarto provider gravado, este
+--  bloco falharia ao re-aplicar (`update.sh`) — e, entre o `drop` e o `add` que
+--  funciona lá embaixo, a tabela ficaria SEM constraint. Falha em verde, que é
+--  o desfecho que a doutrina do self-host proíbe.)
 
 comment on column public.channel_sessions.zernio_account_id is
   'Identificador da conta conectada NO INTERMEDIÁRIO (accountId), não o phone_number_id da Meta. É o que endereça envio e webhook. Espelhado em lib/channels/session-ref.ts.';
@@ -17812,3 +17796,76 @@ grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 grant execute on function public.fn_encrypt_oauth(text) to service_role;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 grant execute on function public.fn_update_budget_consumption() to service_role;
+-- ---- Quarto canal (intermediário de conta) + a MODALIDADE da sessão (migration 0206) ----
+--
+-- Duas coisas no mesmo bloco porque separá-las criaria um estado em que o
+-- provider existe e sua modalidade não — e aí toda linha nasceria sem regra de
+-- envio conhecida. O racional inteiro está no cabeçalho de
+-- `supabase/migrations/20260901120000_0206_canal_stevo_e_modalidade.sql`.
+--
+-- Em uma frase: este intermediário hospeda, na MESMA conta, instância oficial
+-- (janela de 24h, template aprovado) e número ligado por QR (texto livre, risco
+-- de banimento) — regras de envio opostas sob um nome só. `provider_mode` é
+-- quem as separa; `null` significa "provider de modalidade única, pergunte a
+-- ele", e é por isso que a coluna não tem default: um default marcaria toda
+-- linha existente como algo que ela não é.
+
+alter table public.channel_sessions
+  add column if not exists stevo_instance_id text;
+
+alter table public.channel_sessions
+  add column if not exists stevo_token_encrypted bytea;
+
+alter table public.channel_sessions
+  add column if not exists provider_mode text;
+
+alter table public.channel_sessions
+  drop constraint if exists channel_sessions_provider_check;
+
+alter table public.channel_sessions
+  add constraint channel_sessions_provider_check
+  check (provider = any (array['waha'::text, 'meta_cloud'::text, 'zernio'::text, 'stevo'::text]));
+
+alter table public.channel_sessions
+  drop constraint if exists channel_sessions_provider_ref_check;
+
+alter table public.channel_sessions
+  add constraint channel_sessions_provider_ref_check check (
+    (provider = 'waha'       and waha_session_name    is not null) or
+    (provider = 'meta_cloud' and meta_phone_number_id is not null) or
+    (provider = 'zernio'     and zernio_account_id    is not null) or
+    (provider = 'stevo'      and stevo_instance_id    is not null)
+  );
+
+alter table public.channel_sessions
+  drop constraint if exists channel_sessions_provider_mode_check;
+
+alter table public.channel_sessions
+  add constraint channel_sessions_provider_mode_check
+  check (provider_mode is null or provider_mode = any (array['oficial'::text, 'qr'::text]));
+
+-- Dedup ANTES do índice único: um clone que rodou versão de desenvolvimento pode
+-- ter duas linhas ativas com a mesma instância, e o `create unique index`
+-- quebraria o `update.sh` dele. Nunca apaga linha — ela é âncora de FK de
+-- conversas e mensagens.
+update public.channel_sessions c
+   set stevo_instance_id = c.stevo_instance_id || '-conflito-' || c.id::text
+  from (
+    select id,
+           row_number() over (partition by stevo_instance_id order by created_at, id) as n
+      from public.channel_sessions
+     where stevo_instance_id is not null
+       and archived_at is null
+  ) d
+ where d.id = c.id
+   and d.n > 1;
+
+create unique index if not exists channel_sessions_stevo_instance_id_ativo_unique
+  on public.channel_sessions (stevo_instance_id)
+  where archived_at is null and stevo_instance_id is not null;
+
+comment on column public.channel_sessions.stevo_instance_id is
+  'Identificador da INSTANCIA no painel do intermediario de conta - id dele, nao o phone_number_id da Meta. E o que enderaca envio, webhook e saude. Espelhado em lib/channels/session-ref.ts.';
+
+comment on column public.channel_sessions.provider_mode is
+  'A modalidade da sessao quando o provider hospeda mais de uma: oficial (janela de 24h, template aprovado) ou qr (texto livre, risco de banimento). NULL = o provider tem modalidade unica e ela sai da identidade dele. Espelhado em lib/channels/tipo-de-conexao.ts.';
