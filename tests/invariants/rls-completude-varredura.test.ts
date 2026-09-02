@@ -75,6 +75,19 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  ...(["flow_executions", "flow_execution_frames", "flow_execution_joins"] as const).map(
+    (tabela) => ({
+      tabela,
+      razao:
+        "tests/invariants/motor-de-fluxos-rls.test.ts prova as duas direções, o " +
+        "pedido da tabela INTEIRA, o gate de papel (o `agent` da própria org NÃO " +
+        "lê) e a escrita cruzada. Fica fora de TABLES pelo mesmo motivo de " +
+        "`webhook_lead_captures`: a policy da 0207 exige `manager` e o usuário " +
+        "semeado em rls-isolation.test.ts é `agent` — lá o controle positivo " +
+        "falharia por ACERTO. `flow_executions.input` guarda o texto que o " +
+        "cliente mandou, então o que está em jogo aqui é conversa, não metadado.",
+    }),
+  ),
   {
     tabela: "webhook_lead_captures",
     razao:

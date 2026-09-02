@@ -99,9 +99,6 @@ beforeAll(() => {
       v_conv uuid;
       v_pipe uuid;
       v_stage uuid;
-      v_flow uuid;
-      v_versao uuid;
-      v_exec uuid;
     begin
       foreach v_org in array array['${ORG_A}'::uuid, '${ORG_B}'::uuid] loop
         select id into v_sess from public.channel_sessions where organization_id = v_org limit 1;
@@ -202,56 +199,6 @@ beforeAll(() => {
             );
         end if;
 
-        -- flow_executions + as duas tabelas do paralelo (migration 0207).
-        --
-        -- flow_execution_frames guarda vars, e flow_executions.input guarda o
-        -- PAYLOAD DO EVENTO — o texto da mensagem que o cliente mandou. Entre o
-        -- tenant A e a conversa do cliente do tenant B só existe a policy, que
-        -- é exatamente o que este arquivo mede de forma comportamental.
-        -- (Sem crase nos comentários: este bloco vive dentro de um template
-        -- literal de JavaScript, e uma crase aqui encerra a string.)
-        if not exists (select 1 from public.flows where organization_id = v_org) then
-          insert into public.flows (organization_id, name, status)
-            values (v_org, 'RLS Invariant Flow', 'draft') returning id into v_flow;
-          insert into public.flow_versions
-            (organization_id, flow_id, version_number, graph, trigger_config)
-            values (
-              v_org, v_flow, 1,
-              '{"nodes":[],"edges":[]}'::jsonb,
-              '{"kind":"manual"}'::jsonb
-            ) returning id into v_versao;
-        else
-          select id into v_flow from public.flows where organization_id = v_org limit 1;
-          select id into v_versao from public.flow_versions
-            where organization_id = v_org and flow_id = v_flow limit 1;
-        end if;
-
-        if not exists (select 1 from public.flow_executions where organization_id = v_org) then
-          insert into public.flow_executions
-            (organization_id, flow_id, version_id, current_node_id, next_eval_at, input)
-            values (
-              v_org, v_flow, v_versao, 'inicio', now(),
-              jsonb_build_object('texto', 'mensagem privada do tenant ' || v_org::text)
-            ) returning id into v_exec;
-        else
-          select id into v_exec from public.flow_executions
-            where organization_id = v_org limit 1;
-        end if;
-
-        if not exists (select 1 from public.flow_execution_frames where organization_id = v_org) then
-          insert into public.flow_execution_frames
-            (organization_id, execution_id, node_id, status, next_eval_at, vars)
-            values (
-              v_org, v_exec, 'inicio', 'ready', now(),
-              jsonb_build_object('segredo', 'var local do tenant ' || v_org::text)
-            );
-        end if;
-
-        if not exists (select 1 from public.flow_execution_joins where organization_id = v_org) then
-          insert into public.flow_execution_joins
-            (organization_id, execution_id, fork_node_id, join_node_id, modo, esperadas)
-            values (v_org, v_exec, 'bifurca', 'junta', 'todas', 2);
-        end if;
       end loop;
     end
     $seed$;
@@ -290,13 +237,16 @@ export const TABLES = [
   // lia e escrevia. É o modo de falha que o aviso acima descreve, encontrado vivo.
   "org_guardrail_layers",
   "push_subscriptions",
-  // migration 0207 — o motor de fluxos em paralelo. `flow_executions.input`
-  // guarda o PAYLOAD DO EVENTO (o texto que o cliente mandou) e
-  // `flow_execution_frames.vars` guarda as variáveis locais de cada ramo: entre
-  // o tenant A e a conversa do cliente do tenant B só existe a policy.
-  "flow_executions",
-  "flow_execution_frames",
-  "flow_execution_joins",
+  // ⚠️ `flow_executions`, `flow_execution_frames` e `flow_execution_joins`
+  // (migration 0207) NÃO entram aqui, e a ausência é deliberada — pelo mesmo
+  // motivo de `webhook_lead_captures` acima. As policies delas exigem
+  // `manager`, e o usuário semeado neste arquivo é `agent`: o controle positivo
+  // falharia por ACERTO, e a "correção" natural seria afrouxar a policy para
+  // caber no molde. Medido: as três reprovaram aqui exatamente assim antes de
+  // ganharem arquivo próprio. A prova delas vive em
+  // `tests/invariants/motor-de-fluxos-rls.test.ts`, que mede as duas direções,
+  // o pedido da tabela INTEIRA, o gate de papel (o `agent` que não lê) e a
+  // escrita cruzada.
   // ⚠️ `webhook_lead_captures` (migration 0174) NÃO entra nesta lista, e a
   // ausência é deliberada: a policy dela exige `manager`, e o usuário semeado
   // aqui é `agent` — o controle positivo falharia por ACERTO, e a "correção"
