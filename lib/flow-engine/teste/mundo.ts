@@ -54,6 +54,7 @@ export interface Mundo {
   }>;
   globais: Record<string, unknown>;
   subFluxosPublicados: Set<string>;
+  avisosDeSubFluxo: Array<{ execution_id: string; parent_execution_id: string; outcome: string }>;
 }
 
 let proximaFrente = 0;
@@ -97,6 +98,7 @@ export function mundoNovo(): Mundo {
     encontros: new Map(),
     globais: {},
     subFluxosPublicados: new Set(),
+    avisosDeSubFluxo: [],
   };
 }
 
@@ -173,7 +175,7 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
         return { inserted: false };
       }
       mundo.passos.push(evento);
-      if (evento.event_type === "espera_iniciada") {
+      if (evento.event_type === "espera_iniciada" || evento.event_type === "espera_por_evento") {
         mundo.esperas.set(`${evento.execution_id}:${evento.node_id}`, {
           desde: mundo.agora,
           ate: new Date(String(evento.payload.ate)),
@@ -278,6 +280,9 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
       }
     },
     carregarGlobais: async () => mundo.globais,
+    avisarQueSubFluxoTerminou: async (input) => {
+      mundo.avisosDeSubFluxo.push(input);
+    },
     chamarSubFluxo: async (input) => {
       if (mundo.subFluxosPublicados.has(input.flow_id) === false) return null;
       const id = `exec-filha-${mundo.frentes.size + mundo.execucoes.size}`;

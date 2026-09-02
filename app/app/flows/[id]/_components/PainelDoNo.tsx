@@ -13,6 +13,22 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 import { OPERADORES, operadorPedeValor, type Operador } from "@/lib/flow-engine/condicoes";
+import { EVENTOS_QUE_ACORDAM } from "@/lib/flow-engine/nodes/paralelo";
+
+/**
+ * O nome humano de cada evento que o bloco de espera oferece.
+ *
+ * Só os RÓTULOS moram aqui; a lista de valores vem do registry. É a divisão que
+ * `nodeIcons.ts` já usa: o backend decide o que existe, o cliente decide como
+ * chamar — e um evento novo aparece na tela mesmo que alguém esqueça deste mapa
+ * (cai no próprio identificador, feio mas funcional).
+ */
+const ROTULO_DO_EVENTO: Record<string, string> = {
+  "message.received": "O cliente responder",
+  "lead.stage_changed": "O lead mudar de etapa",
+  "lead.won": "O lead ser ganho",
+  "lead.lost": "O lead ser perdido",
+};
 
 /**
  * Os ajustes de cada bloco.
@@ -178,10 +194,18 @@ function Ajustes({ tipo, config, aoMudarConfig }: Props) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="message.received">{t("O cliente responder")}</SelectItem>
-                <SelectItem value="lead.stage_changed">{t("O lead mudar de etapa")}</SelectItem>
-                <SelectItem value="lead.won">{t("O lead ser ganho")}</SelectItem>
-                <SelectItem value="lead.lost">{t("O lead ser perdido")}</SelectItem>
+                {/*
+                  As opções saem de `EVENTOS_QUE_ACORDAM`, a mesma lista que o
+                  handler do barramento escuta. Repetir os valores aqui à mão
+                  criaria a divergência mais silenciosa possível: a pessoa
+                  escolheria a opção, o fluxo dormiria, o evento aconteceria — e
+                  ninguém acordaria, porque o handler nunca soube dele.
+                */}
+                {EVENTOS_QUE_ACORDAM.map((evento) => (
+                  <SelectItem key={evento} value={evento}>
+                    {t(ROTULO_DO_EVENTO[evento] ?? evento)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </Campo>

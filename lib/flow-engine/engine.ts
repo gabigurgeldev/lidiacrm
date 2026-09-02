@@ -216,6 +216,20 @@ export interface FlowAdminClient {
    * Trocar o telefone do suporte num lugar só, em vez de em trinta fluxos.
    */
   carregarGlobais(orgId: string): Promise<Record<string, unknown>>;
+  /**
+   * Avisa o barramento de que uma execução FILHA terminou.
+   *
+   * ⚠️ Sem isto, a frente do pai só volta a andar quando o prazo de 24h vence:
+   * o sub-fluxo terminaria em segundos e quem o chamou ficaria parado um dia
+   * inteiro, sem erro nenhum. O evento é o que fecha o laço.
+   */
+  avisarQueSubFluxoTerminou(input: {
+    organization_id: string;
+    execution_id: string;
+    parent_execution_id: string;
+    outcome: string;
+    output: Record<string, unknown>;
+  }): Promise<void>;
   /** Dispara um sub-fluxo e devolve o id da execução filha. */
   chamarSubFluxo(input: {
     organization_id: string;
@@ -406,22 +420,6 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
     total: p.frente.loop_total,
   };
 
-  /**
-   * ESTA volta acordou por PRAZO VENCIDO, e não porque o evento chegou.
-   *
-   * ⚠️ Sem esta marca, `logic.await_event` é um laço infinito silencioso: o
-   * prazo vence, o claim traz a frente de volta, o nó roda outra vez e devolve
-   * `await_event` com um prazo NOVO. A frente dorme mais um prazo, para sempre,
-   * e o ramo "venceu o prazo" que o operador desenhou nunca é percorrido.
-   *
-   * Só vale para o PRIMEIRO nó desta caminhada — o nó em que a frente estava
-   * parada. Depois de avançar, quem manda é o nó novo.
-   */
-  let acordouPorPrazo =
-    p.frente.awaiting_event_type !== null &&
-    p.frente.wait_deadline !== null &&
-    Date.parse(p.frente.wait_deadline) <= agora.getTime();
-
   /** Une o que a frente sabe ao que o motor precisa gravar nela. */
   const frenteAgora = (): FrenteRow => ({
     ...p.frente,
@@ -586,7 +584,6 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
       }
 
       nodeId = aresta.target;
-      acordouPorPrazo = false;
       resumo.avancadas += 1;
       continue;
     }
@@ -695,43 +692,6 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
     }
 
     if (resultado.kind === "await_event") {
-      if (acordouPorPrazo) {
-        // O prazo venceu: sai pelo ramo que o operador desenhou para isso, em
-        // vez de dormir mais um prazo. É AQUI que "venceu o prazo" acontece.
-        acordouPorPrazo = false;
-        passos += 1;
-        const saida = arestaDoRamo(analisado.arestas, nodeId, resultado.branch_on_timeout);
-        await deps.db.registrarPasso({
-          organization_id: execucao.organization_id,
-          execution_id: execucao.id,
-          node_id: nodeId,
-          event_type: "prazo_do_evento_venceu",
-          payload: { evento: resultado.event_type, ramo: resultado.branch_on_timeout },
-          idempotency_key: `${p.frente.id}:${nodeId}:prazo:${passos}`,
-        });
-        // A frente deixa de esperar: manter `awaiting_event_type` faria um
-        // evento atrasado acordá-la depois de ela já ter seguido pelo prazo.
-        await deps.db.atualizarFrente(p.frente.id, execucao.organization_id, {
-          awaiting_event_type: null,
-          awaiting_match: null,
-          wait_deadline: null,
-          updated_at: agora.toISOString(),
-        });
-        p.frente = {
-          ...p.frente,
-          awaiting_event_type: null,
-          awaiting_match: null,
-          wait_deadline: null,
-        };
-        if (saida === null) {
-          await encerrarFrente(p, { node_id: nodeId, vars: locais, steps_taken: passos });
-          await registrarDesfechoDaFrente(p, `sem_saida:${resultado.branch_on_timeout}`, contexto, nodeId);
-          return;
-        }
-        nodeId = saida.target;
-        resumo.avancadas += 1;
-        continue;
-      }
       // `timeout_at` é obrigatório no tipo, e é o que impede a espera por evento
       // de virar uma execução que nada no sistema jamais coleta. O relógio da
       // frente é o prazo: vencido ele, o próprio claim a traz de volta e ela sai
@@ -743,6 +703,9 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
         event_type: "espera_por_evento",
         payload: {
           evento: resultado.event_type,
+          // `ate` tem este nome porque é o campo que `esperaEmCurso` lê, o
+          // mesmo de `espera_iniciada`. Nome próprio aqui obrigaria o adapter a
+          // conhecer dois formatos de espera.
           ate: resultado.timeout_at.toISOString(),
           saida_no_prazo: resultado.branch_on_timeout,
         },
@@ -894,6 +857,12 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
     loop_node_id: laco.node_id,
     loop_index: laco.index,
     loop_total: laco.total,
+    // Uma frente PRONTA não espera evento nenhum — ela já seguiu adiante. Deixar
+    // a espera velha gravada faria um evento atrasado acordar uma frente que já
+    // saiu pelo prazo, e o fluxo tomaria os dois caminhos.
+    awaiting_event_type: null,
+    awaiting_match: null,
+    wait_deadline: null,
     updated_at: agora.toISOString(),
   });
   await deps.db.atualizarExecucao(execucao.id, execucao.organization_id, {
@@ -1029,6 +998,24 @@ async function concluir(
     completed_at: agora.toISOString(),
     updated_at: agora.toISOString(),
   });
+  // Uma execução FILHA que termina tem de avisar quem a chamou. É o que faz
+  // `flow.call` ser uma chamada, e não um disparo — sem o aviso, quem chamou
+  // acorda pelo prazo de 24h, um dia depois de a resposta estar pronta.
+  if (execucao.parent_execution_id !== null) {
+    try {
+      await deps.db.avisarQueSubFluxoTerminou({
+        organization_id: execucao.organization_id,
+        execution_id: execucao.id,
+        parent_execution_id: execucao.parent_execution_id,
+        outcome,
+        output: execucao.output,
+      });
+    } catch {
+      // O aviso é secundário ao `completed` já gravado: falhar aqui não pode
+      // desfazê-lo, senão a filha seria reclamada para concluir de novo, em
+      // laço. Quem chamou ainda tem o prazo como rede.
+    }
+  }
   resumo.concluidas += 1;
 }
 

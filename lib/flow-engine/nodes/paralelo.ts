@@ -11,6 +11,7 @@
 
 import { z } from "zod";
 
+import { VAR_DO_EVENTO } from "../acordar-por-evento";
 import { resolverCampo } from "../condicoes";
 import { ramoPadrao, type FlowBranch, type FlowNodeDefinition, type NodeExecutionResult } from "../types";
 
@@ -146,8 +147,23 @@ const PRAZO_MINIMO_MS = 5 * 60_000;
 /** 30 dias. Uma espera maior que isso é um fluxo que ninguém vai reconhecer. */
 const PRAZO_MAXIMO_MS = 30 * 24 * 60 * 60_000;
 
+/**
+ * Os eventos que o bloco de espera oferece — FONTE ÚNICA.
+ *
+ * O formulário lê daqui e o handler do barramento também. Fossem duas listas,
+ * elas divergiriam no primeiro evento novo, e do pior jeito possível: a pessoa
+ * escolheria a opção na tela, o fluxo dormiria, o evento aconteceria — e
+ * ninguém acordaria, porque o handler nunca soube desse evento.
+ */
+export const EVENTOS_QUE_ACORDAM = [
+  "message.received",
+  "lead.stage_changed",
+  "lead.won",
+  "lead.lost",
+] as const;
+
 export const awaitEventConfigSchema = z.strictObject({
-  evento: z.string().min(1).max(80),
+  evento: z.enum(EVENTOS_QUE_ACORDAM),
   /**
    * Filtro de igualdade rasa sobre o payload — "a resposta DAQUELA conversa",
    * não "qualquer resposta". Sem ele, a mensagem de um cliente acordaria a
@@ -174,16 +190,29 @@ export const logicAwaitEvent: FlowNodeDefinition<AwaitEventConfig> = {
     { id: RAMO_CHEGOU, label: "Aconteceu", kind: "match" },
     ramoPadrao("Venceu o prazo"),
   ],
-  execute: async (ctx, config): Promise<NodeExecutionResult> => ({
-    kind: "await_event",
-    event_type: config.evento,
-    match: config.quando,
-    // O prazo é obrigatório no tipo do resultado, e é o que impede a espera por
-    // evento de virar uma execução que nada no sistema jamais coleta — um fluxo
-    // parado para sempre, sem uma linha de erro em lugar nenhum.
-    timeout_at: new Date(ctx.agora().getTime() + config.prazo_ms),
-    branch_on_timeout: RAMO_NO_PRAZO,
-  }),
+  execute: async (ctx, config): Promise<NodeExecutionResult> => {
+    // ⚠️ QUEM SABE POR QUE ESTA VOLTA ACONTECEU É O NÓ, não o motor — a mesma
+    // divisão que `logic.wait` já usa. O motor sabe que o relógio venceu; ele
+    // não sabe se, para ESTE bloco, isso significa "acabou" ou "falta mais uma
+    // espera". Aqui a pergunta é outra: voltei porque o evento chegou, ou
+    // porque o prazo venceu?
+    if (ctx.esperaEmCurso !== null) {
+      // O acordador escreve o payload no espaço da frente ao acordá-la. Ele
+      // estar lá é a única diferença observável entre as duas voltas.
+      const chegou = ctx.escopo.frame.vars[VAR_DO_EVENTO] !== undefined;
+      return { kind: "advance", branch_id: chegou ? RAMO_CHEGOU : RAMO_NO_PRAZO };
+    }
+    return {
+      kind: "await_event",
+      event_type: config.evento,
+      match: config.quando,
+      // O prazo é obrigatório no tipo do resultado, e é o que impede a espera
+      // por evento de virar uma execução que nada no sistema jamais coleta —
+      // um fluxo parado para sempre, sem uma linha de erro em lugar nenhum.
+      timeout_at: new Date(ctx.agora().getTime() + config.prazo_ms),
+      branch_on_timeout: RAMO_NO_PRAZO,
+    };
+  },
 };
 
 // ────────────────────────────── flow.call ────────────────────────────────────

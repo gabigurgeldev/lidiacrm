@@ -22,12 +22,14 @@ Cinco blocos novos na paleta do construtor de fluxos:
   repetições é obrigatório, e é ele que garante que a repetição termina mesmo se
   a lista vier maior do que você esperava.
 - **Esperar acontecer** — o fluxo fica parado até o cliente responder (ou o lead
-  mudar de etapa, ser ganho, ser perdido), com um prazo. Vencido o prazo, ele
-  segue por uma saída própria, "Venceu o prazo". Antes só existia esperar um
-  tempo fixo, que é diferente: dava para esperar duas horas, não dava para
-  esperar *a resposta*.
+  mudar de etapa, ser ganho, ser perdido), com um prazo. Se acontecer, ele segue
+  pela saída "Aconteceu" **na hora**, e o que aconteceu fica disponível para os
+  blocos seguintes; se o prazo vencer antes, ele segue por "Venceu o prazo".
+  Antes só existia esperar um tempo fixo, que é diferente: dava para esperar
+  duas horas, não dava para esperar *a resposta*.
 - **Chamar outro fluxo** — roda outro fluxo como sub-rotina e espera ele
-  terminar. Serve para não repetir o mesmo pedaço em dez fluxos diferentes.
+  terminar de verdade: quando o fluxo chamado acaba, quem chamou continua em
+  seguida. Serve para não repetir o mesmo pedaço em dez fluxos diferentes.
 
 Duas coisas que os blocos das mensagens ganharam junto, e que valem para todos
 os fluxos:

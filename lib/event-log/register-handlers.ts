@@ -18,6 +18,7 @@ import { followupGatilhoCasoHandler } from "@/lib/followup/gatilho-caso.handler"
 import { mediaPersistHandler } from "@/workers/media-persist-worker.handler";
 import { mediaDeriveHandler } from "@/workers/media-derive-worker.handler";
 import { flowTriggerHandler } from "@/lib/flow-engine/trigger-matcher.handler";
+import { flowEventWakerHandler } from "@/lib/flow-engine/acordar-por-evento.handler";
 import { webPushInboundHandler } from "@/lib/notifications/push.handler";
 import { registerHandler } from "@/lib/event-log/dispatcher";
 
@@ -44,5 +45,8 @@ export function ensureHandlersRegistered(): void {
   // worker), então nada depende dele para seguir, e um erro aqui não pode
   // atrasar o handler que responde ao cliente.
   registerHandler(flowTriggerHandler);
+  // Sem ele, a saída "Aconteceu" do bloco de espera nunca é percorrida: toda
+  // espera por evento terminaria pelo prazo, inclusive as respondidas na hora.
+  registerHandler(flowEventWakerHandler);
   _registered = true;
 }

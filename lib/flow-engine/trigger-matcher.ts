@@ -145,6 +145,19 @@ export async function armarFluxosParaEvento(
       trigger_event_id: row.id,
       lineage: { evento: row.event_type, event_id: row.id },
       context: {},
+      // ⚠️ O PAYLOAD DO EVENTO, inteiro — é ele que vira `{{event.*}}`.
+      //
+      // Enquanto isto era `context: {}` e mais nada, do evento sobreviviam só
+      // `lead_id`, `contact_id` e a linhagem: um gatilho de "mensagem recebida"
+      // não conseguia ler o TEXTO da mensagem, e um de webhook não lia nada do
+      // corpo que o terceiro mandou. Os gatilhos disparavam e o fluxo não sabia
+      // por quê — metade deles era decorativa.
+      //
+      // Vai em `input`, e não em `context`: `context` é o rascunho que os
+      // blocos escrevem ao longo da execução, e um bloco que gravasse uma
+      // variável com o nome de um campo do evento apagaria o evento. O que
+      // entrou é imutável; o que os blocos escrevem, não.
+      input: row.payload ?? {},
     });
 
     if (insErr !== null) {

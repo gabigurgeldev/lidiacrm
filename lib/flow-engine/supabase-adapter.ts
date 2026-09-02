@@ -17,6 +17,7 @@ import { ensureConversation, sessaoProntaParaEnvio } from "@/lib/automation/star
 import { logger } from "@/lib/logger";
 import { loadEligibleAttendants } from "@/lib/routing/eligibles";
 
+import { EVENTO_DE_SUBFLUXO } from "./engine";
 import type {
   FlowAdminClient,
   FlowExecutionPatch,
@@ -73,7 +74,14 @@ export function criarFlowAdminClient(admin: SupabaseClient): FlowAdminClient {
       const linha = data as
         | { event_type: string; payload: Record<string, unknown>; created_at: string }
         | null;
-      if (linha === null || linha.event_type !== "espera_iniciada") return null;
+      // Duas formas de esperar, e as duas contam: `espera_iniciada` é a espera
+      // por RELÓGIO (`logic.wait`), `espera_por_evento` é a espera por algo
+      // ACONTECER (`logic.await_event`). Reconhecer só a primeira faria o bloco
+      // de espera por evento nunca saber que já esperou — ele reagendaria um
+      // prazo novo a cada volta, para sempre, e a saída "Aconteceu" nunca seria
+      // percorrida.
+      const ESPERAS = ["espera_iniciada", "espera_por_evento"];
+      if (linha === null || !ESPERAS.includes(linha.event_type)) return null;
       const ate = typeof linha.payload.ate === "string" ? Date.parse(linha.payload.ate) : NaN;
       if (Number.isNaN(ate)) return null;
       return { desde: new Date(linha.created_at), ate: new Date(ate) } satisfies EsperaEmCurso;
@@ -290,6 +298,28 @@ export function criarFlowAdminClient(admin: SupabaseClient): FlowAdminClient {
       return globais !== null && typeof globais === "object" && !Array.isArray(globais)
         ? (globais as Record<string, unknown>)
         : {};
+    },
+
+    async avisarQueSubFluxoTerminou(input) {
+      // Vai pelo `event_log` como todo o resto: trigger do Postgres não faz
+      // HTTP e não acorda ninguém, então quem reage a algo neste produto é
+      // sempre um handler do barramento. O acordador escuta este tipo.
+      const { error } = await admin.from("event_log").insert({
+        organization_id: input.organization_id,
+        event_type: EVENTO_DE_SUBFLUXO,
+        entity_kind: "flow_execution",
+        entity_id: input.execution_id,
+        payload: {
+          // `execution_id` é o que o `match` da frente do pai compara — é assim
+          // que o aviso chega a QUEM chamou, e não a toda frente que por acaso
+          // espera um sub-fluxo.
+          execution_id: input.execution_id,
+          parent_execution_id: input.parent_execution_id,
+          outcome: input.outcome,
+          output: input.output,
+        },
+      });
+      if (error) throw new Error(error.message);
     },
 
     async chamarSubFluxo(input) {

@@ -327,3 +327,90 @@ describe("esperar um evento", () => {
     expect(frente.wait_deadline).toBeNull();
   });
 });
+
+describe("chamar outro fluxo", () => {
+  function grafoQueChama(fluxoId: string): FlowGraph {
+    return {
+      nodes: [
+        n("inicio", "trigger.lead_created", {}),
+        n("chama", "flow.call", { fluxo_id: fluxoId, entrada: { titulo: "{{lead.title}}" } }),
+        n("depois", "crm.add_tag", { tag: "voltou_do_subfluxo" }),
+        n("fim", "logic.end", { desfecho: "ok" }),
+      ],
+      edges: [
+        a("e1", "inicio", "chama"),
+        a("e2", "chama", "depois"),
+        a("e3", "depois", "fim"),
+      ],
+    };
+  }
+
+  const FILHO = "3f2a1c8e-5b74-4d9a-91e6-7c0b2d4f8a13";
+
+  it("dispara a filha e PARA, com prazo no relógio", async () => {
+    mundo.subFluxosPublicados.add(FILHO);
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+
+    const frente = [...mundo.frentes.values()][0]!;
+    expect(frente.status).toBe("waiting");
+    expect(frente.awaiting_event_type).toBe("flow.subflow_finished");
+    // O prazo não é enfeite: sem ele, uma filha que nunca termina deixa o pai
+    // parado para sempre, e nada no sistema jamais o coleta.
+    expect(frente.wait_deadline).not.toBeNull();
+    // E o pai NÃO seguiu adiante: quem chama espera.
+    expect(mundo.tags).toEqual([]);
+  });
+
+  it("a espera é DAQUELA filha, não de qualquer sub-fluxo", async () => {
+    // Sem o filtro, um sub-fluxo terminando em outro lugar da organização
+    // acordaria esta espera — e o fluxo seguiria como se a resposta que ele
+    // pediu tivesse chegado.
+    mundo.subFluxosPublicados.add(FILHO);
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+
+    const frente = [...mundo.frentes.values()][0]!;
+    const filha = [...mundo.execucoes.keys()].find((id) => id !== "exec-1")!;
+    expect(frente.awaiting_match).toEqual({ execution_id: filha });
+  });
+
+  it("a entrada é INTERPOLADA contra quem chamou", async () => {
+    // É o que faz um sub-fluxo genérico servir a vários chamadores: ele recebe
+    // o título DESTE lead, não a string "{{lead.title}}".
+    mundo.subFluxosPublicados.add(FILHO);
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+
+    const filha = [...mundo.execucoes.values()].find((e) => e.id !== "exec-1")!;
+    expect(filha.input).toEqual({ titulo: "Loja do Gabriel" });
+    expect(filha.parent_execution_id).toBe("exec-1");
+  });
+
+  it("a filha que TERMINA avisa quem a chamou", async () => {
+    // ⚠️ É este aviso que faz `flow.call` ser uma CHAMADA e não um disparo. Sem
+    // ele o sub-fluxo termina em segundos e quem chamou só acorda quando o
+    // prazo de 24h vence — um dia inteiro depois de a resposta estar pronta,
+    // sem erro nenhum em lugar nenhum.
+    mundo.subFluxosPublicados.add(FILHO);
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+
+    const filha = [...mundo.execucoes.values()].find((e) => e.id !== "exec-1")!;
+    // A filha caminha até o fim no grafo dela (aqui, o mesmo grafo simples).
+    mundo.execucoes.set(filha.id, { ...filha, status: "pending", current_node_id: "fim" });
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+
+    expect(mundo.avisosDeSubFluxo).toHaveLength(1);
+    expect(mundo.avisosDeSubFluxo[0]).toMatchObject({
+      execution_id: filha.id,
+      parent_execution_id: "exec-1",
+    });
+  });
+
+  it("sub-fluxo que não está publicado MATA a execução, em vez de repetir", async () => {
+    // Repetir não conserta um fluxo que não existe, e cada tentativa custaria um
+    // minuto do worker. É defeito de desenho, e defeito de desenho não é falha
+    // repetível.
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+
+    expect(mundo.execucoes.get("exec-1")!.status).toBe("dead");
+    expect(mundo.avisos.map((v) => v.titulo)).toHaveLength(1);
+  });
+});
