@@ -70,7 +70,9 @@ export function useImportarInstancias() {
   return useMutation({
     mutationFn: async (input: { api_key: string; instancias: InstanciaDaConta[] }) =>
       apiClient.post<{
-        data: { importadas: Array<{ id: string; nome: string; recebendo: boolean }> };
+        data: {
+          importadas: Array<{ id: string; nome: string; recebendo: boolean; motivo?: string }>;
+        };
       }>("/api/v1/channels/account/instances", input),
     onError: showApiError,
     onSuccess: () => {
@@ -79,5 +81,21 @@ export function useImportarInstancias() {
       // seletor do inbox e no sinal de saúde sem exigir F5.
       qc.invalidateQueries({ queryKey: ["channel-sessions"] });
     },
+  });
+}
+
+/**
+ * Tenta registrar o webhook de novo, SEM reimportar — para depois que o
+ * operador corrige o escopo da API Key no painel do provedor. Reaproveita a
+ * chave já gravada na linha; não pede nada além do id do canal.
+ */
+export function useReconectarWebhook() {
+  return useMutation({
+    mutationFn: async (channelSessionId: string) =>
+      apiClient.post<{ data: { recebendo: true } }>(
+        `/api/v1/channels/account/instances/${channelSessionId}/webhook`,
+        {},
+      ),
+    onError: showApiError,
   });
 }

@@ -32,13 +32,14 @@ import {
   ROTULO_PARCEIRO_STEVO,
 } from "./tipo-de-conexao";
 import { reactivateChannelSession } from "./reactivate";
+import { env } from "@/lib/env";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 import {
   apontarWebhookStevo,
   validarContaStevo,
   type StevoInstancia,
 } from "./stevo/instancias";
-import { stevoBaseUrl } from "./stevo/credentials";
+import { resolveStevoCreds, stevoBaseUrl } from "./stevo/credentials";
 import type { ChannelProvider } from "./types";
 
 /**
@@ -187,6 +188,29 @@ export interface DesfechoDaImportacao {
   nome: string;
   /** O webhook foi apontado para esta instalação? */
   recebendo: boolean;
+  /** Por que não ficou recebendo — frase pronta pra tela. Só com `recebendo:false`. */
+  motivo?: string;
+}
+
+/**
+ * Base pública desta instalação — vai para o webhook registrado no provedor.
+ *
+ * Mora aqui e não numa rota porque passa a ter dois chamadores
+ * (`account/instances` e `account/instances/[id]/webhook`), e duplicar uma
+ * função que decide para onde a Stevo entrega mensagem é o tipo de cópia que
+ * diverge sem ninguém notar.
+ *
+ * Lida de `env.*` e NÃO de `process.env.NEXT_PUBLIC_APP_URL` direto: variáveis
+ * `NEXT_PUBLIC_` são substituídas no BUILD, e a imagem
+ * genérica do self-host é construída com `https://placeholder.invalid`
+ * (Dockerfile). Lendo do `process.env`, o webhook seria registrado apontando
+ * para o nada — e o canal enviaria sem nunca receber, sem erro em lugar
+ * nenhum.
+ */
+export function publicBase(req: { headers: Headers; nextUrl: { protocol: string; host: string } }): string {
+  const configurada = env.NEXT_PUBLIC_APP_URL;
+  const usavel = configurada && !configurada.includes("placeholder.invalid") ? configurada : null;
+  return usavel ?? req.headers.get("origin") ?? `${req.nextUrl.protocol}//${req.nextUrl.host}`;
 }
 
 /**
@@ -334,7 +358,7 @@ export async function importarInstancias(
       tokenDoWebhook = (criada as { webhook_path_token: string } | null)?.webhook_path_token ?? null;
     }
 
-    const recebendo = tokenDoWebhook
+    const webhook = tokenDoWebhook
       ? await apontarWebhookStevo({
           apiKey: input.apiKey,
           baseUrl: stevoBaseUrl(),
@@ -342,10 +366,60 @@ export async function importarInstancias(
           // A rota NEUTRA de webhook — o caminho não cita provider nenhum.
           url: `${input.baseDoWebhook}/api/v1/webhooks/channel/${tokenDoWebhook}`,
         })
-      : false;
+      : { ok: false as const, motivo: "linha sem webhook_path_token — não deveria acontecer" };
 
-    desfechos.push({ id: inst.id, nome, recebendo });
+    desfechos.push({ id: inst.id, nome, recebendo: webhook.ok, motivo: webhook.motivo });
   }
 
   return { ok: true, desfechos };
+}
+
+/**
+ * Tenta de novo, SEM reimportar — para quando o operador corrige do lado da
+ * Stevo (ex.: adiciona o escopo `instances:manage` na API Key) e só precisa
+ * que o CRM avise a Stevo de novo. Reaproveita a chave já cifrada na linha via
+ * `resolveStevoCreds`: o operador não cola nada de novo.
+ */
+export async function reapontarWebhookDaConta(
+  admin: SupabaseClient,
+  input: { organizationId: string; channelSessionId: string; baseDoWebhook: string },
+): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const base = () =>
+    admin
+      .from("channel_sessions")
+      .select(`id, stevo_instance_id, webhook_path_token, ${ARCHIVED_AT}`)
+      .eq("organization_id", input.organizationId)
+      .eq("provider", ACCOUNT_CHANNEL_PROVIDER)
+      .eq("id", input.channelSessionId);
+  const { data } = await queryTolerantToMissingArchived(
+    () => base().is(ARCHIVED_AT, null).maybeSingle(),
+    () =>
+      admin
+        .from("channel_sessions")
+        .select("id, stevo_instance_id, webhook_path_token")
+        .eq("organization_id", input.organizationId)
+        .eq("provider", ACCOUNT_CHANNEL_PROVIDER)
+        .eq("id", input.channelSessionId)
+        .maybeSingle(),
+  );
+  const linha = data as { id: string; stevo_instance_id: string | null; webhook_path_token: string } | null;
+  if (!linha || !linha.stevo_instance_id) {
+    return { ok: false, motivo: "canal não encontrado" };
+  }
+
+  const creds = await resolveStevoCreds(admin, {
+    organizationId: input.organizationId,
+    instanceId: linha.stevo_instance_id,
+  });
+  if (!creds) {
+    return { ok: false, motivo: "sem credencial gravada para este canal" };
+  }
+
+  const r = await apontarWebhookStevo({
+    apiKey: creds.apiKey,
+    baseUrl: creds.baseUrl,
+    instanceId: linha.stevo_instance_id,
+    url: `${input.baseDoWebhook}/api/v1/webhooks/channel/${linha.webhook_path_token}`,
+  });
+  return r.ok ? { ok: true } : { ok: false, motivo: r.motivo ?? "o provedor recusou" };
 }

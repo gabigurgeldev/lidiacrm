@@ -202,6 +202,12 @@ export async function lerInstanciaStevo(input: {
   }
 }
 
+export interface ApontarWebhookResultado {
+  ok: boolean;
+  /** Frase pronta para a tela. Só presente quando `ok` é `false`. Nunca contém a chave. */
+  motivo?: string;
+}
+
 /**
  * Aponta o webhook da instância para ESTA instalação.
  *
@@ -211,18 +217,23 @@ export async function lerInstanciaStevo(input: {
  * FUNCIONANDO — o canal oficial precisa dessa etapa manual no painel da Meta, e
  * é onde as instalações emperram.
  *
- * Devolve `false` quando o provedor recusou. O chamador NÃO desfaz a importação
- * por causa disso: o canal já consegue ENVIAR, e um canal que envia e não recebe
- * é ruim mas é melhor que canal nenhum — desde que a tela diga.
+ * Devolve `ok:false` (com o motivo) quando o provedor recusou. O chamador NÃO
+ * desfaz a importação por causa disso: o canal já consegue ENVIAR, e um canal
+ * que envia e não recebe é ruim mas é melhor que canal nenhum — desde que a
+ * tela diga, e diga QUAL dos motivos foi. 401 e 403 pedem ações opostas aqui
+ * (chave nova × habilitar escopo `instances:manage` no painel Stevo, que é o
+ * que este PUT exige e o `GET /v1/instances` usado no import não) — a mesma
+ * razão pela qual `validarContaStevo` já separa os dois.
  */
 export async function apontarWebhookStevo(input: {
   apiKey: string;
   baseUrl: string;
   instanceId: string;
   url: string;
-}): Promise<boolean> {
+}): Promise<ApontarWebhookResultado> {
+  let r: Response;
   try {
-    const r = await fetch(
+    r = await fetch(
       `${input.baseUrl}/v1/instances/${encodeURIComponent(input.instanceId)}/webhook`,
       {
         method: "PUT",
@@ -239,8 +250,22 @@ export async function apontarWebhookStevo(input: {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       },
     );
-    return r.ok;
   } catch {
-    return false;
+    return { ok: false, motivo: "não foi possível avisar o provedor — tente de novo" };
   }
+
+  if (r.status === 401) {
+    return { ok: false, motivo: "chave de API recusada pelo provedor ao configurar o webhook" };
+  }
+  if (r.status === 403) {
+    return {
+      ok: false,
+      motivo:
+        "chave válida, mas sem permissão pra configurar o webhook — no painel Stevo, edite a API Key e adicione o escopo instances:manage",
+    };
+  }
+  if (!r.ok) {
+    return { ok: false, motivo: `o provedor respondeu ${r.status} ao configurar o webhook` };
+  }
+  return { ok: true };
 }

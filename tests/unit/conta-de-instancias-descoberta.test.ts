@@ -272,7 +272,7 @@ describe("importar", () => {
     expect(corpo.events).toContain("SEND_MESSAGE");
   });
 
-  it("⭐ webhook recusado NÃO desfaz a importação, mas é reportado", async () => {
+  it("⭐ webhook recusado NÃO desfaz a importação, mas é reportado com motivo", async () => {
     // O canal já envia. Um canal que envia e não recebe é ruim, mas é melhor que
     // canal nenhum — desde que a tela diga, que é para isso que `recebendo` sobe.
     const fetchMock = vi
@@ -293,6 +293,31 @@ describe("importar", () => {
     if (!r.ok) return;
     expect(escritas).toHaveLength(1);
     expect(r.desfechos[0]?.recebendo).toBe(false);
+    expect(r.desfechos[0]?.motivo).toMatch(/500/);
+  });
+
+  it("⭐ webhook recusado por falta de escopo devolve motivo distinto de chave inválida", async () => {
+    // 403 no PUT do webhook é a Stevo dizendo que a chave é VÁLIDA mas falta o
+    // escopo `instances:manage` — diferente de `instances:read`, que já basta
+    // pra listar/importar. Confundir os dois manda o operador reeditar uma
+    // chave que está certa.
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response("{}", { status: 403 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { client } = makeDb();
+    const r = await importarInstancias(client as never, {
+      organizationId: ORG,
+      userId: "u",
+      requestId: "r",
+      apiKey: "k",
+      baseDoWebhook: "https://crm.exemplo",
+      instancias: [instancia()],
+    });
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.desfechos[0]?.recebendo).toBe(false);
+    expect(r.desfechos[0]?.motivo).toMatch(/instances:manage|escopo|permiss/i);
+    expect(r.desfechos[0]?.motivo).not.toMatch(/copiada inteira/);
   });
 
   it("⭐ com uma linha ATIVA e uma ARQUIVADA do mesmo número, atualiza a ativa", async () => {

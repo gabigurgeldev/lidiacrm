@@ -204,6 +204,9 @@ export const DICIONARIO: Traducoes = {
   "números conectados por": { es: "números conectados por" },
   "Conectado, mas sem receber:": { es: "Conectado, pero sin recibir:" },
   "Tente importar de novo.": { es: "Probá importar de nuevo." },
+  "o provedor recusou o webhook": { es: "el proveedor rechazó el webhook" },
+  "Webhook reconectado.": { es: "Webhook reconectado." },
+  "Reconectar webhook": { es: "Reconectar webhook" },
   "sem identificador": { es: "sin identificador" },
   "Chave de API da conta": { es: "Clave de API de la cuenta" },
   "Guardada cifrada. Não é exibida de volta em nenhum momento.": {
