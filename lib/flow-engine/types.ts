@@ -268,7 +268,97 @@ export interface PortaDeCanal {
     /** Marca o contato criado para o aviso, para ele não virar lead nem falar com a IA. */
     interno: boolean;
   }): Promise<DesfechoDeEnvio>;
+
+  /**
+   * Manda para o CONTATO do funil, na conversa dele — o cliente, não o vendedor.
+   *
+   * ⚠️ É outra porta, e não um parâmetro de `enviarTexto`, porque as duas
+   * respondem a perguntas diferentes. `enviarTexto` fala com um TELEFONE que
+   * pode nem ser cliente (o aviso ao vendedor cria um contato interno de
+   * propósito); esta fala com quem já está no funil, na thread que a pessoa vê
+   * no Inbox. Misturar as duas num booleano faria o bloco de aviso poder virar,
+   * por um parâmetro trocado, um envio ao cliente.
+   *
+   * ## O canal é ESCOLHIDO, e o nome dele não chega aqui
+   *
+   * `channelSessionId` é uma conexão concreta que a pessoa escolheu na tela.
+   * `null` mantém o que já acontecia: o motor pega a primeira conexão viva.
+   * Em nenhum dos dois casos o motor sabe QUEM é o canal — a diferença entre
+   * número por QR, API oficial e parceiro é vocabulário de `lib/channels/`, e
+   * a doutrina de restrição de canal proíbe que ela vaze para cá.
+   */
+  enviarParaContato(input: {
+    contactId: string;
+    tipo: TipoDeMensagemDoFluxo;
+    /** Texto da mensagem, ou legenda quando há mídia. */
+    texto: string;
+    /**
+     * Endereço público da mídia, quando `tipo` não é `texto`.
+     *
+     * URL, e NÃO caminho no Storage, de propósito: `sendMessageHandler` confere
+     * `media_storage_path` contra a conversa de destino (`isMediaPathOwnedBy`),
+     * e a mídia de um bloco é configurada UMA vez para ir a centenas de
+     * conversas diferentes. O caminho no Storage nunca casaria com todas.
+     */
+    mediaUrl?: string;
+    /** Conexão escolhida na tela; `null` = a primeira viva, como já era. */
+    channelSessionId: string | null;
+  }): Promise<DesfechoDeEnvio>;
 }
+
+/**
+ * O que um bloco de fluxo consegue mandar.
+ *
+ * Espelha os `type` que `sendMessageHandler` aceita. Acrescentar um valor aqui
+ * sem conferir lá produziria mensagem que o CRM grava e o canal não envia.
+ */
+export const TIPOS_DE_MENSAGEM_DO_FLUXO = [
+  "texto",
+  "imagem",
+  "audio",
+  "video",
+  "arquivo",
+] as const;
+export type TipoDeMensagemDoFluxo = (typeof TIPOS_DE_MENSAGEM_DO_FLUXO)[number];
+
+/**
+ * O pedido de uma campanha de disparo em massa, do jeito que o bloco a descreve.
+ *
+ * Formato PRÓPRIO, e não o `CriarDisparoInput` da rota HTTP, por uma razão de
+ * fronteira: aquele schema tem `z.discriminatedUnion` na audiência, e o motor
+ * de fluxos não pode depender de uma forma que o gerador de fluxo por IA
+ * recusa (ver o cabeçalho de `nodes/disparo-em-massa.ts`). A tradução entre os
+ * dois acontece no adapter, num lugar só.
+ */
+export interface PedidoDeDisparo {
+  nome: string;
+  canalId: string;
+  modo: "freeform" | "template";
+  texto?: string;
+  modeloNome?: string;
+  modeloIdioma?: string;
+  modeloValores: Record<string, string>;
+  audiencia: { tipo: "tags"; tags: string[] } | { tipo: "contatos"; contatos: string[] };
+  intervaloMs: number;
+  comecarSozinho: boolean;
+}
+
+export type DesfechoDoDisparo =
+  | { kind: "criado"; disparoId: string; vaoReceber: number; comecou: boolean }
+  | { kind: "recusado"; motivo: string };
+
+export interface PortaDeDisparo {
+  /**
+   * Cria a campanha pelo MESMO caminho da tela (`lib/bulk-send/criar-disparo.ts`).
+   *
+   * O bloco não manda mensagem: quem manda é o motor de disparos, com o ritmo,
+   * o teto diário, a janela e o opt-out que ele já aplica. Uma segunda
+   * implementação disso é como uma instalação manda campanha para quem pediu
+   * para sair.
+   */
+  criar(pedido: PedidoDeDisparo): Promise<DesfechoDoDisparo>;
+}
+
 
 export type SeveridadeDoAviso = "info" | "warn" | "critical";
 
@@ -305,6 +395,7 @@ export interface FlowExecutionContext {
   crm: PortaDoCrm;
   roteamento: PortaDeRoteamento;
   canal: PortaDeCanal;
+  disparo: PortaDeDisparo;
   avisos: PortaDeAvisos;
   agora: () => Date;
   /** Interpola `{{lead.name}}` e afins contra `escopo`. */

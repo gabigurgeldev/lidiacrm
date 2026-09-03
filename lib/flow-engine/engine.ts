@@ -33,6 +33,7 @@ import type {
   NodeExecutionResult,
   PortaDeAvisos,
   PortaDeCanal,
+  PortaDeDisparo,
   PortaDoCrm,
   PortaDeRoteamento,
 } from "./types";
@@ -247,6 +248,7 @@ export interface PortasDaExecucao {
   crm: PortaDoCrm;
   roteamento: PortaDeRoteamento;
   canal: PortaDeCanal;
+  disparo: PortaDeDisparo;
   avisos: PortaDeAvisos;
 }
 
@@ -527,6 +529,7 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
       crm: p.portas.crm,
       roteamento: p.portas.roteamento,
       canal: p.portas.canal,
+      disparo: p.portas.disparo,
       avisos: p.portas.avisos,
       agora: deps.relogio,
       render: (texto) => interpolar(texto, escopo).texto,

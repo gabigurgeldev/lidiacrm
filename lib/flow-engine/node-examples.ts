@@ -78,6 +78,33 @@ export function configExemploDoTipo(tipo: string): Record<string, unknown> {
         destinatario: { tipo: "dono_do_lead" },
         mensagem: "Novo lead: {{lead.title}}",
       };
+    case "whatsapp.send_to_lead":
+      return {
+        tipo: "texto",
+        // Texto de queda com conteúdo de verdade: o schema exige mensagem não
+        // vazia quando o tipo é texto, e um bloco que nasce inválido aparece no
+        // editor sem saídas — sem nada dizendo por quê.
+        texto: "Oi {{contact.name}}, tudo bem?",
+        canal_id: null,
+      };
+    case "whatsapp.bulk_send":
+      return {
+        nome: "Disparo do fluxo",
+        // UUID nulo de propósito, pelo mesmo motivo de `flow.call`: como valor
+        // de queda ele NÃO pode apontar para uma conexão real por acidente. Uma
+        // campanha saindo pelo número errado é pior que uma que não publica.
+        canal_id: "00000000-0000-0000-0000-000000000000",
+        modo: "freeform",
+        texto: "Oi {{contact.name}}, tudo bem?",
+        modelo_nome: "",
+        modelo_idioma: "",
+        modelo_valores: {},
+        audiencia: "tags",
+        tags: ["clientes"],
+        contatos: [],
+        intervalo_ms: 5_000,
+        comecar_sozinho: false,
+      };
     case "notify.internal":
       // Mesmo caso de `crm.add_tag`: `notifyInternalConfigSchema` exige
       // `titulo`/`corpo` com min(1), e o exemplo vazio nunca foi pego porque

@@ -15,7 +15,9 @@ import { NotifyInternalForm } from "./forms/NotifyInternalForm";
 import { RoutingRedistributeForm } from "./forms/RoutingRedistributeForm";
 import { RoutingRoundRobinForm } from "./forms/RoutingRoundRobinForm";
 import { TriggerLeadCreatedForm } from "./forms/TriggerLeadCreatedForm";
+import { WhatsappBulkSendForm } from "./forms/WhatsappBulkSendForm";
 import { WhatsappNotifyUserForm } from "./forms/WhatsappNotifyUserForm";
+import { WhatsappSendToLeadForm } from "./forms/WhatsappSendToLeadForm";
 import type { PropsDoFormulario } from "./forms/shared";
 
 /**
@@ -62,5 +64,7 @@ export const FORMULARIO_DO_TIPO: Record<string, ComponentType<PropsDoFormulario>
   "routing.round_robin": RoutingRoundRobinForm,
   "routing.redistribute": RoutingRedistributeForm,
   "whatsapp.notify_user": WhatsappNotifyUserForm,
+  "whatsapp.send_to_lead": WhatsappSendToLeadForm,
+  "whatsapp.bulk_send": WhatsappBulkSendForm,
   "notify.internal": NotifyInternalForm,
 };

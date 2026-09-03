@@ -19,6 +19,8 @@ import {
   routingRedistribute,
   routingRoundRobin,
 } from "./nodes/crm-e-roteamento";
+import { whatsappDisparoEmMassa } from "./nodes/disparo-em-massa";
+import { whatsappEnviarAoCliente } from "./nodes/enviar-ao-cliente";
 import { logicEnd, logicIf, logicWait, triggerLeadCreated } from "./nodes/logica";
 import {
   flowCall,
@@ -48,6 +50,8 @@ export function garantirNosRegistrados(): void {
   registrarNo(routingRoundRobin);
   registrarNo(routingRedistribute);
   registrarNo(whatsappNotifyUser);
+  registrarNo(whatsappEnviarAoCliente);
+  registrarNo(whatsappDisparoEmMassa);
   registrarNo(notifyInternal);
   registrado = true;
 }

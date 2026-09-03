@@ -88,6 +88,10 @@ export {
   MonitorPlay,
   // conversation
   ChatCircle,
+  // flow engine: mandar mensagem para o cliente (distinto do aviso ao vendedor)
+  ChatCircleText,
+  // flow engine: disparo em massa
+  Megaphone,
   Phone,
   Paperclip,
   Microphone,

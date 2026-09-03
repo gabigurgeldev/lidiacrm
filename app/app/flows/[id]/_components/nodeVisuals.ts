@@ -8,11 +8,13 @@ import {
   Repeat,
   Bell,
   ChatCircle,
+  ChatCircleText,
   Clock,
   Flag,
   FlowArrow,
   Funnel,
   GitBranch,
+  Megaphone,
   PaperPlaneTilt,
   Play,
   Question,
@@ -76,6 +78,8 @@ export const ICONE_DO_TIPO: Partial<Record<string, PhosphorIcon>> = {
   "routing.round_robin": UsersThree,
   "routing.redistribute": ArrowsClockwise,
   "whatsapp.notify_user": PaperPlaneTilt,
+  "whatsapp.send_to_lead": ChatCircleText,
+  "whatsapp.bulk_send": Megaphone,
   "notify.internal": Bell,
 };
 

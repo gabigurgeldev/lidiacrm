@@ -35,6 +35,18 @@ export interface Mundo {
   atribuicoes: Array<{ leadId: string; userId: string }>;
   tags: string[];
   enviados: Array<{ telefone: string; texto: string }>;
+  /** O que foi mandado ao CLIENTE — outra lista, porque é outro destinatário. */
+  /** Campanhas que o bloco de disparo pediu. */
+  disparosPedidos: Array<Record<string, unknown>>;
+  /** O que a porta de disparo devolve — o teste troca para exercitar recusa. */
+  desfechoDoDisparo: { kind: "criado"; disparoId: string; vaoReceber: number; comecou: boolean } | { kind: "recusado"; motivo: string };
+  enviadosAoCliente: Array<{
+    contactId: string;
+    tipo: string;
+    texto: string;
+    mediaUrl?: string;
+    channelSessionId: string | null;
+  }>;
   avisos: Array<{ titulo: string; corpo: string }>;
   elegiveis: AtendenteElegivel[];
   donoRespondeu: boolean;
@@ -84,6 +96,9 @@ export function mundoNovo(): Mundo {
     atribuicoes: [],
     tags: [],
     enviados: [],
+    disparosPedidos: [],
+    desfechoDoDisparo: { kind: "criado", disparoId: "disparo-1", vaoReceber: 3, comecou: false },
+    enviadosAoCliente: [],
     avisos: [],
     elegiveis: [
       { userId: "user-antigo", lastAssignedAt: Date.parse("2026-08-01T00:00:00Z"), currentLoad: 1 },
@@ -318,6 +333,17 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
       enviarTexto: async ({ telefone, texto }) => {
         mundo.enviados.push({ telefone, texto });
         return mundo.desfechoDoEnvio;
+      },
+      enviarParaContato: async ({ contactId, tipo, texto, mediaUrl, channelSessionId }) => {
+        mundo.enviadosAoCliente.push({ contactId, tipo, texto, mediaUrl, channelSessionId });
+        return mundo.desfechoDoEnvio;
+      },
+    },
+
+    disparo: {
+      criar: async (pedido) => {
+        mundo.disparosPedidos.push(pedido as unknown as Record<string, unknown>);
+        return mundo.desfechoDoDisparo;
       },
     },
     avisos: {

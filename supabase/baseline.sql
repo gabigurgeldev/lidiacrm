@@ -18560,3 +18560,15 @@ comment on column public.channel_sessions.stevo_instance_id is
 
 comment on column public.channel_sessions.provider_mode is
   'A modalidade da sessao quando o provider hospeda mais de uma: oficial (janela de 24h, template aprovado) ou qr (texto livre, risco de banimento). NULL = o provider tem modalidade unica e ela sai da identidade dele. Espelhado em lib/channels/tipo-de-conexao.ts.';
+
+-- ---- de qual fluxo veio a campanha (migration 0209) ----
+alter table public.bulk_sends
+  add column if not exists created_by_flow_execution_id uuid
+    references public.flow_executions(id) on delete set null;
+
+comment on column public.bulk_sends.created_by_flow_execution_id is
+  'A execucao de fluxo que criou esta campanha, quando ela nao foi criada por uma pessoa. NULL nas criadas pela tela. Espelhado em lib/bulk-send/criar-disparo.ts (AutorDoDisparo).';
+
+create index if not exists bulk_sends_created_by_flow_execution_idx
+  on public.bulk_sends (created_by_flow_execution_id)
+  where created_by_flow_execution_id is not null;
