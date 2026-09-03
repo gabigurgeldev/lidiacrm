@@ -197,6 +197,20 @@ describe("descobrir os números da conta", () => {
     expect(escritas).toEqual([]);
   });
 
+  it("⭐ chave sem escopo devolve motivo distinto de chave recusada", async () => {
+    // 403 é chave VÁLIDA sem o escopo instances:read — ação diferente de 401
+    // (chave inválida/revogada). Ver comentário em instancias.ts.
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 403 })));
+    const { client, escritas } = makeDb();
+    const r = await validarContaDeInstancias(client as never, { organizationId: ORG, apiKey: "stevo_sk_x" });
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.motivo).toMatch(/escopo|permiss/);
+    expect(r.motivo).not.toMatch(/copiada inteira/);
+    expect(escritas).toEqual([]);
+  });
+
   it("rede caída e chave errada dão mensagens DIFERENTES", async () => {
     // As ações são opostas — tentar de novo mais tarde versus buscar outra chave.
     // Uma mensagem só para os dois manda o operador para o caminho errado metade

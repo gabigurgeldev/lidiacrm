@@ -131,8 +131,19 @@ export async function validarContaStevo(input: {
     };
   }
 
-  if (resposta.status === 401 || resposta.status === 403) {
+  // 401 e 403 são recusas OPOSTAS na spec da Stevo: 401 é chave ausente,
+  // inválida ou revogada (precisa de chave nova); 403 é chave válida sem o
+  // escopo `instances:read` (precisa só habilitar o escopo no painel). Uma
+  // mensagem só para os dois manda quem tem chave certa reeditá-la à toa.
+  if (resposta.status === 401) {
     return { ok: false, motivo: "chave de API recusada pelo provedor — confira se ela foi copiada inteira" };
+  }
+  if (resposta.status === 403) {
+    return {
+      ok: false,
+      motivo:
+        "essa chave é válida, mas não tem permissão pra listar instâncias — no painel Stevo, crie ou edite a API Key com o escopo instances:read",
+    };
   }
   if (!resposta.ok) {
     return { ok: false, motivo: `o provedor respondeu ${resposta.status} ao listar as instâncias` };
