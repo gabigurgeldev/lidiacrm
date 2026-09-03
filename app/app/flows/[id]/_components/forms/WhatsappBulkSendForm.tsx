@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 
+import { ImportadorDeLista } from "./ImportadorDeLista";
 import { SeletorDeCanal, useConexoesParaEnvio } from "./SeletorDeCanal";
 import { Campo, Dica, Secao, type PropsDoFormulario } from "./shared";
 
@@ -220,24 +221,14 @@ export function WhatsappBulkSendForm({ config, aoMudarConfig }: PropsDoFormulari
             <Dica texto={t("Separe por vírgula. Quem tiver QUALQUER um deles entra na lista.")} />
           </Campo>
         ) : (
-          <Campo rotulo={t("Contatos")}>
-            <Textarea
-              rows={4}
-              value={contatos.join("\n")}
-              placeholder={t("Um identificador de contato por linha")}
-              onChange={(e) =>
-                mudar({
-                  contatos: e.target.value
-                    .split(/[\n,]/)
-                    .map((x) => x.trim())
-                    .filter((x) => x !== ""),
-                })
-              }
-              data-testid="campo-contatos-do-disparo"
+          <Campo rotulo={t("Planilha de contatos")}>
+            <ImportadorDeLista
+              quantos={contatos.length}
+              aoImportar={(ids) => mudar({ contatos: ids })}
             />
             <Dica
               texto={t(
-                "Para importar uma planilha, use a tela de Disparos — ela resolve a planilha em contatos, e você cola os identificadores aqui.",
+                "A planilha é resolvida em contatos AGORA, e a lista fica congelada no bloco. Quem entrar na base depois não recebe — para isso, use marcador.",
               )}
             />
           </Campo>

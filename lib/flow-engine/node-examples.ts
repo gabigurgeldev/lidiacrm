@@ -78,6 +78,37 @@ export function configExemploDoTipo(tipo: string): Record<string, unknown> {
         destinatario: { tipo: "dono_do_lead" },
         mensagem: "Novo lead: {{lead.title}}",
       };
+    case "trigger.message_received":
+      return {};
+    case "trigger.webhook":
+      return { nome: "Gatilho do fluxo" };
+    case "trigger.keyword":
+      // Palavra de queda com sentido: o schema exige ao menos uma, e um bloco
+      // que nasce inválido aparece no editor sem saídas, sem dizer por quê.
+      return { palavras: ["orçamento"], modo: "contem" };
+    case "logic.choice_menu":
+      return {
+        opcoes: [
+          { id: "sim", label: "Sim", aceita: ["1", "sim"] },
+          { id: "nao", label: "Não", aceita: ["2", "nao", "não"] },
+        ],
+        // `exata` por padrão: com `contem`, "10 reais" escolheria a opção "1".
+        modo: "exata",
+        prazo_ms: 3_600_000,
+      };
+    case "routing.random":
+      return { quando_ninguem: "tentar_depois", tentar_de_novo_em_ms: 300_000 };
+    case "routing.fixed_order":
+      // UUID nulo pelo mesmo motivo de `flow.call`: como valor de queda ele NÃO
+      // pode apontar para uma pessoa real por acidente. A publicação recusa, que
+      // é melhor que uma fila entregando leads a quem ninguém escolheu.
+      return {
+        ordem: ["00000000-0000-0000-0000-000000000000"],
+        quando_ninguem: "tentar_depois",
+        tentar_de_novo_em_ms: 300_000,
+      };
+    case "crm.handoff_to_agent":
+      return {};
     case "whatsapp.send_to_lead":
       return {
         tipo: "texto",

@@ -230,6 +230,24 @@ export interface PortaDeRoteamento {
    * segunda cópia.
    */
   elegiveis(input: { organizationId: string }): Promise<AtendenteElegivel[]>;
+
+  /**
+   * A vez da FILA INDIANA: quem, na ordem declarada, atende este lead.
+   *
+   * O cursor vive no banco (`flow_routing_cursors`, migration 0210) e não no
+   * escopo da execução: cada lead abre uma execução nova, e um cursor por
+   * execução reiniciaria a fila a cada lead — entregando sempre ao primeiro da
+   * ordem. Uma fila que nunca anda, sem erro nenhum.
+   *
+   * Quem está na ordem e não está elegível agora é PULADO. Segurar a fila
+   * porque o terceiro saiu para almoçar pararia todos os leads atrás dele.
+   */
+  proximoDaFilaFixa(input: {
+    nodeId: string;
+    ordem: readonly string[];
+    /** Ids de quem pode receber agora, já filtrado por `elegiveis`. */
+    elegiveis: readonly string[];
+  }): Promise<{ userId: string | null; avancou: number }>;
 }
 
 export interface PortaDoCrm {
@@ -244,6 +262,19 @@ export interface PortaDoCrm {
     leadId: string;
     desde: string;
   }): Promise<boolean>;
+
+  /**
+   * Devolve o atendimento da conversa deste contato ao agente de IA.
+   *
+   * Passa por `devolverAtendimentoAoAgente` (`lib/escalacao/retomada.ts`), a
+   * mesma função do botão da tela — e não por um `update` paralelo. A razão
+   * está escrita lá: a passagem para humano tem TRÊS travas, e uma versão
+   * caseira soltaria a mais fraca, deixando o agente mudo para sempre enquanto
+   * a operação responde sucesso.
+   */
+  devolverAoAgente(input: {
+    contactId: string;
+  }): Promise<{ ok: true; jaEstavaComOAgente: boolean } | { ok: false; motivo: string }>;
 }
 
 export type DesfechoDeEnvio =

@@ -11,6 +11,9 @@ export {
   // navigation (inbox icon = Tray in Phosphor)
   Tray as Inbox,
   ListChecks,
+  // flow engine: fila indiana (ordem declarada) e sorteio
+  ListNumbers,
+  Shuffle,
   Plugs,
   PlugsConnected,
   QrCode,

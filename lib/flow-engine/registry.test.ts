@@ -64,12 +64,38 @@ describe("todo nó registrado", () => {
     }
   });
 
-  it("declara `eventos` se — e SÓ se — for gatilho", () => {
+  /**
+   * Gatilhos que NÃO escutam o barramento, e por quê.
+   *
+   * ⚠️ A lista só encolhe, e cada entrada precisa de um caminho de despacho
+   * PRÓPRIO que exista de verdade — o teste confere o arquivo no disco. Sem
+   * isso, esta allowlist viraria o jeito de calar o invariante que ela existe
+   * para preservar: gatilho que fica na tela e nunca dispara.
+   */
+  const GATILHOS_SEM_BARRAMENTO: ReadonlyArray<{
+    tipo: string;
+    porque: string;
+    rota: string;
+  }> = [
+    {
+      tipo: "trigger.webhook",
+      porque:
+        "A chave é a IDENTIDADE (um token secreto pertence a UM fluxo), e o barramento é broadcast: passar por ele faria toda chamada acordar todo fluxo com gatilho de webhook.",
+      rota: "app/api/v1/webhooks/flow/[token]/route.ts",
+    },
+  ];
+
+  it("declara `eventos` se — e SÓ se — for gatilho de barramento", () => {
     // O matcher deriva a assinatura daqui. Gatilho sem eventos fica registrado
     // na tela e nunca dispara; nó comum COM eventos faria o matcher escutar um
     // evento que ninguém consome.
+    const dispensados = new Set(GATILHOS_SEM_BARRAMENTO.map((g) => g.tipo));
     for (const no of todosOsNos()) {
       if (no.category === "trigger") {
+        if (dispensados.has(no.type)) {
+          expect(no.eventos, `${no.type}: dispensado do barramento, não declara eventos`).toBeUndefined();
+          continue;
+        }
         expect(no.eventos ?? [], `${no.type}: gatilho precisa declarar eventos`).not.toHaveLength(0);
         for (const evento of no.eventos ?? []) {
           // O CHECK `event_type_format` do event_log exige este formato.
@@ -80,6 +106,20 @@ describe("todo nó registrado", () => {
       } else {
         expect(no.eventos, `${no.type}: só gatilho declara eventos`).toBeUndefined();
       }
+    }
+  });
+
+  it("⭐ gatilho dispensado do barramento TEM caminho próprio, no disco", async () => {
+    // O controle que impede a allowlist de virar carimbo: a justificativa fala
+    // de uma rota, e a rota precisa existir. Um gatilho dispensado sem rota é
+    // exatamente o defeito do invariante — só que com uma desculpa por escrito.
+    const fs = await import("node:fs");
+    for (const g of GATILHOS_SEM_BARRAMENTO) {
+      expect(g.porque.trim().length, `${g.tipo}: dispensa sem motivo escrito`).toBeGreaterThan(40);
+      expect(
+        fs.existsSync(g.rota),
+        `${g.tipo}: a rota declarada (${g.rota}) não existe — o gatilho não dispara por caminho nenhum`,
+      ).toBe(true);
     }
   });
 

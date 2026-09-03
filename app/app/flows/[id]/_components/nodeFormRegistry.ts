@@ -1,5 +1,12 @@
 import type { ComponentType } from "react";
 
+import { CrmHandoffToAgentForm } from "./forms/CrmHandoffToAgentForm";
+import { LogicChoiceMenuForm } from "./forms/LogicChoiceMenuForm";
+import { RoutingFixedOrderForm } from "./forms/RoutingFixedOrderForm";
+import { RoutingRandomForm } from "./forms/RoutingRandomForm";
+import { TriggerKeywordForm } from "./forms/TriggerKeywordForm";
+import { TriggerWebhookForm } from "./forms/TriggerWebhookForm";
+import { TriggerMessageReceivedForm } from "./forms/TriggerMessageReceivedForm";
 import { CrmAddTagForm } from "./forms/CrmAddTagForm";
 import { CrmAssignOwnerForm } from "./forms/CrmAssignOwnerForm";
 import { CrmOwnerRespondedForm } from "./forms/CrmOwnerRespondedForm";
@@ -50,6 +57,9 @@ import type { PropsDoFormulario } from "./forms/shared";
  */
 export const FORMULARIO_DO_TIPO: Record<string, ComponentType<PropsDoFormulario>> = {
   "trigger.lead_created": TriggerLeadCreatedForm,
+  "trigger.message_received": TriggerMessageReceivedForm,
+  "trigger.keyword": TriggerKeywordForm,
+  "trigger.webhook": TriggerWebhookForm,
   "logic.if": LogicIfForm,
   "logic.wait": LogicWaitForm,
   "logic.end": LogicEndForm,
@@ -57,12 +67,16 @@ export const FORMULARIO_DO_TIPO: Record<string, ComponentType<PropsDoFormulario>
   "logic.merge": LogicMergeForm,
   "logic.loop": LogicLoopForm,
   "logic.await_event": LogicAwaitEventForm,
+  "logic.choice_menu": LogicChoiceMenuForm,
   "flow.call": FlowCallForm,
   "crm.add_tag": CrmAddTagForm,
   "crm.assign_owner": CrmAssignOwnerForm,
   "crm.owner_responded": CrmOwnerRespondedForm,
   "routing.round_robin": RoutingRoundRobinForm,
   "routing.redistribute": RoutingRedistributeForm,
+  "routing.random": RoutingRandomForm,
+  "routing.fixed_order": RoutingFixedOrderForm,
+  "crm.handoff_to_agent": CrmHandoffToAgentForm,
   "whatsapp.notify_user": WhatsappNotifyUserForm,
   "whatsapp.send_to_lead": WhatsappSendToLeadForm,
   "whatsapp.bulk_send": WhatsappBulkSendForm,

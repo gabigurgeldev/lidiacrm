@@ -14,6 +14,10 @@ import {
   FlowArrow,
   Funnel,
   GitBranch,
+  ListChecks,
+  ListNumbers,
+  Robot,
+  Shuffle,
   Megaphone,
   PaperPlaneTilt,
   Play,
@@ -21,6 +25,7 @@ import {
   Tag,
   UserCircle,
   UsersThree,
+  WebhooksLogo,
 } from "@/lib/ui/icons";
 
 /**
@@ -64,6 +69,9 @@ export interface VisualDoNo {
 
 export const ICONE_DO_TIPO: Partial<Record<string, PhosphorIcon>> = {
   "trigger.lead_created": Play,
+  "trigger.message_received": ChatCircle,
+  "trigger.keyword": Tag,
+  "trigger.webhook": WebhooksLogo,
   "logic.if": GitBranch,
   "logic.wait": Clock,
   "logic.end": Flag,
@@ -71,12 +79,16 @@ export const ICONE_DO_TIPO: Partial<Record<string, PhosphorIcon>> = {
   "logic.merge": ArrowsMerge,
   "logic.loop": Repeat,
   "logic.await_event": Hourglass,
+  "logic.choice_menu": ListChecks,
   "flow.call": FlowArrow,
   "crm.add_tag": Tag,
   "crm.assign_owner": UserCircle,
   "crm.owner_responded": ChatCircle,
   "routing.round_robin": UsersThree,
   "routing.redistribute": ArrowsClockwise,
+  "routing.random": Shuffle,
+  "routing.fixed_order": ListNumbers,
+  "crm.handoff_to_agent": Robot,
   "whatsapp.notify_user": PaperPlaneTilt,
   "whatsapp.send_to_lead": ChatCircleText,
   "whatsapp.bulk_send": Megaphone,

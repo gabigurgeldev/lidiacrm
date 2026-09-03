@@ -13,6 +13,8 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
+import { garantirGatilhosDeWebhook } from "@/lib/flow-engine/gatilho-por-webhook";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { flowGraphSchema } from "@/lib/flow-engine/graph-schema";
@@ -103,6 +105,19 @@ export async function POST(_req: NextRequest, ctx: Contexto): Promise<Response> 
     .eq("id", id);
   if (errPonteiro) return fail("internal_error", errPonteiro.message, 500, { requestId });
 
+  // O gatilho por webhook precisa de um endereço público, e ele nasce AQUI —
+  // ao publicar, não ao arrastar o bloco: token criado no rascunho é endereço
+  // vivo para fluxo que não roda. Melhor esforço de propósito (ver o cabeçalho
+  // de `lib/flow-engine/gatilho-por-webhook.ts`): falhar em criar o token não
+  // pode desfazer a publicação dos outros blocos, que não têm nada com isso.
+  const gatilhos = await garantirGatilhosDeWebhook(createAdminClient(), {
+    organizationId: authz.org.orgId,
+    flowId: id,
+    flowName: (fluxo as { name: string }).name,
+    grafo: forma.data,
+    criadoPorUserId: authz.user.id,
+  });
+
   void audit({
     action: "flow.published",
     actorUserId: authz.user.id,
@@ -110,8 +125,17 @@ export async function POST(_req: NextRequest, ctx: Contexto): Promise<Response> 
     resourceType: "flow",
     resourceId: id,
     requestId,
-    metadata: { version_number: novaVersao.version_number, avisos: veredito.avisos.length },
+    metadata: {
+      version_number: novaVersao.version_number,
+      avisos: veredito.avisos.length,
+      gatilhos_de_webhook: gatilhos.length,
+    },
   });
 
-  return ok({ versao: novaVersao, avisos: veredito.avisos }, { requestId, status: 201 });
+  return ok(
+    // Os endereços dos gatilhos voltam na resposta: sem isto a pessoa publica
+    // e não tem onde ler a URL que precisa colar no sistema de fora.
+    { versao: novaVersao, avisos: veredito.avisos, gatilhos_de_webhook: gatilhos },
+    { requestId, status: 201 },
+  );
 }
