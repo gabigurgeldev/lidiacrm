@@ -23,6 +23,16 @@
  * **Ao medir um evento real, aperte este parser.** O lugar certo é aqui, e o
  * comentário acima deve ser substituído pelo formato medido.
  *
+ * ─── O log de `logger.info` abaixo é o instrumento pra essa medição ────────
+ *
+ * `webhook_events_log` guarda o corpo inteiro, mas até isso ser lido (banco
+ * inacessível numa instalação self-host é um cenário real, não hipotético) o
+ * log estruturado é o que sobra. Ele nunca imprime VALOR de campo — só os
+ * NOMES das chaves de primeiro nível (`Object.keys`, depois de achatar) e o
+ * desfecho (`tipo`/`motivo`) — o bastante pra saber se o nome que este parser
+ * chuta bate com o que a Stevo manda de verdade, sem violar a regra do
+ * cabeçalho de `lib/logger.ts` (nunca corpo de mensagem, nunca telefone).
+ *
  * ═══ Sem HMAC, e o que protege no lugar ═══
  *
  * O provedor não documenta assinatura de webhook. O que autentica a entrega é o
@@ -33,6 +43,7 @@
  * concreto: quem observar a URL uma vez pode reenviá-la. Não há como fechar essa
  * diferença sem o outro lado assinar.
  */
+import { logger } from "@/lib/logger";
 
 export type EventoStevo =
   | {
@@ -103,6 +114,22 @@ function tipoDeMensagem(plano: Record<string, unknown>, temMidia: boolean): stri
 }
 
 export function lerEventoStevo(bruto: unknown): EventoStevo {
+  const evento = lerEventoStevoSemLog(bruto);
+  logger.info("[webhook-stevo] evento lido", {
+    tipo: evento.tipo,
+    motivo: evento.tipo === "ignorado" ? evento.motivo : undefined,
+    // Só os NOMES das chaves de primeiro nível, nunca o valor — é o bastante
+    // pra comparar contra CAMPOS_TEXTO/CAMPOS_TELEFONE/CAMPOS_ID/CAMPOS_MIDIA
+    // sem logar telefone nem corpo de mensagem.
+    chaves:
+      bruto !== null && typeof bruto === "object" && !Array.isArray(bruto)
+        ? Object.keys(achatar(bruto))
+        : [],
+  });
+  return evento;
+}
+
+function lerEventoStevoSemLog(bruto: unknown): EventoStevo {
   if (bruto === null || typeof bruto !== "object") {
     return { tipo: "ignorado", motivo: "corpo_nao_e_objeto" };
   }
