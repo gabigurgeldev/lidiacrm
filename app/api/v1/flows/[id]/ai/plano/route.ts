@@ -36,7 +36,11 @@ import { requireRole } from "@/lib/auth/require-role";
 import { logger } from "@/lib/logger";
 import { orcamentoPermite } from "@/lib/flow-engine/ai/budget-gate";
 import { portaComFallback, resolverCadeia } from "@/lib/flow-engine/ai/modelo-com-fallback";
-import { montarSchemaDePlano, type PlanoDeFluxo } from "@/lib/flow-engine/ai/plan-schema";
+import {
+  TOKENS_DO_PLANO,
+  montarSchemaDePlano,
+  type PlanoDeFluxo,
+} from "@/lib/flow-engine/ai/plan-schema";
 import { promptDePlano, promptDoUsuario } from "@/lib/flow-engine/ai/prompt";
 
 export const dynamic = "force-dynamic";
@@ -115,11 +119,18 @@ export async function POST(
     schema: montarSchemaDePlano(),
     system: promptDePlano(),
     prompt: promptDoUsuario(lido.data.pedido, lido.data.historico),
-    // O plano é uma lista de rótulos e frases curtas: 1200 é folgado para 40
-    // blocos e continua LONGE do teto, o que devolve sinal a
-    // `finishReason: "length"` — no caminho antigo, com 4000 para um grafo
-    // inteiro, "length" era o estado normal e não acusava nada.
-    maxOutputTokens: 1200,
+    // ⚠️ ERA `1200`, COM UM COMENTÁRIO DIZENDO "folgado para 40 blocos".
+    //
+    // Medido contra o provedor real: o pedido de exemplo (8 blocos) gastava
+    // entre 826 e 1166 — raspando —, e um pedido de tamanho normal (15 blocos)
+    // foi CORTADO em 4 de 4 rodadas. O corte chega como
+    // "could not parse the response", que fala de parse, e foi o que fez cinco
+    // correções procurarem no schema, no provedor e no transporte.
+    //
+    // O número agora mora junto de `MAX_BLOCOS`/`MAX_LIGACOES`, que são o que
+    // ele precisa comportar, e não é mais a última palavra: a porta sobe o teto
+    // uma vez quando a resposta volta cortada.
+    maxOutputTokens: TOKENS_DO_PLANO,
     rotulo: "plano",
     sinal: req.signal,
   });
@@ -136,9 +147,16 @@ export async function POST(
       warnings: resultado.avisos,
       usouReserva: resultado.usouReserva,
     });
+    // "Cortada mesmo com o teto dobrado" e "o modelo recusou" pedem coisas
+    // DIFERENTES de quem está na tela: a primeira pede um pedido menor, a
+    // segunda pede outra descrição. Mandar as duas para a mesma frase é o que
+    // fazia a pessoa tentar de novo, igual, para receber o mesmo erro.
+    const cortado = resultado.finishReason === "length";
     return fail(
       "ai_provider_error",
-      "A IA não conseguiu planejar o fluxo. Veja o detalhe abaixo ou tente descrever de outro jeito.",
+      cortado
+        ? "O fluxo que você descreveu é grande demais para a IA montar de uma vez. Descreva uma parte por vez — o resto você liga à mão no quadro."
+        : "A IA não conseguiu planejar o fluxo. Veja o detalhe abaixo ou tente descrever de outro jeito.",
       502,
       { requestId, details: { causa: resultado.causa ?? "objeto ausente" } },
     );

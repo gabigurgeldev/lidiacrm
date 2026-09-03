@@ -43,6 +43,63 @@ import { tiposRegistrados } from "../registry";
 export const MAX_BLOCOS = 40;
 export const MAX_LIGACOES = 80;
 
+/**
+ * O TETO DE TOKENS DE SAÍDA DO PLANO — e por que ele mora AQUI.
+ *
+ * ═══ O defeito que este número existe para não repetir ═══
+ *
+ * A rota pedia 1200, com o comentário "folgado para 40 blocos". Medido contra o
+ * provedor real (OpenRouter, `anthropic/claude-sonnet-5`), a afirmação é falsa
+ * por uma ordem de grandeza:
+ *
+ *   pedido curto  (8 blocos)   826 · 1043 · 1068 · 1096 · 1106 · 1166 tokens
+ *   pedido normal (15 blocos)  4 de 4 rodadas CORTADAS em 1200; a que coube
+ *                              num teto maior gastou 6006
+ *
+ * Ou seja: o pedido de exemplo raspava o teto (1166 de 1200) e QUALQUER pedido
+ * de tamanho real estourava. O corte chega ao SDK como
+ * `No object generated: could not parse the response` — uma frase que fala de
+ * PARSE e não de teto —, e foi ela que mandou cinco correções seguidas
+ * procurarem no schema, no provedor e no transporte. Não estava em nenhum dos
+ * três: o produto pedia ao modelo menos espaço do que a própria resposta ocupa.
+ *
+ * Trocar de modelo nunca ajudou, e é por isso que "testei todos os modelos"
+ * descreve exatamente o sintoma: o teto é nosso, não do provedor.
+ *
+ * ═══ Por que aqui, e não na rota ═══
+ *
+ * O teto é uma AFIRMAÇÃO SOBRE ESTE SCHEMA: quanto cabe numa resposta que
+ * respeite `MAX_BLOCOS` e `MAX_LIGACOES`. Longe deles, ele volta a envelhecer
+ * sozinho — foi o que aconteceu. Junto deles, mexer num obriga a olhar o outro.
+ *
+ * ═══ ⚠️ TETO ALTO NÃO CUSTA NADA ═══
+ *
+ * Esta é a confusão que produziu o 1200. Cobra-se pelo token GERADO, não pelo
+ * autorizado: um plano de 6 blocos sob um teto de 6.000 custa exatamente o
+ * mesmo que sob um teto de 1.200 — a diferença é que sob 1.200 ele não cabe.
+ * "Economizar" apertando o teto não economiza um centavo; só quebra a feature.
+ *
+ * Quem decide o custo é o MODELO (ver `resolverCadeia`, que passou a começar
+ * pelo barato) e o NÚMERO DE CHAMADAS, nunca este número.
+ *
+ * ═══ De onde sai o 6000 ═══
+ *
+ * Medido: 8 blocos e 7 ligações couberam em 714 tokens de saída, ou seja ~90
+ * tokens por bloco somado à ligação que sai dele. O teto do schema é
+ * `MAX_BLOCOS` = 40 e `MAX_LIGACOES` = 80:
+ *
+ *     40 × 90  +  80 × 30  =  6000
+ *
+ * Ou seja: este teto comporta o MAIOR plano que o schema permite. Não há mais
+ * um limite escondido menor do que o limite declarado — que era exatamente o
+ * defeito, e a razão de "criar fluxo com IA" falhar em pedido de tamanho real.
+ *
+ * E ele ainda não é a última palavra: `portaComFallback` sobe o teto uma vez
+ * quando a resposta volta cortada, para o caso de um modelo mais verboso que os
+ * medidos aqui.
+ */
+export const TOKENS_DO_PLANO = 6000;
+
 export function montarSchemaDePlano() {
   garantirNosRegistrados();
   const tipos = tiposRegistrados();

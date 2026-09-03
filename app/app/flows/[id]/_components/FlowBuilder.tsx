@@ -33,11 +33,23 @@ export function FlowBuilder({ flowId }: { flowId: string }) {
       // da paleta (FlowCanvas.tsx) nunca tem uma altura finita contra a qual
       // rolar, e o navegador rola a PÁGINA inteira em vez da paleta.
       //
-      // `100dvh` menos o `h-14` do cabeçalho (components/shell/header/AppHeader.tsx,
-      // 56px) e o `p-6` vertical do `<main>` (AppShell.tsx:44, 24px×2 = 48px):
-      // 56 + 48 = 104px. Local a este editor de propósito — mudar `AppShell`
-      // globalmente afetaria toda tela logada.
-      className="flex h-[calc(100dvh-104px)] min-h-[500px] flex-1 flex-col"
+      // `100dvh` menos o `h-14` do cabeçalho (56px) e o padding vertical do
+      // `<main>` do `AppShell`.
+      //
+      // ⚠️ SÃO DOIS NÚMEROS, E O SEGUNDO MUDA COM A LARGURA. O `<main>` era
+      // `p-6` (24px×2 = 48 → 104 no total) e o redesenho da navegação o trocou
+      // por `py-5` abaixo de `lg` (20px×2 = 40 → 96) e `py-6` a partir de `lg`.
+      // Enquanto esta linha dizia só `104px`, o editor media 8px A MAIS que o
+      // espaço real em toda tela abaixo de 1024px — e quem paga uma altura
+      // grande demais é o rodapé, que sai da tela.
+      //
+      // Uma soma escrita à mão sobre valores que moram em outro arquivo
+      // envelhece assim, em silêncio. O Inbox saiu desse padrão de vez (virou
+      // `h-full` sobre uma cadeia de flex — ver `InboxLayout.tsx`); aqui a
+      // troca equivalente exigiria dar altura definida ao invólucro `max-w` do
+      // `AppShell`, o que muda TODA tela logada. Fica o número certo, com as
+      // duas faixas, e a dívida declarada.
+      className="flex h-[calc(100dvh-96px)] min-h-[500px] flex-1 flex-col lg:h-[calc(100dvh-104px)]"
       data-testid="construtor-de-fluxo"
     >
       <FlowCanvas flowId={flowId} />
