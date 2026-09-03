@@ -11,6 +11,41 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
+  # ── O SCHEMA, antes de qualquer coisa subir ────────────────────────────────
+  #
+  # Serviço EFÊMERO: sobe, aplica `supabase/baseline.sql` se o carimbo mudou, e
+  # sai. `restart: "no"` porque ele não é um servidor — reiniciá-lo seria
+  # reaplicar schema em laço.
+  #
+  # ─── Por que ele existe ───────────────────────────────────────────────────
+  #
+  # A cadeia de deploy por painel (EasyPanel, Coolify, Dokploy) entrega CÓDIGO
+  # novo e deixa o SCHEMA para trás: ela puxa a imagem e nada mais. Quem aplicava
+  # o baseline era o `update.sh` do kit, que roda por SSH na VPS — e o painel
+  # nunca o executa. O sintoma é cruel porque é silencioso: o deploy passa verde,
+  # o app sobe, e as telas começam a devolver menos dado (as consultas são
+  # tolerantes a coluna ausente de propósito). Medido: a migration 0206 ficou
+  # pendente até alguém abrir Conexões e ver o aviso.
+  #
+  # ─── Por que um serviço separado, e não o boot do app ─────────────────────
+  #
+  # `SUPABASE_DB_ADMIN_URL` é a conexão de DDL — dona do banco num Supabase
+  # próprio — e `SUPABASE_DB_URL` é a role menor que o app usa. A separação é
+  # deliberada (issue #192) e vigiada por `tests/unit/env-ddl-fora-do-app.test.ts`,
+  # que reprova o build se código de app sequer NOMEAR a variável de admin.
+  # Aplicar no boot do app devolveria a ele o poder que aquela issue tirou.
+  #
+  # Mesma IMAGEM do app (nenhuma quarta imagem a publicar, nenhum `build:` na
+  # máquina do cliente — doutrina de packaging, invariante 1), processo outro.
+  migrate:
+    image: ${APP_IMAGE:-ghcr.io/melgarafael/deskcommcrm:stable}
+    pull_policy: ${APP_PULL_POLICY:-always}
+    restart: "no"
+    env_file: .env
+    command: ["node", "scripts/aplicar-schema.mjs"]
+    logging: *default-logging
+    networks: [internal]
+
   app:
     # Teto de memória — 335 MiB de pico MEDIDO nesta VPS.
     #
@@ -37,6 +72,15 @@ services:
     restart: unless-stopped
     env_file: .env
     depends_on:
+      # O schema ANTES do app, e `service_completed_successfully` e não
+      # `service_started`: o migrate é efêmero, então "iniciou" não diz nada —
+      # o app subiria em paralelo e leria o banco no meio da aplicação.
+      #
+      # Ele sai com 0 mesmo quando não conseguiu aplicar (ver o cabeçalho de
+      # `scripts/aplicar-schema.mjs`), então esta condição NÃO trava o parque
+      # quando o banco está fora do ar: ela só ordena os dois.
+      migrate:
+        condition: service_completed_successfully
       srh:
         condition: service_started
       waha:
