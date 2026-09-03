@@ -365,6 +365,7 @@ export async function importarInstancias(
           instanceId: inst.id,
           // A rota NEUTRA de webhook — o caminho não cita provider nenhum.
           url: `${input.baseDoWebhook}/api/v1/webhooks/channel/${tokenDoWebhook}`,
+          oficial: inst.modo === MODO_OFICIAL,
         })
       : { ok: false as const, motivo: "linha sem webhook_path_token — não deveria acontecer" };
 
@@ -387,7 +388,7 @@ export async function reapontarWebhookDaConta(
   const base = () =>
     admin
       .from("channel_sessions")
-      .select(`id, stevo_instance_id, webhook_path_token, ${ARCHIVED_AT}`)
+      .select(`id, stevo_instance_id, webhook_path_token, provider_mode, ${ARCHIVED_AT}`)
       .eq("organization_id", input.organizationId)
       .eq("provider", ACCOUNT_CHANNEL_PROVIDER)
       .eq("id", input.channelSessionId);
@@ -396,13 +397,18 @@ export async function reapontarWebhookDaConta(
     () =>
       admin
         .from("channel_sessions")
-        .select("id, stevo_instance_id, webhook_path_token")
+        .select("id, stevo_instance_id, webhook_path_token, provider_mode")
         .eq("organization_id", input.organizationId)
         .eq("provider", ACCOUNT_CHANNEL_PROVIDER)
         .eq("id", input.channelSessionId)
         .maybeSingle(),
   );
-  const linha = data as { id: string; stevo_instance_id: string | null; webhook_path_token: string } | null;
+  const linha = data as {
+    id: string;
+    stevo_instance_id: string | null;
+    webhook_path_token: string;
+    provider_mode: string | null;
+  } | null;
   if (!linha || !linha.stevo_instance_id) {
     return { ok: false, motivo: "canal não encontrado" };
   }
@@ -420,6 +426,7 @@ export async function reapontarWebhookDaConta(
     baseUrl: creds.baseUrl,
     instanceId: linha.stevo_instance_id,
     url: `${input.baseDoWebhook}/api/v1/webhooks/channel/${linha.webhook_path_token}`,
+    oficial: linha.provider_mode === MODO_OFICIAL,
   });
   return r.ok ? { ok: true } : { ok: false, motivo: r.motivo ?? "o provedor recusou" };
 }

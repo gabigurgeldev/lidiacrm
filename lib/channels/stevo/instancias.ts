@@ -230,6 +230,14 @@ export async function apontarWebhookStevo(input: {
   baseUrl: string;
   instanceId: string;
   url: string;
+  /**
+   * `events` só existe no motor SM v2 (número por QR) — a spec documenta
+   * "Só SM v2" no campo, e o motor oficial (WABA) recusa o PUT com 400 quando
+   * o corpo traz `events`, porque lá TODO evento já é entregue (não há o que
+   * escolher). Mandar sem checar a modalidade foi o que travou o oficial: o
+   * import escreve pros dois motores no mesmo laço, e só um aceita o campo.
+   */
+  oficial: boolean;
 }): Promise<ApontarWebhookResultado> {
   let r: Response;
   try {
@@ -238,15 +246,18 @@ export async function apontarWebhookStevo(input: {
       {
         method: "PUT",
         headers: { ...cabecalhos(input.apiKey), "content-type": "application/json" },
-        // `events` explícito: o default do provedor é `["MESSAGE","CONNECTION"]`,
-        // e sem `SEND_MESSAGE` a mensagem que o operador manda pelo CELULAR não
-        // chega ao CRM — a conversa fica pela metade, com as respostas dele
-        // faltando. É o mesmo motivo pelo qual o transporte por QR assina
-        // `message.any` e não `message`.
-        body: JSON.stringify({
-          url: input.url,
-          events: ["MESSAGE", "SEND_MESSAGE", "CONNECTION"],
-        }),
+        body: JSON.stringify(
+          input.oficial
+            ? { url: input.url }
+            : {
+                url: input.url,
+                // Sem `SEND_MESSAGE` a mensagem que o operador manda pelo
+                // CELULAR não chega ao CRM — a conversa fica pela metade, com
+                // as respostas dele faltando. Mesmo motivo pelo qual o
+                // transporte por QR assina `message.any` e não `message`.
+                events: ["MESSAGE", "SEND_MESSAGE", "CONNECTION"],
+              },
+        ),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       },
     );
@@ -265,7 +276,17 @@ export async function apontarWebhookStevo(input: {
     };
   }
   if (!r.ok) {
-    return { ok: false, motivo: `o provedor respondeu ${r.status} ao configurar o webhook` };
+    // O corpo do erro carrega `error.message` quando o provedor consegue
+    // explicar o que rejeitou — surfar isso é a diferença entre "400" (sem
+    // pista nenhuma) e o motivo de verdade.
+    const corpo = (await r.json().catch(() => null)) as { error?: { message?: string } } | null;
+    const detalhe = corpo?.error?.message;
+    return {
+      ok: false,
+      motivo: detalhe
+        ? `o provedor recusou o webhook: ${detalhe}`
+        : `o provedor respondeu ${r.status} ao configurar o webhook`,
+    };
   }
   return { ok: true };
 }

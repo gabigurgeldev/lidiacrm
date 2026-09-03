@@ -243,7 +243,7 @@ describe("importar", () => {
     expect(escritas[0]?.patch.organization_id).toBe(ORG);
   });
 
-  it("aponta o webhook para a rota NEUTRA desta instalação", async () => {
+  it("aponta o webhook para a rota NEUTRA desta instalação (QR)", async () => {
     // Os parâmetros são DECLARADOS mesmo sem uso: `vi.fn(async () => …)` infere
     // a lista de argumentos como tupla VAZIA, e aí `mock.calls.at(-1)` não tem
     // índice 0 nem 1 — o teste compila no `tsc` solto e falha no
@@ -259,7 +259,7 @@ describe("importar", () => {
       requestId: "r",
       apiKey: "k",
       baseDoWebhook: "https://crm.exemplo",
-      instancias: [instancia()],
+      instancias: [instancia({ modo: "qr" })],
     });
 
     const [url, init] = fetchMock.mock.calls.at(-1)!;
@@ -270,6 +270,51 @@ describe("importar", () => {
     // Sem `SEND_MESSAGE` a mensagem que o operador manda pelo CELULAR não chega
     // ao CRM, e a conversa fica pela metade.
     expect(corpo.events).toContain("SEND_MESSAGE");
+  });
+
+  it("⭐ oficial NÃO manda events — a spec da Stevo diz 'events só SM v2', e mandar recusa com 400", async () => {
+    // Medido em produção: chave com todos os escopos, número oficial, o PUT
+    // voltava "o provedor respondeu 400 ao configurar o webhook". A causa era
+    // este `events` sobrando no corpo de uma instância que não o aceita.
+    const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+      new Response("{}", { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { client } = makeDb();
+    await importarInstancias(client as never, {
+      organizationId: ORG,
+      userId: "u",
+      requestId: "r",
+      apiKey: "k",
+      baseDoWebhook: "https://crm.exemplo",
+      instancias: [instancia({ modo: "oficial" })],
+    });
+
+    const [, init] = fetchMock.mock.calls.at(-1)!;
+    const corpo = JSON.parse(String(init?.body));
+    expect(corpo).toEqual({ url: "https://crm.exemplo/api/v1/webhooks/channel/tok-novo" });
+    expect(corpo.events).toBeUndefined();
+  });
+
+  it("⭐ corpo do erro com error.message chega inteiro na tela, não só o status", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { code: "invalid_body", message: "events não é aceito para este motor" } }), {
+        status: 400,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { client } = makeDb();
+    const r = await importarInstancias(client as never, {
+      organizationId: ORG,
+      userId: "u",
+      requestId: "r",
+      apiKey: "k",
+      baseDoWebhook: "https://crm.exemplo",
+      instancias: [instancia()],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.desfechos[0]?.motivo).toContain("events não é aceito para este motor");
   });
 
   it("⭐ webhook recusado NÃO desfaz a importação, mas é reportado com motivo", async () => {
