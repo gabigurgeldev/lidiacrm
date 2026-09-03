@@ -95,15 +95,28 @@ export const availabilityScheduleSchema = z.object({
 });
 export type AvailabilitySchedule = z.infer<typeof availabilityScheduleSchema>;
 
+/**
+ * E.164: `+` seguido de 8 a 15 dígitos — mesma faixa da constraint
+ * `contacts_phone_e164_format` do banco. Regex local, sem importar de
+ * `lib/webhooks/`: este arquivo é lido pelo cliente (`ScheduleDialog`), e um
+ * parser de webhook arrastaria código de servidor para o bundle do navegador
+ * à toa.
+ */
+const E164 = /^\+\d{8,15}$/;
+
 /** PATCH parcial de disponibilidade (o atendente muda a sua; manager, de todos). */
 export const availabilityPatchSchema = z
   .object({
     is_available: z.boolean(),
     capacity: z.number().int().min(1).max(1000),
     schedule: availabilityScheduleSchema,
+    // Telefone de aviso do `whatsapp.notify_user` (motor de fluxos) — pra onde
+    // o bloco manda mensagem quando este atendente é o dono do lead. `null`
+    // limpa o campo; string vazia não é aceita (usa `null` pra "sem telefone").
+    notification_phone: z.string().regex(E164, "telefone precisa estar em E.164 (+DDI...)").nullable(),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, {
-    message: "Informe ao menos um campo (is_available, capacity ou schedule).",
+    message: "Informe ao menos um campo (is_available, capacity, schedule ou notification_phone).",
   });
 export type AvailabilityPatch = z.infer<typeof availabilityPatchSchema>;

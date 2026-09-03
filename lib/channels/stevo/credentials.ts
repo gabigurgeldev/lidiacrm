@@ -76,6 +76,57 @@ export function stevoBaseUrlOficial(): string {
 }
 
 /**
+ * O token de ENVIO de uma instância da API Oficial, decifrado. `null` = esta
+ * instância não tem token colado, e o envio cai no proxy (que a recusa).
+ *
+ * ─── Por que este token existe, se já há a chave da conta ───────────────────
+ *
+ * Porque são serviços diferentes com credenciais diferentes:
+ *
+ *   chave da conta (`stevo_sk_…`) → `openapi.stevo.chat`  → gestão + proxy
+ *   token da instância            → `apimeta.shurima.cloud` → envio da Oficial
+ *
+ * O proxy da gestão anuncia servir as duas modalidades, e serve — mas para uma
+ * instância oficial ele responde `409 not_ready` com "sem token — conecte
+ * primeiro", porque a Oficial não tem servidor de instância para ele proxiar.
+ *
+ * Medido na conta de produção: `GET /v1/instances/{id}` devolve `token: null` e
+ * `server_url: null` para TODA instância `is_official_api: true`, e os dois
+ * preenchidos para toda SM v2. O token do gateway não é descobrível por API
+ * nenhuma — só o operador o vê no painel da instância. É por isso que ele é
+ * COLADO, e não sincronizado.
+ */
+export async function stevoOfficialToken(
+  admin: SupabaseClient,
+  lookup: StevoCredsLookup,
+): Promise<string | null> {
+  const { organizationId, instanceId } = lookup;
+  if (!organizationId || !instanceId) return null;
+
+  // Mesmo recorte da busca acima (organização à mão + `archived_at is null`),
+  // e pela mesma razão: ver o cabeçalho do arquivo, issue #236.
+  const base = () =>
+    admin
+      .from("channel_sessions")
+      .select("stevo_official_token_encrypted")
+      .eq("organization_id", organizationId)
+      .eq("stevo_instance_id", instanceId);
+  const { data, error } = await queryTolerantToMissingArchived(
+    () => base().is(ARCHIVED_AT, null).maybeSingle(),
+    () => base().maybeSingle(),
+  );
+  if (error) {
+    throw new Error(
+      `stevo_official_token_lookup_failed: ${error.code ?? "sem_codigo"} ${error.message ?? ""}`.trim(),
+    );
+  }
+
+  const cifrado = data?.stevo_official_token_encrypted;
+  if (!cifrado) return null;
+  return decryptWebhookSecret(admin, cifrado as unknown as string);
+}
+
+/**
  * Credencial do ambiente. `null` quando não configurada — o chamador trata como
  * canal não conectado (noop), nunca como erro.
  */

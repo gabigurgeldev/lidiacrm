@@ -12,11 +12,12 @@ import { Label } from "@/components/ui/label";
 // fala com o Supabase e com a cifra, e importá-lo daqui arrasta `next/headers`
 // para o bundle do navegador — o build quebra com "This API is only available in
 // Server Components". Foi assim que o `build-and-size` reprovou o primeiro PR.
-import { PROVIDER_DA_CONTA } from "@/lib/channels/tipo-de-conexao";
+import { MODO_OFICIAL, PROVIDER_DA_CONTA } from "@/lib/channels/tipo-de-conexao";
 import { lerEstadoDoCanal } from "@/lib/channels/estado";
 import {
   useConexoesDaConta,
   useDescobrirInstancias,
+  useGravarTokenDeEnvio,
   useImportarInstancias,
   useReconectarWebhook,
   type InstanciaDaConta,
@@ -130,7 +131,10 @@ export function CanalContaClient() {
                 modo={c.modo}
                 estado={estado ? { rotulo: t(estado.rotulo), tom: estado.tom } : null}
                 detalhe={
-                  <span className="font-mono">{c.instanceId ?? t("sem identificador")}</span>
+                  <div className="flex flex-col gap-2">
+                    <span className="font-mono">{c.instanceId ?? t("sem identificador")}</span>
+                    {c.modo === MODO_OFICIAL && <TokenDeEnvio channelSessionId={c.id} />}
+                  </div>
                 }
                 acoes={
                   <Button
@@ -274,6 +278,89 @@ export function CanalContaClient() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * O token de ENVIO de um canal da modalidade oficial.
+ *
+ * ─── Por que existe um campo aqui, se esta tela nasceu para não ter campos ──
+ *
+ * A chave da conta descobre número, estado e identificador sozinha — é a razão
+ * de ser desta forma de conectar. Este é o único valor que ela não alcança: a
+ * API de conta devolve o token de envio como nulo em TODA instância oficial
+ * (medido; nas por QR vem preenchido), porque a modalidade oficial fala com
+ * outro serviço. Sem ele o canal recebe e não envia, e a única pista era a
+ * mensagem falhando na tela do inbox.
+ *
+ * Só aparece na modalidade oficial: canal por QR já envia pela chave da conta, e
+ * um campo ali seria pedir um segredo que não tem uso.
+ *
+ * O valor não volta do servidor nunca, nem mascarado — por isso o campo nasce
+ * vazio mesmo quando já há token gravado, e o que se faz aqui é sempre
+ * SUBSTITUIR. Mostrar um valor mascarado sugeriria que dá para conferir o que
+ * está gravado, e não dá.
+ */
+function TokenDeEnvio({ channelSessionId }: { channelSessionId: string }) {
+  const t = useT();
+  const [token, setToken] = useState("");
+  const gravar = useGravarTokenDeEnvio();
+
+  async function salvar() {
+    try {
+      const r = await gravar.mutateAsync({ channelSessionId, token: token.trim() });
+      setToken("");
+      const numero = r.data.numero;
+      // `SANDBOX` entrega só para os números de teste cadastrados na Meta. É o
+      // tipo de coisa que só aparece quando a primeira mensagem não chega, então
+      // aparece aqui, na hora em que dá para agir.
+      const emTeste = (r.data.modo ?? "").toUpperCase() !== "LIVE";
+      toast.success(
+        emTeste
+          ? `${t("Token salvo, mas este número está em modo de teste na Meta:")} ${r.data.modo ?? "?"}`
+          : numero
+            ? `${t("Token salvo. Envio liberado para")} ${numero}.`
+            : t("Token salvo. Envio liberado."),
+      );
+    } catch {
+      // erro já mostrado pelo onError do hook (showApiError)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={`token-de-envio-${channelSessionId}`} className="text-xs">
+        {t("Token de envio (API Oficial)")}
+      </Label>
+      <div className="flex gap-2">
+        <Input
+          id={`token-de-envio-${channelSessionId}`}
+          type="password"
+          value={token}
+          placeholder={t("cole o token que aparece na instância")}
+          onChange={(e) => setToken(e.target.value)}
+          data-testid="campo-token-de-envio"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          data-testid="btn-salvar-token-de-envio"
+          disabled={gravar.isPending || token.trim().length < 8}
+          onClick={salvar}
+        >
+          {gravar.isPending ? (
+            <CircleNotch size={14} className="animate-spin" aria-hidden />
+          ) : null}
+          {t("Salvar")}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {t(
+          "A chave da conta não alcança este valor: ele só aparece no painel do provedor, dentro da instância. Sem ele o número recebe mensagem e não consegue responder.",
+        )}
+      </p>
     </div>
   );
 }

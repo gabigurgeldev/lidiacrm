@@ -55,15 +55,43 @@ export const crmAssignOwner: FlowNodeDefinition<AssignOwnerConfig> = {
 const RAMO_SEM_TELEFONE = "sem_telefone";
 const RAMO_NAO_SAIU = "nao_saiu";
 
+/**
+ * Normaliza para E.164 (`+` seguido de 8 a 15 dígitos), que é o formato que o
+ * CHECK `contacts_phone_e164_format` exige de `contacts.phone_number`.
+ *
+ * Aceita o que uma pessoa digita de verdade — `+55 (11) 99999-8888`,
+ * `55 11 99999 8888` — porque o campo é livre e ninguém digita E.164 puro. Fora
+ * da faixa devolve `null`: enviar para um número não-discável falharia lá na
+ * frente, na criação do contato, com um erro de constraint que quem montou o
+ * fluxo não tem como ligar ao campo que preencheu.
+ *
+ * Teto de tamanho ANTES do laço: a string vem de `ctx.render`, ou seja, pode
+ * carregar o valor de uma variável do fluxo, que é entrada externa.
+ */
+export function telefoneEmE164(bruto: string): string | null {
+  if (bruto.length > 64) return null;
+  let digitos = "";
+  for (const ch of bruto) {
+    if (ch >= "0" && ch <= "9") digitos += ch;
+  }
+  if (digitos.length < 8 || digitos.length > 15) return null;
+  return `+${digitos}`;
+}
+
 export const notifyUserConfigSchema = z.strictObject({
   /**
-   * Quem avisar. `dono_do_lead` resolve pelo dono atual; um id fixo avisa
-   * sempre a mesma pessoa (o gerente, por exemplo).
+   * Quem avisar. `dono_do_lead` resolve pelo dono atual; `telefone` manda para
+   * um número escrito no bloco (o do gerente, o do plantão), e aceita
+   * `{{vars.x}}` porque passa por `ctx.render` antes de ser normalizado.
    */
   destinatario: z
     .discriminatedUnion("tipo", [
       z.strictObject({ tipo: z.literal("dono_do_lead") }),
       z.strictObject({ tipo: z.literal("usuario"), user_id: z.string().min(1).max(120) }),
+      // Sem regex aqui de propósito: o valor pode ser um template, e um `+`
+      // literal só existe depois do render. Quem valida é `telefoneEmE164`, no
+      // execute, e o que não passa cai no ramo "Sem telefone cadastrado".
+      z.strictObject({ tipo: z.literal("telefone"), telefone: z.string().min(1).max(64) }),
     ])
     .default({ tipo: "dono_do_lead" }),
   mensagem: z.string().min(1).max(4000),
@@ -83,18 +111,19 @@ export const whatsappNotifyUser: FlowNodeDefinition<NotifyUserConfig> = {
     ramoPadrao("Depois de avisar"),
   ],
   execute: async (ctx, config): Promise<NodeExecutionResult> => {
-    const telefone =
-      config.destinatario.tipo === "dono_do_lead"
-        ? ctx.fatos.assigned_user?.notification_phone ?? null
-        : null;
-
-    // Destinatário fixo ainda não resolve telefone: o fato do usuário nomeado
-    // não está em `ctx.fatos`, e buscar aqui dentro violaria a regra de o nó
-    // não falar com o banco. Fica declarado em vez de fingir que funciona —
-    // expor um caminho que não envia é pior que não expor.
+    // Destinatário por id de usuário ainda não resolve telefone: o fato do
+    // usuário nomeado não está em `ctx.fatos`, e buscar aqui dentro violaria a
+    // regra de o nó não falar com o banco. Fica declarado em vez de fingir que
+    // funciona — expor um caminho que não envia é pior que não expor. Quem quer
+    // avisar alguém que não é o dono usa `tipo: "telefone"`.
     if (config.destinatario.tipo === "usuario") {
       return { kind: "dead", reason: "destinatario_fixo_ainda_nao_suportado" };
     }
+
+    const telefone =
+      config.destinatario.tipo === "telefone"
+        ? telefoneEmE164(ctx.render(config.destinatario.telefone))
+        : (ctx.fatos.assigned_user?.notification_phone ?? null);
 
     if (telefone === null || telefone.trim() === "") {
       // Ramo próprio, e não falha: telefone em branco é configuração faltando,

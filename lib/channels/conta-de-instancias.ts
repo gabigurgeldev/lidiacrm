@@ -37,9 +37,10 @@ import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 import {
   apontarWebhookStevo,
   validarContaStevo,
+  validarTokenDeEnvioOficial,
   type StevoInstancia,
 } from "./stevo/instancias";
-import { resolveStevoCreds, stevoBaseUrl } from "./stevo/credentials";
+import { resolveStevoCreds, stevoBaseUrl, stevoBaseUrlOficial } from "./stevo/credentials";
 import type { ChannelProvider } from "./types";
 
 /**
@@ -429,4 +430,71 @@ export async function reapontarWebhookDaConta(
     oficial: linha.provider_mode === MODO_OFICIAL,
   });
   return r.ok ? { ok: true } : { ok: false, motivo: r.motivo ?? "o provedor recusou" };
+}
+
+/**
+ * Grava o TOKEN DE ENVIO de um canal da API Oficial, depois de validá-lo.
+ *
+ * ─── Por que este token é colado, e não descoberto ──────────────────────────
+ *
+ * A chave da conta descobre tudo o mais sozinha — instâncias, números, estado —
+ * e é por isso que esta forma de conectar existe. Este é a exceção: a API de
+ * conta devolve `token: null` para TODA instância da API Oficial (medido em
+ * produção, e preenchido para toda instância por QR), porque a Oficial não tem
+ * servidor de instância. O token do gateway só aparece no painel do provedor,
+ * para o operador. Não há o que sincronizar.
+ *
+ * Recusa canal que não seja da modalidade oficial: um canal por QR já envia
+ * pelo proxy, e gravar um token de gateway nele criaria um caminho de envio que
+ * nunca funcionaria — pior que não ter campo nenhum.
+ */
+export async function gravarTokenDeEnvioDaConta(
+  admin: SupabaseClient,
+  input: { organizationId: string; channelSessionId: string; token: string },
+): Promise<{ ok: true; numero: string | null; modo: string | null } | { ok: false; motivo: string }> {
+  const base = () =>
+    admin
+      .from("channel_sessions")
+      .select(`id, stevo_instance_id, provider_mode, ${ARCHIVED_AT}`)
+      .eq("organization_id", input.organizationId)
+      .eq("provider", ACCOUNT_CHANNEL_PROVIDER)
+      .eq("id", input.channelSessionId);
+  const { data } = await queryTolerantToMissingArchived(
+    () => base().is(ARCHIVED_AT, null).maybeSingle(),
+    () =>
+      admin
+        .from("channel_sessions")
+        .select("id, stevo_instance_id, provider_mode")
+        .eq("organization_id", input.organizationId)
+        .eq("provider", ACCOUNT_CHANNEL_PROVIDER)
+        .eq("id", input.channelSessionId)
+        .maybeSingle(),
+  );
+  const linha = data as { id: string; provider_mode: string | null } | null;
+  if (!linha) return { ok: false, motivo: "canal não encontrado" };
+  if (linha.provider_mode !== MODO_OFICIAL) {
+    return { ok: false, motivo: "este canal não é da API Oficial — ele já envia pela chave da conta" };
+  }
+
+  const v = await validarTokenDeEnvioOficial({
+    token: input.token,
+    baseUrl: stevoBaseUrlOficial(),
+  });
+  if (!v.ok) return { ok: false, motivo: v.motivo ?? "o provedor recusou o token" };
+
+  const cifrado = await encryptWebhookSecret(admin, input.token);
+  if (cifrado === null) {
+    // Mesma regra do resto do repo: sem chave de cifra configurada, NÃO grava em
+    // claro. O 422 que o chamador devolve diz qual variável falta.
+    return { ok: false, motivo: "a cifra de credenciais não está configurada nesta instalação" };
+  }
+
+  const { error } = await admin
+    .from("channel_sessions")
+    .update({ stevo_official_token_encrypted: cifrado })
+    .eq("organization_id", input.organizationId)
+    .eq("id", input.channelSessionId);
+  if (error) return { ok: false, motivo: "não deu para gravar o token neste canal" };
+
+  return { ok: true, numero: v.numero ?? null, modo: v.modo ?? null };
 }

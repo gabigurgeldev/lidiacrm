@@ -21,6 +21,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { notifyUserConfigSchema } from "@/lib/flow-engine/nodes/avisos";
+
 import { WhatsappNotifyUserForm } from "./WhatsappNotifyUserForm";
 
 function montar(config: Record<string, unknown> = {}) {
@@ -35,19 +37,38 @@ describe("o formulário do aviso ao vendedor", () => {
     expect(screen.getByTestId("campo-mensagem-do-aviso")).toBeInTheDocument();
   });
 
-  it("⭐ ao escrever, grava JUNTO o destinatário que o motor exige", async () => {
-    const { aoMudarConfig } = montar({ mensagem: "" });
-    await userEvent.type(screen.getByTestId("campo-mensagem-do-aviso"), "O");
+  it("⭐ config nunca tocada AINDA publica — o destinatário tem default no schema", () => {
+    // A versão anterior deste caso media outra coisa: o formulário regravava
+    // `destinatario` a cada tecla, porque não havia campo para ele. Agora há —
+    // e a garantia mudou de lugar, não sumiu. Quem responde por um bloco que
+    // ninguém abriu é o schema.
+    const lido = notifyUserConfigSchema.safeParse({ mensagem: "Oi" });
+    expect(lido.success, "bloco de aviso não publica sem alguém abrir o painel").toBe(true);
+    if (lido.success) expect(lido.data.destinatario).toEqual({ tipo: "dono_do_lead" });
+  });
 
+  it("escolher número fixo mostra o campo do telefone", () => {
+    montar({ mensagem: "Oi", destinatario: { tipo: "telefone", telefone: "+5511999998888" } });
+    expect(screen.getByTestId("campo-telefone-do-aviso")).toHaveValue("+5511999998888");
+  });
+
+  it("com o dono do lead, o campo do telefone NÃO aparece", () => {
+    // Oferecer o campo aqui faria parecer que dá para escrever um número que o
+    // bloco vai ignorar — o telefone vem do cadastro da pessoa.
+    montar({ mensagem: "Oi", destinatario: { tipo: "dono_do_lead" } });
+    expect(screen.queryByTestId("campo-telefone-do-aviso")).not.toBeInTheDocument();
+  });
+
+  it("editar o telefone preserva o tipo do destinatário", async () => {
+    const { aoMudarConfig } = montar({
+      mensagem: "Oi",
+      destinatario: { tipo: "telefone", telefone: "+551199999888" },
+    });
+    await userEvent.type(screen.getByTestId("campo-telefone-do-aviso"), "8");
     const ultimo = aoMudarConfig.mock.calls.at(-1)?.[0] as {
-      mensagem: string;
-      destinatario: { tipo: string };
+      destinatario: { tipo: string; telefone: string };
     };
-    expect(ultimo.mensagem).toBe("O");
-    expect(
-      ultimo.destinatario,
-      "sem `destinatario` a config não publica, e o campo não aparece na tela para a pessoa notar",
-    ).toEqual({ tipo: "dono_do_lead" });
+    expect(ultimo.destinatario.tipo).toBe("telefone");
   });
 
   it("preserva o resto da config em vez de substituí-la", async () => {

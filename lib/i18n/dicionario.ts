@@ -207,6 +207,17 @@ export const DICIONARIO: Traducoes = {
   "o provedor recusou o webhook": { es: "el proveedor rechazó el webhook" },
   "Webhook reconectado.": { es: "Webhook reconectado." },
   "Reconectar webhook": { es: "Reconectar webhook" },
+  "Token de envio (API Oficial)": { es: "Token de envío (API Oficial)" },
+  "cole o token que aparece na instância": { es: "pegue el token que aparece en la instancia" },
+  "Token salvo. Envio liberado.": { es: "Token guardado. Envío liberado." },
+  "Token salvo. Envio liberado para": { es: "Token guardado. Envío liberado para" },
+  "Token salvo, mas este número está em modo de teste na Meta:": {
+    es: "Token guardado, pero este número está en modo de prueba en Meta:",
+  },
+  "A chave da conta não alcança este valor: ele só aparece no painel do provedor, dentro da instância. Sem ele o número recebe mensagem e não consegue responder.":
+    {
+      es: "La clave de la cuenta no alcanza este valor: solo aparece en el panel del proveedor, dentro de la instancia. Sin él, el número recibe mensajes y no puede responder.",
+    },
   "sem identificador": { es: "sin identificador" },
   "Chave de API da conta": { es: "Clave de API de la cuenta" },
   "Guardada cifrada. Não é exibida de volta em nenhum momento.": {
@@ -259,6 +270,10 @@ export const DICIONARIO: Traducoes = {
   "Nome completo": { es: "Nombre completo" },
   "Trocar email — em breve.": { es: "Cambiar email — próximamente." },
   "Fuso horário": { es: "Huso horario" },
+  "Telefone de aviso (WhatsApp)": { es: "Teléfono de aviso (WhatsApp)" },
+  "Para onde vai o aviso quando um fluxo notifica o dono do lead. Formato +DDI e número, ex.: +5511999998888.": {
+    es: "A dónde va el aviso cuando un flujo notifica al dueño del lead. Formato +código de país y número, ej.: +5511999998888.",
+  },
   "Avatar URL": { es: "URL de avatar" },
   "Upload de arquivo — em breve. Cole uma URL pública.": {
     es: "Subida de archivo — próximamente. Pega una URL pública.",
@@ -6480,10 +6495,20 @@ export const DICIONARIO: Traducoes = {
     { es: "Fuera del horario comercial no hay nadie disponible, y eso no es un error — por eso lo predeterminado es esperar." },
   "Tentar de novo depois de quantos minutos?": { es: "¿Intentar de nuevo después de cuántos minutos?" },
   "Mensagem para o vendedor": { es: "Mensaje para el vendedor" },
-  "Vai para o WhatsApp de quem está com o lead. Use {{lead.title}}, {{lead.score}} e {{contact.phone_number}} para incluir os dados.":
-    { es: "Va al WhatsApp de quien tiene el lead. Use {{lead.title}}, {{lead.score}} y {{contact.phone_number}} para incluir los datos." },
-  "O telefone de aviso de cada pessoa fica em Ajustes. Sem ele, o fluxo segue pela saída 'Sem telefone cadastrado'.":
-    { es: "El teléfono de aviso de cada persona está en Ajustes. Sin él, el flujo sigue por la salida 'Sin teléfono registrado'." },
+  "Use {{lead.title}}, {{lead.score}} e {{contact.phone_number}} para incluir os dados.":
+    { es: "Use {{lead.title}}, {{lead.score}} y {{contact.phone_number}} para incluir los datos." },
+  "O telefone de aviso de cada pessoa fica em Equipe › Atendimento, no botão Editar horário. Sem ele, o fluxo segue pela saída 'Sem telefone cadastrado'.":
+    {
+      es: "El teléfono de aviso de cada persona está en Equipo › Atención, en el botón Editar horario. Sin él, el flujo sigue por la salida 'Sin teléfono registrado'.",
+    },
+  "Para quem": { es: "Para quién" },
+  "Quem está com o lead": { es: "Quien tiene el lead" },
+  "Um número fixo": { es: "Un número fijo" },
+  "Número que recebe o aviso": { es: "Número que recibe el aviso" },
+  "Com DDI. Pode usar {{contact.phone_number}} ou uma variável do fluxo. Número fora do formato segue pela saída 'Sem telefone cadastrado'.":
+    {
+      es: "Con código de país. Puede usar {{contact.phone_number}} o una variable del flujo. Un número fuera de formato sigue por la salida 'Sin teléfono registrado'.",
+    },
   "Título do aviso": { es: "Título del aviso" },
   "Texto do aviso": { es: "Texto del aviso" },
   "Gravidade": { es: "Gravedad" },

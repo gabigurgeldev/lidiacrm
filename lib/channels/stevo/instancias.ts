@@ -290,3 +290,66 @@ export async function apontarWebhookStevo(input: {
   }
   return { ok: true };
 }
+
+export interface ValidacaoDoTokenDeEnvio {
+  ok: boolean;
+  /** Frase pronta para a tela quando `ok` é `false`. Nunca contém o token. */
+  motivo?: string;
+  /** Número que o token alcança, como a Meta o escreve. Só quando `ok`. */
+  numero?: string | null;
+  /** `LIVE` = entrega para qualquer número; `SANDBOX`, só para os de teste. */
+  modo?: string | null;
+}
+
+/**
+ * Valida o token de ENVIO de uma instância da API Oficial, perguntando ao
+ * gateway antes de gravar.
+ *
+ * Mesma regra de `validarContaStevo`: **valida ANTES de gravar**. Um token
+ * errado gravado em silêncio só apareceria na próxima mensagem que falhasse, e
+ * quem colou já teria fechado a tela.
+ *
+ * O endpoint escolhido é o de saúde do número, e não um de envio: ele prova a
+ * credencial E devolve o estado que decide se a mensagem sai (`account_mode`),
+ * sem mandar mensagem nenhuma para ninguém. Validar com um envio de teste
+ * custaria uma mensagem real na conta do cliente.
+ */
+export async function validarTokenDeEnvioOficial(input: {
+  token: string;
+  baseUrl: string;
+}): Promise<ValidacaoDoTokenDeEnvio> {
+  let r: Response;
+  try {
+    r = await fetch(`${input.baseUrl}/v1/health`, {
+      headers: { Authorization: `Bearer ${input.token}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      cache: "no-store",
+    });
+  } catch {
+    return { ok: false, motivo: "não deu para falar com o provedor agora — tente de novo" };
+  }
+
+  if (r.status === 401) {
+    return {
+      ok: false,
+      motivo: "token de envio recusado — confira se copiou o da instância inteiro",
+    };
+  }
+  if (r.status === 429) {
+    return { ok: false, motivo: "o provedor pediu para esperar (limite de chamadas) — tente em 1 minuto" };
+  }
+  if (!r.ok) {
+    return { ok: false, motivo: `o provedor respondeu ${r.status}` };
+  }
+
+  const corpo = (await r.json().catch(() => null)) as {
+    display_phone_number?: string;
+    account_mode?: string;
+  } | null;
+
+  return {
+    ok: true,
+    numero: corpo?.display_phone_number ?? null,
+    modo: corpo?.account_mode ?? null,
+  };
+}

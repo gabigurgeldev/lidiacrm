@@ -205,6 +205,10 @@ export const AUDIT_ACTIONS = [
   // uso normal quando o operador corrige um escopo/permissão no painel do
   // provedor depois de um import que ficou sem webhook.
   "channel.webhook_reconfigured",
+  // O operador colou o token de ENVIO de um canal que recebia e não enviava.
+  // É troca de credencial e audita como tal: quem gravou, em qual canal, quando.
+  // O valor nunca entra no registro — nem aqui, nem mascarado.
+  "channel.send_token_updated",
   "authz.denied",
   "team.role_changed",
   "leads.bulk_assigned",

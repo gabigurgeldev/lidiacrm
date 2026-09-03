@@ -26,7 +26,7 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 const SELECT_COLS =
-  "user_id, is_available, capacity, schedule, last_heartbeat_at, updated_at";
+  "user_id, is_available, capacity, schedule, notification_phone, last_heartbeat_at, updated_at";
 
 interface AvailabilityRow {
   user_id: string;
