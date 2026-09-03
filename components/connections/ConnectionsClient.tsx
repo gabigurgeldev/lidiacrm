@@ -35,6 +35,7 @@ import {
   Trash,
   Warning,
 } from "@/lib/ui/icons";
+import { LinkDePareamento } from "./LinkDePareamento";
 import { lerEstadoDoCanal } from "@/lib/channels/estado";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -344,6 +345,14 @@ export function ConnectionsClient({ wahaConfigured }: { wahaConfigured: boolean 
                         )}
                         {t("Reconectar")}
                       </Button>
+                    )}
+                    {/* Mesma condição do Reconectar, e pela mesma razão: só um
+                        canal que vive no transporte tem QR para parear. */}
+                    {vivaNoTransporte && (
+                      <LinkDePareamento
+                        channelSessionId={c.id}
+                        desabilitado={!wahaConfigured}
+                      />
                     )}
                     <Button variant="outline" size="sm" onClick={() => setAntiBanId(c.id)}>
                       <ShieldCheck size={14} aria-hidden />

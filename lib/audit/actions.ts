@@ -209,6 +209,11 @@ export const AUDIT_ACTIONS = [
   // É troca de credencial e audita como tal: quem gravou, em qual canal, quando.
   // O valor nunca entra no registro — nem aqui, nem mascarado.
   "channel.send_token_updated",
+  // Link público de pareamento: gerar é abrir uma porta por onde QUALQUER
+  // pessoa com a URL vincula um WhatsApp à operação. Quem abriu e quem fechou,
+  // e quando, é a única forma de responder depois "de onde veio este número".
+  "channel.pairing_link_created",
+  "channel.pairing_link_revoked",
   "authz.denied",
   "team.role_changed",
   "leads.bulk_assigned",
