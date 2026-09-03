@@ -6,7 +6,7 @@
  * `lib/routing/decide-fila-e-sorteio.test.ts` prova a aritmética de
  * `selectFixedOrder` com um cursor que o teste mesmo escolhe. Isso deixa de
  * fora exatamente a peça que eu não conseguia provar sem banco: a RPC
- * `fn_flow_routing_next_in_order` (migration 0210), que é quem AVANÇA o cursor.
+ * `fn_flow_routing_next_in_order` (migration 0211), que é quem AVANÇA o cursor.
  *
  * A distância entre as duas coisas é o defeito inteiro. Uma RPC que devolvesse
  * sempre `0` — por um `returning` mal escrito, por exemplo — passaria em todo
@@ -78,7 +78,7 @@ describe("a RPC que dá a vez da fila", () => {
         from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'fn_flow_routing_next_in_order';
     `);
-    expect(linha, "a função da migration 0210 não está no banco").toBe("t");
+    expect(linha, "a função da migration 0211 não está no banco").toBe("t");
   });
 
   it("⭐ ANDA: chamadas seguidas dão vezes diferentes, e dá a volta", () => {

@@ -103,7 +103,7 @@ export const routingFixedOrder: FlowNodeDefinition<FilaFixaConfig> = {
     const elegiveis = await ctx.roteamento.elegiveis({ organizationId: ctx.organizationId });
     // A vez vem do banco, não do escopo da execução: cada lead abre uma execução
     // nova, e um cursor por execução reiniciaria a fila a cada lead — entregando
-    // sempre ao primeiro da ordem. Ver a migration 0210.
+    // sempre ao primeiro da ordem. Ver a migration 0211.
     const { userId, avancou } = await ctx.roteamento.proximoDaFilaFixa({
       nodeId: ctx.nodeId,
       ordem: config.ordem,

@@ -18589,7 +18589,7 @@ create index if not exists bulk_sends_created_by_flow_execution_idx
   on public.bulk_sends (created_by_flow_execution_id)
   where created_by_flow_execution_id is not null;
 
--- ---- a vez de cada um na fila indiana (migration 0210) ----
+-- ---- a vez de cada um na fila indiana (migration 0211) ----
 create table if not exists public.flow_routing_cursors (
   organization_id uuid not null references public.organizations(id) on delete cascade,
   flow_id uuid not null references public.flows(id) on delete cascade,
@@ -18673,7 +18673,7 @@ $fila$;
 revoke execute on function public.fn_flow_routing_next_in_order(uuid, uuid, text, integer) from public, anon, authenticated;
 grant execute on function public.fn_flow_routing_next_in_order(uuid, uuid, text, integer) to service_role;
 
--- ---- o gatilho por webhook do fluxo (migration 0211) ----
+-- ---- o gatilho por webhook do fluxo (migration 0212) ----
 alter table public.webhook_sources
   add column if not exists flow_id uuid references public.flows(id) on delete cascade;
 

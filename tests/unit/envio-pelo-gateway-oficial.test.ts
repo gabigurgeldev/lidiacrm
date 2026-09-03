@@ -18,8 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ModuloDeCredenciais from "@/lib/channels/stevo/credentials";
 
 const decrypt = vi.hoisted(() => vi.fn());
-const credsDaConta = vi.hoisted(() => vi.fn());
-const tokenDoGateway = vi.hoisted(() => vi.fn());
+const envioResolvido = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 vi.mock("@/lib/webhooks/secrets", () => ({ decryptWebhookSecret: decrypt }));
@@ -27,26 +26,11 @@ vi.mock("@/lib/channels/stevo/credentials", async (original) => {
   const real = await original<typeof ModuloDeCredenciais>();
   return {
     ...real,
-    resolveStevoCreds: credsDaConta,
-    stevoOfficialToken: tokenDoGateway,
+    resolveEnvioStevo: envioResolvido,
   };
 });
 
 import { stevoAdapter } from "@/lib/channels/adapters/stevo";
-
-/**
- * `checkHealth` é OPCIONAL em `ChannelAdapter` — nem todo canal sabe responder
- * "você está de pé?". Chamá-lo direto não compila, e um `!` espalhado por cada
- * caso esconderia a pergunta que importa: este adapter implementa, ou não?
- *
- * Aqui ela é feita UMA vez, e o dia em que o adapter deixar de implementar
- * falha com frase, em vez de `undefined is not a function`.
- */
-function saudeDo(adapter: typeof stevoAdapter) {
-  const fn = adapter.checkHealth;
-  if (fn === undefined) throw new Error("o adapter parou de implementar checkHealth");
-  return fn.bind(adapter);
-}
 
 const ENVELOPE = {
   organizationId: "org-1",
@@ -59,12 +43,11 @@ const ENVELOPE = {
 describe("envio pelo gateway da API Oficial", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    credsDaConta.mockReset();
-    tokenDoGateway.mockReset();
+    envioResolvido.mockReset();
   });
 
   it("⭐ com token de gateway, manda pro gateway em formato Cloud API — e NÃO pro proxy", async () => {
-    tokenDoGateway.mockResolvedValue("sk_of_abc");
+    envioResolvido.mockResolvedValue({ transporte: "gateway", token: "sk_of_abc" });
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ messages: [{ id: "wamid.XYZ" }] }), { status: 200 }),
     );
@@ -82,13 +65,13 @@ describe("envio pelo gateway da API Oficial", () => {
     // O gateway acrescenta este campo; mandá-lo daqui seria duplicá-lo no
     // payload que ele repassa à Meta.
     expect(corpo).not.toHaveProperty("messaging_product");
-    // O proxy de gestão não pode ter sido consultado: para instância oficial ele
-    // é um 409 certo, e perguntar antes é gastar uma ida à rede para ouvir "não".
-    expect(credsDaConta).not.toHaveBeenCalled();
+    // UMA consulta ao banco decide o transporte — não duas. A segunda caía em
+    // todo envio por QR, que é o caminho mais quente do produto.
+    expect(envioResolvido).toHaveBeenCalledTimes(1);
   });
 
   it("⭐ áudio vira nota de voz (voice: true), não anexo de música", async () => {
-    tokenDoGateway.mockResolvedValue("sk_of_abc");
+    envioResolvido.mockResolvedValue({ transporte: "gateway", token: "sk_of_abc" });
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ messages: [{ id: "wamid.A" }] }), { status: 200 }),
     );
@@ -108,7 +91,7 @@ describe("envio pelo gateway da API Oficial", () => {
   });
 
   it("⭐ erro do gateway mostra o código da Meta, que é o que diz a ação", async () => {
-    tokenDoGateway.mockResolvedValue("sk_of_abc");
+    envioResolvido.mockResolvedValue({ transporte: "gateway", token: "sk_of_abc" });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -123,12 +106,14 @@ describe("envio pelo gateway da API Oficial", () => {
   });
 
   it("sem token de gateway, o caminho antigo (proxy) continua igual", async () => {
-    tokenDoGateway.mockResolvedValue(null);
-    credsDaConta.mockResolvedValue({
-      instanceId: "inst-1",
-      apiKey: "stevo_sk_x",
-      baseUrl: "https://openapi.stevo.chat",
-      source: "session",
+    envioResolvido.mockResolvedValue({
+      transporte: "proxy",
+      creds: {
+        instanceId: "inst-1",
+        apiKey: "stevo_sk_x",
+        baseUrl: "https://openapi.stevo.chat",
+        source: "session",
+      },
     });
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ sent: true, result: { id: "3EB0" } }), { status: 200 }),
@@ -145,41 +130,40 @@ describe("envio pelo gateway da API Oficial", () => {
 describe("saúde da API Oficial pelo gateway", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    credsDaConta.mockReset();
-    tokenDoGateway.mockReset();
+    envioResolvido.mockReset();
   });
 
   it("⭐ número em SANDBOX não é 'funcionando' — entrega só para os de teste", async () => {
-    tokenDoGateway.mockResolvedValue("sk_of_abc");
+    envioResolvido.mockResolvedValue({ transporte: "gateway", token: "sk_of_abc" });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ account_mode: "SANDBOX", quality_rating: "GREEN" }), {
         status: 200,
       }),
     );
 
-    const s = await saudeDo(stevoAdapter)({ organizationId: "org-1", sessionRef: "inst-1" });
+    const s = await stevoAdapter.checkHealth!({ organizationId: "org-1", sessionRef: "inst-1" });
     expect(s.status).toBe("STOPPED");
     expect(s.detail).toMatch(/SANDBOX/u);
   });
 
   it("⭐ token recusado é DESCONECTADO, não 'não deu para perguntar'", async () => {
-    tokenDoGateway.mockResolvedValue("sk_of_abc");
+    envioResolvido.mockResolvedValue({ transporte: "gateway", token: "sk_of_abc" });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 401 }));
 
-    const s = await saudeDo(stevoAdapter)({ organizationId: "org-1", sessionRef: "inst-1" });
+    const s = await stevoAdapter.checkHealth!({ organizationId: "org-1", sessionRef: "inst-1" });
     expect(s.reachable).toBe(true);
     expect(s.status).toBe("FAILED");
   });
 
   it("número LIVE e no verde é funcionando, sem detalhe de ruído", async () => {
-    tokenDoGateway.mockResolvedValue("sk_of_abc");
+    envioResolvido.mockResolvedValue({ transporte: "gateway", token: "sk_of_abc" });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ account_mode: "LIVE", quality_rating: "GREEN" }), {
         status: 200,
       }),
     );
 
-    const s = await saudeDo(stevoAdapter)({ organizationId: "org-1", sessionRef: "inst-1" });
+    const s = await stevoAdapter.checkHealth!({ organizationId: "org-1", sessionRef: "inst-1" });
     expect(s).toEqual({ reachable: true, status: "WORKING", detail: null });
   });
 });

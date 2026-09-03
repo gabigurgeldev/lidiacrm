@@ -234,7 +234,7 @@ export interface PortaDeRoteamento {
   /**
    * A vez da FILA INDIANA: quem, na ordem declarada, atende este lead.
    *
-   * O cursor vive no banco (`flow_routing_cursors`, migration 0210) e não no
+   * O cursor vive no banco (`flow_routing_cursors`, migration 0211) e não no
    * escopo da execução: cada lead abre uma execução nova, e um cursor por
    * execução reiniciaria a fila a cada lead — entregando sempre ao primeiro da
    * ordem. Uma fila que nunca anda, sem erro nenhum.

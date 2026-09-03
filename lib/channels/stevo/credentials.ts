@@ -34,7 +34,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { ARCHIVED_AT, queryTolerantToMissingArchived } from "../archived";
+import { ARCHIVED_AT, consultaTolerante, queryTolerantToMissingArchived } from "../archived";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
 
 export interface StevoCredentials {
@@ -75,55 +75,124 @@ export function stevoBaseUrlOficial(): string {
   return process.env.STEVO_OFFICIAL_API_BASE_URL ?? "https://apimeta.shurima.cloud";
 }
 
+/** A coluna que a migration 0210 acrescentou. Nome em um lugar só. */
+const COLUNA_DO_TOKEN_OFICIAL = "stevo_official_token_encrypted";
+
 /**
- * O token de ENVIO de uma instância da API Oficial, decifrado. `null` = esta
- * instância não tem token colado, e o envio cai no proxy (que a recusa).
+ * Por onde esta instância envia — resolvido em UMA consulta.
  *
- * ─── Por que este token existe, se já há a chave da conta ───────────────────
+ * ─── Por que existem dois transportes ───────────────────────────────────────
  *
- * Porque são serviços diferentes com credenciais diferentes:
- *
- *   chave da conta (`stevo_sk_…`) → `openapi.stevo.chat`  → gestão + proxy
+ *   chave da conta (`stevo_sk_…`) → `openapi.stevo.chat`   → gestão + proxy
  *   token da instância            → `apimeta.shurima.cloud` → envio da Oficial
  *
  * O proxy da gestão anuncia servir as duas modalidades, e serve — mas para uma
  * instância oficial ele responde `409 not_ready` com "sem token — conecte
  * primeiro", porque a Oficial não tem servidor de instância para ele proxiar.
- *
  * Medido na conta de produção: `GET /v1/instances/{id}` devolve `token: null` e
  * `server_url: null` para TODA instância `is_official_api: true`, e os dois
  * preenchidos para toda SM v2. O token do gateway não é descobrível por API
- * nenhuma — só o operador o vê no painel da instância. É por isso que ele é
- * COLADO, e não sincronizado.
+ * nenhuma — só o operador o vê no painel. Por isso ele é COLADO, e por isso
+ * mora numa coluna nossa.
+ *
+ * ─── Por que UMA consulta, e não duas ───────────────────────────────────────
+ *
+ * As duas credenciais moram na MESMA linha e se buscam pela MESMA chave. A
+ * primeira versão disto perguntava duas vezes, e a segunda pergunta caía em
+ * todo envio por QR — o caminho mais quente do produto — para ouvir "não tem
+ * token de gateway" que a primeira já teria dito.
+ *
+ * ─── Por que tolerante à coluna ausente ─────────────────────────────────────
+ *
+ * Porque esta função decide TODO envio deste canal, e a coluna nasceu na 0210.
+ * Um clone que suba o código antes do schema receberia 42703 aqui e perderia o
+ * envio por QR junto — que funcionava antes e não tem nada a ver com a coluna
+ * nova. Sem a coluna, o desfecho é exatamente o de antes dela existir: proxy.
+ * `consultaTolerante` é o mesmo helper que o seletor de números já usa para
+ * `provider`, e ele exige que a MENSAGEM nomeie a coluna — erro de verdade
+ * continua subindo.
  */
-export async function stevoOfficialToken(
+export type EnvioStevo =
+  | { transporte: "gateway"; token: string }
+  | { transporte: "proxy"; creds: StevoCredentials };
+
+export async function resolveEnvioStevo(
   admin: SupabaseClient,
   lookup: StevoCredsLookup,
-): Promise<string | null> {
+): Promise<EnvioStevo | null> {
   const { organizationId, instanceId } = lookup;
   if (!organizationId || !instanceId) return null;
 
-  // Mesmo recorte da busca acima (organização à mão + `archived_at is null`),
-  // e pela mesma razão: ver o cabeçalho do arquivo, issue #236.
-  const base = () =>
+  // `organization_id` À MÃO (service role bypassa RLS) e o mesmo recorte de
+  // `archived_at` do índice único — ver o cabeçalho do arquivo, issue #236.
+  const base = (colunas: string) => () =>
     admin
       .from("channel_sessions")
-      .select("stevo_official_token_encrypted")
+      .select(colunas)
       .eq("organization_id", organizationId)
       .eq("stevo_instance_id", instanceId);
-  const { data, error } = await queryTolerantToMissingArchived(
-    () => base().is(ARCHIVED_AT, null).maybeSingle(),
-    () => base().maybeSingle(),
+  const COM = `stevo_instance_id, stevo_token_encrypted, ${COLUNA_DO_TOKEN_OFICIAL}`;
+  const SEM = "stevo_instance_id, stevo_token_encrypted";
+
+  const { data, error } = await consultaTolerante(
+    COLUNA_DO_TOKEN_OFICIAL,
+    () =>
+      queryTolerantToMissingArchived(
+        () => base(COM)().is(ARCHIVED_AT, null).maybeSingle(),
+        () => base(COM)().maybeSingle(),
+      ),
+    () =>
+      queryTolerantToMissingArchived(
+        () => base(SEM)().is(ARCHIVED_AT, null).maybeSingle(),
+        () => base(SEM)().maybeSingle(),
+      ),
   );
   if (error) {
+    // LANÇA de propósito: descartar o `error` foi metade do defeito da #236, e
+    // aqui o silêncio mandaria pela conta do `.env` de outra organização.
     throw new Error(
-      `stevo_official_token_lookup_failed: ${error.code ?? "sem_codigo"} ${error.message ?? ""}`.trim(),
+      `stevo_creds_lookup_failed: ${error.code ?? "sem_codigo"} ${error.message ?? ""}`.trim(),
     );
   }
 
-  const cifrado = data?.stevo_official_token_encrypted;
-  if (!cifrado) return null;
-  return decryptWebhookSecret(admin, cifrado as unknown as string);
+  const linha = data as {
+    stevo_instance_id?: string | null;
+    stevo_token_encrypted?: string | null;
+    stevo_official_token_encrypted?: string | null;
+  } | null;
+
+  // Gateway PRIMEIRO: token de gateway gravado só existe em instância oficial,
+  // e para ela o proxy é um 409 certo.
+  const doGateway = linha?.stevo_official_token_encrypted;
+  if (doGateway) {
+    const token = await decryptWebhookSecret(admin, doGateway);
+    if (token) return { transporte: "gateway", token };
+    // Decifra que falha NÃO vira envio pelo proxy: o canal é oficial, o proxy o
+    // recusa, e cair lá trocaria "não consegui decifrar o token" por um 409 que
+    // manda o operador reconectar um número que está conectado.
+    return null;
+  }
+
+  const cifrada = linha?.stevo_token_encrypted;
+  const daSessao = cifrada ? await decryptWebhookSecret(admin, cifrada) : null;
+  if (daSessao) {
+    return {
+      transporte: "proxy",
+      creds: {
+        instanceId: linha?.stevo_instance_id ?? instanceId,
+        apiKey: daSessao,
+        baseUrl: stevoBaseUrl(),
+        source: "session",
+      },
+    };
+  }
+
+  // Sessão primeiro, env como fallback — a mesma ordem de `resolveStevoCreds`,
+  // e pela mesma razão: com a chave gravada, o env deixa de ter efeito.
+  const doEnv = stevoCredsFromEnv();
+  return doEnv
+    ? { transporte: "proxy", creds: { ...doEnv, instanceId, source: "env" } }
+    : null;
 }
 
 /**
