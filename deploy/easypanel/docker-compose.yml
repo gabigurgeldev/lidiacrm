@@ -37,6 +37,20 @@ x-logging: &default-logging
     max-file: "3"
 
 services:
+  # Aplica supabase/baseline.sql ANTES do app, e sai — mesmo mecanismo de
+  # docker-compose.prod.yml (ver o cabeçalho de scripts/aplicar-schema.mjs).
+  # Precisa da rede `supabase` também: sem ela não alcança `db:5432`, e por ser
+  # a única credencial de DDL deste projeto, SUPABASE_DB_ADMIN_URL vem do MESMO
+  # .env do app — não é segredo novo.
+  migrate:
+    image: ${APP_IMAGE:-ghcr.io/gabigurgeldev/deskcommcrm:1.11.0}
+    pull_policy: ${APP_PULL_POLICY:-missing}
+    restart: "no"
+    env_file: .env
+    command: ["node", "scripts/aplicar-schema.mjs"]
+    logging: *default-logging
+    networks: [internal, supabase]
+
   app:
     mem_limit: 768m
     image: ${APP_IMAGE:-ghcr.io/gabigurgeldev/deskcommcrm:1.11.0}
@@ -44,6 +58,8 @@ services:
     restart: unless-stopped
     env_file: .env
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       srh:
         condition: service_started
       waha:
