@@ -207,6 +207,17 @@ export const DICIONARIO: Traducoes = {
   "o provedor recusou o webhook": { es: "el proveedor rechazó el webhook" },
   "Webhook reconectado.": { es: "Webhook reconectado." },
   "Reconectar webhook": { es: "Reconectar webhook" },
+  "Token de envio (API Oficial)": { es: "Token de envío (API Oficial)" },
+  "cole o token que aparece na instância": { es: "pegue el token que aparece en la instancia" },
+  "Token salvo. Envio liberado.": { es: "Token guardado. Envío liberado." },
+  "Token salvo. Envio liberado para": { es: "Token guardado. Envío liberado para" },
+  "Token salvo, mas este número está em modo de teste na Meta:": {
+    es: "Token guardado, pero este número está en modo de prueba en Meta:",
+  },
+  "A chave da conta não alcança este valor: ele só aparece no painel do provedor, dentro da instância. Sem ele o número recebe mensagem e não consegue responder.":
+    {
+      es: "La clave de la cuenta no alcanza este valor: solo aparece en el panel del proveedor, dentro de la instancia. Sin él, el número recibe mensajes y no puede responder.",
+    },
   "sem identificador": { es: "sin identificador" },
   "Chave de API da conta": { es: "Clave de API de la cuenta" },
   "Guardada cifrada. Não é exibida de volta em nenhum momento.": {

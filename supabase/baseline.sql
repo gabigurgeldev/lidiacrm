@@ -18514,6 +18514,15 @@ alter table public.channel_sessions
 alter table public.channel_sessions
   add column if not exists stevo_token_encrypted bytea;
 
+-- ---- token de envio da API Oficial (migration 0210) ----
+-- Coluna PRÓPRIA de propósito: a de cima é a chave da CONTA, que fala com a API
+-- de gestão e envia por proxy; esta é o Bearer do gateway da API Oficial, que a
+-- API de conta NÃO devolve (`token: null` em toda instância oficial, medido) e
+-- que o operador cola do painel. Sobrescrever uma com a outra quebraria a
+-- listagem, o reaponte de webhook e o envio por QR.
+alter table public.channel_sessions
+  add column if not exists stevo_official_token_encrypted bytea;
+
 alter table public.channel_sessions
   add column if not exists provider_mode text;
 

@@ -1,18 +1,28 @@
 /**
  * O tradutor de formato do intermediário de CONTA.
  *
- * ═══ O que este canal tem de diferente dos outros três ═══
+ * ═══ Dois transportes, e por que isso NÃO é regra de negócio vazando ═══
  *
- * Um endpoint de envio serve as DUAS modalidades: instância oficial (WABA da
- * Meta) e número ligado por QR compartilham `POST /v1/instances/{id}/messages`,
- * e as credenciais do servidor de cada instância são resolvidas do lado dele. É
- * por isso que aqui não há dois caminhos de envio — e é por isso que o adapter
- * não precisa saber qual modalidade está usando.
+ * Este arquivo já afirmou o contrário — que um endpoint só servia as duas
+ * modalidades — e a afirmação era falsa em produção. O proxy de gestão
+ * (`POST /v1/instances/{id}/messages`) de fato aceita as duas, mas para uma
+ * instância da API Oficial ele responde `409 not_ready` com "Instância da API
+ * Oficial sem token — conecte primeiro": a Oficial não tem servidor de
+ * instância para ele proxiar. Ela fala com a Meta por um GATEWAY separado, com
+ * Bearer de outro token, em formato Cloud API.
  *
- * Quem precisa saber é a REGRA DE ENVIO, e ela não mora aqui: mora em
- * `capabilitiesOfSession({ provider, mode })`. Um `if` de modalidade dentro
- * deste arquivo seria a regra de negócio vazando para o tradutor, que é o que a
- * doutrina `restricao-de-canal` proíbe.
+ * Medido na conta de produção: `GET /v1/instances/{id}` devolve `token: null` e
+ * `server_url: null` para TODA instância oficial e preenchidos para toda SM v2;
+ * o `GET /v1/health` do gateway, com o token que o painel exibe, responde 200
+ * com o número LIVE e aprovado. A instância estava certa; o destino é que era o
+ * errado.
+ *
+ * A escolha aqui é de TRANSPORTE, e ela é feita pela CREDENCIAL que existe —
+ * "tem token de gateway gravado?" — não por um `if` sobre a modalidade. A
+ * diferença importa: a REGRA DE ENVIO (janela de 24h × texto livre com risco de
+ * banimento) continua fora daqui, em `capabilitiesOfSession({ provider, mode })`,
+ * que é o que a doutrina `restricao-de-canal` protege. Um tradutor pode saber
+ * para onde manda; o que ele não pode é decidir se pode mandar.
  *
  * ═══ `isConfigured` responde `true`, e o motivo está medido ═══
  *
@@ -38,13 +48,131 @@ import type {
   RecipientInput,
 } from "../types";
 
-import { resolveStevoCreds } from "../stevo/credentials";
+import { corpoCloudApi } from "../cloud-api/corpo";
+import {
+  resolveStevoCreds,
+  stevoBaseUrlOficial,
+  stevoOfficialToken,
+} from "../stevo/credentials";
 import { corpoDeEnvioStevo, idDaRespostaStevo } from "../stevo/envelope";
 import { lerInstanciaStevo } from "../stevo/instancias";
 
 /** E.164 em dígitos, sem `+` e sem sufixo de domínio — é o que o `to` espera. */
 function digitos(bruto: string): string {
   return bruto.replace(/\D/g, "");
+}
+
+/**
+ * Envio pelo GATEWAY da API Oficial — o caminho que fala com a Meta.
+ *
+ * Corpo em formato Cloud API **sem `messaging_product`**: o gateway o
+ * acrescenta, e mandá-lo aqui é campo duplicado num payload que ele repassa.
+ * Por isso o miolo vem de `corpoCloudApi`, compartilhado com o canal oficial
+ * direto, e o `to` é montado aqui — é justamente onde os dois destinos diferem.
+ *
+ * A resposta é o corpo CRU da Meta (`{ messages: [{ id: "wamid.…" }] }`), então
+ * o id sai de lá e não da varredura de `idDaRespostaStevo`, que existe para a
+ * resposta do proxy.
+ */
+async function enviarPeloGateway(
+  envelope: OutboundEnvelope,
+  token: string,
+): Promise<{ externalId: string | null }> {
+  const res = await fetch(`${stevoBaseUrlOficial()}/v1/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ to: envelope.to, ...corpoCloudApi(envelope) }),
+  });
+
+  const json = (await res.json().catch(() => null)) as {
+    messages?: { id?: string }[];
+    error?: string;
+    message?: string;
+    // O erro da Meta vem embrulhado em `meta` quando existe — é ele que carrega
+    // o código que diz a AÇÃO (131047 = fora da janela de 24h, use template).
+    meta?: { error?: { code?: number; message?: string; error_data?: { details?: string } } };
+  } | null;
+
+  if (!res.ok) {
+    const daMeta = json?.meta?.error;
+    const detalhe =
+      daMeta?.error_data?.details ??
+      daMeta?.message ??
+      json?.message ??
+      json?.error ??
+      res.statusText;
+    const codigo = daMeta?.code !== undefined ? ` (meta ${daMeta.code})` : "";
+    throw new Error(`stevo_send_failed: ${res.status} ${detalhe}${codigo}`.trim());
+  }
+
+  return { externalId: json?.messages?.[0]?.id ?? null };
+}
+
+/**
+ * Saúde de um número da API Oficial, perguntada ao gateway.
+ *
+ * `GET /v1/health` responde o estado do número NA META — `account_mode`,
+ * `account_review_status`, `quality_rating` —, que é o que decide se a mensagem
+ * sai. Um número pode estar "ativo" na conta do intermediário e estar em
+ * `account_mode: SANDBOX` ou reprovado na revisão da Meta; nesse caso o envio
+ * falha e nada na tela do CRM tinha como avisar antes.
+ *
+ * 401 é DESCONECTADO e não "não deu para perguntar": o token de gateway é a
+ * credencial de envio, e um token recusado significa que este canal não envia
+ * mais — informação boa, que precisa chegar à tela.
+ */
+async function saudePeloGateway(token: string): Promise<ChannelHealth> {
+  let res: Response;
+  try {
+    res = await fetch(`${stevoBaseUrlOficial()}/v1/health`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    return { reachable: false, status: null, detail: "o provedor não respondeu" };
+  }
+
+  if (res.status === 401) {
+    return {
+      reachable: true,
+      status: "FAILED",
+      detail: "token de envio recusado — gere um novo no painel e cole de novo",
+    };
+  }
+  if (!res.ok) {
+    return { reachable: false, status: null, detail: `o provedor respondeu ${res.status}` };
+  }
+
+  const corpo = (await res.json().catch(() => null)) as {
+    account_mode?: string;
+    account_review_status?: string;
+    quality_rating?: string;
+  } | null;
+
+  // `LIVE` é o único modo que entrega para número de fora; `SANDBOX` entrega só
+  // para os números de teste cadastrados, e a diferença é invisível até a
+  // primeira mensagem que não chega.
+  const aoVivo = (corpo?.account_mode ?? "").toUpperCase() === "LIVE";
+  if (!aoVivo) {
+    return {
+      reachable: true,
+      status: "STOPPED",
+      detail: `número não está em produção na Meta (${corpo?.account_mode ?? "modo desconhecido"})`,
+    };
+  }
+
+  return {
+    reachable: true,
+    status: "WORKING",
+    // Qualidade não bloqueia envio, mas é o aviso que antecede a restrição da
+    // Meta. Vai no detalhe quando não está no verde.
+    detail:
+      (corpo?.quality_rating ?? "").toUpperCase() === "GREEN"
+        ? null
+        : `qualidade do número: ${corpo?.quality_rating ?? "desconhecida"}`,
+  };
 }
 
 export const stevoAdapter: ChannelAdapter = {
@@ -89,10 +217,18 @@ export const stevoAdapter: ChannelAdapter = {
     }
 
     const admin = createAdminClient();
-    const creds = await resolveStevoCreds(admin, {
+    const escopo = {
       organizationId: envelope.organizationId,
       instanceId: envelope.sessionRef,
-    });
+    };
+
+    // Gateway PRIMEIRO, e a ordem não é preferência: token de gateway gravado
+    // só existe em instância da API Oficial, e para ela o proxy é um 409 certo.
+    // Perguntar ao proxy antes seria gastar uma ida à rede para ouvir "não".
+    const tokenDoGateway = await stevoOfficialToken(admin, escopo);
+    if (tokenDoGateway) return enviarPeloGateway(envelope, tokenDoGateway);
+
+    const creds = await resolveStevoCreds(admin, escopo);
     if (!creds) {
       throw new Error(
         "stevo_not_configured: nenhuma credencial para esta instância (nem na sessão, nem no ambiente).",
@@ -150,10 +286,16 @@ export const stevoAdapter: ChannelAdapter = {
    */
   async checkHealth(input: ChannelTenantScope & { sessionRef: string }): Promise<ChannelHealth> {
     const admin = createAdminClient();
-    const creds = await resolveStevoCreds(admin, {
-      organizationId: input.organizationId,
-      instanceId: input.sessionRef,
-    });
+    const escopo = { organizationId: input.organizationId, instanceId: input.sessionRef };
+
+    // Quem envia pelo gateway é perguntado AO GATEWAY. A API de conta responde
+    // `connected: true` para instância oficial sem olhar o número na Meta — foi
+    // exatamente essa resposta que fez a tela mostrar "conectado" para um canal
+    // que não conseguia enviar, e o operador só descobrir mandando mensagem.
+    const tokenDoGateway = await stevoOfficialToken(admin, escopo);
+    if (tokenDoGateway) return saudePeloGateway(tokenDoGateway);
+
+    const creds = await resolveStevoCreds(admin, escopo);
     if (!creds) {
       return { reachable: false, status: null, detail: "sem credencial para esta instância" };
     }
