@@ -77,6 +77,17 @@ RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
+# O SCHEMA viaja na imagem, e não é para o app usar.
+#
+# Quem o aplica é o serviço EFÊMERO `migrate` do compose, que sobe antes do app,
+# roda `scripts/aplicar-schema.mjs` com a credencial de DDL e sai. Sem estes dois
+# arquivos aqui, uma instalação que implanta por painel (EasyPanel, Coolify,
+# Dokploy) não tem como atualizar o banco: o `update.sh` do kit — o único outro
+# caminho — roda por SSH, na VPS, e o painel nunca o executa.
+#
+# Custo medido: o baseline tem ~1 MB, contra os ~200 MB da imagem.
+COPY --from=build --chown=nextjs:nodejs /app/supabase/baseline.sql ./supabase/baseline.sql
+COPY --from=build --chown=nextjs:nodejs /app/scripts/aplicar-schema.mjs ./scripts/aplicar-schema.mjs
 USER nextjs
 EXPOSE 3000
 # server.js é o entrypoint gerado pelo output standalone.

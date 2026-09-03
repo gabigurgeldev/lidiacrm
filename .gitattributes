@@ -41,3 +41,15 @@ supabase/migrations/MANIFEST.md merge=union
 # clona no Windows vê a falha. `eol=lf` fixa LF no checkout independente do
 # `core.autocrlf` de quem clonou.
 *.sql text eol=lf
+
+# ─── Fim de linha fixo em LF pra todo .sh ────────────────────────────────────
+#
+# Mesmo defeito do bloco acima, outro sintoma: um clone Windows com
+# `core.autocrlf=true` faz checkout de todo `.sh` com CRLF. `bash` (dentro do
+# WSL, ou na VPS se o arquivo viajar por outro caminho que não `git clone`
+# direto em Linux) lê o shebang e a primeira linha como `#!/usr/bin/env bash\r`
+# e `set -euo pipefail\r` — o `\r` cola no último token e vira
+# `set: pipefail: nao encontrado` antes de qualquer teste rodar. Medido rodando
+# `pnpm test:shell` via WSL contra este repo clonado no Windows. `eol=lf` fixa
+# LF no checkout, igual ao `.sql`.
+*.sh text eol=lf
