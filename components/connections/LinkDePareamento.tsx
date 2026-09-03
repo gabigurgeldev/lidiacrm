@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { CircleNotch, Copy } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -89,13 +88,33 @@ export function LinkDePareamento({
   }
 
   return (
-    <div className="flex w-full flex-col gap-1.5" data-testid="link-de-pareamento">
+    <div className="flex w-full flex-col gap-2" data-testid="link-de-pareamento">
       <p className="text-xs font-medium">{t("Link criado — vale por 30 min")}</p>
+      {/*
+        A URL INTEIRA, quebrando linha, e não um <input> de uma linha só. Num
+        cartão estreito o campo cortava o endereço no meio (`…/pai…`), e o que
+        sobrava tinha cara de texto de exemplo — foi relatado exatamente assim,
+        "um link de placeholder". Ver o endereço completo é também como se
+        confere que ele aponta para o domínio certo antes de mandar a alguém.
+      */}
+      <p
+        className="select-all break-all rounded-md border bg-muted/40 p-2 font-mono text-xs"
+        data-testid="url-do-pareamento"
+      >
+        {url}
+      </p>
       <div className="flex gap-2">
-        <Input readOnly value={url} className="font-mono text-xs" onFocus={(e) => e.target.select()} />
         <Button variant="outline" size="sm" onClick={() => void copiar()}>
           <Copy size={14} aria-hidden />
           {t("Copiar")}
+        </Button>
+        {/* Abrir numa aba nova é como quem envia confere que o link funciona
+            ANTES de mandar — sem isso, o primeiro a descobrir que ele não abre
+            é o cliente. `noopener` porque a página de destino é pública. */}
+        <Button variant="outline" size="sm" asChild>
+          <a href={url} target="_blank" rel="noopener noreferrer">
+            {t("Abrir")}
+          </a>
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">

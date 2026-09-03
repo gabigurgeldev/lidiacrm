@@ -210,6 +210,7 @@ export const DICIONARIO: Traducoes = {
   "Enviar link para o cliente": { es: "Enviar enlace al cliente" },
   "Link criado — vale por 30 min": { es: "Enlace creado — vale por 30 min" },
   "Cancelar link": { es: "Cancelar enlace" },
+  "Abrir": { es: "Abrir" },
   "Link cancelado.": { es: "Enlace cancelado." },
   "Não deu para copiar. Selecione o link e copie à mão.": { es: "No se pudo copiar. Seleccione el enlace y cópielo a mano." },
   "Qualquer pessoa com este link consegue parear um WhatsApp nesta linha.": { es: "Cualquier persona con este enlace puede vincular un WhatsApp a esta línea." },
