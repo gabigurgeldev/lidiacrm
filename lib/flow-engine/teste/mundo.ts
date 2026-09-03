@@ -35,6 +35,24 @@ export interface Mundo {
   atribuicoes: Array<{ leadId: string; userId: string }>;
   tags: string[];
   enviados: Array<{ telefone: string; texto: string }>;
+  /** O que foi mandado ao CLIENTE — outra lista, porque é outro destinatário. */
+  /** Campanhas que o bloco de disparo pediu. */
+  disparosPedidos: Array<Record<string, unknown>>;
+  /** A vez de cada fila indiana, por bloco — o que a tabela guarda de verdade. */
+  cursoresDaFila: Map<string, number>;
+  /** Conversas devolvidas ao agente de IA. */
+  devolvidasAoAgente: string[];
+  /** Quando true, a porta de devolução recusa (contato sem conversa). */
+  semConversaParaAgente: boolean;
+  /** O que a porta de disparo devolve — o teste troca para exercitar recusa. */
+  desfechoDoDisparo: { kind: "criado"; disparoId: string; vaoReceber: number; comecou: boolean } | { kind: "recusado"; motivo: string };
+  enviadosAoCliente: Array<{
+    contactId: string;
+    tipo: string;
+    texto: string;
+    mediaUrl?: string;
+    channelSessionId: string | null;
+  }>;
   avisos: Array<{ titulo: string; corpo: string }>;
   elegiveis: AtendenteElegivel[];
   donoRespondeu: boolean;
@@ -84,6 +102,12 @@ export function mundoNovo(): Mundo {
     atribuicoes: [],
     tags: [],
     enviados: [],
+    disparosPedidos: [],
+    cursoresDaFila: new Map(),
+    devolvidasAoAgente: [],
+    semConversaParaAgente: false,
+    desfechoDoDisparo: { kind: "criado", disparoId: "disparo-1", vaoReceber: 3, comecou: false },
+    enviadosAoCliente: [],
     avisos: [],
     elegiveis: [
       { userId: "user-antigo", lastAssignedAt: Date.parse("2026-08-01T00:00:00Z"), currentLoad: 1 },
@@ -123,6 +147,8 @@ export function execucaoNova(): FlowExecutionRow {
     output: {},
     parent_execution_id: null,
     parent_frame_id: null,
+    outcome: null,
+    last_error: null,
   };
 }
 
@@ -193,6 +219,16 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
         ...(patch.attempts !== undefined ? { attempts: patch.attempts } : {}),
         ...(patch.steps_taken !== undefined ? { steps_taken: patch.steps_taken } : {}),
         ...(patch.context !== undefined ? { context: patch.context } : {}),
+        // ⚠️ O DESFECHO e o ERRO precisam sobreviver ao falso.
+        //
+        // Sem eles, o mundo de teste apaga em silêncio as duas coisas que a
+        // tela de Execuções mostra — "deu certo como?" e "por que parou?" —,
+        // e todo teste que tentasse afirmar o desfecho de um fluxo mediria
+        // . Um falso que descarta o resultado do produto faz o
+        // teste concordar com qualquer coisa.
+        ...(patch.outcome !== undefined ? { outcome: patch.outcome } : {}),
+        ...(patch.last_error !== undefined ? { last_error: patch.last_error } : {}),
+        ...(patch.output !== undefined ? { output: patch.output } : {}),
       });
     },
     frentesProntas: async (exec) => {
@@ -312,12 +348,47 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
         mundo.tags.push(tag);
       },
       houveRespostaDoDono: async () => mundo.donoRespondeu,
+      devolverAoAgente: async ({ contactId }) => {
+        if (mundo.semConversaParaAgente) return { ok: false as const, motivo: "sem_conversa" };
+        const jaEstava = mundo.devolvidasAoAgente.includes(contactId);
+        mundo.devolvidasAoAgente.push(contactId);
+        return { ok: true as const, jaEstavaComOAgente: jaEstava };
+      },
     },
-    roteamento: { elegiveis: async () => mundo.elegiveis },
+    roteamento: {
+      elegiveis: async () => mundo.elegiveis,
+      proximoDaFilaFixa: async ({ nodeId, ordem, elegiveis }) => {
+        // Cursor de verdade, com estado: um falso que devolvesse sempre 0
+        // faria a fila parecer funcionar entregando sempre ao primeiro — que
+        // é exatamente o defeito que a tabela existe para evitar.
+        const cursor = mundo.cursoresDaFila.get(nodeId) ?? 0;
+        mundo.cursoresDaFila.set(nodeId, (cursor + 1) % Math.max(1, ordem.length));
+        const podem = new Set(elegiveis);
+        for (let passo = 0; passo < ordem.length; passo += 1) {
+          const i = (cursor + passo) % ordem.length;
+          const candidato = ordem[i];
+          if (candidato !== undefined && podem.has(candidato)) {
+            return { userId: candidato, avancou: cursor };
+          }
+        }
+        return { userId: null, avancou: cursor };
+      },
+    },
     canal: {
       enviarTexto: async ({ telefone, texto }) => {
         mundo.enviados.push({ telefone, texto });
         return mundo.desfechoDoEnvio;
+      },
+      enviarParaContato: async ({ contactId, tipo, texto, mediaUrl, channelSessionId }) => {
+        mundo.enviadosAoCliente.push({ contactId, tipo, texto, mediaUrl, channelSessionId });
+        return mundo.desfechoDoEnvio;
+      },
+    },
+
+    disparo: {
+      criar: async (pedido) => {
+        mundo.disparosPedidos.push(pedido as unknown as Record<string, unknown>);
+        return mundo.desfechoDoDisparo;
       },
     },
     avisos: {

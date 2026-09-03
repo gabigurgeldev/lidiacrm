@@ -238,7 +238,15 @@ describe("falhas", () => {
     const deps = montar(mundo);
     const portasQuebradas = () => {
       const p = deps.portas(execucaoNova());
-      return { ...p, roteamento: { elegiveis: async () => { throw new Error("banco fora do ar"); } } };
+      return {
+        ...p,
+        roteamento: {
+          ...p.roteamento,
+          elegiveis: async () => {
+            throw new Error("banco fora do ar");
+          },
+        },
+      };
     };
     const resumo = await rodarTickDeFluxos({ ...deps, portas: portasQuebradas });
 
@@ -257,7 +265,15 @@ describe("falhas", () => {
     const deps = montar(mundo);
     const portasQuebradas = () => {
       const p = deps.portas(execucaoNova());
-      return { ...p, roteamento: { elegiveis: async () => { throw new Error("banco fora do ar"); } } };
+      return {
+        ...p,
+        roteamento: {
+          ...p.roteamento,
+          elegiveis: async () => {
+            throw new Error("banco fora do ar");
+          },
+        },
+      };
     };
     const resumo = await rodarTickDeFluxos({ ...deps, portas: portasQuebradas });
 

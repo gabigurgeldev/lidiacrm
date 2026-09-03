@@ -18577,6 +18577,134 @@ comment on column public.channel_sessions.stevo_instance_id is
 comment on column public.channel_sessions.provider_mode is
   'A modalidade da sessao quando o provider hospeda mais de uma: oficial (janela de 24h, template aprovado) ou qr (texto livre, risco de banimento). NULL = o provider tem modalidade unica e ela sai da identidade dele. Espelhado em lib/channels/tipo-de-conexao.ts.';
 
+-- ---- de qual fluxo veio a campanha (migration 0209) ----
+alter table public.bulk_sends
+  add column if not exists created_by_flow_execution_id uuid
+    references public.flow_executions(id) on delete set null;
+
+comment on column public.bulk_sends.created_by_flow_execution_id is
+  'A execucao de fluxo que criou esta campanha, quando ela nao foi criada por uma pessoa. NULL nas criadas pela tela. Espelhado em lib/bulk-send/criar-disparo.ts (AutorDoDisparo).';
+
+create index if not exists bulk_sends_created_by_flow_execution_idx
+  on public.bulk_sends (created_by_flow_execution_id)
+  where created_by_flow_execution_id is not null;
+
+-- ---- a vez de cada um na fila indiana (migration 0211) ----
+create table if not exists public.flow_routing_cursors (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  flow_id uuid not null references public.flows(id) on delete cascade,
+  node_id text not null,
+  posicao integer not null default 0,
+  atualizado_em timestamptz not null default now(),
+  primary key (organization_id, flow_id, node_id)
+);
+
+comment on table public.flow_routing_cursors is
+  'Onde a fila indiana de cada bloco routing.fixed_order parou. Fora de flow_executions de proposito: o cursor precisa sobreviver entre execucoes, senao a fila reinicia a cada lead. Espelhado em lib/routing/decide.ts (selectFixedOrder).';
+
+alter table public.flow_routing_cursors enable row level security;
+
+drop policy if exists tenant_isolation_flow_routing_cursors_all on public.flow_routing_cursors;
+create policy tenant_isolation_flow_routing_cursors_all on public.flow_routing_cursors
+  for all using (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  ) with check (
+    (organization_id in (select public.fn_user_org_ids())
+      and public.fn_role_at_least(organization_id, 'manager'))
+    or public.fn_is_platform_admin()
+  );
+
+-- ── Avançar a vez, atomicamente ──────────────────────────────────────────────
+--
+-- Ler o cursor e gravar o próximo em duas idas ao banco é uma corrida: dois
+-- leads chegando no mesmo tique leriam a MESMA posição e entregariam ao MESMO
+-- vendedor — a fila pararia de andar exatamente quando há movimento, que é
+-- quando ninguém está olhando. `insert ... on conflict do update ... returning`
+-- resolve numa declaração só, sob o lock da linha.
+--
+-- Devolve a posição ANTERIOR (de onde o chamador deve procurar) e já deixa o
+-- cursor no próximo. Quem chama decide quem é elegível — o banco não sabe disso.
+create or replace function public.fn_flow_routing_next_in_order(
+  p_organization_id uuid,
+  p_flow_id uuid,
+  p_node_id text,
+  p_tamanho integer
+)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $fila$
+declare
+  v_anterior integer;
+begin
+  if p_tamanho is null or p_tamanho < 1 then
+    return 0;
+  end if;
+
+  -- Garante a linha. `do nothing` porque duas chamadas simultâneas na primeira
+  -- vez são normais, e a segunda não deve falhar nem zerar a primeira.
+  insert into public.flow_routing_cursors (organization_id, flow_id, node_id, posicao)
+  values (p_organization_id, p_flow_id, p_node_id, 0)
+  on conflict (organization_id, flow_id, node_id) do nothing;
+
+  -- Ler e gravar em declarações separadas seria corrida: dois leads no mesmo
+  -- tique leriam a MESMA posição e entregariam ao MESMO vendedor — a fila
+  -- pararia de andar exatamente quando há movimento. Um `update ... returning`
+  -- resolve sob o lock da linha, e devolve a posição ANTERIOR (a vez de agora),
+  -- já deixando o cursor no próximo.
+  update public.flow_routing_cursors
+     set posicao = (posicao + 1) % p_tamanho,
+         atualizado_em = now()
+   where organization_id = p_organization_id
+     and flow_id = p_flow_id
+     and node_id = p_node_id
+  returning (posicao - 1 + p_tamanho) % p_tamanho
+    into v_anterior;
+
+  return coalesce(v_anterior, 0);
+end;
+$fila$;
+
+-- Função nova em `public` nasce EXPOSTA — as DUAS origens do EXECUTE precisam
+-- ser revogadas (doutrina de migrations, item 9).
+revoke execute on function public.fn_flow_routing_next_in_order(uuid, uuid, text, integer) from public, anon, authenticated;
+grant execute on function public.fn_flow_routing_next_in_order(uuid, uuid, text, integer) to service_role;
+
+-- ---- o gatilho por webhook do fluxo (migration 0212) ----
+alter table public.webhook_sources
+  add column if not exists flow_id uuid references public.flows(id) on delete cascade;
+
+comment on column public.webhook_sources.flow_id is
+  'O fluxo que este token acorda, quando kind = flow_trigger. NULL nas linhas de captacao de lead. Espelhado em app/api/v1/webhooks/flow/[token]/route.ts.';
+
+alter table public.webhook_sources alter column default_pipeline_id drop not null;
+alter table public.webhook_sources alter column default_stage_id   drop not null;
+
+do $coerencia$ begin
+  if exists (
+    select 1 from pg_constraint
+     where conname = 'webhook_sources_kind_coerente'
+       and conrelid = 'public.webhook_sources'::regclass
+  ) then
+    alter table public.webhook_sources drop constraint webhook_sources_kind_coerente;
+  end if;
+
+  -- `not valid` NÃO entra aqui de propósito: a tabela é pequena (uma linha por
+  -- formulário publicado) e validar agora é barato. Constraint que nasce
+  -- inválida é a que ninguém lembra de validar depois.
+  alter table public.webhook_sources add constraint webhook_sources_kind_coerente check (
+    (kind = 'lead_capture' and default_pipeline_id is not null and default_stage_id is not null)
+    or (kind = 'flow_trigger' and flow_id is not null)
+  );
+end $coerencia$;
+
+create index if not exists webhook_sources_flow_idx
+  on public.webhook_sources (flow_id)
+  where flow_id is not null;
+
 -- ---- link público de pareamento (migration 0213) ----
 -- 0213 — link público de pareamento por QR.
 --

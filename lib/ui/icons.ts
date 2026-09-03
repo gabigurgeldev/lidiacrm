@@ -11,6 +11,9 @@ export {
   // navigation (inbox icon = Tray in Phosphor)
   Tray as Inbox,
   ListChecks,
+  // flow engine: fila indiana (ordem declarada) e sorteio
+  ListNumbers,
+  Shuffle,
   Plugs,
   PlugsConnected,
   QrCode,
@@ -88,6 +91,10 @@ export {
   MonitorPlay,
   // conversation
   ChatCircle,
+  // flow engine: mandar mensagem para o cliente (distinto do aviso ao vendedor)
+  ChatCircleText,
+  // flow engine: disparo em massa
+  Megaphone,
   Phone,
   Paperclip,
   Microphone,

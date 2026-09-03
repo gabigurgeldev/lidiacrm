@@ -14,7 +14,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { desfechoDoEnvio, type MensagemEnviada } from "@/lib/automation/desfecho-do-envio";
 import { ensureConversation, sessaoProntaParaEnvio } from "@/lib/automation/start-conversation";
+import { criarDisparo } from "@/lib/bulk-send/criar-disparo";
+import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
 import { logger } from "@/lib/logger";
+import { selectFixedOrder } from "@/lib/routing/decide";
+import type { RoutingCandidate } from "@/lib/routing/decide";
 import { loadEligibleAttendants } from "@/lib/routing/eligibles";
 
 import { EVENTO_DE_SUBFLUXO } from "./engine";
@@ -25,7 +29,14 @@ import type {
   PortasDaExecucao,
 } from "./engine";
 import type { EncontroRow, FrenteNova, FrenteRow } from "./frentes";
-import type { DesfechoDeEnvio, EsperaEmCurso, FatosDaExecucao } from "./types";
+import type {
+  DesfechoDeEnvio,
+  DesfechoDoDisparo,
+  EsperaEmCurso,
+  FatosDaExecucao,
+  PedidoDeDisparo,
+  TipoDeMensagemDoFluxo,
+} from "./types";
 
 /** Marca do contato criado só para avisar alguém da equipe. */
 export const ORIGEM_DO_CONTATO_INTERNO = "flow_engine:aviso_interno";
@@ -571,17 +582,42 @@ export function criarPortas(
           .gte("created_at", desde);
         return (count ?? 0) > 0;
       },
+
+      async devolverAoAgente({ contactId }) {
+        return devolverAoAgenteDoFluxo(admin, orgId, { contactId, exec });
+      },
     },
 
     roteamento: {
       async elegiveis({ organizationId }) {
         return loadEligibleAttendants(admin, organizationId, agora());
       },
+
+      async proximoDaFilaFixa({ nodeId, ordem, elegiveis }) {
+        return proximoDaFilaFixaNoBanco(admin, orgId, { exec, nodeId, ordem, elegiveis });
+      },
     },
 
     canal: {
       async enviarTexto({ telefone, texto, interno }) {
         return enviarTextoParaTelefone(admin, orgId, { telefone, texto, interno, exec });
+      },
+
+      async enviarParaContato({ contactId, tipo, texto, mediaUrl, channelSessionId }) {
+        return enviarParaContatoDoFunil(admin, orgId, {
+          contactId,
+          tipo,
+          texto,
+          mediaUrl,
+          channelSessionId,
+          exec,
+        });
+      },
+    },
+
+    disparo: {
+      async criar(pedido) {
+        return criarDisparoDoFluxo(admin, orgId, { pedido, exec });
       },
     },
 
@@ -591,6 +627,273 @@ export function criarPortas(
       },
     },
   };
+}
+
+// ──────────────────────── a vez da fila indiana ──────────────────────────────
+
+/**
+ * Quem, na ordem declarada, atende agora.
+ *
+ * A posição vem da RPC `fn_flow_routing_next_in_order`, que avança o cursor sob
+ * o lock da linha e devolve a vez. Ler e gravar daqui em duas idas seria
+ * corrida: dois leads no mesmo tique leriam a MESMA posição e o segundo
+ * entregaria ao mesmo vendedor — a fila para de andar exatamente quando há
+ * movimento, que é quando ninguém está olhando.
+ *
+ * Se a RPC falhar, a fila NÃO trava o fluxo: cai para a primeira pessoa
+ * elegível da ordem. Perder a vez uma vez é melhor que segurar o lead.
+ */
+async function proximoDaFilaFixaNoBanco(
+  admin: SupabaseClient,
+  orgId: string,
+  input: {
+    exec: FlowExecutionRow;
+    nodeId: string;
+    ordem: readonly string[];
+    elegiveis: readonly string[];
+  },
+): Promise<{ userId: string | null; avancou: number }> {
+  const elegiveis = input.elegiveis.map((userId) => ({ userId }) as RoutingCandidate);
+
+  let cursor = 0;
+  const { data, error } = await admin.rpc("fn_flow_routing_next_in_order", {
+    p_organization_id: orgId,
+    p_flow_id: input.exec.flow_id,
+    p_node_id: input.nodeId,
+    p_tamanho: input.ordem.length,
+  });
+  if (error === null && typeof data === "number") {
+    cursor = data;
+  } else if (error !== null) {
+    logger.warn("[flow.fila_indiana] cursor indisponivel, comecando do inicio da ordem", {
+      erro: error.message,
+    });
+  }
+
+  const escolha = selectFixedOrder(input.ordem, elegiveis, cursor);
+  return { userId: escolha.userId, avancou: cursor };
+}
+
+// ──────────────────── devolver o atendimento à IA ────────────────────────────
+
+/**
+ * A conversa deste contato volta para o agente.
+ *
+ * Passa por `devolverAtendimentoAoAgente`, a MESMA função do botão da tela. O
+ * cabeçalho dela conta por quê: a passagem para humano tem três travas, e a
+ * versão anterior daquela rota soltava só a mais fraca — respondia sucesso e
+ * deixava o agente mudo para sempre.
+ */
+async function devolverAoAgenteDoFluxo(
+  admin: SupabaseClient,
+  orgId: string,
+  input: { contactId: string; exec: FlowExecutionRow },
+): Promise<{ ok: true; jaEstavaComOAgente: boolean } | { ok: false; motivo: string }> {
+  const { data } = await admin
+    .from("conversations")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("contact_id", input.contactId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const conversationId = (data as { id: string } | null)?.id ?? null;
+  if (conversationId === null) return { ok: false, motivo: "sem_conversa" };
+
+  const r = await devolverAtendimentoAoAgente(
+    {
+      supabase: admin,
+      organizationId: orgId,
+      // Mesmo ator que o envio do motor usa — a trilha diz que quem agiu foi o
+      // fluxo, e qual.
+      actor: { type: "webhook_source", id: input.exec.flow_id },
+      requestId: `flow:${input.exec.id}`,
+    },
+    { conversationId },
+  );
+
+  if (!r.ok) return { ok: false, motivo: r.erro };
+  return { ok: true, jaEstavaComOAgente: r.jaEstavaComOAgente };
+}
+
+// ─────────────────────────── disparo em massa ────────────────────────────────
+
+/**
+ * Cria a campanha pelo MESMO caminho da tela.
+ *
+ * A tradução entre o formato do bloco (plano, porque o gerador de fluxo por IA
+ * recusa união discriminada) e o da rota (`CriarDisparoInput`, que tem a união)
+ * acontece aqui, num lugar só.
+ *
+ * ⚠️ `organizationId` vem da LINHA DA EXECUÇÃO, nunca do config do bloco. O
+ * cliente admin passa por cima da RLS, e um id de outra organização colado no
+ * config criaria campanha na base do vizinho.
+ */
+async function criarDisparoDoFluxo(
+  admin: SupabaseClient,
+  orgId: string,
+  input: { pedido: PedidoDeDisparo; exec: FlowExecutionRow },
+): Promise<DesfechoDoDisparo> {
+  const { pedido } = input;
+  try {
+    const r = await criarDisparo(
+      admin,
+      { organizationId: orgId, autor: { tipo: "fluxo", flowExecutionId: input.exec.id } },
+      {
+        name: pedido.nome,
+        channel_session_id: pedido.canalId,
+        mode: pedido.modo,
+        body: pedido.texto,
+        template_name: pedido.modeloNome,
+        template_language: pedido.modeloIdioma,
+        template_values: pedido.modeloValores,
+        interval_ms: pedido.intervaloMs,
+        audiencia:
+          pedido.audiencia.tipo === "tags"
+            ? { kind: "tags", tags: pedido.audiencia.tags }
+            : { kind: "contacts", contact_ids: pedido.audiencia.contatos },
+      },
+    );
+
+    if (!r.ok) return { kind: "recusado", motivo: r.recusa.mensagem };
+
+    let comecou = false;
+    if (pedido.comecarSozinho) {
+      // O ESTADO PRECISA SER EXATAMENTE ESTE.
+      //
+      // `fn_claim_due_bulk_sends` reclama `status = 'running' and next_send_at
+      // <= now()`. Gravar `scheduled` — que era o que esta função fazia antes —
+      // deixa a campanha esperando um promotor que só age sobre agendamento
+      // futuro: ela nasce, aparece na tela como se fosse disparar, e não sai
+      // nunca. Falha muda, do tipo que só se descobre pelo cliente que não
+      // recebeu.
+      //
+      // É a mesma escrita do ramo "disparar agora" de
+      // `app/api/v1/bulk-sends/[id]/start/route.ts`. Chamar aquela rota daqui
+      // exigiria um request HTTP de dentro do motor; o que ela tem além disto
+      // (rate limit por hora, auditoria de quem apertou) é de gente apertando
+      // botão, e não se aplica a um bloco de fluxo.
+      const agora = new Date().toISOString();
+      const { error } = await admin
+        .from("bulk_sends")
+        .update({
+          status: "running",
+          scheduled_for: null,
+          next_send_at: agora,
+          started_at: agora,
+          pause_reason: null,
+          pause_detail: null,
+        })
+        .eq("id", r.disparoId)
+        .eq("organization_id", orgId);
+      comecou = error === null;
+      if (error !== null) {
+        logger.warn("[flow.bulk_send] campanha criada, mas nao consegui iniciar", {
+          disparoId: r.disparoId,
+          erro: error.message,
+        });
+      }
+    }
+
+    return { kind: "criado", disparoId: r.disparoId, vaoReceber: r.recorte.vaoReceber, comecou };
+  } catch (err) {
+    return { kind: "recusado", motivo: err instanceof Error ? err.message : "erro_ao_criar" };
+  }
+}
+
+// ───────────────────────── envio ao contato do funil ─────────────────────────
+
+/** O `type` que `sendMessageHandler` espera, para cada tipo da tela. */
+const TIPO_NA_MENSAGEM: Record<TipoDeMensagemDoFluxo, string> = {
+  texto: "text",
+  imagem: "image",
+  audio: "audio",
+  video: "video",
+  arquivo: "document",
+};
+
+/**
+ * Manda para a conversa do contato — o cliente, não o vendedor.
+ *
+ * Difere de `enviarTextoParaTelefone` em três pontos, e cada um é o motivo de
+ * ela existir separada:
+ *
+ *   1. o contato JÁ existe (veio dos fatos da execução); aqui não se cria nem
+ *      se marca `force_human` — marcar faria o agente de IA calar numa conversa
+ *      de cliente de verdade;
+ *   2. a conexão pode ter sido ESCOLHIDA no bloco, em vez de ser a primeira
+ *      viva da organização;
+ *   3. aceita mídia.
+ *
+ * O que NÃO muda: continua passando por `sendMessageHandler`. É ele quem aplica
+ * bloqueio do contato, janela do número, pacing anti-banimento e idempotência —
+ * e um atalho pelo adapter arriscaria o número da empresa.
+ */
+async function enviarParaContatoDoFunil(
+  admin: SupabaseClient,
+  orgId: string,
+  input: {
+    contactId: string;
+    tipo: TipoDeMensagemDoFluxo;
+    texto: string;
+    mediaUrl?: string;
+    channelSessionId: string | null;
+    exec: FlowExecutionRow;
+  },
+): Promise<DesfechoDeEnvio> {
+  // A conexão escolhida precisa ser DESTA organização. Sem esta conferência, um
+  // id copiado para o config de um fluxo mandaria pelo número de outro cliente —
+  // o cliente admin não barraria, porque ele passa por cima da RLS.
+  let sessionId = input.channelSessionId;
+  if (sessionId !== null) {
+    const { data } = await admin
+      .from("channel_sessions")
+      .select("id")
+      .eq("id", sessionId)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (data === null) return { kind: "recusado", motivo: "conexao_nao_encontrada" };
+  } else {
+    sessionId = await sessaoProntaParaEnvio(admin, orgId);
+  }
+  if (sessionId === null) return { kind: "recusado", motivo: "sem_conexao_de_whatsapp" };
+
+  try {
+    const conversationId = await ensureConversation(admin, orgId, input.contactId, sessionId);
+    const mensagem = (await sendMessageHandler(
+      admin,
+      {
+        organization_id: orgId,
+        actor: { type: "webhook_source", id: input.exec.flow_id },
+        requestId: `flow:${input.exec.id}`,
+      },
+      {
+        conversation_id: conversationId,
+        type: TIPO_NA_MENSAGEM[input.tipo],
+        body: input.texto,
+        // `media_url`, nunca `media_storage_path`: ver a nota da porta em
+        // `types.ts` — o caminho no Storage é conferido contra a conversa de
+        // destino, e a mídia de um bloco vai para muitas conversas diferentes.
+        ...(input.mediaUrl === undefined ? {} : { media_url: input.mediaUrl }),
+      } as Parameters<typeof sendMessageHandler>[2],
+    )) as unknown as MensagemEnviada;
+
+    // O desfecho vem do ESTADO da mensagem: `sendMessageHandler` não lança
+    // quando o envio falha — marca a linha e devolve normalmente.
+    const traduzido = desfechoDoEnvio("flow.send_to_lead", mensagem);
+    if (traduzido.status === "success") return { kind: "enviado", messageId: mensagem.id };
+    if (traduzido.status === "postponed") {
+      const motivo =
+        typeof mensagem.metadata?.queued_reason === "string"
+          ? mensagem.metadata.queued_reason
+          : "aguardando_o_canal";
+      return { kind: "na_fila", motivo };
+    }
+    return { kind: "recusado", motivo: mensagem.error_code ?? traduzido.error ?? "envio_recusado" };
+  } catch (err) {
+    return { kind: "recusado", motivo: err instanceof Error ? err.message : "erro_no_envio" };
+  }
 }
 
 // ──────────────────────────── envio para telefone ────────────────────────────

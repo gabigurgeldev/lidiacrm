@@ -54,6 +54,7 @@ function montar(
   render(
     <PainelDoNo
       tipo={tipo}
+      categoria="logic"
       rotulo="Bloco de prova"
       config={config}
       aoMudarRotulo={vi.fn()}
@@ -155,6 +156,7 @@ describe("o formulário de cada bloco do paralelo", () => {
       const { unmount } = render(
         <PainelDoNo
           tipo="logic.await_event"
+          categoria="logic"
           rotulo="x"
           config={{ evento, quando: {}, prazo_ms: 3_600_000 }}
           aoMudarRotulo={vi.fn()}
@@ -241,6 +243,7 @@ describe("o formulário de cada bloco do paralelo", () => {
       const { unmount } = render(
         <PainelDoNo
           tipo={tipo}
+          categoria="logic"
           rotulo="x"
           config={config as Record<string, unknown>}
           aoMudarRotulo={vi.fn()}

@@ -7,7 +7,7 @@ import type { FlowBranch } from "@/lib/flow-engine/types";
 import { cn } from "@/lib/utils";
 import { Question } from "@/lib/ui/icons";
 
-import { ICONE_DA_CATEGORIA, ICONE_DO_TIPO } from "./nodeIcons";
+import { ICONE_DA_CATEGORIA, ICONE_DO_TIPO, VISUAL_DA_CATEGORIA, VISUAL_PADRAO } from "./nodeVisuals";
 
 export interface DadosDoNo extends Record<string, unknown> {
   rotulo: string;
@@ -22,16 +22,6 @@ export interface DadosDoNo extends Record<string, unknown> {
    */
   recemAdicionado?: boolean;
 }
-
-/** Uma cor por categoria. A cor diz o que o bloco FAZ antes de a pessoa ler. */
-const COR_DA_CATEGORIA: Record<string, string> = {
-  trigger: "border-l-emerald-500",
-  logic: "border-l-sky-500",
-  crm: "border-l-violet-500",
-  whatsapp: "border-l-green-600",
-  routing: "border-l-amber-500",
-  notify: "border-l-rose-500",
-};
 
 /**
  * UM HANDLE POR SAÍDA, com o rótulo ao lado.
@@ -57,7 +47,7 @@ export function NoDoFluxo({ id, data, selected }: NodeProps) {
     <div
       className={cn(
         "w-60 rounded-md border border-l-4 bg-background shadow-sm",
-        COR_DA_CATEGORIA[d.categoria] ?? "border-l-muted",
+        (VISUAL_DA_CATEGORIA[d.categoria] ?? VISUAL_PADRAO).borda,
         selected === true && "ring-2 ring-primary ring-offset-1",
         temErro && "border-destructive ring-2 ring-destructive ring-offset-1",
         // Pop-in do nó que a IA acabou de criar em streaming — ver o

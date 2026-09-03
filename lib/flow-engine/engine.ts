@@ -33,6 +33,7 @@ import type {
   NodeExecutionResult,
   PortaDeAvisos,
   PortaDeCanal,
+  PortaDeDisparo,
   PortaDoCrm,
   PortaDeRoteamento,
 } from "./types";
@@ -91,6 +92,18 @@ export interface FlowExecutionRow {
   parent_execution_id: string | null;
   /** A frente exata que ficou parada esperando esta filha. `null` no topo. */
   parent_frame_id: string | null;
+  /**
+   * COMO a execução terminou — o texto que a tela de Execuções mostra.
+   *
+   * O motor JÁ grava isto (, escrito quando um
+   *  conclui), e a coluna existe no schema desde a 0203. Faltava só
+   * aqui — e a ausência tinha custo: nada que leia a linha da execução
+   * conseguia afirmar o desfecho sem , inclusive teste. Um campo que o
+   * produto escreve e o tipo não declara é um campo que ninguém confere.
+   */
+  outcome: string | null;
+  /** A última falha, quando houve.  enquanto vai bem. */
+  last_error: string | null;
 }
 
 export interface FlowExecutionPatch {
@@ -247,6 +260,7 @@ export interface PortasDaExecucao {
   crm: PortaDoCrm;
   roteamento: PortaDeRoteamento;
   canal: PortaDeCanal;
+  disparo: PortaDeDisparo;
   avisos: PortaDeAvisos;
 }
 
@@ -527,6 +541,7 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
       crm: p.portas.crm,
       roteamento: p.portas.roteamento,
       canal: p.portas.canal,
+      disparo: p.portas.disparo,
       avisos: p.portas.avisos,
       agora: deps.relogio,
       render: (texto) => interpolar(texto, escopo).texto,

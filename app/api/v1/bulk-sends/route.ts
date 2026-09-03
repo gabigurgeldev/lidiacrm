@@ -23,16 +23,7 @@ import { type NextRequest } from "next/server";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
-import { recusaDeModo } from "@/lib/bulk-send/modo";
-import {
-  montarRecortePorIds,
-  montarRecortePorTags,
-  MAX_DESTINATARIOS,
-  type Recorte,
-} from "@/lib/bulk-send/montagem";
-import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
-import type { ChannelProvider } from "@/lib/channels/capabilities";
-import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
+import { criarDisparo } from "@/lib/bulk-send/criar-disparo";
 import { criarDisparoSchema } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
 
@@ -100,146 +91,35 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const supabase = await createClient();
 
-  // ─── A conexão, e o modo que ELA permite ────────────────────────────────────
-  const select = (comArchived: boolean) =>
-    `id, provider, status${comArchived ? `, ${ARCHIVED_AT}` : ""}`;
-  const { data: sessaoRaw } = await queryTolerantToMissingArchived(
-    () =>
-      supabase
-        .from("channel_sessions")
-        .select(select(true))
-        .eq("id", entrada.channel_session_id)
-        .eq("organization_id", orgId)
-        .maybeSingle(),
-    () =>
-      supabase
-        .from("channel_sessions")
-        .select(select(false))
-        .eq("id", entrada.channel_session_id)
-        .eq("organization_id", orgId)
-        .maybeSingle(),
-  );
-  const sessao = sessaoRaw as unknown as
-    | { id: string; provider: ChannelProvider; status: string; archived_at?: string | null }
-    | null;
+  // A regra inteira mora em `lib/bulk-send/criar-disparo.ts`, porque o bloco de
+  // fluxo "Disparo em massa" cria disparo pelo mesmo caminho. Esta rota é a
+  // tradução para HTTP: cada recusa vira o status que faz sentido na API.
+  const r = await criarDisparo(supabase, { organizationId: orgId, autor: { tipo: "pessoa", userId: authz.user.id } }, entrada);
 
-  if (!sessao) {
-    return fail("not_found", "Conexão não encontrada nesta organização.", 404, { requestId });
-  }
-  if (sessao.archived_at) {
-    return fail(
-      "channel_archived",
-      "Essa conexão foi excluída da Central de Conexões. Escolha outra.",
-      409,
-      { requestId },
-    );
-  }
-
-  // O modo é consequência da conexão, nunca uma segunda pergunta — ver
-  // `lib/bulk-send/modo.ts`. A tela nem oferece a combinação impossível; este
-  // gate é para quem chegou pela API.
-  const recusa = recusaDeModo(sessao.provider, entrada.mode);
-  if (recusa) {
-    return fail("bulk_send_mode_incompativel", recusa, 422, { requestId });
-  }
-
-  // ─── Pré-voo do contrato do modelo, uma vez ────────────────────────────────
-  if (entrada.mode === "template") {
-    try {
-      await conferirDefinicao(supabase, {
-        organizationId: orgId,
-        channelSessionId: entrada.channel_session_id,
-        name: entrada.template_name ?? "",
-        language: entrada.template_language ?? "",
-        values: entrada.template_values,
-      });
-    } catch (err) {
-      // As frases de `conferirDefinicao` já são acionáveis em pt-BR
-      // ("X espera 2 valor(es) — falta: body_2"). Repassar verbatim.
-      return fail(
-        "validation_failed",
-        err instanceof Error ? err.message : "O modelo escolhido não pôde ser conferido.",
-        422,
-        { requestId },
-      );
+  if (!r.ok) {
+    const { recusa } = r;
+    switch (recusa.codigo) {
+      case "conexao_nao_encontrada":
+        return fail("not_found", recusa.mensagem, 404, { requestId });
+      case "conexao_arquivada":
+        return fail("channel_archived", recusa.mensagem, 409, { requestId });
+      case "modo_incompativel":
+        return fail("bulk_send_mode_incompativel", recusa.mensagem, 422, { requestId });
+      case "modelo_invalido":
+        return fail("validation_failed", recusa.mensagem, 422, { requestId });
+      case "sem_destinatario":
+        return fail("bulk_send_sem_destinatario", recusa.mensagem, 422, {
+          requestId,
+          details: {
+            fora_por_motivo: recusa.recorte.foraPorMotivo,
+            repetidos: recusa.recorte.repetidos,
+          },
+        });
+      case "lista_grande_demais":
+        return fail("validation_failed", recusa.mensagem, 422, { requestId });
+      case "falha_ao_gravar":
+        return fail("internal_error", recusa.mensagem, 500, { requestId });
     }
-  }
-
-  // ─── O recorte da lista ────────────────────────────────────────────────────
-  let recorte: Recorte;
-  try {
-    recorte =
-      entrada.audiencia.kind === "tags"
-        ? await montarRecortePorTags(supabase, orgId, entrada.audiencia.tags)
-        : await montarRecortePorIds(supabase, orgId, entrada.audiencia.contact_ids);
-  } catch (err) {
-    return fail("internal_error", err instanceof Error ? err.message : "falha ao montar a lista", 500, {
-      requestId,
-    });
-  }
-
-  if (recorte.vaoReceber === 0) {
-    // Campanha que não fala com ninguém não nasce: ela viraria um disparo
-    // "concluído" com zero enviados, e isso se lê como sucesso.
-    return fail(
-      "bulk_send_sem_destinatario",
-      "Nenhum contato desta lista pode receber a mensagem. Confira os motivos e escolha outra lista.",
-      422,
-      { requestId, details: { fora_por_motivo: recorte.foraPorMotivo, repetidos: recorte.repetidos } },
-    );
-  }
-  if (recorte.vaoReceber > MAX_DESTINATARIOS) {
-    return fail(
-      "validation_failed",
-      `Máximo de ${MAX_DESTINATARIOS} destinatários por disparo — divida a lista.`,
-      422,
-      { requestId },
-    );
-  }
-
-  // ─── Cria o disparo e a lista ──────────────────────────────────────────────
-  const { data: criado, error: erroDisparo } = await supabase
-    .from("bulk_sends")
-    .insert({
-      organization_id: orgId,
-      name: entrada.name,
-      status: "draft",
-      channel_session_id: entrada.channel_session_id,
-      // Cópia congelada: re-parear o número depois não muda o que esta campanha é.
-      provider: sessao.provider,
-      mode: entrada.mode,
-      body: entrada.body ?? null,
-      template_name: entrada.template_name ?? null,
-      template_language: entrada.template_language ?? null,
-      template_values: entrada.template_values,
-      interval_ms: entrada.interval_ms,
-      scheduled_for: entrada.scheduled_for ?? null,
-      created_by_user_id: authz.user.id,
-    })
-    .select("id")
-    .single();
-
-  if (erroDisparo || !criado) {
-    return fail("internal_error", erroDisparo?.message ?? "bulk_send_insert_failed", 500, {
-      requestId,
-    });
-  }
-  const disparoId = (criado as { id: string }).id;
-
-  const { error: erroLinhas } = await supabase.from("bulk_send_recipients").insert(
-    recorte.linhas.map((l) => ({
-      organization_id: orgId,
-      bulk_send_id: disparoId,
-      contact_id: l.contact_id,
-      status: l.status,
-      skip_reason: l.skip_reason,
-    })),
-  );
-  if (erroLinhas) {
-    // O disparo sem lista é lixo que confunde a tela; apagar aqui é seguro
-    // porque ele nasceu neste request e ninguém mais o viu.
-    await supabase.from("bulk_sends").delete().eq("id", disparoId).eq("organization_id", orgId);
-    return fail("internal_error", erroLinhas.message, 500, { requestId });
   }
 
   await audit({
@@ -247,26 +127,26 @@ export async function POST(req: NextRequest): Promise<Response> {
     actorUserId: authz.user.id,
     organizationId: orgId,
     resourceType: "bulk_send",
-    resourceId: disparoId,
+    resourceId: r.disparoId,
     requestId,
     metadata: {
       nome: entrada.name,
       modo: entrada.mode,
-      provider: sessao.provider,
-      vao_receber: recorte.vaoReceber,
-      fora_por_motivo: recorte.foraPorMotivo,
-      repetidos: recorte.repetidos,
+      provider: r.provider,
+      vao_receber: r.recorte.vaoReceber,
+      fora_por_motivo: r.recorte.foraPorMotivo,
+      repetidos: r.recorte.repetidos,
       intervalo_ms: entrada.interval_ms,
     },
   });
 
   return ok(
     {
-      id: disparoId,
-      vao_receber: recorte.vaoReceber,
-      fora_por_motivo: recorte.foraPorMotivo,
-      repetidos: recorte.repetidos,
-      nao_encontrados: recorte.naoEncontrados,
+      id: r.disparoId,
+      vao_receber: r.recorte.vaoReceber,
+      fora_por_motivo: r.recorte.foraPorMotivo,
+      repetidos: r.recorte.repetidos,
+      nao_encontrados: r.recorte.naoEncontrados,
     },
     { requestId, status: 201 },
   );
