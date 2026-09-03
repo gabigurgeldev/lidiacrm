@@ -6484,10 +6484,20 @@ export const DICIONARIO: Traducoes = {
     { es: "Fuera del horario comercial no hay nadie disponible, y eso no es un error — por eso lo predeterminado es esperar." },
   "Tentar de novo depois de quantos minutos?": { es: "¿Intentar de nuevo después de cuántos minutos?" },
   "Mensagem para o vendedor": { es: "Mensaje para el vendedor" },
-  "Vai para o WhatsApp de quem está com o lead. Use {{lead.title}}, {{lead.score}} e {{contact.phone_number}} para incluir os dados.":
-    { es: "Va al WhatsApp de quien tiene el lead. Use {{lead.title}}, {{lead.score}} y {{contact.phone_number}} para incluir los datos." },
-  "O telefone de aviso de cada pessoa fica em Ajustes. Sem ele, o fluxo segue pela saída 'Sem telefone cadastrado'.":
-    { es: "El teléfono de aviso de cada persona está en Ajustes. Sin él, el flujo sigue por la salida 'Sin teléfono registrado'." },
+  "Use {{lead.title}}, {{lead.score}} e {{contact.phone_number}} para incluir os dados.":
+    { es: "Use {{lead.title}}, {{lead.score}} y {{contact.phone_number}} para incluir los datos." },
+  "O telefone de aviso de cada pessoa fica em Equipe › Atendimento, no botão Editar horário. Sem ele, o fluxo segue pela saída 'Sem telefone cadastrado'.":
+    {
+      es: "El teléfono de aviso de cada persona está en Equipo › Atención, en el botón Editar horario. Sin él, el flujo sigue por la salida 'Sin teléfono registrado'.",
+    },
+  "Para quem": { es: "Para quién" },
+  "Quem está com o lead": { es: "Quien tiene el lead" },
+  "Um número fixo": { es: "Un número fijo" },
+  "Número que recebe o aviso": { es: "Número que recibe el aviso" },
+  "Com DDI. Pode usar {{contact.phone_number}} ou uma variável do fluxo. Número fora do formato segue pela saída 'Sem telefone cadastrado'.":
+    {
+      es: "Con código de país. Puede usar {{contact.phone_number}} o una variable del flujo. Un número fuera de formato sigue por la salida 'Sin teléfono registrado'.",
+    },
   "Título do aviso": { es: "Título del aviso" },
   "Texto do aviso": { es: "Texto del aviso" },
   "Gravidade": { es: "Gravedad" },

@@ -381,28 +381,76 @@ function Ajustes({ tipo, config, aoMudarConfig, blocosDeReencontro, fluxosChamav
         </>
       );
 
-    case "whatsapp.notify_user":
+    case "whatsapp.notify_user": {
+      const destinatario = (config.destinatario ?? { tipo: "dono_do_lead" }) as {
+        tipo?: string;
+        telefone?: string;
+      };
+      const paraNumeroFixo = destinatario.tipo === "telefone";
       return (
-        <Campo rotulo={t("Mensagem para o vendedor")}>
-          <Textarea
-            rows={6}
-            maxLength={4000}
-            value={String(config.mensagem ?? "")}
-            onChange={(e) => mudar({ mensagem: e.target.value, destinatario: { tipo: "dono_do_lead" } })}
-            data-testid="campo-mensagem-do-aviso"
-          />
-          <Dica
-            texto={t(
-              "Vai para o WhatsApp de quem está com o lead. Use {{lead.title}}, {{lead.score}} e {{contact.phone_number}} para incluir os dados.",
-            )}
-          />
-          <Dica
-            texto={t(
-              "O telefone de aviso de cada pessoa fica em Ajustes. Sem ele, o fluxo segue pela saída 'Sem telefone cadastrado'.",
-            )}
-          />
-        </Campo>
+        <>
+          <Campo rotulo={t("Para quem")}>
+            <Select
+              value={paraNumeroFixo ? "telefone" : "dono_do_lead"}
+              onValueChange={(v) =>
+                mudar({
+                  destinatario:
+                    v === "telefone"
+                      ? { tipo: "telefone", telefone: destinatario.telefone ?? "" }
+                      : { tipo: "dono_do_lead" },
+                })
+              }
+            >
+              <SelectTrigger data-testid="campo-destinatario-do-aviso">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dono_do_lead">{t("Quem está com o lead")}</SelectItem>
+                <SelectItem value="telefone">{t("Um número fixo")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </Campo>
+
+          {paraNumeroFixo ? (
+            <Campo rotulo={t("Número que recebe o aviso")}>
+              <Input
+                value={String(destinatario.telefone ?? "")}
+                maxLength={64}
+                placeholder="+55 11 99999-8888"
+                onChange={(e) => mudar({ destinatario: { tipo: "telefone", telefone: e.target.value } })}
+                data-testid="campo-telefone-do-aviso"
+              />
+              <Dica
+                texto={t(
+                  "Com DDI. Pode usar {{contact.phone_number}} ou uma variável do fluxo. Número fora do formato segue pela saída 'Sem telefone cadastrado'.",
+                )}
+              />
+            </Campo>
+          ) : (
+            <Dica
+              texto={t(
+                "O telefone de aviso de cada pessoa fica em Equipe › Atendimento, no botão Editar horário. Sem ele, o fluxo segue pela saída 'Sem telefone cadastrado'.",
+              )}
+            />
+          )}
+
+          <Campo rotulo={t("Mensagem para o vendedor")}>
+            <Textarea
+              rows={6}
+              maxLength={4000}
+              value={String(config.mensagem ?? "")}
+              onChange={(e) => mudar({ mensagem: e.target.value })}
+              data-testid="campo-mensagem-do-aviso"
+            />
+            <Dica
+              texto={t(
+                "Use {{lead.title}}, {{lead.score}} e {{contact.phone_number}} para incluir os dados.",
+              )}
+            />
+          </Campo>
+        </>
       );
+    }
 
     case "notify.internal":
       return (
