@@ -9,21 +9,18 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  rodarTickDeFluxos,
-  type FlowAdminClient,
-  type FlowExecutionPatch,
-  type FlowExecutionRow,
-  type PortasDaExecucao,
-} from "./engine";
+import { rodarTickDeFluxos } from "./engine";
 import type { FlowGraph } from "./graph-schema";
 import { esquecerRegistroParaTeste, garantirNosRegistrados } from "./register-all";
 import { limparRegistroParaTeste } from "./registry";
-import type { AtendenteElegivel, DesfechoDeEnvio, FatosDaExecucao } from "./types";
+import {
+  execucaoNova,
+  montar as montarBase,
+  mundoNovo as mundoBaseNovo,
+  type Mundo as MundoBase,
+} from "./teste/mundo";
 
-const ORG = "org-1";
 const LEAD = "lead-1";
-const VERSAO = "versao-1";
 const pos = { x: 0, y: 0 };
 
 // ───────────────────────────── o grafo da fatia ──────────────────────────────
@@ -82,165 +79,12 @@ function grafoDaFatia(): FlowGraph {
 
 // ───────────────────────────── o mundo de mentira ────────────────────────────
 
-interface Mundo {
-  execucoes: Map<string, FlowExecutionRow>;
-  passos: Array<{ execution_id: string; node_id: string | null; event_type: string; payload: Record<string, unknown>; idempotency_key: string }>;
-  esperas: Map<string, { desde: Date; ate: Date }>;
-  atribuicoes: Array<{ leadId: string; userId: string }>;
-  tags: string[];
-  enviados: Array<{ telefone: string; texto: string }>;
-  avisos: Array<{ titulo: string; corpo: string }>;
-  elegiveis: AtendenteElegivel[];
-  donoRespondeu: boolean;
-  desfechoDoEnvio: DesfechoDeEnvio;
-  score: number | null;
-  telefoneDoDono: string | null;
-  agora: Date;
-}
-
-function mundoNovo(): Mundo {
-  return {
-    execucoes: new Map(),
-    passos: [],
-    esperas: new Map(),
-    atribuicoes: [],
-    tags: [],
-    enviados: [],
-    avisos: [],
-    elegiveis: [
-      { userId: "user-antigo", lastAssignedAt: Date.parse("2026-08-01T00:00:00Z"), currentLoad: 1 },
-      { userId: "user-recente", lastAssignedAt: Date.parse("2026-08-29T00:00:00Z"), currentLoad: 1 },
-    ],
-    donoRespondeu: false,
-    desfechoDoEnvio: { kind: "enviado", messageId: "msg-1" },
-    score: 82,
-    telefoneDoDono: "+5563999112061",
-    agora: new Date("2026-08-30T12:00:00.000Z"),
-  };
-}
-
-function execucaoNova(): FlowExecutionRow {
-  return {
-    id: "exec-1",
-    organization_id: ORG,
-    flow_id: "flow-1",
-    version_id: VERSAO,
-    status: "pending",
-    current_node_id: "inicio",
-    next_eval_at: "2026-08-30T12:00:00.000Z",
-    attempts: 0,
-    max_attempts: 5,
-    steps_taken: 0,
-    context: {},
-    lead_id: LEAD,
-    contact_id: "contato-1",
-    conversation_id: null,
-    started_at: "2026-08-30T12:00:00.000Z",
-  };
-}
-
-function montar(mundo: Mundo, grafo: FlowGraph = grafoDaFatia()) {
-  const db: FlowAdminClient = {
-    reclamarVencidas: async () =>
-      [...mundo.execucoes.values()].filter(
-        (e) =>
-          ["pending", "running", "waiting"].includes(e.status) &&
-          e.next_eval_at !== null &&
-          Date.parse(e.next_eval_at) <= mundo.agora.getTime(),
-      ),
-    carregarGrafo: async () => grafo,
-    carregarFatos: async (): Promise<FatosDaExecucao> => ({
-      lead: {
-        id: LEAD,
-        title: "Loja do Gabriel",
-        status: "open",
-        stage_id: "etapa-1",
-        pipeline_id: "funil-1",
-        owner_user_id: mundo.atribuicoes.at(-1)?.userId ?? null,
-        value_cents: 150_000,
-        source: "meta_ads",
-        tags: mundo.tags,
-        custom_fields: {},
-        score: mundo.score,
-        score_band: null,
-        created_at: "2026-08-30T11:59:00.000Z",
-      },
-      contact: {
-        id: "contato-1",
-        name: "Gabriel",
-        phone_number: "+559481004900",
-        email: null,
-        tags: [],
-        is_blocked: false,
-      },
-      assigned_user:
-        mundo.atribuicoes.length === 0
-          ? null
-          : {
-              id: mundo.atribuicoes.at(-1)!.userId,
-              name: "Vendedor",
-              notification_phone: mundo.telefoneDoDono,
-            },
-    }),
-    esperaEmCurso: async (execId, nodeId) => mundo.esperas.get(`${execId}:${nodeId}`) ?? null,
-    registrarPasso: async (evento) => {
-      if (mundo.passos.some((p) => p.idempotency_key === evento.idempotency_key && p.execution_id === evento.execution_id)) {
-        return { inserted: false };
-      }
-      mundo.passos.push(evento);
-      if (evento.event_type === "espera_iniciada") {
-        mundo.esperas.set(`${evento.execution_id}:${evento.node_id}`, {
-          desde: mundo.agora,
-          ate: new Date(String(evento.payload.ate)),
-        });
-      }
-      return { inserted: true };
-    },
-    atualizarExecucao: async (id, _orgId, patch: FlowExecutionPatch) => {
-      const atual = mundo.execucoes.get(id)!;
-      mundo.execucoes.set(id, {
-        ...atual,
-        ...(patch.status !== undefined ? { status: patch.status } : {}),
-        ...(patch.current_node_id !== undefined ? { current_node_id: patch.current_node_id } : {}),
-        ...(patch.next_eval_at !== undefined ? { next_eval_at: patch.next_eval_at } : {}),
-        ...(patch.attempts !== undefined ? { attempts: patch.attempts } : {}),
-        ...(patch.steps_taken !== undefined ? { steps_taken: patch.steps_taken } : {}),
-        ...(patch.context !== undefined ? { context: patch.context } : {}),
-      });
-    },
-    nomeDoFluxo: async () => "Fluxo de prova",
-    abrirAvisoDeMorte: async (item) => {
-      mundo.avisos.push({ titulo: item.titulo, corpo: item.corpo });
-    },
-  };
-
-  const portas = (_exec: FlowExecutionRow): PortasDaExecucao => ({
-    crm: {
-      atribuirDono: async ({ leadId, userId }) => {
-        mundo.atribuicoes.push({ leadId, userId });
-      },
-      removerDono: async () => {},
-      adicionarTag: async ({ tag }) => {
-        mundo.tags.push(tag);
-      },
-      houveRespostaDoDono: async () => mundo.donoRespondeu,
-    },
-    roteamento: { elegiveis: async () => mundo.elegiveis },
-    canal: {
-      enviarTexto: async ({ telefone, texto }) => {
-        mundo.enviados.push({ telefone, texto });
-        return mundo.desfechoDoEnvio;
-      },
-    },
-    avisos: {
-      abrir: async ({ titulo, corpo }) => {
-        mundo.avisos.push({ titulo, corpo });
-      },
-    },
-  });
-
-  return { db, relogio: () => mundo.agora, portas };
-}
+// O mundo falso mora em `teste/mundo.ts`: `paralelo.test.ts` usa o MESMO.
+// Duas cópias divergiriam no primeiro conserto, e a que não o recebesse
+// seguiria verde provando um motor que não existe mais.
+type Mundo = MundoBase;
+const mundoNovo = () => { const m = mundoBaseNovo(); const e = execucaoNova(); m.execucoes.set(e.id, e); return m; };
+const montar = (mundo: Mundo, grafo: FlowGraph = grafoDaFatia()) => montarBase(mundo, grafo);
 
 // ──────────────────────────────── os testes ──────────────────────────────────
 

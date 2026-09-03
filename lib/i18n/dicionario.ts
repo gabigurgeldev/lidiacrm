@@ -6419,6 +6419,46 @@ export const DICIONARIO: Traducoes = {
   "Mínimo de 5 minutos — abaixo disso o relógio do sistema não distingue.":
     { es: "Mínimo de 5 minutos — por debajo de eso el reloj del sistema no distingue." },
   "Como registrar o fim": { es: "Cómo registrar el final" },
+  // ── os blocos do paralelo (fluxos) ──
+  "Aqui os caminhos que correm ao mesmo tempo voltam a ser um só. Aponte a bifurcação para este bloco.":
+    { es: "Aquí los caminos que corren al mismo tiempo vuelven a ser uno solo. Apunte la bifurcación a este bloque." },
+  "Lista a percorrer": { es: "Lista a recorrer" },
+  "O caminho da lista guardada por um bloco anterior — por exemplo vars.produtos.":
+    { es: "La ruta de la lista guardada por un bloque anterior — por ejemplo vars.produtos." },
+  "Repetir no máximo quantas vezes?": { es: "¿Repetir como máximo cuántas veces?" },
+  "O teto é obrigatório: é ele que garante que a repetição termina, mesmo se a lista vier maior do que o esperado.":
+    { es: "El tope es obligatorio: es lo que garantiza que la repetición termina, incluso si la lista viene más grande de lo esperado." },
+  "Esperar o quê?": { es: "¿Esperar qué?" },
+  "O cliente responder": { es: "Que el cliente responda" },
+  "O lead mudar de etapa": { es: "Que el lead cambie de etapa" },
+  "O lead ser ganho": { es: "Que el lead se gane" },
+  "O lead ser perdido": { es: "Que el lead se pierda" },
+  "Esperar por quantas horas?": { es: "¿Esperar cuántas horas?" },
+  "Vencido o prazo, o fluxo segue pela saída 'Venceu o prazo'. Toda espera precisa de prazo — sem ele o fluxo ficaria parado para sempre.":
+    { es: "Vencido el plazo, el flujo sigue por la salida 'Venció el plazo'. Toda espera necesita plazo — sin él el flujo quedaría detenido para siempre." },
+  "Qual fluxo chamar": { es: "Qué flujo llamar" },
+  "Novo caminho": { es: "Nuevo camino" },
+  "Como os caminhos se juntam": { es: "Cómo se juntan los caminos" },
+  "Esperar todos terminarem": { es: "Esperar a que todos terminen" },
+  "Seguir com o primeiro que terminar": { es: "Seguir con el primero que termine" },
+  "Quando o primeiro chegar, os outros caminhos são cancelados.":
+    { es: "Cuando llegue el primero, los demás caminos se cancelan." },
+  "O fluxo só continua depois que todos os caminhos chegarem ao reencontro.":
+    { es: "El flujo solo continúa después de que todos los caminos lleguen al reencuentro." },
+  "Bloco de reencontro": { es: "Bloque de reencuentro" },
+  "Escolha o bloco de reencontro": { es: "Elija el bloque de reencuentro" },
+  "Nenhum bloco de reencontro no fluxo ainda. Acrescente um pela paleta — é ele que junta os caminhos de volta.":
+    { es: "Todavía no hay bloque de reencuentro en el flujo. Agregue uno desde la paleta — es el que junta los caminos de vuelta." },
+  "Onde estes caminhos voltam a ser um só. Sem ele o fluxo não publica.":
+    { es: "Donde estos caminos vuelven a ser uno solo. Sin él el flujo no se publica." },
+  "Escolha o fluxo": { es: "Elija el flujo" },
+  "Nenhum outro fluxo publicado nesta organização. Publique o fluxo que você quer chamar primeiro.":
+    { es: "No hay otro flujo publicado en esta organización. Publique primero el flujo que quiere llamar." },
+  "Ele roda inteiro, e este fluxo continua quando ele terminar.":
+    { es: "Se ejecuta entero, y este flujo continúa cuando él termine." },
+  "Nome deste caminho": { es: "Nombre de este camino" },
+  "Remover este caminho": { es: "Quitar este camino" },
+  "Acrescentar caminho": { es: "Agregar camino" },
   "Aparece na tela de Execuções, para você separar o que deu certo do que não deu.":
     { es: "Aparece en la pantalla de Ejecuciones, para separar lo que salió bien de lo que no." },
   "Marcador": { es: "Etiqueta" },

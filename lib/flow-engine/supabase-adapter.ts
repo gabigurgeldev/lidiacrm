@@ -17,12 +17,14 @@ import { ensureConversation, sessaoProntaParaEnvio } from "@/lib/automation/star
 import { logger } from "@/lib/logger";
 import { loadEligibleAttendants } from "@/lib/routing/eligibles";
 
+import { EVENTO_DE_SUBFLUXO } from "./engine";
 import type {
   FlowAdminClient,
   FlowExecutionPatch,
   FlowExecutionRow,
   PortasDaExecucao,
 } from "./engine";
+import type { EncontroRow, FrenteNova, FrenteRow } from "./frentes";
 import type { DesfechoDeEnvio, EsperaEmCurso, FatosDaExecucao } from "./types";
 
 /** Marca do contato criado só para avisar alguém da equipe. */
@@ -72,7 +74,14 @@ export function criarFlowAdminClient(admin: SupabaseClient): FlowAdminClient {
       const linha = data as
         | { event_type: string; payload: Record<string, unknown>; created_at: string }
         | null;
-      if (linha === null || linha.event_type !== "espera_iniciada") return null;
+      // Duas formas de esperar, e as duas contam: `espera_iniciada` é a espera
+      // por RELÓGIO (`logic.wait`), `espera_por_evento` é a espera por algo
+      // ACONTECER (`logic.await_event`). Reconhecer só a primeira faria o bloco
+      // de espera por evento nunca saber que já esperou — ele reagendaria um
+      // prazo novo a cada volta, para sempre, e a saída "Aconteceu" nunca seria
+      // percorrida.
+      const ESPERAS = ["espera_iniciada", "espera_por_evento"];
+      if (linha === null || !ESPERAS.includes(linha.event_type)) return null;
       const ate = typeof linha.payload.ate === "string" ? Date.parse(linha.payload.ate) : NaN;
       if (Number.isNaN(ate)) return null;
       return { desde: new Date(linha.created_at), ate: new Date(ate) } satisfies EsperaEmCurso;
@@ -114,7 +123,267 @@ export function criarFlowAdminClient(admin: SupabaseClient): FlowAdminClient {
         refId: item.refId,
       });
     },
+
+    // ─────────────────────── o que o paralelo acrescenta ───────────────────────
+
+    async frentesProntas(exec) {
+      const { data, error } = await admin
+        .from("flow_execution_frames")
+        .select("*")
+        .eq("organization_id", exec.organization_id)
+        .eq("execution_id", exec.id)
+        // Viva E vencida. Filtrar so por 'ready' deixaria toda frente que
+        // dormiu num `wait` presa para sempre: o relogio dela vence, o claim
+        // traz a execucao de volta, e nada aqui a devolveria para o motor.
+        .in("status", ["ready", "waiting"])
+        .lte("next_eval_at", new Date().toISOString())
+        .order("created_at", { ascending: true });
+      if (error) throw new Error(error.message);
+      const prontas = (data ?? []) as FrenteRow[];
+      if (prontas.length > 0) return prontas;
+
+      // Nenhuma frente PRONTA. Ou a execução tem frentes dormindo — e aí não há
+      // o que caminhar —, ou ela é anterior a esta tabela e nunca teve nenhuma.
+      const { count, error: erroConta } = await admin
+        .from("flow_execution_frames")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", exec.organization_id)
+        .eq("execution_id", exec.id);
+      if (erroConta) throw new Error(erroConta.message);
+      if ((count ?? 0) > 0) return [];
+
+      // ⚠️ A AUTO-CURA DA RAIZ é o que faz o paralelo entrar sem backfill.
+      //
+      // Toda execução que já estava em voo quando esta tabela nasceu não tem
+      // frente nenhuma, e o estado dela é exatamente `current_node_id` +
+      // `steps_taken`. Sem esta cura, ou toda execução viva morreria no primeiro
+      // tick pós-deploy, ou o self-hoster teria de rodar um backfill à mão — e a
+      // doutrina de packaging proíbe uma atualização que peça isso.
+      const raiz = await criarFrentes(admin, [
+        {
+          organization_id: exec.organization_id,
+          execution_id: exec.id,
+          parent_frame_id: null,
+          node_id: exec.current_node_id,
+          status: "ready",
+          next_eval_at: new Date().toISOString(),
+          steps_taken: exec.steps_taken,
+          vars: {},
+          fork_node_id: null,
+        },
+      ]);
+      return raiz;
+    },
+
+    async criarFrentes(frentes) {
+      return criarFrentes(admin, frentes);
+    },
+
+    async atualizarFrente(id, orgId, patch) {
+      const { error } = await admin
+        .from("flow_execution_frames")
+        .update({ ...patch, updated_at: patch.updated_at ?? new Date().toISOString() })
+        .eq("id", id)
+        .eq("organization_id", orgId);
+      if (error) throw new Error(error.message);
+    },
+
+    async frentesVivas(executionId, orgId) {
+      const { count, error } = await admin
+        .from("flow_execution_frames")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", orgId)
+        .eq("execution_id", executionId)
+        .in("status", ["ready", "waiting"]);
+      if (error) throw new Error(error.message);
+      return count ?? 0;
+    },
+
+    async relerFrente(id, orgId) {
+      const { data, error } = await admin
+        .from("flow_execution_frames")
+        .select("*")
+        .eq("organization_id", orgId)
+        .eq("id", id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return (data as FrenteRow | null) ?? null;
+    },
+
+    async relogioDasFrentesVivas(executionId, orgId) {
+      const { data, error } = await admin
+        .from("flow_execution_frames")
+        .select("next_eval_at")
+        .eq("organization_id", orgId)
+        .eq("execution_id", executionId)
+        .in("status", ["ready", "waiting"])
+        .not("next_eval_at", "is", null)
+        .order("next_eval_at", { ascending: true })
+        .limit(1);
+      if (error) throw new Error(error.message);
+      return ((data ?? [])[0] as { next_eval_at: string } | undefined)?.next_eval_at ?? null;
+    },
+
+    async abrirEncontro(encontro) {
+      // `onConflict` no par (execution_id, fork_node_id) é o que torna o fork
+      // idempotente: o motor pode revisitar o nó de fork num retry, e o encontro
+      // não pode nascer duas vezes nem ter a contagem zerada por isso.
+      const { error } = await admin
+        .from("flow_execution_joins")
+        .upsert(encontro, { onConflict: "execution_id,fork_node_id", ignoreDuplicates: true });
+      if (error) throw new Error(error.message);
+    },
+
+    async chegarNoEncontroSePreciso(input) {
+      const { data, error } = await admin.rpc("fn_flow_join_arrive", {
+        p_org: input.organization_id,
+        p_exec: input.execution_id,
+        p_fork: input.fork_node_id,
+        p_node: input.node_id,
+      });
+      if (error) throw new Error(error.message);
+      const linhas = (data ?? []) as EncontroRow[];
+      // Zero linhas = a frente não está no nó de encontro daquele fork. É o caso
+      // comum, e é por isso que a pergunta e a contagem são a mesma viagem.
+      return linhas[0] ?? null;
+    },
+
+    async resolverEncontro(input) {
+      const { error } = await admin
+        .from("flow_execution_joins")
+        .update({ resolvido_em: input.em })
+        .eq("organization_id", input.organization_id)
+        .eq("execution_id", input.execution_id)
+        .eq("fork_node_id", input.fork_node_id)
+        // Só grava se ainda era nulo: quem resolveu primeiro é quem vale, e um
+        // retry não pode reescrever o instante da decisão.
+        .is("resolvido_em", null);
+      if (error) throw new Error(error.message);
+    },
+
+    async cancelarFrentesIrmas(input) {
+      const { error } = await admin
+        .from("flow_execution_frames")
+        .update({
+          status: "cancelled",
+          // Cancelada é terminal, e terminal não tem relógio — é o que o CHECK
+          // `flow_execution_frames_clock_check` cobra. Deixar o relógio faria a
+          // perdedora ser reclamada de novo, para andar depois de ter perdido.
+          next_eval_at: null,
+          claimed_until: null,
+          awaiting_event_type: null,
+          awaiting_match: null,
+          wait_deadline: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("organization_id", input.organization_id)
+        .eq("execution_id", input.execution_id)
+        .eq("fork_node_id", input.fork_node_id)
+        .neq("id", input.excetoFrenteId)
+        .in("status", ["ready", "waiting"]);
+      if (error) throw new Error(error.message);
+    },
+
+    async carregarGlobais(orgId) {
+      const { data } = await admin
+        .from("organizations")
+        .select("settings")
+        .eq("id", orgId)
+        .maybeSingle();
+      const settings = (data as { settings: Record<string, unknown> | null } | null)?.settings;
+      const globais = (settings ?? {})["flow_globals"];
+      // Objeto ou nada. Um `flow_globals` que alguém gravou como string ou lista
+      // viraria `{{global.x}}` indefinido em silêncio; devolver `{}` é o mesmo
+      // resultado, mas sem fingir que leu algo.
+      return globais !== null && typeof globais === "object" && !Array.isArray(globais)
+        ? (globais as Record<string, unknown>)
+        : {};
+    },
+
+    async avisarQueSubFluxoTerminou(input) {
+      // Vai pelo `event_log` como todo o resto: trigger do Postgres não faz
+      // HTTP e não acorda ninguém, então quem reage a algo neste produto é
+      // sempre um handler do barramento. O acordador escuta este tipo.
+      const { error } = await admin.from("event_log").insert({
+        organization_id: input.organization_id,
+        event_type: EVENTO_DE_SUBFLUXO,
+        entity_kind: "flow_execution",
+        entity_id: input.execution_id,
+        payload: {
+          // `execution_id` é o que o `match` da frente do pai compara — é assim
+          // que o aviso chega a QUEM chamou, e não a toda frente que por acaso
+          // espera um sub-fluxo.
+          execution_id: input.execution_id,
+          parent_execution_id: input.parent_execution_id,
+          outcome: input.outcome,
+          output: input.output,
+        },
+      });
+      if (error) throw new Error(error.message);
+    },
+
+    async chamarSubFluxo(input) {
+      // A versão PUBLICADA é a que roda. Chamar um fluxo em rascunho faria o
+      // sub-fluxo mudar debaixo de quem o chama, a cada salvamento do editor.
+      const { data: fluxo } = await admin
+        .from("flows")
+        .select("id, published_version_id")
+        .eq("organization_id", input.organization_id)
+        .eq("id", input.flow_id)
+        .maybeSingle();
+      const versao = (fluxo as { published_version_id: string | null } | null)?.published_version_id;
+      if (!versao) return null;
+
+      const { data: grafo } = await admin
+        .from("flow_versions")
+        .select("graph")
+        .eq("organization_id", input.organization_id)
+        .eq("id", versao)
+        .maybeSingle();
+      const nos = ((grafo as { graph: { nodes?: { id: string; type: string }[] } } | null)?.graph
+        ?.nodes ?? []) as { id: string; type: string }[];
+      const entrada = nos.find((n) => n.type.startsWith("trigger."));
+      if (entrada === undefined) return null;
+
+      const agora = new Date().toISOString();
+      const { data: filha, error } = await admin
+        .from("flow_executions")
+        .insert({
+          organization_id: input.organization_id,
+          flow_id: input.flow_id,
+          version_id: versao,
+          status: "pending",
+          current_node_id: entrada.id,
+          next_eval_at: agora,
+          attempts: 0,
+          steps_taken: 0,
+          context: {},
+          input: input.input,
+          output: {},
+          parent_execution_id: input.parent_execution_id,
+          parent_frame_id: input.parent_frame_id,
+          lead_id: input.lead_id,
+          contact_id: input.contact_id,
+          conversation_id: input.conversation_id,
+          started_at: agora,
+        })
+        .select("id")
+        .single();
+      if (error) throw new Error(error.message);
+      return { execution_id: (filha as { id: string }).id };
+    },
   };
+}
+
+/** O INSERT das frentes, num lugar so: a auto-cura da raiz usa o mesmo. */
+async function criarFrentes(
+  admin: SupabaseClient,
+  frentes: FrenteNova[],
+): Promise<FrenteRow[]> {
+  if (frentes.length === 0) return [];
+  const { data, error } = await admin.from("flow_execution_frames").insert(frentes).select("*");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as FrenteRow[];
 }
 
 // ───────────────────────────────── fatos ─────────────────────────────────────

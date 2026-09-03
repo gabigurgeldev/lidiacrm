@@ -198,6 +198,7 @@ beforeAll(() => {
               'auth-rls'
             );
         end if;
+
       end loop;
     end
     $seed$;
@@ -236,6 +237,16 @@ export const TABLES = [
   // lia e escrevia. É o modo de falha que o aviso acima descreve, encontrado vivo.
   "org_guardrail_layers",
   "push_subscriptions",
+  // ⚠️ `flow_executions`, `flow_execution_frames` e `flow_execution_joins`
+  // (migration 0207) NÃO entram aqui, e a ausência é deliberada — pelo mesmo
+  // motivo de `webhook_lead_captures` acima. As policies delas exigem
+  // `manager`, e o usuário semeado neste arquivo é `agent`: o controle positivo
+  // falharia por ACERTO, e a "correção" natural seria afrouxar a policy para
+  // caber no molde. Medido: as três reprovaram aqui exatamente assim antes de
+  // ganharem arquivo próprio. A prova delas vive em
+  // `tests/invariants/motor-de-fluxos-rls.test.ts`, que mede as duas direções,
+  // o pedido da tabela INTEIRA, o gate de papel (o `agent` que não lê) e a
+  // escrita cruzada.
   // ⚠️ `webhook_lead_captures` (migration 0174) NÃO entra nesta lista, e a
   // ausência é deliberada: a policy dela exige `manager`, e o usuário semeado
   // aqui é `agent` — o controle positivo falharia por ACERTO, e a "correção"

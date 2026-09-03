@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/hooks/i18n/useT";
 import { usePaletaDeNos, type NoDaPaleta } from "@/hooks/flows/useFlowNodes";
-import { useFluxo, usePublicarFluxo, useSalvarRascunho } from "@/hooks/flows/useFlows";
+import { useFluxo, useFluxos, usePublicarFluxo, useSalvarRascunho } from "@/hooks/flows/useFlows";
 import type { ErroDeGrafo, FlowGraph } from "@/lib/flow-engine/graph-schema";
 import { configExemploDoTipo } from "@/lib/flow-engine/node-examples";
 import { garantirNosRegistrados } from "@/lib/flow-engine/register-all";
@@ -125,6 +125,36 @@ function Quadro({ flowId }: { flowId: string }) {
   const publicar = usePublicarFluxo(flowId);
 
   const [nos, setNos, aoMudarNos] = useNodesState<Node>([]);
+
+  // ── o que os seletores do painel precisam saber ──
+  //
+  // ⚠️ Estas duas listas existem porque os campos correspondentes eram texto
+  // livre, e texto livre ali é impossível de acertar: o `encontro` pedia o `id`
+  // de um bloco que a tela nunca mostra (a pessoa vê "Reencontro", não `junta`),
+  // e o `flow.call` pedia um UUID colado à mão. Os dois publicavam e falhavam
+  // depois, com a causa longe de quem montou.
+  const blocosDeReencontro = useMemo(
+    () =>
+      nos
+        .filter((n) => (n.data as DadosDoNo).tipo === "logic.merge")
+        .map((n) => ({ id: n.id, rotulo: (n.data as DadosDoNo).rotulo })),
+    [nos],
+  );
+
+  // O fluxo ATUAL sai da lista: um fluxo que chama a si mesmo é recursão que a
+  // validação de publicação barra depois — melhor não oferecer.
+  const { data: todosOsFluxos } = useFluxos();
+  const fluxosChamaveis = useMemo(
+    () =>
+      (todosOsFluxos ?? [])
+        .filter((f) => f.id !== flowId)
+        .map((f) => ({
+          id: f.id,
+          nome: f.name,
+          publicado: f.active_version_id !== null,
+        })),
+    [todosOsFluxos, flowId],
+  );
   const [arestas, setArestas, aoMudarArestas] = useEdgesState<Edge>([]);
   const [selecionado, setSelecionado] = useState<string | null>(null);
   const [erros, setErros] = useState<ErroDeGrafo[]>([]);
@@ -394,6 +424,8 @@ function Quadro({ flowId }: { flowId: string }) {
               setSelecionado(null);
             }}
             podeApagar={(noSelecionado.data as DadosDoNo).categoria !== "trigger"}
+            blocosDeReencontro={blocosDeReencontro}
+            fluxosChamaveis={fluxosChamaveis}
           />
         )}
       </div>

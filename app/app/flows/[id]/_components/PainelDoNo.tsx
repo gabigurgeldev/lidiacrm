@@ -13,6 +13,22 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 import { OPERADORES, operadorPedeValor, type Operador } from "@/lib/flow-engine/condicoes";
+import { EVENTOS_QUE_ACORDAM } from "@/lib/flow-engine/nodes/paralelo";
+
+/**
+ * O nome humano de cada evento que o bloco de espera oferece.
+ *
+ * Só os RÓTULOS moram aqui; a lista de valores vem do registry. É a divisão que
+ * `nodeIcons.ts` já usa: o backend decide o que existe, o cliente decide como
+ * chamar — e um evento novo aparece na tela mesmo que alguém esqueça deste mapa
+ * (cai no próprio identificador, feio mas funcional).
+ */
+const ROTULO_DO_EVENTO: Record<string, string> = {
+  "message.received": "O cliente responder",
+  "lead.stage_changed": "O lead mudar de etapa",
+  "lead.won": "O lead ser ganho",
+  "lead.lost": "O lead ser perdido",
+};
 
 /**
  * Os ajustes de cada bloco.
@@ -23,6 +39,19 @@ import { OPERADORES, operadorPedeValor, type Operador } from "@/lib/flow-engine/
  * árvore de JSON. Quem monta o fluxo não conhece o schema — conhece o funil.
  */
 
+/** Um bloco do MESMO fluxo, oferecido como alvo de reencontro. */
+export interface BlocoAlcancavel {
+  id: string;
+  rotulo: string;
+}
+
+/** Um fluxo da organização, oferecido para "chamar outro fluxo". */
+export interface FluxoChamavel {
+  id: string;
+  nome: string;
+  publicado: boolean;
+}
+
 interface Props {
   tipo: string;
   rotulo: string;
@@ -31,6 +60,16 @@ interface Props {
   aoMudarConfig: (config: Record<string, unknown>) => void;
   aoApagar: () => void;
   podeApagar: boolean;
+  /**
+   * Os blocos de reencontro DESTE fluxo.
+   *
+   * ⚠️ Sem isto o campo era texto livre pedindo o `id` do bloco — e a pessoa vê
+   * "Reencontro" no quadro, não `junta`. Ela teria de descobrir um identificador
+   * que a tela nunca mostra, para um campo sem o qual o fluxo não publica.
+   */
+  blocosDeReencontro?: readonly BlocoAlcancavel[];
+  /** Os fluxos da organização, para o bloco "Chamar outro fluxo". */
+  fluxosChamaveis?: readonly FluxoChamavel[];
 }
 
 export function PainelDoNo(props: Props) {
@@ -72,7 +111,7 @@ export function PainelDoNo(props: Props) {
   );
 }
 
-function Ajustes({ tipo, config, aoMudarConfig }: Props) {
+function Ajustes({ tipo, config, aoMudarConfig, blocosDeReencontro, fluxosChamaveis }: Props) {
   const t = useT();
   const mudar = (patch: Record<string, unknown>) => aoMudarConfig({ ...config, ...patch });
 
@@ -114,6 +153,148 @@ function Ajustes({ tipo, config, aoMudarConfig }: Props) {
           <Dica texto={t("Aparece na tela de Execuções, para você separar o que deu certo do que não deu.")} />
         </Campo>
       );
+
+    case "logic.fork":
+      return (
+        <AjustesDaBifurcacao
+          config={config}
+          aoMudarConfig={aoMudarConfig}
+          blocosDeReencontro={blocosDeReencontro ?? []}
+        />
+      );
+
+    case "logic.merge":
+      return (
+        <Aviso
+          texto={t(
+            "Aqui os caminhos que correm ao mesmo tempo voltam a ser um só. Aponte a bifurcação para este bloco.",
+          )}
+        />
+      );
+
+    case "logic.loop": {
+      return (
+        <>
+          <Campo rotulo={t("Lista a percorrer")}>
+            <Input
+              value={String(config.lista ?? "")}
+              maxLength={120}
+              placeholder="vars.itens"
+              onChange={(e) => mudar({ lista: e.target.value })}
+              data-testid="campo-lista-do-laco"
+            />
+            <Dica
+              texto={t(
+                "O caminho da lista guardada por um bloco anterior — por exemplo vars.produtos.",
+              )}
+            />
+          </Campo>
+          <Campo rotulo={t("Repetir no máximo quantas vezes?")}>
+            <Input
+              type="number"
+              min={1}
+              max={100}
+              value={Number(config.max ?? 10)}
+              onChange={(e) =>
+                mudar({ max: Math.min(100, Math.max(1, Number(e.target.value))) })
+              }
+              data-testid="campo-teto-do-laco"
+            />
+            <Dica
+              texto={t(
+                "O teto é obrigatório: é ele que garante que a repetição termina, mesmo se a lista vier maior do que o esperado.",
+              )}
+            />
+          </Campo>
+        </>
+      );
+    }
+
+    case "logic.await_event": {
+      const horas = Math.round(Number(config.prazo_ms ?? 3_600_000) / 3_600_000);
+      return (
+        <>
+          <Campo rotulo={t("Esperar o quê?")}>
+            <Select
+              value={String(config.evento ?? "message.received")}
+              onValueChange={(v) => mudar({ evento: v })}
+            >
+              <SelectTrigger data-testid="campo-evento-esperado">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {/*
+                  As opções saem de `EVENTOS_QUE_ACORDAM`, a mesma lista que o
+                  handler do barramento escuta. Repetir os valores aqui à mão
+                  criaria a divergência mais silenciosa possível: a pessoa
+                  escolheria a opção, o fluxo dormiria, o evento aconteceria — e
+                  ninguém acordaria, porque o handler nunca soube dele.
+                */}
+                {EVENTOS_QUE_ACORDAM.map((evento) => (
+                  <SelectItem key={evento} value={evento}>
+                    {t(ROTULO_DO_EVENTO[evento] ?? evento)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Campo>
+          <Campo rotulo={t("Esperar por quantas horas?")}>
+            <Input
+              type="number"
+              min={1}
+              max={720}
+              value={horas}
+              onChange={(e) =>
+                mudar({
+                  prazo_ms: Math.min(720, Math.max(1, Number(e.target.value))) * 3_600_000,
+                })
+              }
+              data-testid="campo-prazo-do-evento"
+            />
+            <Dica
+              texto={t(
+                "Vencido o prazo, o fluxo segue pela saída 'Venceu o prazo'. Toda espera precisa de prazo — sem ele o fluxo ficaria parado para sempre.",
+              )}
+            />
+          </Campo>
+        </>
+      );
+    }
+
+    case "flow.call": {
+      // ⚠️ Só os PUBLICADOS entram na lista. Um fluxo em rascunho não roda, e
+      // oferecê-lo aqui produziria um bloco que publica e falha na primeira
+      // execução — com a causa a dois cliques de distância de quem montou.
+      const chamaveis = (fluxosChamaveis ?? []).filter((f) => f.publicado);
+      return (
+        <Campo rotulo={t("Qual fluxo chamar")}>
+          {chamaveis.length === 0 ? (
+            <p className="text-xs text-muted-foreground" data-testid="sem-fluxo-chamavel">
+              {t(
+                "Nenhum outro fluxo publicado nesta organização. Publique o fluxo que você quer chamar primeiro.",
+              )}
+            </p>
+          ) : (
+            <Select
+              value={String(config.fluxo_id ?? "")}
+              onValueChange={(v) => mudar({ fluxo_id: v })}
+            >
+              <SelectTrigger data-testid="campo-fluxo-chamado">
+                <SelectValue placeholder={t("Escolha o fluxo")} />
+              </SelectTrigger>
+              <SelectContent>
+                {chamaveis.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Dica texto={t("Ele roda inteiro, e este fluxo continua quando ele terminar.")} />
+        </Campo>
+      );
+    }
 
     case "crm.add_tag":
       return (
@@ -264,6 +445,139 @@ function Ajustes({ tipo, config, aoMudarConfig }: Props) {
     default:
       return <Aviso texto={t("Este bloco não tem ajustes.")} />;
   }
+}
+
+
+// ────────────────────────────── a bifurcação ─────────────────────────────────
+
+interface RamoDoFork {
+  id: string;
+  label: string;
+}
+
+/**
+ * Os ajustes de "Fazer ao mesmo tempo".
+ *
+ * O campo que parece burocracia e não é: **o reencontro**. Ele é declarado, e
+ * não descoberto pelo sistema, porque adivinhar onde os caminhos se juntam
+ * acerta no desenho simples e erra em silêncio assim que houver duas
+ * bifurcações uma dentro da outra — e errar em silêncio aqui significa um fluxo
+ * que se junta no lugar errado sem nada acusar.
+ */
+function AjustesDaBifurcacao({
+  config,
+  aoMudarConfig,
+  blocosDeReencontro,
+}: {
+  config: Record<string, unknown>;
+  aoMudarConfig: (c: Record<string, unknown>) => void;
+  blocosDeReencontro: readonly BlocoAlcancavel[];
+}) {
+  const t = useT();
+  const ramos = (Array.isArray(config.ramos) ? config.ramos : []) as RamoDoFork[];
+
+  const trocar = (novos: RamoDoFork[]) => aoMudarConfig({ ...config, ramos: novos });
+
+  const acrescentar = () => {
+    // O id nasce uma vez e nunca muda: é ele que a ligação no quadro guarda.
+    // Derivá-lo do rótulo faria renomear o caminho soltar a linha.
+    trocar([...ramos, { id: `c${Date.now().toString(36)}`, label: t("Novo caminho") }]);
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Campo rotulo={t("Como os caminhos se juntam")}>
+        <Select
+          value={String(config.modo ?? "todas")}
+          onValueChange={(v) => aoMudarConfig({ ...config, modo: v })}
+        >
+          <SelectTrigger data-testid="campo-modo-do-fork">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">{t("Esperar todos terminarem")}</SelectItem>
+            <SelectItem value="primeira">{t("Seguir com o primeiro que terminar")}</SelectItem>
+          </SelectContent>
+        </Select>
+        <Dica
+          texto={
+            String(config.modo ?? "todas") === "primeira"
+              ? t("Quando o primeiro chegar, os outros caminhos são cancelados.")
+              : t("O fluxo só continua depois que todos os caminhos chegarem ao reencontro.")
+          }
+        />
+      </Campo>
+
+      <Campo rotulo={t("Bloco de reencontro")}>
+        {blocosDeReencontro.length === 0 ? (
+          // O caso que o campo de texto escondia: não há para onde apontar
+          // ainda. Dizer isso é melhor que oferecer uma caixa vazia onde a
+          // pessoa digita um nome que não existe e só descobre ao publicar.
+          <p className="text-xs text-muted-foreground" data-testid="sem-bloco-de-reencontro">
+            {t(
+              "Nenhum bloco de reencontro no fluxo ainda. Acrescente um pela paleta — é ele que junta os caminhos de volta.",
+            )}
+          </p>
+        ) : (
+          <Select
+            value={String(config.encontro ?? "")}
+            onValueChange={(v) => aoMudarConfig({ ...config, encontro: v })}
+          >
+            <SelectTrigger data-testid="campo-encontro-do-fork">
+              <SelectValue placeholder={t("Escolha o bloco de reencontro")} />
+            </SelectTrigger>
+            <SelectContent>
+              {blocosDeReencontro.map((bloco) => (
+                <SelectItem key={bloco.id} value={bloco.id}>
+                  {bloco.rotulo}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Dica
+          texto={t(
+            "Onde estes caminhos voltam a ser um só. Sem ele o fluxo não publica.",
+          )}
+        />
+      </Campo>
+
+      {ramos.map((ramo, i) => (
+        <div key={ramo.id} className="rounded-md border p-3" data-testid={`ramo-${ramo.id}`}>
+          <Campo rotulo={t("Nome deste caminho")}>
+            <Input
+              value={ramo.label}
+              maxLength={60}
+              onChange={(e) => {
+                const novos = [...ramos];
+                novos[i] = { ...ramo, label: e.target.value };
+                trocar(novos);
+              }}
+              data-testid={`rotulo-do-ramo-${ramo.id}`}
+            />
+          </Campo>
+          {ramos.length > 2 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-2"
+              onClick={() => trocar(ramos.filter((r) => r.id !== ramo.id))}
+              data-testid={`apagar-ramo-${ramo.id}`}
+            >
+              {t("Remover este caminho")}
+            </Button>
+          )}
+        </div>
+      ))}
+
+      {ramos.length < 6 && (
+        <Button type="button" variant="outline" size="sm" onClick={acrescentar} data-testid="add-ramo">
+          {t("Acrescentar caminho")}
+        </Button>
+      )}
+    </div>
+  );
 }
 
 // ─────────────────────────────── a decisão ───────────────────────────────────

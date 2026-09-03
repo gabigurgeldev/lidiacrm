@@ -68,7 +68,59 @@ export type NodeExecutionResult =
   /** Falha REPETÍVEL: o motor tenta de novo com backoff até `max_attempts`. */
   | { kind: "fail"; error: string }
   /** Falha DEFINITIVA: não adianta repetir. Vai direto para `dead`. */
-  | { kind: "dead"; reason: string };
+  | { kind: "dead"; reason: string }
+  /**
+   * Abre N frentes paralelas, uma por ramo, e marca onde elas se reencontram.
+   *
+   * `modo: "todas"` é o AND — o merge só segue quando todas chegarem.
+   * `modo: "primeira"` é a corrida: a primeira frente a alcançar o merge vence e
+   * as irmãs são canceladas. É com ele que se escreve "espera o cliente
+   * responder OU o pagamento cair OU 24h passarem".
+   *
+   * O `join_node_id` é declarado pelo FORK, não descoberto pelo motor: um merge
+   * inferido por alcançabilidade acertaria no grafo simples e erraria em
+   * qualquer grafo com dois forks aninhados, e erraria em silêncio.
+   */
+  | { kind: "fork"; branch_ids: string[]; modo: "todas" | "primeira"; join_node_id: string }
+  /**
+   * Dorme até um EVENTO chegar — não até uma hora. Quem acorda é o matcher do
+   * `event_log`, comparando `event_type` e `match`.
+   *
+   * `timeout_at` não é opcional de propósito: uma espera por evento sem prazo é
+   * uma execução que nada no sistema jamais coleta, e o sintoma disso é um fluxo
+   * parado para sempre sem uma linha de erro em lugar nenhum. Vencido o prazo, a
+   * frente segue por `branch_on_timeout`.
+   */
+  | {
+      kind: "await_event";
+      event_type: string;
+      match?: Record<string, unknown>;
+      timeout_at: Date;
+      branch_on_timeout: string;
+    }
+  /**
+   * Chama outro fluxo como função e espera o resultado.
+   *
+   * A frente que chamou fica parada até a execução filha concluir; o `output`
+   * dela volta para o escopo de quem chamou. Ciclo (A chama B, B chama A) é
+   * barrado na PUBLICAÇÃO, não aqui — em runtime já seria tarde.
+   */
+  | { kind: "call_subflow"; flow_id: string; input: Record<string, unknown>; branch_id: string }
+  /**
+   * Repete o corpo uma vez por item, e sai pelo `done_branch_id` no fim.
+   *
+   * `max` é obrigatório e é a razão de o laço poder existir: a validação de
+   * publicação proibia QUALQUER ciclo justamente porque um ciclo sem teto queima
+   * `steps_taken` até o limite da execução. Com teto declarado, o ciclo passa a
+   * ter fim conhecido antes de começar.
+   */
+  | {
+      kind: "loop";
+      items: unknown[];
+      body_branch_id: string;
+      done_branch_id: string;
+      max: number;
+    };
 
 // ──────────────────────────── fatos e variáveis ──────────────────────────────
 
@@ -113,6 +165,24 @@ export interface FatosDaExecucao {
   } | null;
 }
 
+/** O que a frente sabe de si mesma. `null` fora de laço. */
+export interface EscopoDaFrente {
+  /**
+   * Variáveis LOCAIS desta frente.
+   *
+   * É o que impede dois ramos paralelos de se sobrescreverem: `advance` com
+   * `vars` fora de um fork grava no `vars` compartilhado da execução; dentro de
+   * um fork, grava aqui. Sem essa separação, dois ramos que gravassem a mesma
+   * chave produziriam o valor de quem terminou por último — e o fluxo seguiria
+   * entregando o resultado errado, sem erro nenhum.
+   */
+  vars: Record<string, unknown>;
+  /** Posição no laço, base 0. `null` quando a frente não está num laço. */
+  loop_index: number | null;
+  /** Quantos itens o laço tem ao todo. `null` fora de laço. */
+  loop_total: number | null;
+}
+
 /** Escopo visível a `{{...}}`. Montado pelo motor; o nó só lê. */
 export interface EscopoDeVariaveis {
   lead: FatosDaExecucao["lead"];
@@ -121,6 +191,26 @@ export interface EscopoDeVariaveis {
   /** `flow_executions.context` — o que os nós anteriores gravaram. */
   vars: Record<string, unknown>;
   execution: { id: string; started_at: string; steps_taken: number };
+  /**
+   * O PAYLOAD DO EVENTO — o que armou a execução, ou o que acordou esta frente.
+   *
+   * ⚠️ Isto não existia, e a ausência tornava metade dos gatilhos inúteis.
+   * `trigger-matcher.ts` gravava `context: {}` literal: do evento sobreviviam
+   * só `lead_id`, `contact_id` e a linhagem. Um gatilho de "mensagem recebida"
+   * não conseguia ler o TEXTO da mensagem; um de webhook não conseguia ler nada
+   * do corpo que o terceiro mandou.
+   *
+   * `{}` quando a execução não nasceu de evento (chamada manual, sub-fluxo).
+   */
+  event: Record<string, unknown>;
+  /** O que é desta frente, não da execução inteira. */
+  frame: EscopoDaFrente;
+  /**
+   * Variáveis da ORGANIZAÇÃO, iguais em todo fluxo dela
+   * (`organizations.settings.flow_globals`). Trocar o número do suporte num
+   * lugar só, em vez de em trinta fluxos.
+   */
+  global: Record<string, unknown>;
 }
 
 // ──────────────────────────────── as portas ──────────────────────────────────

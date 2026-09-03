@@ -1846,3 +1846,66 @@ ou ontem, e fora disso imprime `dd/MM/yyyy` — idêntico nos dois idiomas.
 
 **O que segue fora:** e-mail e o PDF de LGPD, com o motivo escrito em
 `tests/unit/i18n-a-data-segue-o-idioma.test.ts`.
+
+## J24 — Dá para montar um fluxo com caminhos paralelos? (2026-09-02)
+
+Os blocos do paralelo — bifurcar, reencontrar, repetir, esperar acontecer,
+chamar outro fluxo — entraram com motor, schema e validação provados. O que esta
+jornada mede é a única coisa que nenhuma daquelas suítes mede: **se uma pessoa
+consegue montar o fluxo**.
+
+O modo de falha que ela existe para pegar não dá erro nenhum. Um bloco sem
+formulário aparece na paleta, entra no canvas e parece pronto; a recusa só chega
+na publicação, e sem campo onde consertar. Passa em todo teste de backend e não
+serve para nada.
+
+| Caso | O que a pessoa faz | Sinal esperado | Estado |
+|---|---|---|---|
+| J24.1 | Abre a paleta do editor | os cinco blocos aparecem | NÃO MEDIDO (spec escrita) |
+| J24.2 | Clica em cada bloco | o formulário abre com os campos obrigatórios | **MEDIDO** — `PainelDoNo.paralelo.test.tsx`, 9 casos |
+| J24.3 | Acrescenta um caminho na bifurcação | o caminho novo nasce com id próprio | **MEDIDO** — id não derivado do rótulo |
+| J24.4 | Escolhe como os caminhos se juntam | "esperar todos" / "seguir com o primeiro" | **MEDIDO** |
+| J24.5 | Configura o laço | teto obrigatório, preso entre 1 e 100 na tela | **MEDIDO** |
+| J24.6 | Configura a espera | prazo em HORAS, e todo evento com rótulo humano | **MEDIDO** |
+| J24.7 | Publica com o reencontro apontando para o vazio | recusa legível, falando de reencontro | NÃO MEDIDO (spec escrita) |
+| J24.8 | Publica o fluxo completo | publica | NÃO MEDIDO |
+
+### O que ficou NÃO MEDIDO, e por quê
+
+`tests/e2e/flow-blocos-do-paralelo.spec.ts` existe e está declarada em
+`SPECS_PARTE_2`, mas **não foi executada**: o stack local do Supabase não sobe
+nesta máquina. Os contêineres `supabase_pg_meta` e `supabase_studio` morrem com
+`invalid ELF header` ao carregar o libc, e é o mesmo defeito de arquitetura do
+Docker local que faz `pgvector/pgvector:pg15` responder `exec format error`
+enquanto `pgvector/pgvector:pg16` roda normalmente. Medido nos dois casos com
+repull limpo e `--platform linux/amd64` explícito.
+
+Consequência a registrar sem enfeite: **o piso pg15 também não foi exercitado
+localmente** — `pnpm test:db` rodou em pg16 (143 arquivos, 1141 casos, verde).
+Quem fecha as duas lacunas é o CI, que usa pg15 no job `invariants` e sobe o
+stack no job `e2e`.
+
+### A suspeita de UX que a medição levantou — e que foi PAGA
+
+Dois campos tinham sido escritos utilizáveis, não bons, e a jornada os registrou
+antes que alguém os encontrasse:
+
+- o reencontro da bifurcação era **texto livre pedindo o `id` do bloco**, e a
+  pessoa vê "Reencontro" no quadro, nunca `junta`;
+- `flow.call` pedia o **UUID do fluxo colado à mão**.
+
+Os dois publicavam e funcionavam. Os dois eram impossíveis de acertar sem abrir
+o JSON do grafo.
+
+**Consertados na mesma entrega**, com o editor passando as duas listas ao painel:
+
+| Caso | O que a pessoa faz | Sinal | Estado |
+|---|---|---|---|
+| J24.9 | Escolhe o reencontro | seletor com o RÓTULO do bloco; o id nunca aparece | **MEDIDO** |
+| J24.10 | Não há reencontro no fluxo | a tela diz o que acrescentar, em vez de caixa vazia | **MEDIDO** |
+| J24.11 | Escolhe o fluxo a chamar | seletor com o NOME; o UUID nunca aparece | **MEDIDO** |
+| J24.12 | Só existem rascunhos | não são oferecidos, e a tela explica | **MEDIDO** |
+
+O último caso nasceu de uma sabotagem: o filtro de publicados existia e **nada o
+vigiava**. Oferecer um rascunho produz um bloco que publica e falha na primeira
+execução, com a causa longe de quem montou.

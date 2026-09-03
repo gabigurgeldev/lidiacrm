@@ -20,6 +20,13 @@ import {
   routingRoundRobin,
 } from "./nodes/crm-e-roteamento";
 import { logicEnd, logicIf, logicWait, triggerLeadCreated } from "./nodes/logica";
+import {
+  flowCall,
+  logicAwaitEvent,
+  logicFork,
+  logicLoop,
+  logicMerge,
+} from "./nodes/paralelo";
 
 let registrado = false;
 
@@ -30,6 +37,11 @@ export function garantirNosRegistrados(): void {
   registrarNo(logicIf);
   registrarNo(logicWait);
   registrarNo(logicEnd);
+  registrarNo(logicFork);
+  registrarNo(logicMerge);
+  registrarNo(logicLoop);
+  registrarNo(logicAwaitEvent);
+  registrarNo(flowCall);
   registrarNo(crmAddTag);
   registrarNo(crmAssignOwner);
   registrarNo(crmDonoRespondeu);

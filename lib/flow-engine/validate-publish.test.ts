@@ -48,13 +48,18 @@ function grafoBom(): FlowGraph {
 }
 
 describe("o registry decide o que existe", () => {
-  it("os 11 nós desta entrega estão registrados", () => {
+  it("os 16 nós desta entrega estão registrados", () => {
     expect(tiposRegistrados()).toEqual([
       "crm.add_tag",
       "crm.assign_owner",
       "crm.owner_responded",
+      "flow.call",
+      "logic.await_event",
       "logic.end",
+      "logic.fork",
       "logic.if",
+      "logic.loop",
+      "logic.merge",
       "logic.wait",
       "notify.internal",
       "routing.redistribute",
@@ -195,5 +200,99 @@ describe("o schema de forma", () => {
       edges: [],
     });
     expect(r.success).toBe(true);
+  });
+});
+
+describe("o paralelo, no portão da publicação", () => {
+  /** Bifurca em dois e reencontra. O desenho que a doutrina do fork exige. */
+  function grafoComFork(over: { encontro?: string } = {}): FlowGraph {
+    return {
+      nodes: [
+        no("inicio", "trigger.lead_created"),
+        no("bifurca", "logic.fork", {
+          ramos: [
+            { id: "a", label: "A" },
+            { id: "b", label: "B" },
+          ],
+          modo: "todas",
+          encontro: over.encontro ?? "junta",
+        }),
+        no("marca_a", "crm.add_tag", { tag: "a" }),
+        no("marca_b", "crm.add_tag", { tag: "b" }),
+        no("junta", "logic.merge"),
+        no("fim", "logic.end", { desfecho: "ok" }),
+      ],
+      edges: [
+        aresta("e1", "inicio", "bifurca"),
+        aresta("e2", "bifurca", "marca_a", "a"),
+        aresta("e3", "bifurca", "marca_b", "b"),
+        aresta("e4", "marca_a", "junta"),
+        aresta("e5", "marca_b", "junta"),
+        aresta("e6", "junta", "fim"),
+      ],
+    };
+  }
+
+  it("um fluxo que bifurca e reencontra PUBLICA", () => {
+    expect(validarParaPublicar(grafoComFork()).ok).toBe(true);
+  });
+
+  it("reencontro que não existe no grafo é ERRO", () => {
+    // `encontro` é declarado pelo fork, não descoberto pelo motor. O preço de
+    // declarar é alguém conferir: sem isto, o defeito aparece só em runtime,
+    // como um fluxo que bifurca e nunca mais se junta — e o motor não distingue
+    // isso de um fluxo que termina em ramos separados de propósito.
+    const r = validarParaPublicar(grafoComFork({ encontro: "nao_existe" }));
+    expect(r.ok).toBe(false);
+    expect(r.erros.map((e) => e.codigo)).toContain("encontro_inexistente");
+  });
+
+  it("reencontro que aponta para um bloco que NÃO é reencontro é ERRO", () => {
+    const r = validarParaPublicar(grafoComFork({ encontro: "marca_a" }));
+    expect(r.ok).toBe(false);
+    expect(r.erros.map((e) => e.codigo)).toContain("encontro_nao_e_reencontro");
+  });
+
+  it("um laço com contador PUBLICA, mesmo formando círculo", () => {
+    // A regra antiga era "nenhum ciclo", e o motivo estava certo: ciclo sem fim
+    // consome `steps_taken` até a execução morrer. `logic.loop` tem `max`
+    // obrigatório, então o círculo que passa por ele tem fim conhecido antes de
+    // começar — e sem isto o bloco de repetição não poderia ser publicado nunca.
+    const grafo: FlowGraph = {
+      nodes: [
+        no("inicio", "trigger.lead_created"),
+        no("repete", "logic.loop", { lista: "vars.itens", max: 5 }),
+        no("corpo", "crm.add_tag", { tag: "x" }),
+        no("fim", "logic.end", { desfecho: "ok" }),
+      ],
+      edges: [
+        aresta("e1", "inicio", "repete"),
+        aresta("e2", "repete", "corpo", "corpo"),
+        aresta("e3", "corpo", "repete"),
+        aresta("e4", "repete", "fim", "else"),
+      ],
+    };
+    expect(validarParaPublicar(grafo).ok).toBe(true);
+  });
+
+  it("círculo SEM contador segue sendo erro", () => {
+    // A contra-prova do caso acima: se a regra tivesse sido simplesmente
+    // removida para o laço caber, todo círculo passaria — e um fluxo que volta
+    // ao mesmo bloco para sempre publica sem ninguém notar.
+    const grafo: FlowGraph = {
+      nodes: [
+        no("inicio", "trigger.lead_created"),
+        no("marca", "crm.add_tag", { tag: "x" }),
+        no("marca2", "crm.add_tag", { tag: "y" }),
+      ],
+      edges: [
+        aresta("e1", "inicio", "marca"),
+        aresta("e2", "marca", "marca2"),
+        aresta("e3", "marca2", "marca"),
+      ],
+    };
+    const r = validarParaPublicar(grafo);
+    expect(r.ok).toBe(false);
+    expect(r.erros.map((e) => e.codigo)).toContain("ciclo");
   });
 });
