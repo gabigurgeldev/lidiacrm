@@ -147,6 +147,8 @@ export function execucaoNova(): FlowExecutionRow {
     output: {},
     parent_execution_id: null,
     parent_frame_id: null,
+    outcome: null,
+    last_error: null,
   };
 }
 
@@ -217,6 +219,16 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
         ...(patch.attempts !== undefined ? { attempts: patch.attempts } : {}),
         ...(patch.steps_taken !== undefined ? { steps_taken: patch.steps_taken } : {}),
         ...(patch.context !== undefined ? { context: patch.context } : {}),
+        // ⚠️ O DESFECHO e o ERRO precisam sobreviver ao falso.
+        //
+        // Sem eles, o mundo de teste apaga em silêncio as duas coisas que a
+        // tela de Execuções mostra — "deu certo como?" e "por que parou?" —,
+        // e todo teste que tentasse afirmar o desfecho de um fluxo mediria
+        // . Um falso que descarta o resultado do produto faz o
+        // teste concordar com qualquer coisa.
+        ...(patch.outcome !== undefined ? { outcome: patch.outcome } : {}),
+        ...(patch.last_error !== undefined ? { last_error: patch.last_error } : {}),
+        ...(patch.output !== undefined ? { output: patch.output } : {}),
       });
     },
     frentesProntas: async (exec) => {

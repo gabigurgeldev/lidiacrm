@@ -92,6 +92,18 @@ export interface FlowExecutionRow {
   parent_execution_id: string | null;
   /** A frente exata que ficou parada esperando esta filha. `null` no topo. */
   parent_frame_id: string | null;
+  /**
+   * COMO a execução terminou — o texto que a tela de Execuções mostra.
+   *
+   * O motor JÁ grava isto (, escrito quando um
+   *  conclui), e a coluna existe no schema desde a 0203. Faltava só
+   * aqui — e a ausência tinha custo: nada que leia a linha da execução
+   * conseguia afirmar o desfecho sem , inclusive teste. Um campo que o
+   * produto escreve e o tipo não declara é um campo que ninguém confere.
+   */
+  outcome: string | null;
+  /** A última falha, quando houve.  enquanto vai bem. */
+  last_error: string | null;
 }
 
 export interface FlowExecutionPatch {
