@@ -31,8 +31,9 @@ import type { FlowBranch } from "@/lib/flow-engine/types";
 import { Question } from "@/lib/ui/icons";
 
 import { ConstrutorComIa } from "./ConstrutorComIa";
-import { ICONE_DA_CATEGORIA, ICONE_DO_TIPO } from "./nodeIcons";
+import { ICONE_DA_CATEGORIA, ICONE_DO_TIPO } from "./nodeVisuals";
 import { NoDoFluxo, type DadosDoNo } from "./NoDoFluxo";
+import { EdgeConfigPanel } from "./EdgeConfigPanel";
 import { PainelDoNo } from "./PainelDoNo";
 
 /**
@@ -157,6 +158,9 @@ function Quadro({ flowId }: { flowId: string }) {
   );
   const [arestas, setArestas, aoMudarArestas] = useEdgesState<Edge>([]);
   const [selecionado, setSelecionado] = useState<string | null>(null);
+  // A linha selecionada. Exclusiva com o nó: dois painéis abertos ao mesmo
+  // tempo brigariam pelos mesmos 320px da direita.
+  const [arestaSelecionada, setArestaSelecionada] = useState<string | null>(null);
   const [erros, setErros] = useState<ErroDeGrafo[]>([]);
   const [semeadoDe, setSemeadoDe] = useState<string | null>(null);
   // Travado enquanto a IA constrói em streaming: nada de arrastar nó, ligar
@@ -226,6 +230,33 @@ function Quadro({ flowId }: { flowId: string }) {
     () => nos.find((n) => n.id === selecionado) ?? null,
     [nos, selecionado],
   );
+
+  /**
+   * Tudo o que o painel da linha precisa, resolvido de uma vez.
+   *
+   * Mora aqui porque quem é dono do grafo é o quadro: o painel não deve
+   * procurar o bloco de origem numa lista que ele não tem.
+   */
+  const ligacaoSelecionada = useMemo(() => {
+    if (arestaSelecionada === null) return null;
+    const aresta = arestas.find((a) => a.id === arestaSelecionada);
+    if (aresta === undefined) return null;
+    const origem = nos.find((n) => n.id === aresta.source);
+    const destino = nos.find((n) => n.id === aresta.target);
+    if (origem === undefined || destino === undefined) return null;
+    return {
+      aresta,
+      origem: (origem.data as DadosDoNo).rotulo,
+      destino: (destino.data as DadosDoNo).rotulo,
+      ramosDaOrigem: (origem.data as DadosDoNo).branches,
+      // O handle É o ramo; sem handle, o bloco tem saída única e o ramo é o
+      // pega-tudo — a mesma leitura que `paraGrafo` faz ao salvar.
+      ramoAtual: aresta.sourceHandle ?? "else",
+      ramosOcupados: arestas
+        .filter((a) => a.source === aresta.source && a.id !== aresta.id)
+        .map((a) => a.sourceHandle ?? "else"),
+    };
+  }, [arestaSelecionada, arestas, nos]);
 
   const atualizarNo = useCallback(
     (id: string, patch: Partial<DadosDoNo & { config: Record<string, unknown> }>) => {
@@ -384,8 +415,30 @@ function Quadro({ flowId }: { flowId: string }) {
             onNodesChange={bloqueado ? undefined : aoMudarNos}
             onEdgesChange={bloqueado ? undefined : aoMudarArestas}
             onConnect={bloqueado ? undefined : aoLigar}
-            onNodeClick={bloqueado ? undefined : (_, n) => setSelecionado(n.id)}
-            onPaneClick={bloqueado ? undefined : () => setSelecionado(null)}
+            onNodeClick={
+              bloqueado
+                ? undefined
+                : (_, n) => {
+                    setSelecionado(n.id);
+                    setArestaSelecionada(null);
+                  }
+            }
+            onEdgeClick={
+              bloqueado
+                ? undefined
+                : (_, a) => {
+                    setArestaSelecionada(a.id);
+                    setSelecionado(null);
+                  }
+            }
+            onPaneClick={
+              bloqueado
+                ? undefined
+                : () => {
+                    setSelecionado(null);
+                    setArestaSelecionada(null);
+                  }
+            }
             nodeTypes={tiposDeNo}
             nodesDraggable={!bloqueado}
             nodesConnectable={!bloqueado}
@@ -412,6 +465,7 @@ function Quadro({ flowId }: { flowId: string }) {
         {noSelecionado !== null && (
           <PainelDoNo
             tipo={(noSelecionado.data as DadosDoNo).tipo}
+            categoria={(noSelecionado.data as DadosDoNo).categoria}
             rotulo={(noSelecionado.data as DadosDoNo).rotulo}
             config={((noSelecionado.data as { config?: Record<string, unknown> }).config ?? {})}
             aoMudarRotulo={(rotulo) => atualizarNo(noSelecionado.id, { rotulo })}
@@ -426,6 +480,33 @@ function Quadro({ flowId }: { flowId: string }) {
             podeApagar={(noSelecionado.data as DadosDoNo).categoria !== "trigger"}
             blocosDeReencontro={blocosDeReencontro}
             fluxosChamaveis={fluxosChamaveis}
+          />
+        )}
+
+        {ligacaoSelecionada !== null && (
+          <EdgeConfigPanel
+            origem={ligacaoSelecionada.origem}
+            destino={ligacaoSelecionada.destino}
+            ramosDaOrigem={ligacaoSelecionada.ramosDaOrigem}
+            ramoAtual={ligacaoSelecionada.ramoAtual}
+            ramosOcupados={ligacaoSelecionada.ramosOcupados}
+            aoTrocarRamo={(ramo) => {
+              // O id da aresta carrega o handle (`origem-ramo-destino`), então
+              // trocar a saída troca o id junto — deixá-lo velho faria duas
+              // arestas diferentes colidirem no mesmo id ao ligar de novo.
+              const a = ligacaoSelecionada.aresta;
+              const novoId = `${a.source}-${ramo}-${a.target}`;
+              setArestas((atuais) =>
+                atuais.map((x) =>
+                  x.id === a.id ? { ...x, id: novoId, sourceHandle: ramo } : x,
+                ),
+              );
+              setArestaSelecionada(novoId);
+            }}
+            aoApagar={() => {
+              setArestas((atuais) => atuais.filter((x) => x.id !== ligacaoSelecionada.aresta.id));
+              setArestaSelecionada(null);
+            }}
           />
         )}
       </div>
