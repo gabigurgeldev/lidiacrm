@@ -57,6 +57,23 @@ export const PUBLIC_PATHS: RegExp[] = [
   // dois nomes de propósito: `/^\/legal/` deixaria qualquer sub-path futuro
   // nascer público de carona.
   /^\/legal\/(terms|privacy)$/,
+  // PAREAMENTO POR LINK. Quem abre e o dono do numero, do lado de fora da
+  // organizacao: nao ha sessao a exigir, e exigi-la e o defeito que este bloco
+  // conserta -- medido em producao, `/pair/<token>` respondia 307 para o login
+  // e `/api/v1/pair/<token>/status` respondia 401. A pagina "publica" nao era
+  // publica para ninguem, e nenhum teste unitario pegaria isso: o proxy nao
+  // roda neles.
+  //
+  // A auth mora DENTRO das rotas, como em `/api/v1/system/relogio/tick`: o
+  // token de 192 bits E a credencial, e `lerLinkDePareamento` recusa o que
+  // expirou, foi cancelado ou ja pareou um aparelho -- com a MESMA resposta
+  // que da a um token inexistente, para nao virar oraculo.
+  //
+  // Ancorados com `$` e exigindo pelo menos um caractere no lugar do token:
+  // `/^\/pair\//` deixaria qualquer sub-path futuro nascer publico de carona,
+  // que e a razao ja escrita nas duas entradas acima.
+  /^\/pair\/[^/]+$/,
+  /^\/api\/v1\/pair\/[^/]+\/(status|qr)$/,
 ];
 
 export function isPublicPath(pathname: string): boolean {
