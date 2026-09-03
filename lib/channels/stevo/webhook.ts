@@ -23,7 +23,24 @@
  * **Ao medir um evento real, aperte este parser.** O lugar certo é aqui, e o
  * comentário acima deve ser substituído pelo formato medido.
  *
- * ─── O log de `logger.info` abaixo é o instrumento pra essa medição ────────
+ * ─── ✅ MEDIDO: o motivo Oficial NÃO usa este chute ─────────────────────────
+ *
+ * O log abaixo mediu em produção: uma conta Oficial manda o envelope CRU da
+ * WhatsApp Cloud API da Meta (`chaves: ["object","entry"]`) — não um formato
+ * próprio da Stevo. Isso É documentado, só não pela Stevo: é o webhook da
+ * Meta, estável há anos. `lerEventoCloudApiOficial` lê esse formato PRECISO —
+ * mensagem, telefone e id vêm de `entry[0].changes[0].value.messages[0]`.
+ *
+ * O achatador genérico (`achatar`) NUNCA teria achado isso: ele para no
+ * primeiro array (`profundidade`/`Array.isArray` na guarda), e da Meta pra
+ * baixo é array em TODO nível (`entry` → `changes` → `messages`). Chaves
+ * medidas batendo exatamente com `["object","entry"]` é a prova.
+ *
+ * O motivo pelo qual não generalizei o achatador pra descer em array: o modo
+ * SM v2 (QR) usa o caminho antigo e nunca foi medido — alargar o achatador
+ * mexeria nos dois formatos de uma vez, e só um está confirmado.
+ *
+ * ─── O log de `logger.info` abaixo é o instrumento pra medir o que falta ────
  *
  * `webhook_events_log` guarda o corpo inteiro, mas até isso ser lido (banco
  * inacessível numa instalação self-host é um cenário real, não hipotético) o
@@ -76,6 +93,13 @@ function primeiroTexto(o: Record<string, unknown>, chaves: string[]): string | n
   return null;
 }
 
+/** Primeiro elemento de um array, se for um objeto — como a Cloud API sempre envia. */
+function primeiroDoArray(v: unknown): Record<string, unknown> | null {
+  return Array.isArray(v) && v.length > 0 && typeof v[0] === "object" && v[0] !== null
+    ? (v[0] as Record<string, unknown>)
+    : null;
+}
+
 /**
  * Achata o payload num só nível de busca.
  *
@@ -113,6 +137,69 @@ function tipoDeMensagem(plano: Record<string, unknown>, temMidia: boolean): stri
   return temMidia ? "document" : "text";
 }
 
+/**
+ * WhatsApp Cloud API da Meta, formato exato — é o que a conta Oficial entrega
+ * (medido, ver cabeçalho do arquivo). `entry`/`changes`/`messages` são arrays
+ * de UM elemento por entrega; `[0]` é o caminho documentado pela própria Meta.
+ */
+function lerEventoCloudApiOficial(bruto: Record<string, unknown>): EventoStevo {
+  const entry = primeiroDoArray(bruto.entry);
+  const change = entry ? primeiroDoArray(entry.changes) : null;
+  const value = change?.value as Record<string, unknown> | undefined;
+  if (!value) return { tipo: "ignorado", motivo: "cloud_api_sem_value" };
+
+  const mensagem = primeiroDoArray(value.messages);
+  if (!mensagem) {
+    // `statuses` é o eco de entrega/leitura do que ESTE CRM mandou — não é
+    // mensagem de cliente, e não é erro: é o formato normal da Cloud API para
+    // status. Distinguir do "sem value" evita que os dois pareçam a mesma
+    // falha quando um é rotina e o outro é formato inesperado.
+    return {
+      tipo: "ignorado",
+      motivo: primeiroDoArray(value.statuses) ? "status_de_entrega" : "cloud_api_sem_mensagem",
+    };
+  }
+
+  const telefone = digitosDoEndereco(typeof mensagem.from === "string" ? mensagem.from : null);
+  if (!telefone) return { tipo: "ignorado", motivo: "sem_remetente_reconhecivel" };
+
+  const tipo = typeof mensagem.type === "string" ? mensagem.type : null;
+  const corpoTexto = mensagem.text as { body?: unknown } | undefined;
+  const texto = typeof corpoTexto?.body === "string" ? corpoTexto.body : null;
+
+  // Mídia: NÃO MEDIDO ainda (nenhuma mensagem com anexo chegou pra confirmar).
+  // A doc da Stevo diz que mídia chega com `stevo.media` já resolvido — chuto
+  // esse caminho como fallback defensivo; se errar, midiaUrl fica null e a
+  // mensagem ainda assim é ingerida (texto/legenda, se houver).
+  const midia = tipo ? (mensagem[tipo] as Record<string, unknown> | undefined) : undefined;
+  const stevoMedia = (mensagem as { stevo?: { media?: { url?: unknown } } }).stevo?.media;
+  const midiaUrl = typeof stevoMedia?.url === "string" ? stevoMedia.url : null;
+
+  if (!texto && !midiaUrl && !midia?.caption) {
+    return { tipo: "ignorado", motivo: "sem_conteudo_reconhecivel" };
+  }
+
+  const carimboSegundos = Number(mensagem.timestamp);
+  const enviadaEm = Number.isFinite(carimboSegundos) && carimboSegundos > 0
+    ? new Date(carimboSegundos * 1000)
+    : new Date();
+
+  return {
+    tipo: "mensagem",
+    // A Cloud API nunca entrega de volta o que ESTE CRM mandou — só `messages`
+    // (do cliente) e `statuses` (eco de entrega/leitura, tratado acima). Sem o
+    // conceito de "eco do celular do operador" que o modo QR tem.
+    daEmpresa: false,
+    externalId: typeof mensagem.id === "string" ? mensagem.id : null,
+    telefone,
+    texto: texto ?? (typeof midia?.caption === "string" ? midia.caption : null),
+    midiaUrl,
+    midiaMime: typeof midia?.mime_type === "string" ? midia.mime_type : null,
+    tipoDeMensagem: tipoDeMensagem({ type: tipo ?? "" }, Boolean(midiaUrl)),
+    enviadaEm,
+  };
+}
+
 export function lerEventoStevo(bruto: unknown): EventoStevo {
   const evento = lerEventoStevoSemLog(bruto);
   logger.info("[webhook-stevo] evento lido", {
@@ -130,9 +217,16 @@ export function lerEventoStevo(bruto: unknown): EventoStevo {
 }
 
 function lerEventoStevoSemLog(bruto: unknown): EventoStevo {
-  if (bruto === null || typeof bruto !== "object") {
+  if (bruto === null || typeof bruto !== "object" || Array.isArray(bruto)) {
     return { tipo: "ignorado", motivo: "corpo_nao_e_objeto" };
   }
+  // Conta Oficial: envelope cru da Cloud API, medido em produção (ver
+  // cabeçalho do arquivo). `object` é o campo que a própria Meta usa pra
+  // dizer "isto é um webhook de WhatsApp Business Account".
+  if ((bruto as Record<string, unknown>).object === "whatsapp_business_account") {
+    return lerEventoCloudApiOficial(bruto as Record<string, unknown>);
+  }
+
   const plano = achatar(bruto);
 
   const evento = (primeiroTexto(plano, ["event", "type", "action"]) ?? "").toUpperCase();
