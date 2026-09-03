@@ -49,11 +49,7 @@ import type {
 } from "../types";
 
 import { corpoCloudApi } from "../cloud-api/corpo";
-import {
-  resolveStevoCreds,
-  stevoBaseUrlOficial,
-  stevoOfficialToken,
-} from "../stevo/credentials";
+import { resolveEnvioStevo, stevoBaseUrlOficial } from "../stevo/credentials";
 import { corpoDeEnvioStevo, idDaRespostaStevo } from "../stevo/envelope";
 import { lerInstanciaStevo } from "../stevo/instancias";
 
@@ -217,23 +213,20 @@ export const stevoAdapter: ChannelAdapter = {
     }
 
     const admin = createAdminClient();
-    const escopo = {
+    // UMA consulta decide o transporte: as duas credenciais moram na mesma
+    // linha e se buscam pela mesma chave. Perguntar duas vezes custava uma ida
+    // a mais ao banco em TODO envio por QR — o caminho mais quente do produto.
+    const envio = await resolveEnvioStevo(admin, {
       organizationId: envelope.organizationId,
       instanceId: envelope.sessionRef,
-    };
-
-    // Gateway PRIMEIRO, e a ordem não é preferência: token de gateway gravado
-    // só existe em instância da API Oficial, e para ela o proxy é um 409 certo.
-    // Perguntar ao proxy antes seria gastar uma ida à rede para ouvir "não".
-    const tokenDoGateway = await stevoOfficialToken(admin, escopo);
-    if (tokenDoGateway) return enviarPeloGateway(envelope, tokenDoGateway);
-
-    const creds = await resolveStevoCreds(admin, escopo);
-    if (!creds) {
+    });
+    if (!envio) {
       throw new Error(
         "stevo_not_configured: nenhuma credencial para esta instância (nem na sessão, nem no ambiente).",
       );
     }
+    if (envio.transporte === "gateway") return enviarPeloGateway(envelope, envio.token);
+    const creds = envio.creds;
 
     const res = await fetch(
       `${creds.baseUrl}/v1/instances/${encodeURIComponent(creds.instanceId)}/messages`,
@@ -286,19 +279,19 @@ export const stevoAdapter: ChannelAdapter = {
    */
   async checkHealth(input: ChannelTenantScope & { sessionRef: string }): Promise<ChannelHealth> {
     const admin = createAdminClient();
-    const escopo = { organizationId: input.organizationId, instanceId: input.sessionRef };
-
     // Quem envia pelo gateway é perguntado AO GATEWAY. A API de conta responde
     // `connected: true` para instância oficial sem olhar o número na Meta — foi
     // exatamente essa resposta que fez a tela mostrar "conectado" para um canal
     // que não conseguia enviar, e o operador só descobrir mandando mensagem.
-    const tokenDoGateway = await stevoOfficialToken(admin, escopo);
-    if (tokenDoGateway) return saudePeloGateway(tokenDoGateway);
-
-    const creds = await resolveStevoCreds(admin, escopo);
-    if (!creds) {
+    const envio = await resolveEnvioStevo(admin, {
+      organizationId: input.organizationId,
+      instanceId: input.sessionRef,
+    });
+    if (!envio) {
       return { reachable: false, status: null, detail: "sem credencial para esta instância" };
     }
+    if (envio.transporte === "gateway") return saudePeloGateway(envio.token);
+    const creds = envio.creds;
 
     const instancia = await lerInstanciaStevo({
       apiKey: creds.apiKey,

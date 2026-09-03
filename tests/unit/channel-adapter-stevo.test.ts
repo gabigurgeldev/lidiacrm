@@ -29,9 +29,14 @@ import { corpoDeEnvioStevo, idDaRespostaStevo } from "@/lib/channels/stevo/envel
 import type { OutboundEnvelope } from "@/lib/channels/types";
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn(() => ({})) }));
+// `resolveEnvioStevo` e não `resolveStevoCreds`: o adapter passou a resolver o
+// transporte (proxy × gateway da API Oficial) numa consulta só, e é essa a
+// função que ele chama. Mockar a antiga deixava a nova REAL, que vai ao banco —
+// e o `createAdminClient` daqui é `{}`, então o `send` morria com
+// "admin.from is not a function" antes de chegar ao caminho sob teste.
 vi.mock("@/lib/channels/stevo/credentials", async (original) => {
   const real = (await original()) as Record<string, unknown>;
-  return { ...real, resolveStevoCreds: vi.fn() };
+  return { ...real, resolveEnvioStevo: vi.fn() };
 });
 
 const envelope = (over: Partial<OutboundEnvelope> = {}): OutboundEnvelope =>
@@ -120,8 +125,8 @@ describe("o adapter", () => {
   });
 
   it("⭐ `send` LANÇA quando não há credencial — nunca devolve id nulo", async () => {
-    const { resolveStevoCreds } = await import("@/lib/channels/stevo/credentials");
-    vi.mocked(resolveStevoCreds).mockResolvedValue(null);
+    const { resolveEnvioStevo } = await import("@/lib/channels/stevo/credentials");
+    vi.mocked(resolveEnvioStevo).mockResolvedValue(null);
     const { stevoAdapter } = await import("@/lib/channels/adapters/stevo");
 
     // `{externalId: null}` faria o handler gravar `sent` — "enviado" para algo
@@ -130,12 +135,15 @@ describe("o adapter", () => {
   });
 
   it("⭐ `sent: false` com HTTP 200 é FALHA, não sucesso", async () => {
-    const { resolveStevoCreds } = await import("@/lib/channels/stevo/credentials");
-    vi.mocked(resolveStevoCreds).mockResolvedValue({
-      instanceId: "inst-1",
-      apiKey: "k",
-      baseUrl: "https://provedor.test",
-      source: "session",
+    const { resolveEnvioStevo } = await import("@/lib/channels/stevo/credentials");
+    vi.mocked(resolveEnvioStevo).mockResolvedValue({
+      transporte: "proxy",
+      creds: {
+        instanceId: "inst-1",
+        apiKey: "k",
+        baseUrl: "https://provedor.test",
+        source: "session",
+      },
     });
     const fetchMock = vi.fn(async () =>
       new Response(JSON.stringify({ sent: false, error: "numero invalido" }), { status: 200 }),
@@ -151,12 +159,15 @@ describe("o adapter", () => {
     // A spec da Stevo devolve error como objeto, não string — é o formato real,
     // não o que o teste acima (com string) testava. 409 = not_ready (instância
     // não conectada do lado da Stevo).
-    const { resolveStevoCreds } = await import("@/lib/channels/stevo/credentials");
-    vi.mocked(resolveStevoCreds).mockResolvedValue({
-      instanceId: "inst-1",
-      apiKey: "k",
-      baseUrl: "https://provedor.test",
-      source: "session",
+    const { resolveEnvioStevo } = await import("@/lib/channels/stevo/credentials");
+    vi.mocked(resolveEnvioStevo).mockResolvedValue({
+      transporte: "proxy",
+      creds: {
+        instanceId: "inst-1",
+        apiKey: "k",
+        baseUrl: "https://provedor.test",
+        source: "session",
+      },
     });
     const fetchMock = vi.fn(async () =>
       new Response(
