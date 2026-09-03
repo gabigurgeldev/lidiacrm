@@ -16,6 +16,8 @@ export interface AttendantAvailability {
   /** null = atendente ainda sem linha de availability (nunca configurado). */
   capacity: number | null;
   schedule: AvailabilitySchedule;
+  /** Telefone (E.164) que o bloco `whatsapp.notify_user` do motor de fluxos usa. */
+  notification_phone: string | null;
   last_heartbeat_at: string | null;
   updated_at: string | null;
   /** Conversas abertas atribuídas (G5-04): a mesma carga que o router usa. */
@@ -39,6 +41,7 @@ export interface AvailabilityUpdate {
   is_available?: boolean;
   capacity?: number;
   schedule?: AvailabilitySchedule;
+  notification_phone?: string | null;
 }
 
 /** PATCH disponibilidade de um atendente (próprio OU manager+; a API enforça). */

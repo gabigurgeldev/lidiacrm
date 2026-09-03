@@ -115,7 +115,11 @@ export const stevoAdapter: ChannelAdapter = {
       sent?: boolean;
       engine?: string;
       result?: unknown;
-      error?: string;
+      // A spec devolve `{error: {code, message}}` — OBJETO, nunca string.
+      // `?? string` aqui era o bug: interpolar o objeto direto num template
+      // literal vira `"[object Object]"`, o que a tela mostrava no lugar do
+      // motivo de verdade.
+      error?: { code?: string; message?: string } | string;
       message?: string;
     } | null;
 
@@ -123,7 +127,11 @@ export const stevoAdapter: ChannelAdapter = {
     // chegou, o motor recusou. Tratar só o status HTTP diria "enviado" para uma
     // mensagem que o provedor acabou de recusar.
     if (!res.ok || json?.sent === false) {
-      const detalhe = json?.error ?? json?.message ?? res.statusText;
+      const erro = json?.error;
+      const detalhe =
+        typeof erro === "string"
+          ? erro
+          : (erro?.message ?? erro?.code ?? json?.message ?? res.statusText);
       throw new Error(`stevo_send_failed: ${res.status} ${detalhe}`.trim());
     }
 

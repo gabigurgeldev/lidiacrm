@@ -259,6 +259,10 @@ export const DICIONARIO: Traducoes = {
   "Nome completo": { es: "Nombre completo" },
   "Trocar email — em breve.": { es: "Cambiar email — próximamente." },
   "Fuso horário": { es: "Huso horario" },
+  "Telefone de aviso (WhatsApp)": { es: "Teléfono de aviso (WhatsApp)" },
+  "Para onde vai o aviso quando um fluxo notifica o dono do lead. Formato +DDI e número, ex.: +5511999998888.": {
+    es: "A dónde va el aviso cuando un flujo notifica al dueño del lead. Formato +código de país y número, ej.: +5511999998888.",
+  },
   "Avatar URL": { es: "URL de avatar" },
   "Upload de arquivo — em breve. Cole uma URL pública.": {
     es: "Subida de archivo — próximamente. Pega una URL pública.",
