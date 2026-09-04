@@ -1073,6 +1073,55 @@ ENTREGA, com a mensagem sumindo sem erro visível.
 
 ---
 
+
+## J25 — Ler o quadro do fluxo sem abrir bloco por bloco `[P1]` (2026-09-04)
+
+O editor mostrava, embaixo do nome de cada bloco, o identificador interno dele
+(`logic.wait`, `whatsapp.send_to_lead`). Num fluxo com cinco mensagens seguidas
+eram cinco cartões idênticos; para saber qual era qual, abria-se um por um. As
+linhas tinham o mesmo problema: um "Decidir" com quatro regras produzia quatro
+fios sem nome saindo do mesmo cartão. Não havia como arrastar um bloco da paleta
+para um ponto do quadro, nem copiar um bloco já configurado.
+
+**O que muda no risco:** o quadro é onde a pessoa decide se o fluxo está certo
+ANTES de publicar. Um quadro que não diz o que cada bloco faz empurra a
+conferência para o botão Publicar — e três blocos nascem com UUID nulo de
+propósito (`flow.call`, `whatsapp.bulk_send`, `routing.fixed_order`), então a
+descoberta de "falta escolher" acontecia no erro de publicação, longe do bloco.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J25.1 | Cartão de espera | diz o tempo, na maior unidade inteira | **PASS** (unit `quadro-do-fluxo-legivel`) |
+| J25.2 | Cartão de mensagem | mostra o começo do texto, não o `type` | **PASS** (unit) |
+| J25.3 | Bloco com recurso não escolhido | cartão diz "Falta escolher", antes de Publicar | **PASS** (unit) |
+| J25.4 | Config meio escrita | resumo não lança, em nenhum dos 25 tipos | **PASS** (unit — varre o registry inteiro) |
+| J25.5 | Tipo sem resumo | cai na `descricao` do registry, nunca quebra | **PASS** (unit) |
+| J25.6 | Rótulo da linha | é o nome do RAMO, e traduzido | **PASS** (unit) |
+| J25.7 | Bloco de saída única | linha SEM rótulo — não repete o óbvio | **PASS** (unit) |
+| J25.8 | Linha de exceção | tracejada; a de regra, não | **PASS** (unit) |
+| J25.9 | Duplicar | cópia não COMPARTILHA a config com o original | **PASS** (unit) |
+| J25.10 | Duplicar gatilho | recusado: um fluxo tem um só | **PASS** (unit) |
+| J25.11 | Toda frase do cartão tem espanhol | enumeração completa, não amostra | **PASS** (unit) |
+| J25.12 | Arrastar da paleta larga o bloco | um bloco a mais, no ponto solto | **NÃO MEDIDO NA TELA** — spec escrita e registrada em `SPECS_PARTE_2` |
+| J25.13 | Arrasto de tipo desconhecido | não cria bloco nenhum | **NÃO MEDIDO NA TELA** — idem |
+| J25.14 | Botão Duplicar no painel | cópia com o mesmo rótulo, selecionada | **NÃO MEDIDO NA TELA** — idem |
+| J25.15 | Arrumar | reposiciona sem apagar bloco nem ligação | **NÃO MEDIDO NA TELA** — idem |
+
+### O que ficou NÃO MEDIDO, e por quê
+
+- **A tela, com servidor de pé.** `tests/e2e/flow-quadro-legivel.spec.ts` existe
+  e está registrada no CI, mas não foi executada nesta sessão: exige
+  `next build` + Supabase local + banco fresco, e a entrega saiu antes disso.
+  Registrado aqui em vez de omitido — a doutrina de QA Visual pede a prova pela
+  tela, e ela está devendo. **Quem retomar roda a spec primeiro.**
+- **O minimapa nos dois temas.** As `--xy-*` passaram a sair dos tokens do
+  produto (`app/globals.css`), o que resolve a causa do retângulo branco por
+  construção. Não foi conferido a olho em tema escuro numa VPS — e "a olho" não
+  vale: a doutrina pede medida por ferramenta (`getComputedStyle`), que a spec
+  ainda não faz.
+
+---
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

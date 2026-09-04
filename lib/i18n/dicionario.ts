@@ -6841,6 +6841,219 @@ export const DICIONARIO: Traducoes = {
   "{n} blocos vieram com valores padrão — revise antes de publicar.":
     { es: "{n} bloques quedaron con valores por defecto — revisalos antes de publicar." },
 
+
+  // ─── Quadro do fluxo · barra e paleta ───
+  "Arrumar": { es: "Ordenar" },
+  "Duplicar com estes ajustes": { es: "Duplicar con estos ajustes" },
+  "Clique para acrescentar, ou arraste até o ponto do quadro.": {
+    es: "Haz clic para agregar, o arrastra hasta el punto del tablero.",
+  },
+
+  // ─── Quadro do fluxo · o resumo de cada cartão (resumoDoBloco.ts) ───
+  "Espera {n} segundos": { es: "Espera {n} segundos" },
+  "Espera {n} minutos": { es: "Espera {n} minutos" },
+  "Espera {n} horas": { es: "Espera {n} horas" },
+  "Espera {n} dias": { es: "Espera {n} días" },
+  "Espera {evento}, no máximo {n} segundos": { es: "Espera {evento}, máximo {n} segundos" },
+  "Espera {evento}, no máximo {n} minutos": { es: "Espera {evento}, máximo {n} minutos" },
+  "Espera {evento}, no máximo {n} horas": { es: "Espera {evento}, máximo {n} horas" },
+  "Espera {evento}, no máximo {n} dias": { es: "Espera {evento}, máximo {n} días" },
+  "Espera {evento}": { es: "Espera {evento}" },
+  "A mensagem contém {palavras}": { es: "El mensaje contiene {palavras}" },
+  "A mensagem é {palavras}": { es: "El mensaje es {palavras}" },
+  "Sem palavra escolhida": { es: "Sin palabra elegida" },
+  "Chamada de fora: {nome}": { es: "Llamada externa: {nome}" },
+  "Sem regra escrita": { es: "Sin regla escrita" },
+  "Se {regras}": { es: "Si {regras}" },
+  "{n} regras: {regras}": { es: "{n} reglas: {regras}" },
+  "Termina como {desfecho}": { es: "Termina como {desfecho}" },
+  "{n} ao mesmo tempo, espera todas: {nomes}": {
+    es: "{n} a la vez, espera todas: {nomes}",
+  },
+  "{n} ao mesmo tempo, vale a primeira: {nomes}": {
+    es: "{n} a la vez, vale la primera: {nomes}",
+  },
+  "Repete para cada {lista}": { es: "Repite para cada {lista}" },
+  "Repete para cada {lista}, até {max}": { es: "Repite para cada {lista}, hasta {max}" },
+  "Sem opção escrita": { es: "Sin opción escrita" },
+  "Espera a escolha: {opcoes}": { es: "Espera la elección: {opcoes}" },
+  "Falta escolher o fluxo": { es: "Falta elegir el flujo" },
+  "Chama outro fluxo e espera o resultado": { es: "Llama a otro flujo y espera el resultado" },
+  "Marca como {tag}": { es: "Marca como {tag}" },
+  "Passa o lead para {quem}": { es: "Pasa el lead a {quem}" },
+  "O dono respondeu depois do bloco anterior?": {
+    es: "¿El dueño respondió después del bloque anterior?",
+  },
+  "O dono respondeu desde que o fluxo começou?": {
+    es: "¿El dueño respondió desde que empezó el flujo?",
+  },
+  "Falta montar a fila": { es: "Falta armar la fila" },
+  "Fila fixa, {n} na vez": { es: "Fila fija, {n} en turno" },
+  "Manda um arquivo ao cliente": { es: "Manda un archivo al cliente" },
+  "“{msg}”": { es: "“{msg}”" },
+  "Avisa o dono do lead": { es: "Avisa al dueño del lead" },
+  "Avisa o dono: “{msg}”": { es: "Avisa al dueño: “{msg}”" },
+  "Avisa por WhatsApp: “{msg}”": { es: "Avisa por WhatsApp: “{msg}”" },
+  "Falta escolher o número": { es: "Falta elegir el número" },
+  "Dispara para uma lista fixa": { es: "Envía a una lista fija" },
+  "Dispara para quem tem {tags}": { es: "Envía a quien tiene {tags}" },
+  "Abre um aviso: {titulo}": { es: "Abre un aviso: {titulo}" },
+
+  // ─── Editor de fluxo · painel da ligação ───
+  "Esta ligação": { es: "Esta conexión" },
+  "Sai por qual saída": { es: "Sale por qué salida" },
+  "Este bloco tem uma saída só.": { es: "Este bloque tiene una sola salida." },
+  "As saídas que já têm outra linha não aparecem aqui — cada saída leva a um bloco só.": {
+    es: "Las salidas que ya tienen otra línea no aparecen aquí — cada salida lleva a un solo bloque.",
+  },
+  "Remover esta ligação": { es: "Quitar esta conexión" },
+
+  // ─── Editor de fluxo · entrega ao agente de IA ───
+  "A conversa volta para o agente de IA atender. Se ela tinha sido passada para uma pessoa, esta passagem é DESFEITA — inclusive quando foi um atendente que assumiu. Use depois de ter certeza de que o humano terminou.":
+    {
+      es: "La conversación vuelve al agente de IA. Si había sido pasada a una persona, ese traspaso se DESHACE — incluso cuando fue un agente quien la tomó. Úsalo después de confirmar que el humano terminó.",
+    },
+
+  // ─── Editor de fluxo · importador de planilha ───
+  "Não consegui ler a planilha.": { es: "No pude leer la planilla." },
+  "Não consegui enviar a planilha. Tente de novo.": {
+    es: "No pude enviar la planilla. Inténtalo de nuevo.",
+  },
+  "Trocar a planilha": { es: "Cambiar la planilla" },
+  "Escolher planilha": { es: "Elegir planilla" },
+  "{n} contato(s) nesta lista.": { es: "{n} contacto(s) en esta lista." },
+  "{c} criado(s), {e} já estavam na base.": { es: "{c} creado(s), {e} ya estaban en la base." },
+  "Fora:": { es: "Fuera:" },
+  "{n} linha(s) da planilha não puderam ser lidas.": {
+    es: "{n} línea(s) de la planilla no se pudieron leer.",
+  },
+
+  // ─── Editor de fluxo · menu de opções ───
+  "Nova opção": { es: "Nueva opción" },
+  "Este bloco só ESPERA a resposta. A pergunta com as opções sai de um bloco de mensagem antes dele.":
+    {
+      es: "Este bloque solo ESPERA la respuesta. La pregunta con las opciones sale de un bloque de mensaje anterior.",
+    },
+  "Vencido o prazo, o fluxo segue pela saída 'Não respondeu a tempo' — que é diferente de 'Não entendi a resposta'.":
+    {
+      es: "Vencido el plazo, el flujo sigue por la salida 'No respondió a tiempo' — que es distinta de 'No entendí la respuesta'.",
+    },
+  "Como comparar a resposta": { es: "Cómo comparar la respuesta" },
+  "A resposta é exatamente uma das opções": { es: "La respuesta es exactamente una de las opciones" },
+  "A resposta contém uma das opções": { es: "La respuesta contiene una de las opciones" },
+  "'Exata' é o certo para menu por número: com 'contém', a resposta '10' escolheria a opção '1'.": {
+    es: "'Exacta' es lo correcto para menú por número: con 'contiene', la respuesta '10' elegiría la opción '1'.",
+  },
+  "As opções": { es: "Las opciones" },
+  "O cliente pode responder": { es: "El cliente puede responder" },
+  "1, sim, quero": { es: "1, sí, quiero" },
+  "Remover esta opção": { es: "Quitar esta opción" },
+  "Acrescentar opção": { es: "Agregar opción" },
+
+  // ─── Editor de fluxo · caminhos paralelos ───
+  "Os caminhos": { es: "Los caminos" },
+
+  // ─── Editor de fluxo · fila fixa de atendimento ───
+  "Pessoa que não está mais na equipe": { es: "Persona que ya no está en el equipo" },
+  "A ordem": { es: "El orden" },
+  "Quem atende, e em que ordem": { es: "Quién atiende, y en qué orden" },
+  "Ninguém na fila ainda. Acrescente as pessoas na ordem em que devem atender.": {
+    es: "Nadie en la fila todavía. Agrega a las personas en el orden en que deben atender.",
+  },
+  "Subir na fila": { es: "Subir en la fila" },
+  "Descer na fila": { es: "Bajar en la fila" },
+  "Tirar da fila": { es: "Quitar de la fila" },
+  "Cada lead vai para o próximo da ordem, dando a volta no fim. Quem estiver indisponível na hora é pulado, e a vez dele não se perde.":
+    {
+      es: "Cada lead va al siguiente del orden, volviendo al principio al final. A quien no esté disponible en ese momento se le saltea, y su turno no se pierde.",
+    },
+  "Acrescentar à fila": { es: "Agregar a la fila" },
+  "Escolha quem entra na fila": { es: "Elige quién entra en la fila" },
+
+  // ─── Editor de fluxo · sorteio ───
+  "Sorteia entre quem está disponível. Sorteio concentra: três leads seguidos para a mesma pessoa é resultado normal. Para dividir parelho, use 'Distribuir para um vendedor'.":
+    {
+      es: "Sortea entre quienes están disponibles. El sorteo concentra: tres leads seguidos a la misma persona es un resultado normal. Para repartir parejo, usa 'Distribuir a un vendedor'.",
+    },
+
+  // ─── Editor de fluxo · gatilho por webhook ───
+  "Nome deste gatilho": { es: "Nombre de este disparador" },
+  "Só para você reconhecer este gatilho na lista de Webhooks. Não muda o endereço.": {
+    es: "Solo para que reconozcas este disparador en la lista de Webhooks. No cambia la dirección.",
+  },
+  "O endereço": { es: "La dirección" },
+  "O endereço deste gatilho é criado quando você PUBLICA o fluxo, e aparece em Canais › Webhooks. Ele não muda quando você publica de novo — dá para colar no outro sistema uma vez só.":
+    {
+      es: "La dirección de este disparador se crea cuando PUBLICAS el flujo, y aparece en Canales › Webhooks. No cambia cuando publicas de nuevo — se puede pegar en el otro sistema una sola vez.",
+    },
+
+  // ─── Editor de fluxo · disparo em massa ───
+  "A campanha": { es: "La campaña" },
+  "Nome da campanha": { es: "Nombre de la campaña" },
+  "Aparece na tela de Disparos. Aceita {{lead.title}} para distinguir uma execução da outra.": {
+    es: "Aparece en la pantalla de Envíos. Acepta {{lead.title}} para distinguir una ejecución de otra.",
+  },
+  "Por qual número disparar": { es: "Por qué número enviar" },
+  "O que enviar": { es: "Qué enviar" },
+  "Use {{contact.name}} para tratar cada pessoa pelo nome.": {
+    es: "Usa {{contact.name}} para tratar a cada persona por su nombre.",
+  },
+  "Carregando os modelos…": { es: "Cargando las plantillas…" },
+  "Nenhum modelo aprovado nesta conta. Crie e aprove o modelo na Meta, sincronize em Conexões › Modelos, e volte.":
+    {
+      es: "Ninguna plantilla aprobada en esta cuenta. Crea y aprueba la plantilla en Meta, sincroniza en Conexiones › Plantillas, y vuelve.",
+    },
+  "Escolha o modelo": { es: "Elige la plantilla" },
+  "Fora da janela de 24 horas, este número só entrega modelo aprovado — é regra da Meta, não do produto.":
+    {
+      es: "Fuera de la ventana de 24 horas, este número solo entrega plantilla aprobada — es regla de Meta, no del producto.",
+    },
+  "Valor de {k}": { es: "Valor de {k}" },
+  "De onde vêm os números": { es: "De dónde vienen los números" },
+  "Todo mundo com um marcador": { es: "Todos los que tengan una etiqueta" },
+  "Uma lista fixa de contatos": { es: "Una lista fija de contactos" },
+  "A lista é recortada na hora de cada execução — quem ganhar o marcador depois também entra.": {
+    es: "La lista se recorta en el momento de cada ejecución — quien reciba la etiqueta después también entra.",
+  },
+  "A lista é a mesma toda vez, não importa quem entrou na base depois.": {
+    es: "La lista es la misma siempre, sin importar quién entró en la base después.",
+  },
+  "Marcadores": { es: "Etiquetas" },
+  "clientes, black-friday": { es: "clientes, black-friday" },
+  "Separe por vírgula. Quem tiver QUALQUER um deles entra na lista.": {
+    es: "Sepáralas con coma. Quien tenga CUALQUIERA de ellas entra en la lista.",
+  },
+  "Planilha de contatos": { es: "Planilla de contactos" },
+  "A planilha é resolvida em contatos AGORA, e a lista fica congelada no bloco. Quem entrar na base depois não recebe — para isso, use marcador.":
+    {
+      es: "La planilla se resuelve en contactos AHORA, y la lista queda congelada en el bloque. Quien entre en la base después no recibe — para eso, usa etiqueta.",
+    },
+  "Como disparar": { es: "Cómo enviar" },
+  "Segundos entre uma mensagem e outra": { es: "Segundos entre un mensaje y otro" },
+  "O sistema nunca dispara mais rápido que o mínimo do número escolhido, mesmo que você peça.": {
+    es: "El sistema nunca envía más rápido que el mínimo del número elegido, aunque se lo pidas.",
+  },
+  "Começar sozinho?": { es: "¿Empezar solo?" },
+  "Não — deixar em rascunho para revisão": { es: "No — dejar en borrador para revisión" },
+  "Sim — disparar assim que for criado": { es: "Sí — enviar apenas se cree" },
+  "Ninguém confere a lista antes. Use só quando o fluxo já roda há tempo e você confia no recorte.": {
+    es: "Nadie revisa la lista antes. Úsalo solo cuando el flujo ya lleva tiempo funcionando y confías en el recorte.",
+  },
+  "A campanha nasce em rascunho e abre um aviso na Central. Alguém confere quantos vão receber e aperta o botão.":
+    {
+      es: "La campaña nace en borrador y abre un aviso en la Central. Alguien revisa cuántos van a recibir y aprieta el botón.",
+    },
+
+  // ─── Editor de fluxo · aviso ao vendedor e mensagem ao cliente ───
+  "De onde vem o telefone": { es: "De dónde viene el teléfono" },
+  "Tipo de mensagem": { es: "Tipo de mensaje" },
+  "O arquivo precisa estar num endereço público — o WhatsApp busca por lá na hora de enviar.": {
+    es: "El archivo tiene que estar en una dirección pública — WhatsApp lo busca ahí al momento de enviar.",
+  },
+  "Use {{lead.title}}, {{contact.name}} e {{lead.score}} para incluir os dados do lead.": {
+    es: "Usa {{lead.title}}, {{contact.name}} y {{lead.score}} para incluir los datos del lead.",
+  },
+  "Por onde enviar": { es: "Por dónde enviar" },
 };
 
 /**

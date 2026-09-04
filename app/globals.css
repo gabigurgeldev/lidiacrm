@@ -1310,3 +1310,59 @@
   background-color: var(--color-surface);
   box-shadow: var(--shadow-xs);
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   QUADRO DE FLUXO (@xyflow/react) — as cores do produto, nos dois temas
+
+   O @xyflow/react pinta minimapa, controles, linhas e rótulo de aresta a partir
+   de um conjunto próprio de variáveis `--xy-*`, com valores DEFAULT claros
+   embutidos na folha dele (`@xyflow/react/dist/style.css`). Este repo não
+   redefinia nenhuma — e a consequência era visível: o minimapa aparecia como um
+   retângulo branco sólido no canto do canvas escuro, a ponto de o construtor ter
+   sido escrito SEM minimapa e com um comentário explicando a ausência.
+
+   Tirar a peça era tratar o sintoma. A causa é a ponte que faltava entre as
+   `--xy-*` e os tokens do produto, e é ela que este bloco constrói.
+
+   Por que em `.react-flow` e não em `:root`: as `--color-*` já trocam de valor
+   sozinhas entre claro e escuro (`:root` e o bloco de tema logo abaixo dele),
+   então uma definição só, ancorada nos tokens, acompanha os dois temas sem
+   duplicar nada. Escrever os hex aqui devolveria o problema — invertido. */
+.react-flow {
+  --xy-background-color-default: var(--color-bg);
+  --xy-background-pattern-dots-color-default: var(--color-border);
+  --xy-background-pattern-lines-color-default: var(--color-border);
+
+  --xy-edge-stroke-default: var(--color-border);
+  --xy-edge-stroke-selected-default: var(--color-accent);
+  --xy-edge-label-background-color-default: var(--color-surface);
+  --xy-edge-label-color-default: var(--color-text-muted);
+
+  --xy-handle-background-color-default: var(--color-accent);
+  --xy-handle-border-color-default: var(--color-surface);
+
+  --xy-controls-button-background-color-default: var(--color-surface);
+  --xy-controls-button-background-color-hover-default: var(--color-surface-elevated);
+  --xy-controls-button-color-default: var(--color-text);
+  --xy-controls-button-color-hover-default: var(--color-text);
+  --xy-controls-button-border-color-default: var(--color-border);
+
+  --xy-minimap-background-color-default: var(--color-surface);
+  --xy-minimap-node-background-color-default: var(--color-border);
+  --xy-minimap-node-stroke-color-default: var(--color-border);
+  /* A máscara é o que fica FORA da vista atual. Translúcida sobre a superfície,
+     nunca opaca: opaca esconderia o formato do fluxo, que é a única coisa que o
+     minimapa serve para mostrar. */
+  --xy-minimap-mask-background-color-default: color-mix(in oklab, var(--color-bg) 70%, transparent);
+  --xy-minimap-mask-stroke-color-default: var(--color-border);
+
+  --xy-attribution-background-color-default: transparent;
+}
+
+/* O minimapa é chassi da tela, não superfície que se repete: borda e sombra
+   suave o descolam do canvas sem virar um cartão dentro do quadro. */
+.react-flow__minimap {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}

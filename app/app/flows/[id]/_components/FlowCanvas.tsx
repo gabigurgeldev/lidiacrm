@@ -4,10 +4,12 @@ import {
   addEdge,
   Background,
   Controls,
+  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
   useNodesState,
+  useReactFlow,
   type Connection,
   type Edge,
   type Node,
@@ -23,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/hooks/i18n/useT";
 import { usePaletaDeNos, type NoDaPaleta } from "@/hooks/flows/useFlowNodes";
 import { useFluxo, useFluxos, usePublicarFluxo, useSalvarRascunho } from "@/hooks/flows/useFlows";
+import { autoLayout } from "@/lib/flow-engine/ai/auto-layout";
 import type { ErroDeGrafo, FlowGraph } from "@/lib/flow-engine/graph-schema";
 import { configExemploDoTipo } from "@/lib/flow-engine/node-examples";
 import { garantirNosRegistrados } from "@/lib/flow-engine/register-all";
@@ -35,6 +38,7 @@ import { ICONE_DA_CATEGORIA, ICONE_DO_TIPO } from "./nodeVisuals";
 import { NoDoFluxo, type DadosDoNo } from "./NoDoFluxo";
 import { EdgeConfigPanel } from "./EdgeConfigPanel";
 import { PainelDoNo } from "./PainelDoNo";
+import { decorarArestas, duplicarNo } from "./quadro";
 
 /**
  * O construtor.
@@ -48,6 +52,19 @@ import { PainelDoNo } from "./PainelDoNo";
  */
 
 const tiposDeNo = { fluxo: NoDoFluxo };
+
+/**
+ * O tipo MIME do arrasto da paleta para o quadro.
+ *
+ * Próprio, e não `text/plain`: com `text/plain` qualquer texto solto na tela
+ * (uma seleção arrastada de outra aba) chegaria no `onDrop` e viraria uma
+ * tentativa de criar bloco de um tipo que não existe. Mesmo padrão e mesmo
+ * motivo do construtor irmão (`app/app/ai/followups/[id]/_components/`).
+ */
+const MIME_DO_ARRASTO = "application/x-flow-node-type";
+
+/** O quadro alinha em grade de 20px. Ver o comentário de `snapGrid` abaixo. */
+const GRADE: [number, number] = [20, 20];
 
 function ramosDoTipo(tipo: string, config: unknown): FlowBranch[] {
   garantirNosRegistrados();
@@ -202,8 +219,15 @@ function Quadro({ flowId }: { flowId: string }) {
     [setArestas],
   );
 
-  const acrescentar = useCallback(
-    (no: NoDaPaleta) => {
+  /**
+   * Cria o bloco NUMA POSIÇÃO — a peça que faltava para arrastar da paleta.
+   *
+   * O `acrescentar` de antes calculava a posição sozinho (`80 + n % 4 * 260`),
+   * então não havia como dizer "põe aqui". Quem escolhe a posição agora é quem
+   * chama: o clique mantém a grade, o arrasto usa onde a pessoa soltou.
+   */
+  const acrescentarEm = useCallback(
+    (no: NoDaPaleta, posicao: { x: number; y: number }) => {
       const id = `n${Date.now().toString(36)}`;
       const config = configExemploDoTipo(no.type);
       setNos((atuais) => [
@@ -211,7 +235,7 @@ function Quadro({ flowId }: { flowId: string }) {
         {
           id,
           type: "fluxo",
-          position: { x: 80 + (atuais.length % 4) * 260, y: 80 + Math.floor(atuais.length / 4) * 200 },
+          position: posicao,
           data: {
             rotulo: no.rotulo,
             tipo: no.type,
@@ -222,9 +246,78 @@ function Quadro({ flowId }: { flowId: string }) {
         },
       ]);
       setSelecionado(id);
+      setArestaSelecionada(null);
     },
     [setNos],
   );
+
+  /**
+   * O clique na paleta continua existindo, e não é redundância com o arrasto.
+   *
+   * Arrastar não é alcançável por teclado — quem navega por Tab não tem gesto
+   * equivalente, e a paleta é a única porta para criar bloco. Manter os dois é
+   * o que o construtor irmão já faz.
+   */
+  const acrescentar = useCallback(
+    (no: NoDaPaleta) => {
+      const n = nos.length;
+      acrescentarEm(no, { x: 80 + (n % 4) * 260, y: 80 + Math.floor(n / 4) * 200 });
+    },
+    [acrescentarEm, nos.length],
+  );
+
+  const { screenToFlowPosition } = useReactFlow();
+
+  const aoArrastarPorCima = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const aoSoltar = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const tipo = e.dataTransfer.getData(MIME_DO_ARRASTO);
+      if (tipo === "") return;
+      const no = (paleta?.nos ?? []).find((x) => x.type === tipo);
+      // Tipo que a paleta não conhece não vira bloco: seria um cartão sem
+      // rótulo, sem categoria e sem saídas, e o quadro não teria como desenhá-lo.
+      if (no === undefined) return;
+      acrescentarEm(no, screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+    },
+    [acrescentarEm, paleta?.nos, screenToFlowPosition],
+  );
+
+  /** Ver `duplicarNo` em `quadro.ts` — inclusive o que NÃO é copiado, e por quê. */
+  const duplicar = useCallback(
+    (id: string) => {
+      const novoId = `n${Date.now().toString(36)}`;
+      const copia = duplicarNo(nos, id, novoId);
+      if (copia === null) return;
+      setNos((atuais) => [...atuais, copia]);
+      setSelecionado(novoId);
+      setArestaSelecionada(null);
+    },
+    [nos, setNos],
+  );
+
+  /**
+   * ARRUMAR: devolve o quadro à grade, de cima para baixo, a partir do gatilho.
+   *
+   * Reusa o `autoLayout` que a IA de geração já usa — é o mesmo problema (um
+   * grafo sem posição que precisa de uma), e duas regras de arrumação
+   * diferentes fariam o quadro montado à mão e o gerado ficarem com cara de
+   * desenhos de duas mãos. Só as POSIÇÕES mudam; nenhum bloco, ligação ou
+   * config é tocado.
+   */
+  const arrumar = useCallback(() => {
+    setNos((atuais) => {
+      const posicoes = autoLayout(
+        atuais.map((n) => ({ id: n.id, type: (n.data as DadosDoNo).tipo })),
+        arestas.map((a) => ({ source: a.source, target: a.target })),
+      );
+      return atuais.map((n) => ({ ...n, position: posicoes[n.id] ?? n.position }));
+    });
+  }, [setNos, arestas]);
 
   const noSelecionado = useMemo(
     () => nos.find((n) => n.id === selecionado) ?? null,
@@ -311,6 +404,11 @@ function Quadro({ flowId }: { flowId: string }) {
     }
   }
 
+  const arestasDesenhadas = useMemo(
+    () => decorarArestas(nos, arestas, t),
+    [nos, arestas, t],
+  );
+
   const nosComErro = useMemo(() => {
     const porAncora = new Map<string, string[]>();
     for (const e of erros) {
@@ -342,6 +440,15 @@ function Quadro({ flowId }: { flowId: string }) {
           <Badge variant="secondary">{t("Nunca publicado")}</Badge>
         )}
         <div className="ml-auto flex gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={arrumar}
+            disabled={bloqueado || nos.length === 0}
+            data-testid="arrumar-quadro"
+          >
+            {t("Arrumar")}
+          </Button>
           {/* A PORTA da tela de execuções deste fluxo. Fica aqui, e não no menu,
               porque é onde a pessoa está quando quer ver o fluxo rodar — e é o
               que o teste de navegação espera de tela sob `[id]`: alcançada a
@@ -386,6 +493,9 @@ function Quadro({ flowId }: { flowId: string }) {
           data-testid="paleta"
           aria-disabled={bloqueado}
         >
+          <p className="mb-2 px-2 text-xs text-muted-foreground">
+            {t("Clique para acrescentar, ou arraste até o ponto do quadro.")}
+          </p>
           {(paleta?.categorias ?? []).map((cat) => (
             <div key={cat.id} className="mb-4">
               <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -403,7 +513,12 @@ function Quadro({ flowId }: { flowId: string }) {
                           onClick={() => acrescentar(n)}
                           disabled={bloqueado}
                           title={t(n.descricao)}
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted disabled:pointer-events-none disabled:opacity-40"
+                          draggable={!bloqueado}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(MIME_DO_ARRASTO, n.type);
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
+                          className="flex w-full cursor-grab items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted active:cursor-grabbing disabled:pointer-events-none disabled:opacity-40"
                           data-testid={`paleta-${n.type}`}
                         >
                           <Icone size={14} className="shrink-0 text-muted-foreground" aria-hidden />
@@ -417,10 +532,15 @@ function Quadro({ flowId }: { flowId: string }) {
           ))}
         </aside>
 
-        <div className="min-w-0 flex-1" data-testid="quadro">
+        <div
+          className="min-w-0 flex-1"
+          data-testid="quadro"
+          onDragOver={aoArrastarPorCima}
+          onDrop={bloqueado ? undefined : aoSoltar}
+        >
           <ReactFlow
             nodes={nosComErro}
-            edges={arestas}
+            edges={arestasDesenhadas}
             onNodesChange={bloqueado ? undefined : aoMudarNos}
             onEdgesChange={bloqueado ? undefined : aoMudarArestas}
             onConnect={bloqueado ? undefined : aoLigar}
@@ -455,19 +575,27 @@ function Quadro({ flowId }: { flowId: string }) {
             panOnDrag={!bloqueado}
             zoomOnScroll={!bloqueado}
             fitView
-            // Sem MiniMap e com a atribuição escondida: o CSS default do
-            // @xyflow/react pinta os dois com fundo claro
-            // (var(--xy-minimap-background-color-default) e
-            // --xy-attribution-background-color-default), e este repo não tem
-            // override de tema escuro para nenhuma variável --xy-* — apareciam
-            // como um retângulo claro sólido no canto inferior direito, sobre
-            // o canvas escuro. O construtor irmão (follow-up,
-            // app/app/ai/followups/[id]/_components/FlowCanvas.tsx) já evita o
-            // MiniMap de propósito; aqui alinha ao mesmo precedente.
+            // A grade alinha o que é solto no quadro. Sem ela, dois blocos
+            // arrastados para "a mesma altura" ficam 3px fora, e as linhas
+            // entre eles saem tortas — o quadro parece desalinhado sem que
+            // ninguém consiga apontar onde.
+            snapToGrid
+            snapGrid={GRADE}
+            // A atribuição continua escondida; o MiniMap voltou.
+            //
+            // Ele estava fora porque o CSS default do @xyflow/react pinta o
+            // painel com fundo claro (`--xy-minimap-background-color-default`)
+            // e este repo não tinha override de tema escuro para nenhuma
+            // variável `--xy-*` — aparecia como um retângulo claro sólido sobre
+            // o canvas escuro. Isso deixou de ser verdade: `app/globals.css`
+            // agora liga as `--xy-*` aos tokens do produto, nos dois temas. O
+            // motivo de excluí-lo era o defeito, não o componente — e num
+            // quadro de vinte blocos ele é a única forma de saber onde se está.
             proOptions={{ hideAttribution: true }}
           >
-            <Background />
+            <Background gap={GRADE[0]} />
             <Controls />
+            <MiniMap pannable zoomable nodeStrokeWidth={3} />
           </ReactFlow>
         </div>
 
@@ -486,6 +614,7 @@ function Quadro({ flowId }: { flowId: string }) {
               );
               setSelecionado(null);
             }}
+            aoDuplicar={() => duplicar(noSelecionado.id)}
             podeApagar={(noSelecionado.data as DadosDoNo).categoria !== "trigger"}
             blocosDeReencontro={blocosDeReencontro}
             fluxosChamaveis={fluxosChamaveis}

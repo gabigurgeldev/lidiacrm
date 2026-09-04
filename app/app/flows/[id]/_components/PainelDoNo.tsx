@@ -25,6 +25,14 @@ interface Props {
   aoMudarRotulo: (rotulo: string) => void;
   aoMudarConfig: (config: Record<string, unknown>) => void;
   aoApagar: () => void;
+  /**
+   * Cria uma cópia deste bloco, com a MESMA config, ao lado.
+   *
+   * Fica aqui e não num menu do cartão porque é onde a pessoa está quando
+   * acabou de configurar — o gesto que se quer é "mais um desses, igual".
+   * Gatilho não duplica; ver o porquê em `duplicar`, no FlowCanvas.
+   */
+  aoDuplicar?: () => void;
   podeApagar: boolean;
   /**
    * Os blocos de reencontro DESTE fluxo.
@@ -69,17 +77,23 @@ export function PainelDoNo(props: Props) {
         fluxosChamaveis={props.fluxosChamaveis}
       />
 
-      {props.podeApagar && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-auto"
-          onClick={props.aoApagar}
-          data-testid="apagar-no"
-        >
-          {t("Remover este bloco")}
-        </Button>
-      )}
+      <div className="mt-auto flex flex-col gap-2 pt-2">
+        {props.podeApagar && props.aoDuplicar !== undefined && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={props.aoDuplicar}
+            data-testid="duplicar-no"
+          >
+            {t("Duplicar com estes ajustes")}
+          </Button>
+        )}
+        {props.podeApagar && (
+          <Button variant="outline" size="sm" onClick={props.aoApagar} data-testid="apagar-no">
+            {t("Remover este bloco")}
+          </Button>
+        )}
+      </div>
     </aside>
   );
 }
