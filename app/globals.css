@@ -1052,6 +1052,50 @@
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
+   ENTRADAS DO PAINEL DE IA — as animações que o produto ACHAVA que tinha
+
+   ⚠️ `animate-in`, `fade-in`, `zoom-in-95`, `slide-in-from-*` são classes do
+   plugin `tailwindcss-animate`, que NÃO está instalado neste repo
+   (`plugins: []` em `tailwind.config.ts`). Elas apareciam em quatro lugares —
+   o overlay e o cartão de `ConstrutorComIa.tsx`, a bolha e o cartão de opção de
+   `ia/Pecas.tsx`, e o pop-in do bloco recém-criado em `NoDoFluxo.tsx` — e
+   nenhuma delas fazia nada. O comentário de `Pecas.tsx` já registrava a dívida.
+
+   Trazer o plugin por causa de cinco usos seria dependência nova no bundle de
+   todo self-hoster. Estas quatro regras cobrem o que era usado, no padrão que
+   `.barra-indeterminada` (acima) já estabeleceu.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@keyframes ia-surge {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes ia-aparece {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* A bolha e o cartão de opção entram de baixo; o overlay só aparece. */
+.ia-surge {
+  animation: ia-surge 240ms var(--ease-out) both;
+}
+
+.ia-aparece {
+  animation: ia-aparece 180ms var(--ease-out) both;
+}
+
+/* `both` acima é o que faz o `animation-delay` escalonado dos cartões de opção
+   valer: sem ele, as opções piscam todas visíveis antes de a cascata começar. */
+
+@media (prefers-reduced-motion: reduce) {
+  .ia-surge,
+  .ia-aparece {
+    animation: none;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
    CARTÃO AGRUPADO E SEGMENTADO — a linguagem de "Ajustes" do iOS
 
    Adotada em 2026-09-01 por decisão do dono do produto; os anti-patterns 5

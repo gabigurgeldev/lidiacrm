@@ -84,8 +84,12 @@ export async function POST(
       actorUserId: authz.user.id,
       organizationId: authz.org.orgId,
       resourceType: "ai_models",
-      resourceId: provider,
-      metadata: { ...resultado },
+      // ⚠️ `null`, e NÃO `provider`. `api_audit_log.resource_id` é `uuid`, e
+      // "openrouter" não é um: o INSERT estourava. Audit é fire-and-forget, então
+      // a sincronização seguia e a linha da trilha sumia — sem sintoma em tela
+      // nenhuma. O identificador natural vai no metadata, que é texto livre.
+      resourceId: null,
+      metadata: { ...resultado, provedor: provider },
       requestId,
     });
     return ok(resultado, { requestId });

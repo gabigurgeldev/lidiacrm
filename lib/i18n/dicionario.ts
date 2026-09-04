@@ -6818,6 +6818,38 @@ export const DICIONARIO: Traducoes = {
     { es: "Listo. Revisá los bloques en el tablero, ajustá lo que quieras y guardá el borrador." },
   "A conversa se perde se você sair desta tela antes de montar o fluxo.":
     { es: "La conversación se pierde si salís de esta pantalla antes de armar el flujo." },
+  // ── o painel de IA: responder escrevendo, ver o plano, descartar depois ────
+  "ou escreva sua resposta": { es: "o escribí tu respuesta" },
+  "escreva sua resposta": { es: "escribí tu respuesta" },
+  "Não tenho preferência": { es: "No tengo preferencia" },
+  "(sem preferência — escolha um padrão sensato)":
+    { es: "(sin preferencia — elegí un valor razonable)" },
+  "Corrigir a última resposta": { es: "Corregir la última respuesta" },
+  "Ver o que vai ser montado": { es: "Ver lo que se va a armar" },
+  "Montando o plano…": { es: "Armando el plan…" },
+  "{n} blocos vão ser criados:": { es: "Se van a crear {n} bloques:" },
+  "Isto substitui o que está no quadro agora. Dá para descartar depois.":
+    { es: "Esto reemplaza lo que hay en el tablero ahora. Se puede descartar después." },
+  "Pronto. Confira os blocos no quadro, ajuste o que quiser e publique.":
+    { es: "Listo. Revisá los bloques en el tablero, ajustá lo que quieras y publicá." },
+  "Pronto. Confira os blocos no quadro e resolva os pontos abaixo antes de publicar.":
+    { es: "Listo. Revisá los bloques en el tablero y resolvé los puntos de abajo antes de publicar." },
+  "Ajustes feitos automaticamente": { es: "Ajustes hechos automáticamente" },
+  "Ainda falta resolver, senão o fluxo não publica":
+    { es: "Todavía falta resolver esto, si no el flujo no se publica" },
+  "Ficar com este fluxo": { es: "Quedarme con este flujo" },
+  "O quadro voltou ao que era antes.": { es: "El tablero volvió a como estaba antes." },
+  // ── ajustar um fluxo que já existe, em vez de refazê-lo ───────────────────
+  "Ajustar o fluxo que está no quadro": { es: "Ajustar el flujo que está en el tablero" },
+  "Montar um fluxo do zero": { es: "Armar un flujo desde cero" },
+  "Descreva o fluxo que você quer, ou peça um ajuste no que já está no quadro — ex.: a espera passa a ser de 1 hora.":
+    {
+      es: "Describí el flujo que querés, o pedí un ajuste en lo que ya está en el tablero — ej.: la espera pasa a ser de 1 hora.",
+    },
+  "Ajustar mexe só no que você pediu e mantém o resto — inclusive os campos que você preencheu à mão. Do zero substitui o quadro inteiro.":
+    {
+      es: "Ajustar toca solo lo que pediste y mantiene el resto — incluidos los campos que completaste a mano. Desde cero reemplaza todo el tablero.",
+    },
   "Não consegui entender o pedido.": { es: "No pude entender el pedido." },
   "A geração falhou. Tente de novo.": { es: "La generación falló. Intentá de nuevo." },
   "A IA não conseguiu terminar o fluxo. Tente descrever de outro jeito.":

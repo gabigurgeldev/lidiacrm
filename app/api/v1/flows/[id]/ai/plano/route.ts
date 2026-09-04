@@ -35,6 +35,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { logger } from "@/lib/logger";
 import { orcamentoPermite } from "@/lib/flow-engine/ai/budget-gate";
+import { motivoDaEntradaRecusada } from "@/lib/flow-engine/ai/entrada";
 import { portaComFallback, resolverCadeia } from "@/lib/flow-engine/ai/modelo-com-fallback";
 import {
   TOKENS_DO_PLANO,
@@ -75,9 +76,10 @@ export async function POST(
   if (!authz.ok) return authz.response;
   const { id: flowId } = await ctx.params;
 
-  const lido = entradaDeGeracaoSchema.safeParse(await req.json().catch(() => ({})));
+  const corpo = await req.json().catch(() => ({}));
+  const lido = entradaDeGeracaoSchema.safeParse(corpo);
   if (!lido.success) {
-    return fail("validation_failed", "Descreva o que você quer antes de gerar.", 422, { requestId });
+    return fail("validation_failed", motivoDaEntradaRecusada(lido.error, corpo), 422, { requestId });
   }
 
   const orcamento = await orcamentoPermite(authz.org.orgId, PURPOSE);

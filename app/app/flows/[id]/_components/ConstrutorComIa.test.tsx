@@ -73,7 +73,12 @@ const GRAFO = {
   ],
 };
 
-function montarTela() {
+/**
+ * `quadroAtual` vazio por padrão: é o estado de um fluxo recém-criado, e é o
+ * que a maioria dos casos exercita. Passar um grafo com blocos liga o caminho
+ * do AJUSTE — a tela oferece "ajustar" só quando há o que ajustar.
+ */
+function montarTela(quadroAtual: { nodes: unknown[]; edges: unknown[] } = { nodes: [], edges: [] }) {
   const canvas = vi.fn();
   const bloqueio = vi.fn();
   const anterior = { nos: [{ id: "velho" }], arestas: [] } as never;
@@ -82,24 +87,41 @@ function montarTela() {
       flowId="11111111-1111-4111-8111-111111111111"
       onAtualizarCanvas={canvas}
       grafoAntesDeGerar={() => anterior}
+      grafoAtual={() => quadroAtual as never}
       onMudarBloqueio={bloqueio}
     />,
   );
   return { canvas, bloqueio, anterior };
 }
 
-/** Vai da porta fechada até o botão "Montar o fluxo" aparecer. */
+/** Vai da porta fechada até a IA responder a primeira vez. */
 async function ateOResumo(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByTestId("abrir-construtor-ia"));
   await user.type(screen.getByTestId("ia-pedido"), "avisa o vendedor quando o lead esfriar");
   await user.click(screen.getByTestId("ia-continuar"));
 }
 
-describe("ConstrutorComIa", () => {
-  beforeEach(() => {
-    postMock.mockReset();
-  });
+/**
+ * Segue do resumo até a montagem começar.
+ *
+ * ⚠️ HÁ UM PASSO A MAIS AQUI, e ele É a feature. Antes, "Montar o fluxo"
+ * aparecia direto no resumo e disparava plano + montagem coladas: a pessoa
+ * aceitava a substituição do quadro dela tendo lido uma frase. Hoje ela vê a
+ * lista de blocos antes — este helper existe porque o passo é obrigatório.
+ */
+async function ateMontar(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByTestId("ia-ver-plano"));
+  await user.click(await screen.findByTestId("ia-montar"));
+}
 
+// No topo, e não dentro de um `describe`: o arquivo tem três blocos, e um
+// reset preso ao primeiro deixa os outros herdando as chamadas do anterior —
+// o sintoma é "esperava 2 chamadas, recebeu 8".
+beforeEach(() => {
+  postMock.mockReset();
+});
+
+describe("ConstrutorComIa", () => {
   it("mostra a pergunta como CARTÕES de escolha única, navegáveis por teclado", async () => {
     const user = userEvent.setup();
     postMock.mockResolvedValueOnce({
@@ -127,7 +149,7 @@ describe("ConstrutorComIa", () => {
 
     const { canvas } = montarTela();
     await ateOResumo(user);
-    await user.click(await screen.findByTestId("ia-montar"));
+    await ateMontar(user);
 
     await waitFor(() => expect(canvas).toHaveBeenCalled());
     const primeiro = canvas.mock.calls[0]![0] as { nos: unknown[] };
@@ -148,7 +170,7 @@ describe("ConstrutorComIa", () => {
 
     montarTela();
     await ateOResumo(user);
-    await user.click(await screen.findByTestId("ia-montar"));
+    await ateMontar(user);
 
     const aviso = await screen.findByTestId("ia-aviso-padrao");
     // Esconder isso seria repetir o pecado que esta frente veio consertar: um
@@ -166,7 +188,9 @@ describe("ConstrutorComIa", () => {
 
     const { bloqueio } = montarTela();
     await ateOResumo(user);
-    await user.click(await screen.findByTestId("ia-montar"));
+    // Só "ver o plano": é a chamada que falha, e o botão de montar nunca chega
+    // a existir — que é justamente o comportamento a provar.
+    await user.click(await screen.findByTestId("ia-ver-plano"));
 
     const erro = await screen.findByTestId("ia-erro");
     expect(erro).toHaveTextContent(/Nenhum provedor de IA/);
@@ -189,7 +213,7 @@ describe("ConstrutorComIa", () => {
 
     const { canvas, anterior } = montarTela();
     await ateOResumo(user);
-    await user.click(await screen.findByTestId("ia-montar"));
+    await ateMontar(user);
 
     // A tela DIZ que os blocos ficaram lá — sem esta frase a pessoa lê "falhou",
     // fecha o painel e não repara no fluxo que sobrou.
@@ -201,5 +225,203 @@ describe("ConstrutorComIa", () => {
     // anterior. Sem ela, a frase acima poderia estar mentindo.
     const voltouAoAnterior = canvas.mock.calls.some((c) => c[0] === anterior);
     expect(voltouAoAnterior, "o esqueleto não pode ser desfeito por uma falha").toBe(false);
+  });
+});
+
+describe("responder sem cartão", () => {
+  it("dá para DIGITAR a resposta, mesmo quando há opções", async () => {
+    // ⚠️ O servidor recusava toda pergunta com menos de 2 opções, então para
+    // perguntar "qual o texto da mensagem?" o modelo tinha de inventar três
+    // textos — e a pessoa escolhia entre frases que não eram as dela.
+    const user = userEvent.setup();
+    postMock
+      .mockResolvedValueOnce({
+        data: { kind: "perguntar", pergunta: "Qual etiqueta?", opcoes: ["quente", "frio"] },
+      })
+      .mockResolvedValueOnce({ data: { kind: "pronto", resumo: "Monto 3 blocos." } });
+
+    montarTela();
+    await ateOResumo(user);
+
+    await user.type(await screen.findByTestId("ia-resposta-livre"), "lead-vip");
+    await user.click(screen.getByTestId("ia-enviar-resposta"));
+
+    await waitFor(() => expect(postMock).toHaveBeenCalledTimes(2));
+    const corpo = postMock.mock.calls[1]![1] as { historico: { texto: string }[] };
+    expect(
+      corpo.historico.map((m) => m.texto),
+      "o que a pessoa escreveu tem de chegar ao modelo como resposta dela",
+    ).toContain("lead-vip");
+  });
+
+  it("pergunta ABERTA vem sem cartão nenhum, e ainda assim tem caminho", async () => {
+    const user = userEvent.setup();
+    postMock.mockResolvedValueOnce({
+      data: {
+        kind: "perguntar",
+        pergunta: "Qual o texto da mensagem?",
+        opcoes: [],
+        resposta_livre: true,
+      },
+    });
+
+    montarTela();
+    await ateOResumo(user);
+
+    expect(await screen.findByTestId("ia-resposta-livre")).toBeInTheDocument();
+    expect(screen.queryAllByTestId("ia-opcao")).toHaveLength(0);
+  });
+
+  it('"não tenho preferência" é uma resposta, não um abandono', async () => {
+    const user = userEvent.setup();
+    postMock
+      .mockResolvedValueOnce({
+        data: { kind: "perguntar", pergunta: "Quanto esperar?", opcoes: ["10 min", "1 hora"] },
+      })
+      .mockResolvedValueOnce({ data: { kind: "pronto", resumo: "Monto 3 blocos." } });
+
+    montarTela();
+    await ateOResumo(user);
+    await user.click(await screen.findByTestId("ia-pular"));
+
+    await waitFor(() => expect(postMock).toHaveBeenCalledTimes(2));
+    const corpo = postMock.mock.calls[1]![1] as { historico: { texto: string }[] };
+    expect(corpo.historico).toHaveLength(2);
+  });
+
+  it("corrigir a última resposta remove o par e pergunta de novo", async () => {
+    // Sem isto, clicar na opção errada obrigava a fechar o painel e recomeçar a
+    // descrição do zero — e a conversa não é persistida, então é literal.
+    const user = userEvent.setup();
+    postMock
+      .mockResolvedValueOnce({
+        data: { kind: "perguntar", pergunta: "Quanto esperar?", opcoes: ["10 min", "1 hora"] },
+      })
+      .mockResolvedValueOnce({ data: { kind: "pronto", resumo: "Monto 3 blocos." } })
+      .mockResolvedValueOnce({
+        data: { kind: "perguntar", pergunta: "Quanto esperar?", opcoes: ["10 min", "1 hora"] },
+      });
+
+    montarTela();
+    await ateOResumo(user);
+    await user.click((await screen.findAllByTestId("ia-opcao"))[0]!);
+
+    await user.click(await screen.findByTestId("ia-corrigir"));
+
+    await waitFor(() => expect(postMock).toHaveBeenCalledTimes(3));
+    const corpo = postMock.mock.calls[2]![1] as { historico: unknown[] };
+    expect(corpo.historico, "o par pergunta/resposta tinha de sair do histórico").toHaveLength(0);
+  });
+});
+
+describe("ver antes de aceitar, e descartar depois", () => {
+  it("lista os blocos do plano ANTES de substituir o quadro", async () => {
+    const user = userEvent.setup();
+    postMock
+      .mockResolvedValueOnce({ data: { kind: "pronto", resumo: "Monto 3 blocos." } })
+      .mockResolvedValueOnce({ data: PLANO });
+
+    const { canvas } = montarTela();
+    await ateOResumo(user);
+    await user.click(await screen.findByTestId("ia-ver-plano"));
+
+    const lista = await screen.findByTestId("ia-plano");
+    expect(lista).toHaveTextContent("Espera");
+    // A intenção é o que permite conferir: "Espera" sozinho não diz 10 minutos.
+    expect(lista).toHaveTextContent("esperar 10 minutos");
+    expect(
+      canvas,
+      "o quadro da pessoa não pode ser tocado antes de ela ver o que vem",
+    ).not.toHaveBeenCalled();
+  });
+
+  it("descartar DEPOIS de pronto devolve o quadro anterior", async () => {
+    // Antes só dava para desfazer DURANTE a montagem — que é justamente quando
+    // a pessoa ainda não sabe se gostou do resultado.
+    const user = userEvent.setup();
+    postMock
+      .mockResolvedValueOnce({ data: { kind: "pronto", resumo: "Monto 3 blocos." } })
+      .mockResolvedValueOnce({ data: PLANO })
+      .mockResolvedValueOnce({ data: { grafo: GRAFO, comExemplo: 0, descartes: [] } });
+
+    const { canvas, anterior } = montarTela();
+    await ateOResumo(user);
+    await ateMontar(user);
+
+    await user.click(await screen.findByTestId("ia-descartar"));
+
+    expect(canvas).toHaveBeenLastCalledWith(anterior);
+  });
+
+  it("o que ficou pendente aparece na tela, e não no botão Publicar", async () => {
+    const user = userEvent.setup();
+    postMock
+      .mockResolvedValueOnce({ data: { kind: "pronto", resumo: "Monto 3 blocos." } })
+      .mockResolvedValueOnce({ data: PLANO })
+      .mockResolvedValueOnce({
+        data: {
+          grafo: GRAFO,
+          comExemplo: 0,
+          descartes: [],
+          consertos: [{ ancora: "w1", oQueFoiFeito: "A saída solta passou a terminar o fluxo." }],
+          pendencias: [
+            { ancora: "tag", codigo: "ramo_sem_saida", mensagem: 'A saída "Sim" não leva a lugar nenhum.' },
+          ],
+        },
+      });
+
+    montarTela();
+    await ateOResumo(user);
+    await ateMontar(user);
+
+    expect(await screen.findByTestId("ia-pendencias")).toHaveTextContent('A saída "Sim"');
+    // O conserto automático também é dito: ele mexeu em ligação, e conserto
+    // silencioso vira "eu não pedi isso".
+    expect(screen.getByTestId("ia-consertos")).toHaveTextContent("terminar o fluxo");
+  });
+});
+
+describe("ajustar o fluxo que já está no quadro", () => {
+  const QUADRO_CHEIO = { nodes: GRAFO.nodes, edges: GRAFO.edges };
+
+  it("com o quadro VAZIO não oferece ajustar — não há o que ajustar", async () => {
+    const user = userEvent.setup();
+    montarTela();
+    await user.click(screen.getByTestId("abrir-construtor-ia"));
+
+    expect(screen.queryByTestId("ia-ajustar")).not.toBeInTheDocument();
+    expect(screen.getByTestId("ia-continuar")).toBeInTheDocument();
+  });
+
+  it("com blocos no quadro, ajustar vai DIRETO à rota de ajuste", async () => {
+    // Sem passar por `interpretar` nem pela lista do plano: o pedido é uma
+    // alteração sobre um fluxo que a pessoa está vendo na tela.
+    const user = userEvent.setup();
+    postMock.mockResolvedValueOnce({
+      data: { grafo: GRAFO, comExemplo: 0, descartes: [], preservados: 2, regerados: 1 },
+    });
+
+    const { canvas } = montarTela(QUADRO_CHEIO);
+    await user.click(screen.getByTestId("abrir-construtor-ia"));
+    await user.type(screen.getByTestId("ia-pedido"), "a espera passa a ser de 1 hora");
+    await user.click(screen.getByTestId("ia-ajustar"));
+
+    await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
+    expect(postMock.mock.calls[0]![0]).toContain("/ai/ajustar");
+    expect(postMock.mock.calls[0]![1]).toMatchObject({ pedido: "a espera passa a ser de 1 hora" });
+    await waitFor(() => expect(canvas).toHaveBeenCalled());
+  });
+
+  it("depois do ajuste dá para descartar e voltar ao quadro anterior", async () => {
+    const user = userEvent.setup();
+    postMock.mockResolvedValueOnce({ data: { grafo: GRAFO, comExemplo: 0, descartes: [] } });
+
+    const { canvas, anterior } = montarTela(QUADRO_CHEIO);
+    await user.click(screen.getByTestId("abrir-construtor-ia"));
+    await user.type(screen.getByTestId("ia-pedido"), "tira a etiqueta");
+    await user.click(screen.getByTestId("ia-ajustar"));
+
+    await user.click(await screen.findByTestId("ia-descartar"));
+    expect(canvas).toHaveBeenLastCalledWith(anterior);
   });
 });

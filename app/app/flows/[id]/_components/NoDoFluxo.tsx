@@ -92,7 +92,7 @@ export function NoDoFluxo({ id, data, selected }: NodeProps) {
         temErro && "border-destructive ring-2 ring-destructive ring-offset-1",
         // Pop-in do nó que a IA acabou de criar em streaming — ver o
         // comentário de `recemAdicionado` na interface acima.
-        d.recemAdicionado === true && "animate-in fade-in zoom-in-95 duration-300",
+        d.recemAdicionado === true && "ia-surge",
       )}
       data-testid={`no-${id}`}
       title={temErro ? d.erros!.join("; ") : legenda}
