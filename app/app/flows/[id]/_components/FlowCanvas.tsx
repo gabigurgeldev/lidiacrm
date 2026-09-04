@@ -342,6 +342,15 @@ function Quadro({ flowId }: { flowId: string }) {
           <Badge variant="secondary">{t("Nunca publicado")}</Badge>
         )}
         <div className="ml-auto flex gap-2">
+          {/* A PORTA da tela de execuções deste fluxo. Fica aqui, e não no menu,
+              porque é onde a pessoa está quando quer ver o fluxo rodar — e é o
+              que o teste de navegação espera de tela sob `[id]`: alcançada a
+              partir da lista, nunca item de menu. */}
+          <Button asChild variant="ghost" size="sm">
+            <Link href={`/app/flows/${flowId}/execucoes`} data-testid="ver-execucoes-do-fluxo">
+              {t("Ver execuções")}
+            </Link>
+          </Button>
           <ConstrutorComIa
             flowId={flowId}
             onAtualizarCanvas={({ nos: n, arestas: a }) => {

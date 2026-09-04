@@ -38,7 +38,14 @@ export async function GET(req: NextRequest): Promise<Response> {
   let q = supabase
     .from("flow_executions")
     .select(
-      "id, flow_id, version_id, status, current_node_id, outcome, last_error, attempts, steps_taken, lead_id, contact_id, started_at, completed_at, next_eval_at",
+      // O CONTATO vem embutido, e não como id solto: a tela precisa dizer QUEM
+      // disparou o fluxo, e resolver nome por id do lado do cliente seria uma
+      // consulta por linha. `crm_leads(contact_id)` é o desempate — `contact_id`
+      // é nulo quando o gatilho foi só de lead (ver `trigger-matcher.ts`, que só
+      // o preenche quando o payload do evento o traz).
+      "id, flow_id, version_id, status, current_node_id, outcome, last_error, attempts, steps_taken, lead_id, contact_id, started_at, completed_at, next_eval_at, " +
+        "contato:contact_id(id, display_name, name, phone_number), " +
+        "lead:lead_id(id, title, contact_id, contato:contact_id(id, display_name, name, phone_number))",
     )
     .eq("organization_id", authz.org.orgId);
   if (status !== null) q = q.eq("status", status);

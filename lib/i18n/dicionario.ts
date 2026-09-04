@@ -6693,9 +6693,17 @@ export const DICIONARIO: Traducoes = {
   // Passo 3 — o ritmo
   "Tempo entre uma mensagem e outra": { es: "Tiempo entre un mensaje y otro" },
   "segundos": { es: "segundos" },
+  "Execuções deste fluxo": { es: "Ejecuciones de este flujo" },
+  "Quem disparou, em que passo está e quanto tempo levou entre um passo e outro.": { es: "Quién lo disparó, en qué paso está y cuánto tardó entre un paso y otro." },
+  "Este fluxo ainda não rodou nenhuma vez.": { es: "Este flujo todavía no se ejecutó ninguna vez." },
+  "Sem contato identificado": { es: "Sin contacto identificado" },
+  "Nenhum passo registrado ainda.": { es: "Todavía no hay ningún paso registrado." },
+  "Ver execuções": { es: "Ver ejecuciones" },
+  "Avançou": { es: "Avanzó" },
+  "Começou a esperar": { es: "Empezó a esperar" },
+  "Parou": { es: "Se detuvo" },
+  "Caminho concluído": { es: "Camino concluido" },
   "minutos": { es: "minutos" },
-  "horas": { es: "horas" },
-  "dias": { es: "días" },
   "Esperar quanto tempo?": { es: "¿Esperar cuánto tiempo?" },
   "Mínimo de 10 segundos. O fluxo retoma em cerca de 2 segundos depois do prazo — o tempo que você marca é respeitado.":
     {
