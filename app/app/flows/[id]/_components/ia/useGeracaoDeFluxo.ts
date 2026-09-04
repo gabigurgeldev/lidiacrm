@@ -23,6 +23,15 @@
  * apertado. Separadas, uma falha na segunda deixa a primeira de pé; juntas, uma
  * resposta só de ~35s teria de sobreviver inteira ou não valer nada.
  *
+ * ═══ ⚠️ E POR QUE ELAS VIRARAM DOIS MÉTODOS, E NÃO UM ═══
+ *
+ * `iniciar()` fazia as duas em sequência. O plano chegava, era usado para
+ * desenhar o esqueleto, e a montagem começava no mesmo instante — então a
+ * pessoa NUNCA via o que ia ser montado antes de o canvas dela ser substituído.
+ * A informação existia (o plano traz `rotulo` e `intencao` de cada bloco) e era
+ * consumida por dentro. `planejar()` devolve e para; `montar()` é o passo que a
+ * pessoa manda dar. Nenhuma chamada a mais.
+ *
  * ═══ Falhar na etapa 2 NÃO apaga o trabalho ═══
  *
  * O esqueleto fica no quadro. Ele é um grafo válido — `configExemploDoTipo` em
@@ -36,9 +45,16 @@ import * as React from "react";
 import { apiClient } from "@/lib/api/client";
 import type { PlanoDeFluxo } from "@/lib/flow-engine/ai/plan-schema";
 import { planoParaGrafo, type ConfigResolvida } from "@/lib/flow-engine/ai/plan-to-graph";
-import type { FlowGraph } from "@/lib/flow-engine/graph-schema";
+import type { Conserto } from "@/lib/flow-engine/ai/reparar";
+import type { ErroDeGrafo, FlowGraph } from "@/lib/flow-engine/graph-schema";
 
-export type FaseDaGeracao = "parado" | "planejando" | "montando" | "pronto" | "falhou";
+export type FaseDaGeracao =
+  | "parado"
+  | "planejando"
+  | "planejado"
+  | "montando"
+  | "pronto"
+  | "falhou";
 
 export interface Mensagem {
   papel: "usuario" | "ia";
@@ -54,6 +70,10 @@ export interface EstadoDaGeracao {
   comExemplo: number;
   grafo: FlowGraph | null;
   erro: string | null;
+  /** O que o reparo determinístico arrumou sozinho. A tela diz — ver `Consertos`. */
+  consertos: Conserto[];
+  /** O que ainda impede publicar. Vazio quando o fluxo está pronto para publicar. */
+  pendencias: ErroDeGrafo[];
   /**
    * `true` quando a etapa 2 falhou e o que ficou no quadro é só o esqueleto.
    *
@@ -71,6 +91,8 @@ const INICIAL: EstadoDaGeracao = {
   comExemplo: 0,
   grafo: null,
   erro: null,
+  consertos: [],
+  pendencias: [],
   somenteEsqueleto: false,
 };
 
@@ -79,10 +101,15 @@ interface RespostaDaMontagem {
   grafo: FlowGraph;
   comExemplo: number;
   descartes: { o_que: string; motivo: string }[];
+  consertos?: Conserto[];
+  pendencias?: ErroDeGrafo[];
 }
 
 export interface UseGeracaoDeFluxo extends EstadoDaGeracao {
-  iniciar(pedido: string, historico: readonly Mensagem[]): Promise<void>;
+  /** ETAPA 1. Devolve o plano ao estado e PARA — quem manda montar é a pessoa. */
+  planejar(pedido: string, historico: readonly Mensagem[]): Promise<void>;
+  /** ETAPA 2. Só faz sentido depois de `planejar()`. */
+  montar(pedido: string): Promise<void>;
   cancelar(): void;
   reiniciar(): void;
 }
@@ -94,31 +121,38 @@ export function useGeracaoDeFluxo(
   const [estado, setEstado] = React.useState<EstadoDaGeracao>(INICIAL);
   const abortRef = React.useRef<AbortController | null>(null);
   // O callback muda a cada render do pai; guardá-lo numa ref evita recriar
-  // `iniciar` (e cancelar uma geração em curso) por causa disso.
+  // `planejar`/`montar` (e cancelar uma geração em curso) por causa disso.
   const aoMudarGrafoRef = React.useRef(aoMudarGrafo);
   aoMudarGrafoRef.current = aoMudarGrafo;
+  // O plano vive também numa ref porque `montar()` é chamado de um `onClick` no
+  // mesmo tique em que o estado acabou de ser escrito — ler do estado ali
+  // pegaria o valor anterior.
+  const planoRef = React.useRef<PlanoDeFluxo | null>(null);
 
   const cancelar = React.useCallback(() => {
     abortRef.current?.abort();
     abortRef.current = null;
+    planoRef.current = null;
     setEstado(INICIAL);
   }, []);
 
-  const reiniciar = React.useCallback(() => setEstado(INICIAL), []);
+  const reiniciar = React.useCallback(() => {
+    planoRef.current = null;
+    setEstado(INICIAL);
+  }, []);
 
   React.useEffect(() => {
     // Sair da tela no meio da montagem não pode deixar a conexão pendurada.
     return () => abortRef.current?.abort();
   }, []);
 
-  const iniciar = React.useCallback(
+  const planejar = React.useCallback(
     async (pedido: string, historico: readonly Mensagem[]) => {
       abortRef.current?.abort();
       const controle = new AbortController();
       abortRef.current = controle;
       setEstado({ ...INICIAL, fase: "planejando" });
 
-      // ── ETAPA 1 ────────────────────────────────────────────────────────────
       let plano: PlanoDeFluxo;
       try {
         const resposta = await apiClient.post<{ data: PlanoDeFluxo }>(
@@ -131,6 +165,7 @@ export function useGeracaoDeFluxo(
         );
         plano = resposta.data;
       } catch (err) {
+        if (controle.signal.aborted) return;
         setEstado({
           ...INICIAL,
           fase: "falhou",
@@ -143,23 +178,41 @@ export function useGeracaoDeFluxo(
       }
 
       if (controle.signal.aborted) return;
+      planoRef.current = plano;
+      setEstado({
+        ...INICIAL,
+        fase: "planejado",
+        plano,
+        total: plano.blocos.length,
+      });
+    },
+    [flowId],
+  );
+
+  const montar = React.useCallback(
+    async (pedido: string) => {
+      const plano = planoRef.current;
+      if (plano === null) return;
+
+      const controle = new AbortController();
+      abortRef.current = controle;
 
       // O esqueleto no canvas ANTES do primeiro config: é o que faz o fluxo
       // aparecer em segundos, e é o que sobra se a etapa 2 não voltar.
       const esqueleto = planoParaGrafo(plano, new Map<string, ConfigResolvida>());
       if (esqueleto.valido) aoMudarGrafoRef.current(esqueleto.grafo);
 
-      setEstado({
+      setEstado((s) => ({
+        ...s,
         fase: "montando",
-        plano,
-        total: plano.blocos.length,
         comExemplo: 0,
         grafo: esqueleto.valido ? esqueleto.grafo : null,
         erro: null,
+        consertos: [],
+        pendencias: [],
         somenteEsqueleto: false,
-      });
+      }));
 
-      // ── ETAPA 2 ────────────────────────────────────────────────────────────
       try {
         const resposta = await apiClient.post<{ data: RespostaDaMontagem }>(
           `/api/v1/flows/${flowId}/ai/montar`,
@@ -181,6 +234,8 @@ export function useGeracaoDeFluxo(
           fase: "pronto",
           grafo: resposta.data.grafo,
           comExemplo: resposta.data.comExemplo,
+          consertos: resposta.data.consertos ?? [],
+          pendencias: resposta.data.pendencias ?? [],
           somenteEsqueleto: false,
         }));
       } catch (err) {
@@ -198,5 +253,5 @@ export function useGeracaoDeFluxo(
     [flowId],
   );
 
-  return { ...estado, iniciar, cancelar, reiniciar };
+  return { ...estado, planejar, montar, cancelar, reiniciar };
 }

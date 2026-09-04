@@ -6818,6 +6818,27 @@ export const DICIONARIO: Traducoes = {
     { es: "Listo. Revisá los bloques en el tablero, ajustá lo que quieras y guardá el borrador." },
   "A conversa se perde se você sair desta tela antes de montar o fluxo.":
     { es: "La conversación se pierde si salís de esta pantalla antes de armar el flujo." },
+  // ── o painel de IA: responder escrevendo, ver o plano, descartar depois ────
+  "ou escreva sua resposta": { es: "o escribí tu respuesta" },
+  "escreva sua resposta": { es: "escribí tu respuesta" },
+  "Não tenho preferência": { es: "No tengo preferencia" },
+  "(sem preferência — escolha um padrão sensato)":
+    { es: "(sin preferencia — elegí un valor razonable)" },
+  "Corrigir a última resposta": { es: "Corregir la última respuesta" },
+  "Ver o que vai ser montado": { es: "Ver lo que se va a armar" },
+  "Montando o plano…": { es: "Armando el plan…" },
+  "{n} blocos vão ser criados:": { es: "Se van a crear {n} bloques:" },
+  "Isto substitui o que está no quadro agora. Dá para descartar depois.":
+    { es: "Esto reemplaza lo que hay en el tablero ahora. Se puede descartar después." },
+  "Pronto. Confira os blocos no quadro, ajuste o que quiser e publique.":
+    { es: "Listo. Revisá los bloques en el tablero, ajustá lo que quieras y publicá." },
+  "Pronto. Confira os blocos no quadro e resolva os pontos abaixo antes de publicar.":
+    { es: "Listo. Revisá los bloques en el tablero y resolvé los puntos de abajo antes de publicar." },
+  "Ajustes feitos automaticamente": { es: "Ajustes hechos automáticamente" },
+  "Ainda falta resolver, senão o fluxo não publica":
+    { es: "Todavía falta resolver esto, si no el flujo no se publica" },
+  "Ficar com este fluxo": { es: "Quedarme con este flujo" },
+  "O quadro voltou ao que era antes.": { es: "El tablero volvió a como estaba antes." },
   "Não consegui entender o pedido.": { es: "No pude entender el pedido." },
   "A geração falhou. Tente de novo.": { es: "La generación falló. Intentá de nuevo." },
   "A IA não conseguiu terminar o fluxo. Tente descrever de outro jeito.":
