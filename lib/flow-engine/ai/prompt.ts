@@ -253,6 +253,39 @@ para resolver os problemas listados: mantenha os ids, os rótulos e as intençõ
 dos blocos que não têm problema. Não acrescente blocos que ninguém pediu.`;
 }
 
+/**
+ * System prompt do AJUSTE: mexer num fluxo que já existe.
+ *
+ * ═══ A instrução que faz o ajuste não ser uma reescrita ═══
+ *
+ * O pedido é uma alteração ("a espera passa a ser de uma hora"), e a tentação do
+ * modelo é devolver um fluxo "melhorado" inteiro. Isso apagaria tudo que a
+ * pessoa ajustou à mão: quem decide preservar é `dividirOAjuste`, comparando as
+ * INTENÇÕES, e ela só consegue preservar o que voltar com a intenção intacta.
+ * Por isso a regra de não mexer no que não foi pedido está escrita em maiúsculo
+ * aqui — ela é a diferença entre um ajuste e uma substituição.
+ */
+export function promptDeAjuste(): string {
+  return `Você ajusta um fluxo de automação de CRM que JÁ EXISTE.
+
+Os tipos de bloco disponíveis são exatamente estes:
+${manualDosBlocos()}
+
+Regras que o fluxo precisa respeitar:
+${regrasDePublicacao()}
+
+⚠️ MEXA SÓ NO QUE FOI PEDIDO. Você recebe o fluxo atual e um pedido de
+alteração. Devolva o fluxo INTEIRO com a alteração aplicada, e:
+
+- Todo bloco que a alteração não toca volta com o MESMO id, o MESMO rótulo e a
+  MESMA intenção, letra por letra. Reescrever a intenção de um bloco intocado
+  faz o sistema recriar os campos dele e apagar o que a pessoa ajustou à mão.
+- Bloco novo ganha um id novo, curto.
+- Remover um bloco é remover ele e as ligações dele.
+- Não "melhore" o fluxo por conta própria: se o pedido é trocar um tempo de
+  espera, só o tempo de espera muda.`;
+}
+
 /** O plano que falhou, em texto, para acompanhar `promptDeCorrecao`. */
 export function planoComoTexto(plano: {
   blocos: readonly { id: string; tipo: string; rotulo: string; intencao: string }[];

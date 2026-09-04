@@ -73,7 +73,12 @@ const GRAFO = {
   ],
 };
 
-function montarTela() {
+/**
+ * `quadroAtual` vazio por padrão: é o estado de um fluxo recém-criado, e é o
+ * que a maioria dos casos exercita. Passar um grafo com blocos liga o caminho
+ * do AJUSTE — a tela oferece "ajustar" só quando há o que ajustar.
+ */
+function montarTela(quadroAtual: { nodes: unknown[]; edges: unknown[] } = { nodes: [], edges: [] }) {
   const canvas = vi.fn();
   const bloqueio = vi.fn();
   const anterior = { nos: [{ id: "velho" }], arestas: [] } as never;
@@ -82,6 +87,7 @@ function montarTela() {
       flowId="11111111-1111-4111-8111-111111111111"
       onAtualizarCanvas={canvas}
       grafoAntesDeGerar={() => anterior}
+      grafoAtual={() => quadroAtual as never}
       onMudarBloqueio={bloqueio}
     />,
   );
@@ -372,5 +378,50 @@ describe("ver antes de aceitar, e descartar depois", () => {
     // O conserto automático também é dito: ele mexeu em ligação, e conserto
     // silencioso vira "eu não pedi isso".
     expect(screen.getByTestId("ia-consertos")).toHaveTextContent("terminar o fluxo");
+  });
+});
+
+describe("ajustar o fluxo que já está no quadro", () => {
+  const QUADRO_CHEIO = { nodes: GRAFO.nodes, edges: GRAFO.edges };
+
+  it("com o quadro VAZIO não oferece ajustar — não há o que ajustar", async () => {
+    const user = userEvent.setup();
+    montarTela();
+    await user.click(screen.getByTestId("abrir-construtor-ia"));
+
+    expect(screen.queryByTestId("ia-ajustar")).not.toBeInTheDocument();
+    expect(screen.getByTestId("ia-continuar")).toBeInTheDocument();
+  });
+
+  it("com blocos no quadro, ajustar vai DIRETO à rota de ajuste", async () => {
+    // Sem passar por `interpretar` nem pela lista do plano: o pedido é uma
+    // alteração sobre um fluxo que a pessoa está vendo na tela.
+    const user = userEvent.setup();
+    postMock.mockResolvedValueOnce({
+      data: { grafo: GRAFO, comExemplo: 0, descartes: [], preservados: 2, regerados: 1 },
+    });
+
+    const { canvas } = montarTela(QUADRO_CHEIO);
+    await user.click(screen.getByTestId("abrir-construtor-ia"));
+    await user.type(screen.getByTestId("ia-pedido"), "a espera passa a ser de 1 hora");
+    await user.click(screen.getByTestId("ia-ajustar"));
+
+    await waitFor(() => expect(postMock).toHaveBeenCalledTimes(1));
+    expect(postMock.mock.calls[0]![0]).toContain("/ai/ajustar");
+    expect(postMock.mock.calls[0]![1]).toMatchObject({ pedido: "a espera passa a ser de 1 hora" });
+    await waitFor(() => expect(canvas).toHaveBeenCalled());
+  });
+
+  it("depois do ajuste dá para descartar e voltar ao quadro anterior", async () => {
+    const user = userEvent.setup();
+    postMock.mockResolvedValueOnce({ data: { grafo: GRAFO, comExemplo: 0, descartes: [] } });
+
+    const { canvas, anterior } = montarTela(QUADRO_CHEIO);
+    await user.click(screen.getByTestId("abrir-construtor-ia"));
+    await user.type(screen.getByTestId("ia-pedido"), "tira a etiqueta");
+    await user.click(screen.getByTestId("ia-ajustar"));
+
+    await user.click(await screen.findByTestId("ia-descartar"));
+    expect(canvas).toHaveBeenLastCalledWith(anterior);
   });
 });

@@ -358,6 +358,9 @@ function Quadro({ flowId }: { flowId: string }) {
               setArestas(a);
             }}
             grafoAntesDeGerar={() => ({ nos, arestas })}
+            // `paraGrafo` e não `{ nos, arestas }`: o ajuste vai ao servidor e
+            // precisa da forma do MOTOR, com `config` no lugar de `data`.
+            grafoAtual={() => paraGrafo(nos, arestas)}
             onMudarBloqueio={setBloqueado}
           />
           <Button

@@ -110,6 +110,15 @@ export interface UseGeracaoDeFluxo extends EstadoDaGeracao {
   planejar(pedido: string, historico: readonly Mensagem[]): Promise<void>;
   /** ETAPA 2. Só faz sentido depois de `planejar()`. */
   montar(pedido: string): Promise<void>;
+  /**
+   * O OUTRO caminho: mexer no fluxo que já está no quadro.
+   *
+   * Uma chamada só, e sem passar por `interpretar`: o pedido aqui é uma
+   * alteração sobre algo que existe ("a espera passa a ser de uma hora"), não
+   * uma descrição a esclarecer. Perguntar antes seria pedir à pessoa que
+   * explique um fluxo que ela está vendo na tela.
+   */
+  ajustar(pedido: string, grafoAtual: FlowGraph): Promise<void>;
   cancelar(): void;
   reiniciar(): void;
 }
@@ -253,5 +262,46 @@ export function useGeracaoDeFluxo(
     [flowId],
   );
 
-  return { ...estado, planejar, montar, cancelar, reiniciar };
+  const ajustar = React.useCallback(
+    async (pedido: string, grafoAtual: FlowGraph) => {
+      abortRef.current?.abort();
+      const controle = new AbortController();
+      abortRef.current = controle;
+      // `total` já é o tamanho do fluxo atual: a barra diz "montando N blocos" e
+      // N aqui é o que existe, que é a informação certa — o ajuste devolve o
+      // fluxo inteiro, mesmo mexendo em um bloco.
+      setEstado({ ...INICIAL, fase: "montando", total: grafoAtual.nodes.length });
+
+      try {
+        const resposta = await apiClient.post<{ data: RespostaDaMontagem }>(
+          `/api/v1/flows/${flowId}/ai/ajustar`,
+          { pedido, grafo: grafoAtual },
+          { timeoutMs: 180_000, signal: controle.signal, semRepetir: true },
+        );
+        aoMudarGrafoRef.current(resposta.data.grafo);
+        setEstado((s) => ({
+          ...s,
+          fase: "pronto",
+          grafo: resposta.data.grafo,
+          comExemplo: resposta.data.comExemplo,
+          consertos: resposta.data.consertos ?? [],
+          pendencias: resposta.data.pendencias ?? [],
+        }));
+      } catch (err) {
+        if (controle.signal.aborted) return;
+        setEstado((s) => ({
+          ...s,
+          fase: "falhou",
+          erro: err instanceof Error ? err.message : "O ajuste falhou no meio.",
+          // Aqui NÃO sobra esqueleto: o ajuste não escreve no canvas antes de a
+          // resposta chegar inteira, então o quadro está intocado e não há nada
+          // a resgatar nem a avisar.
+          somenteEsqueleto: false,
+        }));
+      }
+    },
+    [flowId],
+  );
+
+  return { ...estado, planejar, montar, ajustar, cancelar, reiniciar };
 }

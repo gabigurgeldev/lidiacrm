@@ -6839,6 +6839,17 @@ export const DICIONARIO: Traducoes = {
     { es: "Todavía falta resolver esto, si no el flujo no se publica" },
   "Ficar com este fluxo": { es: "Quedarme con este flujo" },
   "O quadro voltou ao que era antes.": { es: "El tablero volvió a como estaba antes." },
+  // ── ajustar um fluxo que já existe, em vez de refazê-lo ───────────────────
+  "Ajustar o fluxo que está no quadro": { es: "Ajustar el flujo que está en el tablero" },
+  "Montar um fluxo do zero": { es: "Armar un flujo desde cero" },
+  "Descreva o fluxo que você quer, ou peça um ajuste no que já está no quadro — ex.: a espera passa a ser de 1 hora.":
+    {
+      es: "Describí el flujo que querés, o pedí un ajuste en lo que ya está en el tablero — ej.: la espera pasa a ser de 1 hora.",
+    },
+  "Ajustar mexe só no que você pediu e mantém o resto — inclusive os campos que você preencheu à mão. Do zero substitui o quadro inteiro.":
+    {
+      es: "Ajustar toca solo lo que pediste y mantiene el resto — incluidos los campos que completaste a mano. Desde cero reemplaza todo el tablero.",
+    },
   "Não consegui entender o pedido.": { es: "No pude entender el pedido." },
   "A geração falhou. Tente de novo.": { es: "La generación falló. Intentá de nuevo." },
   "A IA não conseguiu terminar o fluxo. Tente descrever de outro jeito.":

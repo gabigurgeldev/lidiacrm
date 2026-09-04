@@ -125,6 +125,15 @@ export interface ConstrutorComIaProps {
   onAtualizarCanvas: (grafo: { nos: Node[]; arestas: Edge[] }) => void;
   /** O canvas antes de começar a gerar — para "Descartar" desfazer sem perda. */
   grafoAntesDeGerar: () => { nos: Node[]; arestas: Edge[] };
+  /**
+   * O quadro de agora, na forma do motor — a entrada do AJUSTE.
+   *
+   * Separado de `grafoAntesDeGerar` de propósito: aquele é `nos`/`arestas` do
+   * React Flow, para restaurar a tela; este é `FlowGraph`, para mandar ao
+   * servidor. Converter aqui dentro duplicaria `paraGrafo` (FlowCanvas.tsx),
+   * que é quem sabe traduzir `data` em `config`.
+   */
+  grafoAtual: () => FlowGraph;
   /** A tela inteira (paleta, Salvar, Publicar) escuta isto para travar durante a montagem. */
   onMudarBloqueio: (bloqueado: boolean) => void;
 }
@@ -133,6 +142,7 @@ export function ConstrutorComIa({
   flowId,
   onAtualizarCanvas,
   grafoAntesDeGerar,
+  grafoAtual,
   onMudarBloqueio,
 }: ConstrutorComIaProps) {
   const t = useT();
@@ -353,6 +363,27 @@ export function ConstrutorComIa({
     void geracao.montar(pedido);
   }
 
+  /**
+   * O outro caminho: mexer no que já está no quadro.
+   *
+   * Não passa por `interpretar` nem pela lista do plano. O pedido é uma
+   * alteração sobre um fluxo que a pessoa está vendo — perguntar "o que você
+   * quer dizer com isso?" seria pedir que ela explique a própria tela, e mostrar
+   * a lista inteira depois esconderia justamente o que interessa, que é o pouco
+   * que mudou.
+   */
+  function comecarOAjuste() {
+    if (!pedido.trim()) return;
+    snapshotAntesDeGerar.current = grafoAntesDeGerar();
+    onMudarBloqueio(true);
+    setErro(null);
+    setPasso("construindo");
+    void geracao.ajustar(pedido, grafoAtual());
+  }
+
+  /** Há fluxo no quadro? É o que decide se "ajustar" é uma opção. */
+  const temFluxoNoQuadro = grafoAtual().nodes.length > 0;
+
   function cancelar() {
     geracao.cancelar();
     onMudarBloqueio(false);
@@ -450,9 +481,15 @@ export function ConstrutorComIa({
               value={pedido}
               onChange={(e) => setPedido(e.target.value)}
               maxLength={2000}
-              placeholder={t(
-                "Ex.: quando um lead novo entrar, espera 10 minutos e, se ninguém tiver falado com ele, avisa o vendedor no WhatsApp.",
-              )}
+              placeholder={
+                temFluxoNoQuadro
+                  ? t(
+                      "Descreva o fluxo que você quer, ou peça um ajuste no que já está no quadro — ex.: a espera passa a ser de 1 hora.",
+                    )
+                  : t(
+                      "Ex.: quando um lead novo entrar, espera 10 minutos e, se ninguém tiver falado com ele, avisa o vendedor no WhatsApp.",
+                    )
+              }
               data-testid="ia-pedido"
             />
             {/* O teto existe no servidor e a tela nunca o anunciava: um pedido
@@ -467,13 +504,42 @@ export function ConstrutorComIa({
                 {erroVisivel}
               </p>
             )}
-            <Button
-              onClick={continuarDaEntrada}
-              disabled={!pedido.trim() || interpretando}
-              data-testid="ia-continuar"
-            >
-              {interpretando ? t("Pensando…") : t("Continuar")}
-            </Button>
+            {/* Duas saídas, e só quando as duas fazem sentido: com o quadro
+                vazio não há o que ajustar, e oferecer a escolha ali seria um
+                botão que não faz nada. */}
+            {temFluxoNoQuadro ? (
+              <div className="flex flex-col gap-2">
+                <Button
+                  onClick={comecarOAjuste}
+                  disabled={!pedido.trim() || interpretando}
+                  data-testid="ia-ajustar"
+                >
+                  <Sparkle className="mr-2 size-4" />
+                  {t("Ajustar o fluxo que está no quadro")}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={continuarDaEntrada}
+                  disabled={!pedido.trim() || interpretando}
+                  data-testid="ia-continuar"
+                >
+                  {interpretando ? t("Pensando…") : t("Montar um fluxo do zero")}
+                </Button>
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  {t(
+                    "Ajustar mexe só no que você pediu e mantém o resto — inclusive os campos que você preencheu à mão. Do zero substitui o quadro inteiro.",
+                  )}
+                </p>
+              </div>
+            ) : (
+              <Button
+                onClick={continuarDaEntrada}
+                disabled={!pedido.trim() || interpretando}
+                data-testid="ia-continuar"
+              >
+                {interpretando ? t("Pensando…") : t("Continuar")}
+              </Button>
+            )}
           </div>
         )}
 
