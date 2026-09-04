@@ -12,7 +12,7 @@ import { z } from "zod";
 
 import { selectRoundRobin } from "@/lib/routing/decide";
 
-import { ramoPadrao, type AtendenteElegivel, type FlowNodeDefinition, type NodeExecutionResult } from "../types";
+import { ramoDeExcecao, ramoPadrao, type AtendenteElegivel, type FlowNodeDefinition, type NodeExecutionResult } from "../types";
 
 // ───────────────────────────── crm.add_tag ───────────────────────────────────
 
@@ -122,7 +122,7 @@ export const routingRoundRobin: FlowNodeDefinition<RodizioConfig> = {
   descricao: "Entrega o lead ao próximo da fila entre quem está disponível agora.",
   configSchema: rodizioConfigSchema,
   branches: (): ReturnType<FlowNodeDefinition["branches"]> => [
-    { id: RAMO_SEM_NINGUEM, label: "Ninguém disponível", kind: "match" },
+    ramoDeExcecao(RAMO_SEM_NINGUEM, "Ninguém disponível"),
     ramoPadrao("Depois de distribuir"),
   ],
   execute: async (ctx, config) => {
@@ -142,7 +142,7 @@ export const routingRedistribute: FlowNodeDefinition<RodizioConfig> = {
   descricao: "Tira o lead de quem não atendeu e entrega ao próximo da fila.",
   configSchema: rodizioConfigSchema,
   branches: (): ReturnType<FlowNodeDefinition["branches"]> => [
-    { id: RAMO_SEM_NINGUEM, label: "Ninguém disponível", kind: "match" },
+    ramoDeExcecao(RAMO_SEM_NINGUEM, "Ninguém disponível"),
     ramoPadrao("Depois de passar adiante"),
   ],
   execute: async (ctx, config) => {

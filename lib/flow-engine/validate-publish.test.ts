@@ -139,6 +139,35 @@ describe("validarParaPublicar", () => {
     expect(r.erros).toEqual([]);
   });
 
+  it("⭐ aceita saída de EXCEÇÃO solta — senão nenhum fluxo com mensagem publica", () => {
+    // O defeito que este caso trava, relatado em produção: "Mandar mensagem
+    // para o cliente" traz de fábrica duas saídas de falha ("Sem telefone do
+    // cliente", "Não saiu agora"), e elas eram exigidas como se fossem regras
+    // escritas pelo operador. Um fluxo com cinco desses blocos precisava de dez
+    // ligações para casos de erro que ninguém quis tratar — e sem elas a
+    // publicação era recusada.
+    const g = grafoBom();
+    g.nodes.push(
+      no("manda", "whatsapp.send_to_lead", { tipo: "texto", texto: "oi" }),
+      no("fim_manda", "logic.end", { desfecho: "atendido" }),
+    );
+    // Só o "Depois de enviar" ligado. As duas saídas de falha ficam soltas.
+    g.edges.push(aresta("e4", "decide", "manda", "alto"), aresta("e5", "manda", "fim_manda"));
+    g.edges = g.edges.filter((e) => e.id !== "e2");
+
+    const r = validarParaPublicar(g);
+    expect(r.erros.map((e) => e.codigo)).not.toContain("ramo_sem_saida");
+    expect(r.erros).toEqual([]);
+  });
+
+  it("⭐ a saída de REGRA continua obrigatória — o conserto não afrouxou isso", () => {
+    // Controle do caso acima: se a validação tivesse passado a aceitar QUALQUER
+    // ramo solto, o teste anterior passaria medindo nada.
+    const g = grafoBom();
+    g.edges = g.edges.filter((e) => e.branch_id !== "alto");
+    expect(validarParaPublicar(g).erros.map((e) => e.codigo)).toContain("ramo_sem_saida");
+  });
+
   it("recusa ligação presa a uma saída que não existe mais", () => {
     // O caso real: o operador apaga uma regra do `logic.if` e a aresta fica órfã.
     const g = grafoBom();

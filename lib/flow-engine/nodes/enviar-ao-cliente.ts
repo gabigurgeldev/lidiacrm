@@ -32,6 +32,7 @@
 import { z } from "zod";
 
 import {
+  ramoDeExcecao,
   ramoPadrao,
   TIPOS_DE_MENSAGEM_DO_FLUXO,
   type FlowNodeDefinition,
@@ -102,8 +103,8 @@ export const whatsappEnviarAoCliente: FlowNodeDefinition<EnviarAoClienteConfig> 
     // As duas saídas existem porque as duas acontecem, e por motivos que quem
     // monta o fluxo trata de formas diferentes: "não tem com quem falar" pede
     // outro caminho no funil; "não saiu agora" costuma pedir espera e retentativa.
-    { id: RAMO_SEM_CONTATO, label: "Sem telefone do cliente", kind: "match" },
-    { id: RAMO_NAO_SAIU, label: "Não saiu agora", kind: "match" },
+    ramoDeExcecao(RAMO_SEM_CONTATO, "Sem telefone do cliente"),
+    ramoDeExcecao(RAMO_NAO_SAIU, "Não saiu agora"),
     ramoPadrao("Depois de enviar"),
   ],
   execute: async (ctx, config): Promise<NodeExecutionResult> => {

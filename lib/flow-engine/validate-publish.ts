@@ -83,13 +83,22 @@ export function validarParaPublicar(grafo: FlowGraph): ResultadoDaValidacao {
     }
   }
 
-  // ── toda saída de decisão tem para onde ir ───────────────────────────────
+  // ── toda saída de REGRA tem para onde ir ─────────────────────────────────
   // O pega-tudo pode ficar solto: ali "sem ligação" quer dizer "termina aqui",
   // e o motor completa com desfecho próprio. Uma saída de REGRA solta é outra
   // coisa — quem escreveu a regra esperava que ela levasse a algum lugar.
+  //
+  // Saída de EXCEÇÃO também pode ficar solta, e este `continue` é um conserto,
+  // não uma flexibilização: antes dele, "Sem telefone do cliente" e "Não saiu
+  // agora" — que vêm de fábrica em TODO bloco de mensagem — eram exigidas como
+  // se fossem regras escritas. Um fluxo com cinco desses blocos precisava de
+  // dez ligações para casos de erro que ninguém quis tratar, e sem elas não
+  // publicava. O motor sempre soube o que fazer com um ramo solto: encerra a
+  // frente com `sem_saida:<ramo>` (ver `engine.ts`, onde o comentário já dizia
+  // que esta validação "só exige saída em ramo de REGRA" — e ela não fazia).
   for (const no of nos) {
     for (const ramo of no.branches) {
-      if (ramo.kind === "fallback") continue;
+      if (ramo.kind === "fallback" || ramo.kind === "excecao") continue;
       if (arestaDoRamo(arestas, no.id, ramo.id) === null) {
         erros.push({
           ancora: no.id,

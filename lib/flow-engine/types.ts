@@ -33,7 +33,29 @@ import type { RoutingCandidate } from "@/lib/routing/decide";
  */
 export const RAMO_PADRAO = "else";
 
-export type FlowBranchKind = "match" | "fallback";
+/**
+ * O que uma saída SIGNIFICA — e é por isso que ela existe, e não só por
+ * enfeite na tela.
+ *
+ * - `match`     — o operador ESCREVEU esta saída: uma regra do "Decidir", uma
+ *                 opção do menu, uma frente do paralelo. Deixá-la solta é erro:
+ *                 quem escreveu a regra esperava que ela levasse a algum lugar.
+ * - `excecao`   — o bloco NÃO CONSEGUIU fazer o que se pediu (sem telefone, a
+ *                 mensagem não saiu, ninguém disponível). Vem de fábrica, o
+ *                 operador não a pediu, e ela pode ficar solta: aí o caminho
+ *                 termina ali, que é o que o motor já faz.
+ * - `fallback`  — o pega-tudo. Solto significa "termina aqui".
+ *
+ * A distinção entre os dois primeiros nasceu de um defeito real: TODA saída de
+ * exceção era `match`, e a validação de publicação exigia ligação em todas.
+ * Num fluxo com cinco blocos de mensagem isso são dez ligações obrigatórias
+ * para casos de erro que o operador não quer tratar — e o fluxo simplesmente
+ * não publicava. O motor sempre esteve certo: `engine.ts` encerra a frente com
+ * `sem_saida:<ramo>` e o comentário lá diz, desde antes disto, que "a validação
+ * de publicação só exige saída em ramo de REGRA". Era a validação que não sabia
+ * distinguir os dois.
+ */
+export type FlowBranchKind = "match" | "fallback" | "excecao";
 
 export interface FlowBranch {
   /** Estável dentro do nó. Renomear o rótulo nunca solta a aresta. */
@@ -45,6 +67,18 @@ export interface FlowBranch {
 
 export function ramoPadrao(label = "Senão"): FlowBranch {
   return { id: RAMO_PADRAO, label, kind: "fallback" };
+}
+
+/**
+ * Uma saída de FALHA do bloco: ele tentou e não deu. Ver `FlowBranchKind`.
+ *
+ * Helper e não `kind: "excecao"` escrito à mão em cada nó porque a escolha
+ * entre `match` e `excecao` é a decisão inteira: um `match` posto por descuido
+ * numa saída de falha volta a travar a publicação de qualquer fluxo que use
+ * aquele bloco, e o sintoma aparece longe daqui — na tela de publicar.
+ */
+export function ramoDeExcecao(id: string, label: string): FlowBranch {
+  return { id, label, kind: "excecao" };
 }
 
 // ─────────────────────────── resultado da execução ───────────────────────────

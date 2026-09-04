@@ -6434,7 +6434,6 @@ export const DICIONARIO: Traducoes = {
   "Publicado e pronto para ligar.": { es: "Publicado y listo para encender." },
   "Rascunho — publique antes de ligar.": { es: "Borrador — publique antes de encender." },
   "Ligado": { es: "Encendido" },
-  "Abrir": { es: "Abrir" },
   "Fluxo ligado.": { es: "Flujo encendido." },
   "Fluxo pausado.": { es: "Flujo pausado." },
 

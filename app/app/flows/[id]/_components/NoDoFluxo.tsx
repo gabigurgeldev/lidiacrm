@@ -87,6 +87,9 @@ export function NoDoFluxo({ id, data, selected }: NodeProps) {
                 // A saída de escape não veio de uma regra que a pessoa escreveu:
                 // itálico e apagada, para se ler como "o resto cai aqui".
                 ramo.kind === "fallback" && "italic text-muted-foreground",
+                // Exceção não é regra: ela pode ficar solta, e mostrá-la com o
+                // mesmo peso das saídas escritas faz parecer que falta ligar.
+                ramo.kind === "excecao" && "text-muted-foreground",
               )}
               data-testid={`saida-${id}-${ramo.id}`}
             >
@@ -94,7 +97,7 @@ export function NoDoFluxo({ id, data, selected }: NodeProps) {
                 aria-hidden
                 className={cn(
                   "h-1.5 w-1.5 shrink-0 rounded-full",
-                  ramo.kind === "fallback" ? "bg-muted-foreground/50" : "bg-primary",
+                  ramo.kind === "match" ? "bg-primary" : "bg-muted-foreground/50",
                 )}
               />
               <span className="truncate text-xs leading-tight">{t(ramo.label)}</span>

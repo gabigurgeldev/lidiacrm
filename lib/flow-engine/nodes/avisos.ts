@@ -10,7 +10,7 @@
 
 import { z } from "zod";
 
-import { ramoPadrao, type FlowNodeDefinition, type NodeExecutionResult } from "../types";
+import { ramoDeExcecao, ramoPadrao, type FlowNodeDefinition, type NodeExecutionResult } from "../types";
 
 // ────────────────────────── crm.assign_owner ─────────────────────────────────
 
@@ -106,8 +106,8 @@ export const whatsappNotifyUser: FlowNodeDefinition<NotifyUserConfig> = {
   descricao: "Manda uma mensagem para o WhatsApp de quem atende, com os dados do lead.",
   configSchema: notifyUserConfigSchema,
   branches: (): ReturnType<FlowNodeDefinition["branches"]> => [
-    { id: RAMO_SEM_TELEFONE, label: "Sem telefone cadastrado", kind: "match" },
-    { id: RAMO_NAO_SAIU, label: "Não saiu agora", kind: "match" },
+    ramoDeExcecao(RAMO_SEM_TELEFONE, "Sem telefone cadastrado"),
+    ramoDeExcecao(RAMO_NAO_SAIU, "Não saiu agora"),
     ramoPadrao("Depois de avisar"),
   ],
   execute: async (ctx, config): Promise<NodeExecutionResult> => {

@@ -34,6 +34,7 @@
 import { z } from "zod";
 
 import {
+  ramoDeExcecao,
   ramoPadrao,
   type FlowNodeDefinition,
   type NodeExecutionResult,
@@ -121,7 +122,7 @@ export const whatsappDisparoEmMassa: FlowNodeDefinition<DisparoEmMassaConfig> = 
   descricao: "Cria uma campanha para muitos contatos de uma vez, pela conexão escolhida.",
   configSchema: disparoEmMassaConfigSchema,
   branches: (): ReturnType<FlowNodeDefinition["branches"]> => [
-    { id: RAMO_NAO_CRIOU, label: "Não deu para criar", kind: "match" },
+    ramoDeExcecao(RAMO_NAO_CRIOU, "Não deu para criar"),
     ramoPadrao("Depois de criar"),
   ],
   execute: async (ctx, config): Promise<NodeExecutionResult> => {

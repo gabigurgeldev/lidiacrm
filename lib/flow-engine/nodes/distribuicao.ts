@@ -24,7 +24,7 @@ import { z } from "zod";
 
 import { selectRandom } from "@/lib/routing/decide";
 
-import { ramoPadrao, type FlowNodeDefinition, type NodeExecutionResult } from "../types";
+import { ramoDeExcecao, ramoPadrao, type FlowNodeDefinition, type NodeExecutionResult } from "../types";
 import { VAR_DONO_ESCOLHIDO } from "./crm-e-roteamento";
 
 const RAMO_SEM_NINGUEM = "sem_ninguem";
@@ -54,7 +54,7 @@ export const routingRandom: FlowNodeDefinition<SorteioConfig> = {
   descricao: "Escolhe por sorteio entre quem está disponível agora.",
   configSchema: sorteioConfigSchema,
   branches: (): ReturnType<FlowNodeDefinition["branches"]> => [
-    { id: RAMO_SEM_NINGUEM, label: "Ninguém disponível", kind: "match" },
+    ramoDeExcecao(RAMO_SEM_NINGUEM, "Ninguém disponível"),
     ramoPadrao("Depois de sortear"),
   ],
   execute: async (ctx, config): Promise<NodeExecutionResult> => {
@@ -92,7 +92,7 @@ export const routingFixedOrder: FlowNodeDefinition<FilaFixaConfig> = {
   descricao: "Percorre a ordem de vendedores que você definir, um lead por vez.",
   configSchema: filaFixaConfigSchema,
   branches: (): ReturnType<FlowNodeDefinition["branches"]> => [
-    { id: RAMO_SEM_NINGUEM, label: "Ninguém disponível", kind: "match" },
+    ramoDeExcecao(RAMO_SEM_NINGUEM, "Ninguém disponível"),
     ramoPadrao("Depois de distribuir"),
   ],
   execute: async (ctx, config): Promise<NodeExecutionResult> => {
@@ -170,7 +170,7 @@ export const crmHandoffToAgent: FlowNodeDefinition<EntregarAoAgenteConfig> = {
   descricao: "Devolve o atendimento ao agente de IA, desfazendo a passagem para humano.",
   configSchema: entregarAoAgenteConfigSchema,
   branches: (): ReturnType<FlowNodeDefinition["branches"]> => [
-    { id: "sem_conversa", label: "Sem conversa aberta", kind: "match" },
+    ramoDeExcecao("sem_conversa", "Sem conversa aberta"),
     ramoPadrao("Depois de entregar"),
   ],
   execute: async (ctx): Promise<NodeExecutionResult> => {
