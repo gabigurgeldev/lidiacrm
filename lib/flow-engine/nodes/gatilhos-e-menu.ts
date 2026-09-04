@@ -39,14 +39,35 @@ const VAR_DO_EVENTO = "evento";
 
 // ─────────────────────── trigger.message_received ────────────────────────────
 
-export const triggerMessageReceived: FlowNodeDefinition<Record<string, never>> = {
+/**
+ * POR QUAIS NÚMEROS este gatilho escuta.
+ *
+ * `null` = todos os conectados, que é o comportamento que sempre houve — e é
+ * por isso que o campo é `nullable().default(null)` e não ausente: todo fluxo
+ * já publicado continua valendo para todos os números, sem republicar.
+ *
+ * Compartilhado pelos dois gatilhos de mensagem de propósito. Tê-lo em um só
+ * seria pegadinha: o outro seguiria disparando para os seis números do cliente
+ * sem dizer, e a tela não teria como explicar a diferença.
+ *
+ * ⚠️ Quem APLICA este filtro é o `trigger-matcher`, ANTES de criar a execução —
+ * não o `execute` daqui. Ver o comentário do matcher para a razão.
+ */
+const canalDoGatilho = z.string().uuid().nullable().default(null);
+
+export const triggerMessageReceivedConfigSchema = z.strictObject({
+  canal_id: canalDoGatilho,
+});
+export type TriggerMessageReceivedConfig = z.infer<typeof triggerMessageReceivedConfigSchema>;
+
+export const triggerMessageReceived: FlowNodeDefinition<TriggerMessageReceivedConfig> = {
   type: "trigger.message_received",
   version: 1,
   category: "trigger",
   rotulo: "Quando o cliente manda mensagem",
   descricao: "Começa o fluxo toda vez que chega mensagem de um cliente.",
   eventos: ["message.received"],
-  configSchema: z.strictObject({}),
+  configSchema: triggerMessageReceivedConfigSchema,
   branches: () => [ramoPadrao("Começa aqui")],
   execute: async () => ({ kind: "advance", branch_id: "else" }),
 };
@@ -62,6 +83,8 @@ export const gatilhoPorPalavraConfigSchema = z.strictObject({
    * reais" dispararia a opção "1".
    */
   modo: z.enum(["contem", "exata"]).default("contem"),
+  /** Ver `canalDoGatilho`. `null` = todos os números conectados. */
+  canal_id: canalDoGatilho,
 });
 export type GatilhoPorPalavraConfig = z.infer<typeof gatilhoPorPalavraConfigSchema>;
 

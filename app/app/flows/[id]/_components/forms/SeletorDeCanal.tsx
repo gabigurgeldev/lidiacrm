@@ -50,12 +50,26 @@ export function SeletorDeCanal({
   valor,
   aoEscolher,
   permitirAutomatico = true,
+  proposito = "envio",
 }: {
-  /** Id da conexão escolhida; `null` = a primeira disponível. */
+  /** Id da conexão escolhida; `null` = ver `proposito`. */
   valor: string | null;
   aoEscolher: (id: string | null) => void;
   /** `false` no disparo em massa, onde a conexão precisa ser explícita. */
   permitirAutomatico?: boolean;
+  /**
+   * Para que serve a escolha — e o que `null` SIGNIFICA, que é o ponto.
+   *
+   * `envio`: por onde a mensagem sai. `null` = a primeira conexão disponível.
+   * `escuta`: por quais números o gatilho começa. `null` = TODOS eles.
+   *
+   * São opostos: em `envio`, `null` escolhe um; em `escuta`, `null` não exclui
+   * nenhum. Mostrar "A primeira conexão disponível" num gatilho faria o
+   * operador achar que o fluxo escuta um número só — o contrário do que
+   * acontece. E os detalhes de pacing e cobrança de cada cartão são sobre
+   * mandar, não sobre receber: no gatilho eles são ruído.
+   */
+  proposito?: "envio" | "escuta";
 }) {
   const t = useT();
   const { data: conexoes, isLoading } = useConexoesParaEnvio();
@@ -79,8 +93,16 @@ export function SeletorDeCanal({
         <Cartao
           escolhido={valor === null}
           aoEscolher={() => aoEscolher(null)}
-          titulo={t("A primeira conexão disponível")}
-          detalhe={t("Serve quando há um número só, e não quebra se ele for trocado.")}
+          titulo={
+            proposito === "escuta"
+              ? t("Todos os números conectados")
+              : t("A primeira conexão disponível")
+          }
+          detalhe={
+            proposito === "escuta"
+              ? t("O fluxo começa por qualquer número que receber a mensagem.")
+              : t("Serve quando há um número só, e não quebra se ele for trocado.")
+          }
           testid="canal-automatico"
         />
       )}
@@ -92,16 +114,20 @@ export function SeletorDeCanal({
           aoEscolher={() => aoEscolher(c.id)}
           titulo={c.rotulo}
           aviso={c.conectada ? null : t("desconectado agora")}
-          detalhe={[
+          detalhe={
+            proposito === "escuta"
+              ? t("O fluxo só começa quando a mensagem chegar por este número.")
+              : [
             c.modo === "template" ? t("Só envia modelo aprovado.") : t("Envia texto livre."),
             t("No mínimo {s}s entre mensagens.").replace(
               "{s}",
               String(Math.ceil(c.piso_ms / 1000)),
             ),
-            c.cobra_por_mensagem ? t("Cobra por mensagem.") : "",
-          ]
-            .filter((x) => x !== "")
-            .join(" ")}
+                  c.cobra_por_mensagem ? t("Cobra por mensagem.") : "",
+                ]
+                  .filter((x) => x !== "")
+                  .join(" ")
+          }
           testid={`canal-${c.id}`}
         />
       ))}

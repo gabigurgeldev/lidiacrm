@@ -49,11 +49,45 @@ interface LinhaDeFluxo {
  * a versão publicada segue disparando, e começar por um nó que só existe no
  * rascunho criaria execução que morre no primeiro tick.
  */
-function acharGatilho(graph: unknown, tipos: ReadonlySet<string>): string | null {
+function acharGatilho(
+  graph: unknown,
+  tipos: ReadonlySet<string>,
+): { id: string; config: Record<string, unknown> } | null {
   const parsed = flowGraphSchema.safeParse(graph);
   if (!parsed.success) return null;
   const gatilho = parsed.data.nodes.find((n) => tipos.has(n.type));
-  return gatilho?.id ?? null;
+  if (gatilho === undefined) return null;
+  // O `config` vem junto porque o filtro de CANAL precisa dele — ver
+  // `escutaEsteCanal`. Antes esta função devolvia só o id, e o matcher nunca
+  // enxergava a configuração do bloco de início.
+  return { id: gatilho.id, config: (gatilho.config ?? {}) as Record<string, unknown> };
+}
+
+/**
+ * O gatilho deste fluxo escuta o número por onde a mensagem chegou?
+ *
+ * `canal_id` ausente ou `null` = todos os números. É o comportamento de sempre,
+ * e é o que mantém todo fluxo já publicado funcionando sem republicar.
+ *
+ * ─── Por que este filtro mora AQUI, e não no `execute` do nó ────────────────
+ *
+ * O cabeçalho de `nodes/gatilhos-e-menu.ts` descreve as duas saídas para
+ * filtrar um gatilho — decidir no nó (a) ou pré-filtrar no matcher (b) — e diz
+ * que a (b) "só se paga com volume medido". O volume chegou: um cliente com
+ * SEIS números conectados e um fluxo que escuta um. Pela (a), cada mensagem dos
+ * outros cinco viraria uma execução nascida morta, e a tela de Execuções — que
+ * é onde se descobre por que um fluxo não fez nada — encheria de linhas mortas
+ * que escondem as que importam.
+ *
+ * O filtro de PALAVRA continua no `execute`: ele depende de normalização de
+ * acento e caixa, e trazê-lo para cá espalharia a mesma regra por dois lugares.
+ * Só o canal, que é comparação de id, sobe.
+ */
+function escutaEsteCanal(config: Record<string, unknown>, payload: unknown): boolean {
+  const escolhido = config.canal_id;
+  if (typeof escolhido !== "string" || escolhido === "") return true;
+  const daMensagem = (payload as Record<string, unknown> | null)?.channel_session_id;
+  return daMensagem === escolhido;
 }
 
 export async function armarFluxosParaEvento(
@@ -123,10 +157,16 @@ export async function armarFluxosParaEvento(
       continue;
     }
 
-    const nodeId = acharGatilho(v.graph, tiposDeGatilho);
-    if (nodeId === null) {
+    const gatilho = acharGatilho(v.graph, tiposDeGatilho);
+    if (gatilho === null) {
       // A versão publicada não tem gatilho deste tipo — o fluxo escuta outra
       // coisa. Não é erro: é só não ser para ele.
+      pulados += 1;
+      continue;
+    }
+    if (!escutaEsteCanal(gatilho.config, row.payload)) {
+      // Chegou por um número que este fluxo não escuta. Nem cria execução: ver
+      // o comentário de `escutaEsteCanal`.
       pulados += 1;
       continue;
     }
@@ -136,7 +176,7 @@ export async function armarFluxosParaEvento(
       flow_id: fluxo.id,
       version_id: v.id,
       status: "pending",
-      current_node_id: nodeId,
+      current_node_id: gatilho.id,
       // Vencida AGORA: o próximo tick pega. Não é `null` porque o CHECK de
       // relógio do schema recusa estado ativo sem hora.
       next_eval_at: new Date().toISOString(),
