@@ -6693,6 +6693,14 @@ export const DICIONARIO: Traducoes = {
   // Passo 3 — o ritmo
   "Tempo entre uma mensagem e outra": { es: "Tiempo entre un mensaje y otro" },
   "segundos": { es: "segundos" },
+  "minutos": { es: "minutos" },
+  "horas": { es: "horas" },
+  "dias": { es: "días" },
+  "Esperar quanto tempo?": { es: "¿Esperar cuánto tiempo?" },
+  "Mínimo de 10 segundos. O fluxo retoma em cerca de 2 segundos depois do prazo — o tempo que você marca é respeitado.":
+    {
+      es: "Mínimo de 10 segundos. El flujo se reanuda unos 2 segundos después del plazo — el tiempo que usted marca se respeta.",
+    },
   "Mínimo de {s}s exigido por este canal — não dá para ir mais rápido.":
     { es: "Mínimo de {s}s exigido por este canal — no se puede ir más rápido." },
   "Mínimo de {s}s para o número não ser bloqueado. Dá para afrouxar em Conexões, por sua conta e risco.":
