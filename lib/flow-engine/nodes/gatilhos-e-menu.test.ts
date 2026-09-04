@@ -59,6 +59,7 @@ describe("trigger.keyword com o payload REAL do evento", () => {
     const r = await triggerKeyword.execute(ctx(PAYLOAD_REAL), {
       palavras: ["testedefluxopatrão"],
       modo: "contem",
+      canal_id: null,
     });
     expect(r).toEqual({ kind: "advance", branch_id: "else" });
   });
@@ -66,7 +67,7 @@ describe("trigger.keyword com o payload REAL do evento", () => {
   it("⭐ o caso EXATO que morreu em produção: acento e caixa não atrapalham", async () => {
     const r = await triggerKeyword.execute(
       ctx({ ...PAYLOAD_REAL, body_preview: "Quero TESTEDEFLUXOPATRAO agora" }),
-      { palavras: ["testedefluxopatrão"], modo: "contem" },
+      { palavras: ["testedefluxopatrão"], modo: "contem", canal_id: null },
     );
     expect(r).toEqual({ kind: "advance", branch_id: "else" });
   });
@@ -75,6 +76,7 @@ describe("trigger.keyword com o payload REAL do evento", () => {
     const r = await triggerKeyword.execute(ctx({ ...PAYLOAD_REAL, body_preview: "bom dia" }), {
       palavras: ["orçamento"],
       modo: "contem",
+      canal_id: null,
     });
     expect(r).toEqual({ kind: "dead", reason: "mensagem_sem_a_palavra" });
   });
@@ -83,6 +85,7 @@ describe("trigger.keyword com o payload REAL do evento", () => {
     const r = await triggerKeyword.execute(ctx({ type: "image", direction: "inbound" }), {
       palavras: ["oi"],
       modo: "contem",
+      canal_id: null,
     });
     expect(r).toEqual({ kind: "dead", reason: "mensagem_sem_a_palavra" });
   });
@@ -92,6 +95,7 @@ describe("trigger.keyword com o payload REAL do evento", () => {
       const r = await triggerKeyword.execute(ctx({ [chave]: "quero orçamento" }), {
         palavras: ["orçamento"],
         modo: "contem",
+        canal_id: null,
       });
       expect(r, `chave ${chave}`).toEqual({ kind: "advance", branch_id: "else" });
     }
