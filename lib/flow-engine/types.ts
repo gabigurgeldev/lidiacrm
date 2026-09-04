@@ -516,3 +516,26 @@ export interface FlowNodeDefinition<C = unknown> {
   branches(config: C): FlowBranch[];
   execute(ctx: FlowExecutionContext, config: C): Promise<NodeExecutionResult>;
 }
+
+/**
+ * As raízes que `{{...}}` enxerga, em RUNTIME.
+ *
+ * ⚠️ Existe porque o system prompt da IA precisa da lista, e o `keyof` de uma
+ * interface some na compilação. Enquanto a whitelist do prompt era escrita à
+ * mão, ela autorizava `lead` e `vars` e mandava "não invente outras" — o resto
+ * do escopo estava proibido para a IA e liberado para quem monta à mão, e o
+ * próprio `node-examples.ts` já usava `{{contact.name}}`.
+ *
+ * O `satisfies` é o que impede a divergência de voltar: raiz nova na interface
+ * sem entrada aqui não compila, porque `Record` cobra a chave.
+ */
+export const RAIZES_DE_VARIAVEL = {
+  lead: "o lead do funil (title, score, stage_id, custom_fields…)",
+  contact: "a pessoa (name, phone_e164, email)",
+  assigned_user: "quem atende o lead agora (name, email)",
+  vars: "o que os blocos anteriores gravaram nesta execução",
+  execution: "a execução em si (id, started_at, steps_taken)",
+  event: "o payload do evento que disparou o fluxo",
+  frame: "o que é desta frente, e não da execução inteira",
+  global: "variáveis da organização, iguais em todo fluxo dela",
+} as const satisfies Record<keyof EscopoDeVariaveis, string>;

@@ -70,6 +70,7 @@ import { gerarConfigs } from "@/lib/flow-engine/ai/etapas";
 import { portaComFallback, resolverCadeia } from "@/lib/flow-engine/ai/modelo-com-fallback";
 import { montarSchemaDePlano, type PlanoDeFluxo } from "@/lib/flow-engine/ai/plan-schema";
 import { planoParaGrafo, type ConfigResolvida } from "@/lib/flow-engine/ai/plan-to-graph";
+import { tornarPublicavel } from "@/lib/flow-engine/ai/publicavel";
 
 export const dynamic = "force-dynamic";
 
@@ -194,14 +195,34 @@ export async function POST(
       );
     }
 
+    // ── o fluxo tem de PUBLICAR, não só de desenhar ──────────────────────
+    //
+    // `planoParaGrafo` confere a FORMA; quem decide se o fluxo vale é
+    // `validarParaPublicar`, e ela não rodava aqui. O laço custa zero chamadas
+    // quando o grafo já está bom, que é o caso comum. Ver `publicavel.ts`.
+    const publicavel = await tornarPublicavel({
+      porta,
+      plano,
+      configs: configs as ReadonlyMap<string, ConfigResolvida>,
+      grafo: montado.grafo,
+      sinal: req.signal,
+    });
+
     logger.info("flow.ai.montar.fim", {
       organizationId: authz.org.orgId,
       requestId,
       flowId,
       ms: Date.now() - t0,
       modeloCanonico: cadeia.primario.modelId,
-      nos: montado.grafo.nodes.length,
-      arestas: montado.grafo.edges.length,
+      nos: publicavel.grafo.nodes.length,
+      arestas: publicavel.grafo.edges.length,
+      // O laço de publicação, em três números. `pendencias` subindo acusa
+      // prompt desatualizado em relação a `validate-publish.ts`;
+      // `corrigidoPeloModelo` alto acusa que o reparo determinístico está
+      // deixando passar um caso que teria conserto único.
+      consertosAutomaticos: publicavel.consertos.length,
+      corrigidoPeloModelo: publicavel.corrigidoPeloModelo,
+      pendencias: publicavel.pendencias.map((p) => p.codigo),
       // Contagem separada de propósito: "montou" com metade dos blocos em
       // valores padrão é um resultado diferente de "montou", e um número que
       // sobe aqui acusa provedor recusando o formato de config.
@@ -221,18 +242,26 @@ export async function POST(
       resourceId: flowId,
       requestId,
       metadata: {
-        nos: montado.grafo.nodes.length,
-        arestas: montado.grafo.edges.length,
+        nos: publicavel.grafo.nodes.length,
+        arestas: publicavel.grafo.edges.length,
         comExemplo: montado.comExemplo,
         modelo: cadeia.primario.modelId,
+        consertosAutomaticos: publicavel.consertos.length,
+        corrigidoPeloModelo: publicavel.corrigidoPeloModelo,
+        pendencias: publicavel.pendencias.length,
       },
     });
 
     return ok(
       {
-        grafo: montado.grafo,
+        grafo: publicavel.grafo,
         comExemplo: montado.comExemplo,
         descartes: montado.descartes,
+        // O que o produto arrumou sozinho, e o que ainda falta. Dizer as duas
+        // coisas é o ponto: a pessoa não pode descobrir no botão Publicar um
+        // problema de um fluxo que ela não escreveu.
+        consertos: publicavel.consertos,
+        pendencias: publicavel.pendencias,
       },
       { requestId },
     );
