@@ -172,6 +172,11 @@ export const AUDIT_ACTIONS = [
   "ai.inbox_item_status_changed",
   "ai.flywheel_proposal_applied",
   "ai.org_memory_published",
+  // Alguém puxou a sincronização do catálogo (OpenRouter) fora do relógio
+  // diário — normalmente porque o cron nunca rodou nesta instalação e o
+  // seletor de modelo estava mudo. `metadata` carrega recebidos/gravados/
+  // depreciados; é o que responde "por que a lista mudou" depois.
+  "ai.model_catalog_synced",
   "ai.org_memory_entry_created",
   "ai.org_memory_entry_updated",
   /** Provedor/modelo de um ponto do sistema que usa IA foi trocado no painel. */

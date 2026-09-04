@@ -113,7 +113,13 @@ export async function sincronizarCatalogo(
   };
 }
 
-async function buscarDaOpenRouter(): Promise<ModeloDaOpenRouter[]> {
+/**
+ * Exportada porque a sincronização manual (`POST /api/v1/ai/providers/[provider]/sync`)
+ * chama a MESMA busca — duplicar este fetch ali seria o anti-pattern nº 2 do
+ * `CLAUDE.md` (duplicação sem fonte única), e as duas cópias divergiriam na
+ * primeira vez que a origem mudasse de formato.
+ */
+export async function buscarDaOpenRouter(): Promise<ModeloDaOpenRouter[]> {
   const res = await fetch(ENDPOINT_DO_CATALOGO, {
     signal: AbortSignal.timeout(TIMEOUT_MS),
     headers: { accept: "application/json" },

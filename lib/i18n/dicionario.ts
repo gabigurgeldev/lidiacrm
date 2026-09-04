@@ -3238,6 +3238,10 @@ export const DICIONARIO: Traducoes = {
   "Espelho da conta": { es: "Espejo de la cuenta" },
   "template(s)": { es: "plantilla(s)" },
   "Sincronizando…": { es: "Sincronizando…" },
+  "Catálogo sincronizado.": { es: "Catálogo sincronizado." },
+  "Não deu para carregar os modelos. Tente de novo.": { es: "No se pudieron cargar los modelos. Inténtelo de nuevo." },
+  "O catálogo desta conta ainda não foi sincronizado.": { es: "El catálogo de esta cuenta todavía no se sincronizó." },
+  "Sincronizar catálogo agora": { es: "Sincronizar catálogo ahora" },
   "Sincronizar com a Meta": { es: "Sincronizar con Meta" },
   "Nenhum template ainda": { es: "Ninguna plantilla todavía" },
   "Crie templates no Gerenciador do WhatsApp e clique em": {
