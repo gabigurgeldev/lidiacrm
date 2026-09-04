@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
 
+import { SeletorDeCanal } from "./SeletorDeCanal";
 import { Campo, Dica, Secao, type PropsDoFormulario } from "./shared";
 
 /** `trigger.keyword` — começa quando a mensagem traz uma das palavras. */
@@ -62,6 +63,17 @@ export function TriggerKeywordForm({ config, aoMudarConfig }: PropsDoFormulario)
           }
         />
       </Campo>
+
+      <div className="space-y-1.5">
+        <p className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {t("Por quais números o fluxo escuta")}
+        </p>
+        <SeletorDeCanal
+          proposito="escuta"
+          valor={(config.canal_id as string | null) ?? null}
+          aoEscolher={(id) => mudar({ canal_id: id })}
+        />
+      </div>
     </Secao>
   );
 }
