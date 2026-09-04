@@ -94,9 +94,38 @@ export function mensagemCasa(
   });
 }
 
-/** O texto da mensagem, de onde quer que o evento o tenha posto. */
+/**
+ * O texto da mensagem, de onde quer que o evento o tenha posto.
+ *
+ * ⚠️ `body_preview` PRIMEIRO, e não por gosto: é a chave que o emissor de
+ * verdade usa. O evento `message.received` nasce do gatilho `trg_messages_emit_event`
+ * no banco, e `fn_emit_message_event` grava `'body_preview', left(new.body, 280)`.
+ * Nenhuma das outras quatro chaves existe naquele payload.
+ *
+ * Enquanto ela faltava aqui, esta função devolvia `""` para TODA mensagem real,
+ * `mensagemCasa("")` saía `false` na primeira linha, e os dois blocos que
+ * dependem do que o cliente escreveu estavam mortos: o gatilho por palavra
+ * nunca disparava, e o menu nunca reconhecia a resposta. Não intermitente —
+ * 100%. Medido em produção: quatro execuções, todas `dead` com
+ * `mensagem_sem_a_palavra` e `steps_taken=0`, e a última nascida de uma
+ * mensagem cujo texto era EXATAMENTE a palavra configurada.
+ *
+ * `lib/followup/aplicar-inbound.ts` já lia `body_preview` — o nome certo era
+ * conhecido no repo, e o que houve foi contrato divergente entre dois módulos.
+ *
+ * ⚠️ E ele vem TRUNCADO em 280 caracteres. Uma palavra-chave depois disso não
+ * casa. Ler `messages.body` inteiro resolveria e exigiria que o nó consultasse
+ * o banco — nó que consulta banco deixa de ser tradutor de formato, que é a
+ * única coisa que `docs/doctrine/restricao-de-canal.md` permite que ele seja.
+ * Para WhatsApp o corte cobre praticamente tudo; o limite fica escrito aqui em
+ * vez de ser descoberto por quem escrever uma palavra no fim de um texto longo.
+ *
+ * As chaves antigas continuam na lista: outro emissor (um webhook de terceiro,
+ * o gatilho de teste local) pode mandar o texto com outro nome, e tirá-las
+ * trocaria um bug por outro.
+ */
 function textoDoEvento(evento: Record<string, unknown>): string {
-  for (const chave of ["body", "text", "message", "conteudo"]) {
+  for (const chave of ["body_preview", "body", "text", "message", "conteudo"]) {
     const valor = evento[chave];
     if (typeof valor === "string" && valor.trim() !== "") return valor;
   }
