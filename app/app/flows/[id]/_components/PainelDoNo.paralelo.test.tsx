@@ -60,7 +60,6 @@ function montar(
       aoMudarRotulo={vi.fn()}
       aoMudarConfig={aoMudarConfig}
       aoApagar={vi.fn()}
-      podeApagar
       blocosDeReencontro={extra.blocosDeReencontro ?? REENCONTROS}
       fluxosChamaveis={extra.fluxosChamaveis ?? FLUXOS}
     />,
@@ -162,7 +161,6 @@ describe("o formulário de cada bloco do paralelo", () => {
           aoMudarRotulo={vi.fn()}
           aoMudarConfig={vi.fn()}
           aoApagar={vi.fn()}
-          podeApagar
         />,
       );
       const gatilho = screen.getByTestId("campo-evento-esperado");
@@ -249,7 +247,6 @@ describe("o formulário de cada bloco do paralelo", () => {
           aoMudarRotulo={vi.fn()}
           aoMudarConfig={vi.fn()}
           aoApagar={vi.fn()}
-          podeApagar
         />,
       );
       expect(
