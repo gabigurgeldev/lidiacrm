@@ -17,6 +17,16 @@ import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -197,6 +207,41 @@ function Quadro({ flowId }: { flowId: string }) {
     [nos, selecionado],
   );
 
+  /**
+   * O ÚNICO caminho que tira bloco do quadro. O botão do painel e a tecla do
+   * teclado convergem aqui — ver `onBeforeDelete` lá embaixo. Duas remoções
+   * paralelas (a nossa e a do @xyflow) precisariam ser mantidas iguais para
+   * sempre, e a primeira divergência apareceria como aresta órfã: desenho
+   * certo, roteamento errado, nada acusando.
+   */
+  const removerNos = useCallback(
+    (ids: readonly string[]) => {
+      const alvo = new Set(ids);
+      setNos((atuais) => atuais.filter((n) => !alvo.has(n.id)));
+      setArestas((atuais) => atuais.filter((e) => !alvo.has(e.source) && !alvo.has(e.target)));
+      setSelecionado((atual) => (atual !== null && alvo.has(atual) ? null : atual));
+    },
+    [setNos, setArestas],
+  );
+
+  const [aConfirmar, setAConfirmar] = useState<string[] | null>(null);
+
+  const pedirParaApagar = useCallback(
+    (ids: readonly string[]) => {
+      // O bloco de início É apagável. O que ele ganha é um aviso, porque a
+      // consequência é DIFERIDA: o quadro continua funcionando, o rascunho
+      // continua salvando, e a recusa só aparece na publicação
+      // (`validate-publish.ts`, código `sem_gatilho`). Sem o aviso, a pessoa
+      // descobre o problema minutos depois, longe da ação que o causou.
+      const temInicio = nos.some(
+        (n) => ids.includes(n.id) && (n.data as DadosDoNo).categoria === "trigger",
+      );
+      if (temInicio) setAConfirmar([...ids]);
+      else removerNos(ids);
+    },
+    [nos, removerNos],
+  );
+
   const atualizarNo = useCallback(
     (id: string, patch: Partial<DadosDoNo & { config: Record<string, unknown> }>) => {
       setNos((atuais) =>
@@ -222,7 +267,25 @@ function Quadro({ flowId }: { flowId: string }) {
     [setNos],
   );
 
+  /**
+   * O quadro sem bloco nenhum não é rascunho — é quadro em branco, e o schema
+   * recusa (`graph-schema.ts`, `nodes` é `.min(1)`). O 400 que ele produz diz
+   * "Dados inválidos.", uma frase sobre o CORPO DO PEDIDO para um problema que
+   * é sobre o QUADRO. A tela para de emitir um pedido que ela já sabe inválido,
+   * e diz o motivo real.
+   */
+  function quadroVazio(): boolean {
+    if (nos.length > 0) return false;
+    toast.warning(
+      t(
+        "O quadro está sem blocos. Ponha ao menos um antes de salvar — o rascunho guardado continua o de antes.",
+      ),
+    );
+    return true;
+  }
+
   async function aoSalvar() {
+    if (quadroVazio()) return;
     try {
       await salvar.mutateAsync(paraGrafo(nos, arestas));
       toast.success(t("Rascunho salvo."));
@@ -232,6 +295,7 @@ function Quadro({ flowId }: { flowId: string }) {
   }
 
   async function aoPublicar() {
+    if (quadroVazio()) return;
     setErros([]);
     try {
       await salvar.mutateAsync(paraGrafo(nos, arestas));
@@ -360,6 +424,26 @@ function Quadro({ flowId }: { flowId: string }) {
             nodesDraggable={!bloqueado}
             nodesConnectable={!bloqueado}
             elementsSelectable={!bloqueado}
+            // `Delete` é a tecla que a pessoa aperta; `Backspace` é o default do
+            // @xyflow e fica por compatibilidade. Sem esta prop só o Backspace
+            // valia, e quem apertava Delete concluía que o bloco não sai.
+            //
+            // Digitar no painel NÃO apaga bloco: o lib lê a tecla com
+            // `actInsideInputWithModifier: false` e a descarta quando o alvo é
+            // input ou textarea.
+            //
+            // `null` enquanto a IA constrói: ali `onNodesChange` é `undefined`,
+            // e uma remoção que o lib emite e ninguém aplica é pior que botão
+            // desabilitado — é tecla que não faz nada, sem dizer por quê.
+            deleteKeyCode={bloqueado ? null : ["Delete", "Backspace"]}
+            onBeforeDelete={async ({ nodes: aRemover }) => {
+              // Aresta sozinha segue pelo caminho do lib. Bloco, não: quem
+              // remove bloco é `removerNos`, SEMPRE, então este caminho VETA o
+              // do lib em vez de correr ao lado dele.
+              if (aRemover.length === 0) return true;
+              pedirParaApagar(aRemover.map((n) => n.id));
+              return false;
+            }}
             panOnDrag={!bloqueado}
             zoomOnScroll={!bloqueado}
             fitView
@@ -386,17 +470,40 @@ function Quadro({ flowId }: { flowId: string }) {
             config={((noSelecionado.data as { config?: Record<string, unknown> }).config ?? {})}
             aoMudarRotulo={(rotulo) => atualizarNo(noSelecionado.id, { rotulo })}
             aoMudarConfig={(config) => atualizarNo(noSelecionado.id, { config })}
-            aoApagar={() => {
-              setNos((a) => a.filter((n) => n.id !== noSelecionado.id));
-              setArestas((a) =>
-                a.filter((e) => e.source !== noSelecionado.id && e.target !== noSelecionado.id),
-              );
-              setSelecionado(null);
-            }}
-            podeApagar={(noSelecionado.data as DadosDoNo).categoria !== "trigger"}
+            aoApagar={() => pedirParaApagar([noSelecionado.id])}
           />
         )}
       </div>
+
+      <AlertDialog
+        open={aConfirmar !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setAConfirmar(null);
+        }}
+      >
+        <AlertDialogContent data-testid="confirmar-remover-inicio">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("Remover o bloco de início?")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t(
+                "Sem um bloco de início o fluxo não pode ser publicado — não há o que o faça começar. O rascunho continua podendo ser salvo, e você pega outro bloco de início na paleta, em Começo.",
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="cancelar-remocao">{t("Cancelar")}</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="confirmar-remocao"
+              onClick={() => {
+                if (aConfirmar !== null) removerNos(aConfirmar);
+                setAConfirmar(null);
+              }}
+            >
+              {t("Remover")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

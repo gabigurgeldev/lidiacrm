@@ -28,6 +28,7 @@
   ],
   "nodes": [
     { "id": "crm_leads", "lane": "origem", "col": 0, "type": "table", "label": "crm_leads", "sublabel": "trigger fn_emit_event_on_lead_change" },
+    { "id": "lista", "lane": "tela", "col": 0, "type": "frontend", "label": "/app/flows", "sublabel": "cria, renomeia, exclui, liga" },
     { "id": "construtor", "lane": "tela", "col": 0, "type": "frontend", "label": "/app/flows/[id]", "sublabel": "canvas, ssr:false" },
 
     { "id": "event_log", "lane": "barramento", "col": 1, "type": "table", "label": "event_log", "sublabel": "lead.created" },
@@ -86,6 +87,8 @@
     { "id": "e25", "from": "passos", "to": "execucoes_tela", "label": "a trilha" },
     { "id": "e26", "from": "no_espera", "to": "flow_executions", "label": "next_eval_at" },
     { "id": "e27", "from": "construtor", "to": "registry", "label": "paleta e saídas" },
-    { "id": "e28", "from": "no_decide", "to": "tick", "label": "o ramo escolhido" }
+    { "id": "e28", "from": "no_decide", "to": "tick", "label": "o ramo escolhido" },
+    { "id": "e29", "from": "lista", "to": "construtor", "label": "abre para montar" },
+    { "id": "e30", "from": "lista", "to": "flows", "label": "PATCH name · DELETE (manager)" }
   ]
 }

@@ -108,7 +108,12 @@ export async function PATCH(req: NextRequest, ctx: Contexto): Promise<Response> 
 
 export async function DELETE(_req: NextRequest, ctx: Contexto): Promise<Response> {
   const requestId = randomUUID();
-  const authz = await requireRole("admin", { requestId, resource: "flows" });
+  // `manager`, como o resto do módulo — GET, PATCH, publish e state. Era
+  // `admin`, e a divergência não tinha argumento: quem PUBLICA um fluxo põe uma
+  // automação para falar com cliente e mexer no funil sozinha, o que é mais
+  // grave do que apagar o rascunho dela. O gate que protege aqui não é o papel,
+  // é a recusa logo abaixo — fluxo com execução VIVA não some.
+  const authz = await requireRole("manager", { requestId, resource: "flows" });
   if (!authz.ok) return authz.response;
   const { id } = await ctx.params;
 
@@ -125,11 +130,15 @@ export async function DELETE(_req: NextRequest, ctx: Contexto): Promise<Response
     .in("status", ["pending", "running", "waiting", "paused"]);
 
   if ((count ?? 0) > 0) {
+    // Frase FIXA, contagem em `details`. Interpolada, ela nunca poderia entrar
+    // em `lib/i18n/dicionario.ts` — a chave só casa com texto literal — e
+    // chegaria em português para quem escolheu espanhol. Com o menu de excluir
+    // na lista, esta é uma das respostas que a tela realmente mostra.
     return fail(
       "conflict",
-      `Este fluxo tem ${count} execução(ões) em andamento. Pause o fluxo e espere terminarem.`,
+      "Este fluxo tem execuções em andamento. Pause o fluxo e espere terminarem.",
       409,
-      { requestId },
+      { requestId, details: { execucoes_vivas: count ?? 0 } },
     );
   }
 

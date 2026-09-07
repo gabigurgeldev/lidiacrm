@@ -13,6 +13,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 import { OPERADORES, operadorPedeValor, type Operador } from "@/lib/flow-engine/condicoes";
+import { Trash } from "@/lib/ui/icons";
 
 /**
  * Os ajustes de cada bloco.
@@ -30,7 +31,6 @@ interface Props {
   aoMudarRotulo: (rotulo: string) => void;
   aoMudarConfig: (config: Record<string, unknown>) => void;
   aoApagar: () => void;
-  podeApagar: boolean;
 }
 
 export function PainelDoNo(props: Props) {
@@ -38,36 +38,52 @@ export function PainelDoNo(props: Props) {
 
   return (
     <aside
-      className="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l bg-background p-4"
+      className="flex w-80 shrink-0 flex-col overflow-hidden border-l bg-background"
       data-testid="painel-do-no"
     >
-      <div className="space-y-1.5">
-        <Label htmlFor="rotulo-do-no">{t("Nome deste bloco")}</Label>
-        <Input
-          id="rotulo-do-no"
-          value={props.rotulo}
-          maxLength={80}
-          onChange={(e) => props.aoMudarRotulo(e.target.value)}
-          data-testid="campo-rotulo-do-no"
-        />
-        <p className="text-xs text-muted-foreground">
-          {t("É só o nome que aparece no quadro. Mudar não desliga nenhuma ligação.")}
-        </p>
+      {/*
+       * `min-h-0` é obrigatório: sem ele o filho flex não encolhe, a rolagem
+       * não aparece, o conteúdo estica o <aside> e o rodapé desce junto — que
+       * é exatamente o defeito que esta divisão existe para consertar.
+       */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="rotulo-do-no">{t("Nome deste bloco")}</Label>
+          <Input
+            id="rotulo-do-no"
+            value={props.rotulo}
+            maxLength={80}
+            onChange={(e) => props.aoMudarRotulo(e.target.value)}
+            data-testid="campo-rotulo-do-no"
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("É só o nome que aparece no quadro. Mudar não desliga nenhuma ligação.")}
+          </p>
+        </div>
+
+        <Ajustes {...props} />
       </div>
 
-      <Ajustes {...props} />
-
-      {props.podeApagar && (
+      {/*
+       * O rodapé é IRMÃO da área que rola, nunca filho dela. Antes o botão
+       * tinha `mt-auto` DENTRO do container rolável: em bloco de formulário
+       * longo (a decisão com várias saídas, o aviso no WhatsApp com textarea de
+       * 6 linhas) ele descia com o conteúdo e ficava abaixo da dobra — e
+       * ninguém rola um painel que parece terminado. Era o "não consigo apagar
+       * alguns blocos".
+       */}
+      <div className="shrink-0 border-t p-4">
         <Button
           variant="outline"
           size="sm"
-          className="mt-auto"
+          className="w-full text-destructive"
           onClick={props.aoApagar}
           data-testid="apagar-no"
         >
+          <Trash size={14} aria-hidden className="mr-1" />
           {t("Remover este bloco")}
         </Button>
-      )}
+      </div>
     </aside>
   );
 }
@@ -200,28 +216,76 @@ function Ajustes({ tipo, config, aoMudarConfig }: Props) {
         </>
       );
 
-    case "whatsapp.notify_user":
+    case "whatsapp.notify_user": {
+      const destinatario = (config.destinatario ?? { tipo: "dono_do_lead" }) as {
+        tipo?: string;
+        telefone?: string;
+      };
+      const paraNumeroFixo = destinatario.tipo === "telefone";
       return (
-        <Campo rotulo={t("Mensagem para o vendedor")}>
-          <Textarea
-            rows={6}
-            maxLength={4000}
-            value={String(config.mensagem ?? "")}
-            onChange={(e) => mudar({ mensagem: e.target.value, destinatario: { tipo: "dono_do_lead" } })}
-            data-testid="campo-mensagem-do-aviso"
-          />
-          <Dica
-            texto={t(
-              "Vai para o WhatsApp de quem está com o lead. Use {{lead.title}}, {{lead.score}} e {{contact.phone_number}} para incluir os dados.",
-            )}
-          />
-          <Dica
-            texto={t(
-              "O telefone de aviso de cada pessoa fica em Ajustes. Sem ele, o fluxo segue pela saída 'Sem telefone cadastrado'.",
-            )}
-          />
-        </Campo>
+        <>
+          <Campo rotulo={t("Para quem")}>
+            <Select
+              value={paraNumeroFixo ? "telefone" : "dono_do_lead"}
+              onValueChange={(v) =>
+                mudar({
+                  destinatario:
+                    v === "telefone"
+                      ? { tipo: "telefone", telefone: destinatario.telefone ?? "" }
+                      : { tipo: "dono_do_lead" },
+                })
+              }
+            >
+              <SelectTrigger data-testid="campo-destinatario-do-aviso">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dono_do_lead">{t("Quem está com o lead")}</SelectItem>
+                <SelectItem value="telefone">{t("Um número fixo")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </Campo>
+
+          {paraNumeroFixo ? (
+            <Campo rotulo={t("Número que recebe o aviso")}>
+              <Input
+                value={String(destinatario.telefone ?? "")}
+                maxLength={64}
+                placeholder="+55 11 99999-8888"
+                onChange={(e) => mudar({ destinatario: { tipo: "telefone", telefone: e.target.value } })}
+                data-testid="campo-telefone-do-aviso"
+              />
+              <Dica
+                texto={t(
+                  "Com DDI. Pode usar {{contact.phone_number}} ou uma variável do fluxo. Número fora do formato segue pela saída 'Sem telefone cadastrado'.",
+                )}
+              />
+            </Campo>
+          ) : (
+            <Dica
+              texto={t(
+                "O telefone de aviso de cada pessoa fica em Equipe › Atendimento, no botão Editar horário. Sem ele, o fluxo segue pela saída 'Sem telefone cadastrado'.",
+              )}
+            />
+          )}
+
+          <Campo rotulo={t("Mensagem para o vendedor")}>
+            <Textarea
+              rows={6}
+              maxLength={4000}
+              value={String(config.mensagem ?? "")}
+              onChange={(e) => mudar({ mensagem: e.target.value })}
+              data-testid="campo-mensagem-do-aviso"
+            />
+            <Dica
+              texto={t(
+                "Use {{lead.title}}, {{lead.score}} e {{contact.phone_number}} para incluir os dados.",
+              )}
+            />
+          </Campo>
+        </>
       );
+    }
 
     case "notify.internal":
       return (

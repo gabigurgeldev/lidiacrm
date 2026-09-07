@@ -1846,3 +1846,46 @@ ou ontem, e fora disso imprime `dd/MM/yyyy` — idêntico nos dois idiomas.
 
 **O que segue fora:** e-mail e o PDF de LGPD, com o motivo escrito em
 `tests/unit/i18n-a-data-segue-o-idioma.test.ts`.
+
+---
+
+## J20 — Monta o fluxo, apaga bloco, renomeia e exclui `[P1]` (2026-09-07)
+
+Relato do dono do produto, dois sintomas, uma raiz: **o backend do Flow Engine
+estava inteiro e a tela não chamava.**
+
+**Achado 1 — "não consigo apagar o bloco que começa o fluxo".** O painel do
+bloco recebia `podeApagar`, calculado como `categoria !== "trigger"`, e no bloco
+de início o botão não era desabilitado: era **removido do DOM**, sem tooltip e
+sem uma linha de motivo. A publicação já recusava fluxo sem gatilho
+(`validate-publish.ts`, `sem_gatilho`, 422 ancorado no quadro) e a paleta já
+permitia recolocar o bloco — a trava de UI não protegia nada que a publicação
+não protegesse melhor, e cobrava o preço de um bloco que não sai.
+
+**Achado 2 — "não consigo apagar alguns blocos".** Não era regra, era layout: o
+botão tinha `mt-auto` **dentro** do `<aside>` que rola, então em bloco de
+formulário longo (`logic.if` com várias saídas, `whatsapp.notify_user` com
+textarea de 6 linhas) ele descia com o conteúdo e ficava abaixo da dobra.
+Sintoma indistinguível do achado 1 para quem usa. É medido por **ferramenta**
+(`boundingBox()` do botão contra o do painel), não a olho: um teste que só
+clicasse passaria, porque o Playwright rola até o elemento antes de clicar — que
+é exatamente o que a pessoa não faz.
+
+**Achado 3 — a tecla `Delete` era inerte.** O `<ReactFlow>` não passava
+`deleteKeyCode` e o default do `@xyflow/react` é só `Backspace`.
+
+**Achado 4 — a lista não tinha porta para excluir nem renomear.** `DELETE` e
+`PATCH name` existiam desde a 0203, e `useApagarFluxo()` estava no repo **sem
+nenhum chamador**. Junto com isso: o `DELETE` era a única rota do módulo a
+exigir `admin` (todas as outras exigem `manager`), então um manager veria o
+botão novo e tomaria 403 depois do clique.
+
+Spec: `tests/e2e/fluxo-apaga-renomeia-exclui.spec.ts` (em `SPECS_PARTE_2`).
+Guardas de classe: `tests/unit/flows-rbac-alinhado.test.ts` (varre o AST de toda
+rota de `/api/v1/flows` e exige `manager`) e o bloco "excluir fluxo" de
+`tests/invariants/flow-engine-isolamento.test.ts`.
+
+**NÃO COBERTO, declarado:** o 409 de execução viva na exclusão. Semear
+`flow_executions` em `waiting` com versão publicada e ponteiro coerente não cabe
+na receita do job de e2e; a recusa está medida contra Postgres no invariante e
+lida na rota, mas **não** foi vista pela tela.

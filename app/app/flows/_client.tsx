@@ -17,6 +17,8 @@ import {
   type FluxoDaLista,
 } from "@/hooks/flows/useFlows";
 
+import { MenuDoFluxo } from "./_components/MenuDoFluxo";
+
 export function FluxosClient() {
   const t = useT();
   const { data: fluxos, isLoading } = useFluxos();
@@ -119,6 +121,7 @@ function LinhaDoFluxo({ fluxo }: { fluxo: FluxoDaLista }) {
         <Button asChild variant="ghost" size="sm">
           <Link href={`/app/flows/${fluxo.id}`}>{t("Abrir")}</Link>
         </Button>
+        <MenuDoFluxo fluxo={fluxo} />
       </Card>
     </li>
   );

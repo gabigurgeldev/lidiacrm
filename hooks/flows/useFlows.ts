@@ -97,6 +97,20 @@ export function useTrocarEstado(id: string) {
   });
 }
 
+export function useRenomearFluxo(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiClient.patch<{ data: FluxoDaLista }>(doFluxo(id), { name }).then((r) => r.data),
+    // Invalida o PREFIXO: `CHAVE_DOS_FLUXOS` é `["flows"]` e o detalhe é
+    // `["flows", id]`, então a lista e o cabeçalho do editor trocam de nome
+    // juntos — inclusive num editor aberto noutra aba.
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: CHAVE_DOS_FLUXOS });
+    },
+  });
+}
+
 export function useApagarFluxo() {
   const qc = useQueryClient();
   return useMutation({

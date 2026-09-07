@@ -211,3 +211,67 @@ describe("a função de claim não é alcançável pela chave anônima", () => {
     expect(grants).toMatch(/service_role/);
   });
 });
+
+/**
+ * EXCLUIR UM FLUXO — O QUE A TELA PASSOU A PODER FAZER.
+ *
+ * A rota `DELETE /api/v1/flows/[id]` existia desde a 0203 e nenhuma tela a
+ * chamava; ela também exigia `admin`, enquanto o resto do módulo exige
+ * `manager`. Com a lista ganhando o menu de excluir, os dois lados passam a ser
+ * exercitados de verdade — e nenhum deles tinha prova contra Postgres.
+ *
+ * O segundo caso é o que não se decide por leitura. `flow_executions.version_id`
+ * referencia `flow_versions(id)` SEM cascade: apagar o fluxo dispara dois
+ * cascades (`flow_versions.flow_id` e `flow_executions.flow_id`), e só não
+ * estoura porque o `NO ACTION` é checado no FIM do statement, quando a linha
+ * referenciadora já saiu pelo outro caminho. Isso é raciocínio sobre ordem de
+ * integridade referencial; o único jeito honesto de saber é rodar. Se falhar, o
+ * sintoma na tela é 500 ao excluir um fluxo que já rodou.
+ */
+const FLOW_C = "eeeeeeee-2222-4000-8000-00000000000c";
+const VERSION_C = "eeeeeeee-3333-4000-8000-00000000000c";
+const EXECUTION_C = "eeeeeeee-4444-4000-8000-00000000000c";
+const EVENT_C = "eeeeeeee-5555-4000-8000-00000000000c";
+
+describe("excluir fluxo", () => {
+  beforeAll(() => {
+    sql(`
+      insert into public.flows (id, organization_id, name, status)
+        values ('${FLOW_C}', '${ORG_A}', 'Flow Invariant c', 'draft')
+        on conflict (id) do nothing;
+      insert into public.flow_versions
+        (id, organization_id, flow_id, version_number, graph, trigger_config)
+        values ('${VERSION_C}', '${ORG_A}', '${FLOW_C}', 1, '{}'::jsonb, '{"kind":"manual"}'::jsonb)
+        on conflict (id) do nothing;
+      update public.flows set active_version_id = '${VERSION_C}' where id = '${FLOW_C}';
+      insert into public.flow_executions
+        (id, organization_id, flow_id, version_id, status, current_node_id)
+        values ('${EXECUTION_C}', '${ORG_A}', '${FLOW_C}', '${VERSION_C}', 'completed', 'fim')
+        on conflict (id) do nothing;
+      insert into public.flow_execution_events
+        (id, organization_id, execution_id, event_type)
+        values ('${EVENT_C}', '${ORG_A}', '${EXECUTION_C}', 'finished')
+        on conflict (id) do nothing;
+    `);
+  });
+
+  it("um `manager` da própria organização apaga o fluxo publicado que já rodou", () => {
+    expect(
+      writeCountAs(USER_A, `delete from public.flows where id = '${FLOW_C}'`),
+    ).toBe(1);
+  });
+
+  it("versão, execução e eventos vão junto — sem linha órfã", () => {
+    expect(sql(`select count(*) from public.flow_versions where id = '${VERSION_C}';`)).toBe("0");
+    expect(sql(`select count(*) from public.flow_executions where id = '${EXECUTION_C}';`)).toBe(
+      "0",
+    );
+    expect(
+      sql(`select count(*) from public.flow_execution_events where id = '${EVENT_C}';`),
+    ).toBe("0");
+  });
+
+  it("o fluxo da outra organização continua onde estava", () => {
+    expect(sql(`select name from public.flows where id = '${FLOW_B}';`)).toBe("Flow Invariant b");
+  });
+});
