@@ -113,8 +113,14 @@ function LinhaDaExecucao({
   );
 }
 
-/** Português de operação para o estado. Nunca a palavra do banco. */
-const NOME_DO_ESTADO: Record<string, string> = {
+/**
+ * Português de operação para o estado. Nunca a palavra do banco.
+ *
+ * Exportado porque a tela de execuções DE UM FLUXO mostra os mesmos estados —
+ * um segundo dicionário divergiria no primeiro estado novo, e o jeito de
+ * descobrir seria ver "waiting" cru numa tela e "Esperando" na outra.
+ */
+export const NOME_DO_ESTADO: Record<string, string> = {
   pending: "Na fila",
   running: "Rodando",
   waiting: "Esperando",

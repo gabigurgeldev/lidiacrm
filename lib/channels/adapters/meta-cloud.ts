@@ -20,7 +20,7 @@
  *    o outro canal converte por nós, este não.
  */
 import { createAdminClient } from "@/lib/supabase/admin";
-import { metaContactsPayload } from "@/lib/channels/meta/contact-card";
+import { corpoCloudApi } from "../cloud-api/corpo";
 import { resolveMetaCreds } from "../meta/credentials";
 import type {
   ChannelAdapter,
@@ -46,42 +46,6 @@ function toE164Digits(raw: string): string {
  */
 import { metaCredsFromEnv } from "../meta/credentials";
 export { metaCredsFromEnv as getMetaCreds };
-
-/** `kind: "contact"` → objeto `contacts` da Cloud API. */
-function contactPayload(env: OutboundEnvelope): Record<string, unknown> | null {
-  if (env.kind !== "contact" || !env.contact) return null;
-  return {
-    type: "contacts",
-    contacts: metaContactsPayload(env.contact.fullName, env.contact.phoneNumber),
-  };
-}
-
-/** `kind` do envelope → objeto de mídia da Cloud API. */
-function mediaPayload(env: OutboundEnvelope): Record<string, unknown> | null {
-  if (!env.media) return null;
-  const link = env.media.url;
-  const caption = env.media.caption ?? undefined;
-
-  switch (env.kind) {
-    case "image":
-      return { type: "image", image: { link, ...(caption ? { caption } : {}) } };
-    case "video":
-      return { type: "video", video: { link, ...(caption ? { caption } : {}) } };
-    case "audio":
-      // `voice: true` é o que faz virar BOLHA DE VOZ. Sem ele, anexo de música.
-      // Exige ogg/opus — a Meta não converte, diferente do outro canal.
-      return { type: "audio", audio: { link, voice: true } };
-    default:
-      return {
-        type: "document",
-        document: {
-          link,
-          ...(env.media.filename ? { filename: env.media.filename } : {}),
-          ...(caption ? { caption } : {}),
-        },
-      };
-  }
-}
 
 export const metaCloudAdapter: ChannelAdapter = {
   provider: "meta_cloud",
@@ -196,10 +160,7 @@ export const metaCloudAdapter: ChannelAdapter = {
     // o banner de "canal não conectado"; transformar em erro mudaria comportamento.
     if (!creds) return { externalId: null };
 
-    const corpo =
-      contactPayload(envelope) ??
-      mediaPayload(envelope) ??
-      { type: "text", text: { body: envelope.body ?? "" } };
+    const corpo = corpoCloudApi(envelope);
 
     const res = await fetch(
       `https://graph.facebook.com/${creds.graphVersion}/${creds.phoneNumberId}/messages`,

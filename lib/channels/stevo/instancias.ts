@@ -131,8 +131,19 @@ export async function validarContaStevo(input: {
     };
   }
 
-  if (resposta.status === 401 || resposta.status === 403) {
+  // 401 e 403 são recusas OPOSTAS na spec da Stevo: 401 é chave ausente,
+  // inválida ou revogada (precisa de chave nova); 403 é chave válida sem o
+  // escopo `instances:read` (precisa só habilitar o escopo no painel). Uma
+  // mensagem só para os dois manda quem tem chave certa reeditá-la à toa.
+  if (resposta.status === 401) {
     return { ok: false, motivo: "chave de API recusada pelo provedor — confira se ela foi copiada inteira" };
+  }
+  if (resposta.status === 403) {
+    return {
+      ok: false,
+      motivo:
+        "essa chave é válida, mas não tem permissão pra listar instâncias — no painel Stevo, crie ou edite a API Key com o escopo instances:read",
+    };
   }
   if (!resposta.ok) {
     return { ok: false, motivo: `o provedor respondeu ${resposta.status} ao listar as instâncias` };
@@ -191,6 +202,12 @@ export async function lerInstanciaStevo(input: {
   }
 }
 
+export interface ApontarWebhookResultado {
+  ok: boolean;
+  /** Frase pronta para a tela. Só presente quando `ok` é `false`. Nunca contém a chave. */
+  motivo?: string;
+}
+
 /**
  * Aponta o webhook da instância para ESTA instalação.
  *
@@ -200,36 +217,139 @@ export async function lerInstanciaStevo(input: {
  * FUNCIONANDO — o canal oficial precisa dessa etapa manual no painel da Meta, e
  * é onde as instalações emperram.
  *
- * Devolve `false` quando o provedor recusou. O chamador NÃO desfaz a importação
- * por causa disso: o canal já consegue ENVIAR, e um canal que envia e não recebe
- * é ruim mas é melhor que canal nenhum — desde que a tela diga.
+ * Devolve `ok:false` (com o motivo) quando o provedor recusou. O chamador NÃO
+ * desfaz a importação por causa disso: o canal já consegue ENVIAR, e um canal
+ * que envia e não recebe é ruim mas é melhor que canal nenhum — desde que a
+ * tela diga, e diga QUAL dos motivos foi. 401 e 403 pedem ações opostas aqui
+ * (chave nova × habilitar escopo `instances:manage` no painel Stevo, que é o
+ * que este PUT exige e o `GET /v1/instances` usado no import não) — a mesma
+ * razão pela qual `validarContaStevo` já separa os dois.
  */
 export async function apontarWebhookStevo(input: {
   apiKey: string;
   baseUrl: string;
   instanceId: string;
   url: string;
-}): Promise<boolean> {
+  /**
+   * `events` só existe no motor SM v2 (número por QR) — a spec documenta
+   * "Só SM v2" no campo, e o motor oficial (WABA) recusa o PUT com 400 quando
+   * o corpo traz `events`, porque lá TODO evento já é entregue (não há o que
+   * escolher). Mandar sem checar a modalidade foi o que travou o oficial: o
+   * import escreve pros dois motores no mesmo laço, e só um aceita o campo.
+   */
+  oficial: boolean;
+}): Promise<ApontarWebhookResultado> {
+  let r: Response;
   try {
-    const r = await fetch(
+    r = await fetch(
       `${input.baseUrl}/v1/instances/${encodeURIComponent(input.instanceId)}/webhook`,
       {
         method: "PUT",
         headers: { ...cabecalhos(input.apiKey), "content-type": "application/json" },
-        // `events` explícito: o default do provedor é `["MESSAGE","CONNECTION"]`,
-        // e sem `SEND_MESSAGE` a mensagem que o operador manda pelo CELULAR não
-        // chega ao CRM — a conversa fica pela metade, com as respostas dele
-        // faltando. É o mesmo motivo pelo qual o transporte por QR assina
-        // `message.any` e não `message`.
-        body: JSON.stringify({
-          url: input.url,
-          events: ["MESSAGE", "SEND_MESSAGE", "CONNECTION"],
-        }),
+        body: JSON.stringify(
+          input.oficial
+            ? { url: input.url }
+            : {
+                url: input.url,
+                // Sem `SEND_MESSAGE` a mensagem que o operador manda pelo
+                // CELULAR não chega ao CRM — a conversa fica pela metade, com
+                // as respostas dele faltando. Mesmo motivo pelo qual o
+                // transporte por QR assina `message.any` e não `message`.
+                events: ["MESSAGE", "SEND_MESSAGE", "CONNECTION"],
+              },
+        ),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       },
     );
-    return r.ok;
   } catch {
-    return false;
+    return { ok: false, motivo: "não foi possível avisar o provedor — tente de novo" };
   }
+
+  if (r.status === 401) {
+    return { ok: false, motivo: "chave de API recusada pelo provedor ao configurar o webhook" };
+  }
+  if (r.status === 403) {
+    return {
+      ok: false,
+      motivo:
+        "chave válida, mas sem permissão pra configurar o webhook — no painel Stevo, edite a API Key e adicione o escopo instances:manage",
+    };
+  }
+  if (!r.ok) {
+    // O corpo do erro carrega `error.message` quando o provedor consegue
+    // explicar o que rejeitou — surfar isso é a diferença entre "400" (sem
+    // pista nenhuma) e o motivo de verdade.
+    const corpo = (await r.json().catch(() => null)) as { error?: { message?: string } } | null;
+    const detalhe = corpo?.error?.message;
+    return {
+      ok: false,
+      motivo: detalhe
+        ? `o provedor recusou o webhook: ${detalhe}`
+        : `o provedor respondeu ${r.status} ao configurar o webhook`,
+    };
+  }
+  return { ok: true };
+}
+
+export interface ValidacaoDoTokenDeEnvio {
+  ok: boolean;
+  /** Frase pronta para a tela quando `ok` é `false`. Nunca contém o token. */
+  motivo?: string;
+  /** Número que o token alcança, como a Meta o escreve. Só quando `ok`. */
+  numero?: string | null;
+  /** `LIVE` = entrega para qualquer número; `SANDBOX`, só para os de teste. */
+  modo?: string | null;
+}
+
+/**
+ * Valida o token de ENVIO de uma instância da API Oficial, perguntando ao
+ * gateway antes de gravar.
+ *
+ * Mesma regra de `validarContaStevo`: **valida ANTES de gravar**. Um token
+ * errado gravado em silêncio só apareceria na próxima mensagem que falhasse, e
+ * quem colou já teria fechado a tela.
+ *
+ * O endpoint escolhido é o de saúde do número, e não um de envio: ele prova a
+ * credencial E devolve o estado que decide se a mensagem sai (`account_mode`),
+ * sem mandar mensagem nenhuma para ninguém. Validar com um envio de teste
+ * custaria uma mensagem real na conta do cliente.
+ */
+export async function validarTokenDeEnvioOficial(input: {
+  token: string;
+  baseUrl: string;
+}): Promise<ValidacaoDoTokenDeEnvio> {
+  let r: Response;
+  try {
+    r = await fetch(`${input.baseUrl}/v1/health`, {
+      headers: { Authorization: `Bearer ${input.token}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+      cache: "no-store",
+    });
+  } catch {
+    return { ok: false, motivo: "não deu para falar com o provedor agora — tente de novo" };
+  }
+
+  if (r.status === 401) {
+    return {
+      ok: false,
+      motivo: "token de envio recusado — confira se copiou o da instância inteiro",
+    };
+  }
+  if (r.status === 429) {
+    return { ok: false, motivo: "o provedor pediu para esperar (limite de chamadas) — tente em 1 minuto" };
+  }
+  if (!r.ok) {
+    return { ok: false, motivo: `o provedor respondeu ${r.status}` };
+  }
+
+  const corpo = (await r.json().catch(() => null)) as {
+    display_phone_number?: string;
+    account_mode?: string;
+  } | null;
+
+  return {
+    ok: true,
+    numero: corpo?.display_phone_number ?? null,
+    modo: corpo?.account_mode ?? null,
+  };
 }

@@ -55,6 +55,68 @@ export function selectRoundRobin(eligibles: RoutingCandidate[]): string | null {
   return sorted[0]?.userId ?? null;
 }
 
+/**
+ * Sorteio entre os elegíveis.
+ *
+ * ⚠️ NÃO é rodízio, e a diferença é o ponto: `selectRoundRobin` distribui por
+ * JUSTIÇA (quem está há mais tempo sem receber vem primeiro) e o sorteio
+ * distribui por ACASO. Numa equipe pequena o acaso concentra — três leads
+ * seguidos para a mesma pessoa é resultado comum, não defeito. Quem escolhe
+ * este bloco está pedindo imprevisibilidade de propósito (evitar que o time
+ * saiba de quem é a vez); quem quer divisão pareja usa o rodízio.
+ *
+ * `rng` é injetável para o teste medir a distribuição sem depender de sorte.
+ */
+export function selectRandom(
+  eligibles: RoutingCandidate[],
+  rng: () => number = Math.random,
+): string | null {
+  if (eligibles.length === 0) return null;
+  // Ordem estável antes de sortear: `eligibles` chega na ordem do banco, e um
+  // sorteio sobre ordem instável é irreproduzível mesmo com `rng` fixo.
+  const ordenados = [...eligibles].sort((a, b) => (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));
+  const i = Math.min(ordenados.length - 1, Math.max(0, Math.floor(rng() * ordenados.length)));
+  return ordenados[i]?.userId ?? null;
+}
+
+/**
+ * A "fila indiana": uma ORDEM declarada por quem monta o fluxo, percorrida em
+ * volta.
+ *
+ * ⚠️ Também não é rodízio. O rodízio decide pela fila do sistema (quem recebeu
+ * há mais tempo); aqui a ordem é a que a pessoa escreveu, e ela vale mesmo que
+ * seja "injusta" — é comum o time ter uma ordem combinada que o sistema não
+ * conhece (quem é sênior atende primeiro, quem entrou ontem atende por último).
+ *
+ * `cursor` é a posição de onde continuar, guardada FORA da execução: cada lead
+ * é uma execução nova, e um cursor por execução recomeçaria do zero toda vez —
+ * o que faria a "ordem" entregar sempre ao primeiro da lista.
+ *
+ * Quem está na ordem mas não está elegível agora é PULADO, e o cursor avança
+ * mesmo assim: parar a fila porque o terceiro da lista saiu para almoçar
+ * seguraria todos os leads seguintes atrás dele.
+ */
+export function selectFixedOrder(
+  ordem: readonly string[],
+  eligibles: RoutingCandidate[],
+  cursor: number,
+): { userId: string | null; proximoCursor: number } {
+  if (ordem.length === 0) return { userId: null, proximoCursor: cursor };
+  const elegiveis = new Set(eligibles.map((e) => e.userId));
+
+  for (let passo = 0; passo < ordem.length; passo += 1) {
+    const i = (cursor + passo) % ordem.length;
+    const candidato = ordem[i];
+    if (candidato !== undefined && elegiveis.has(candidato)) {
+      return { userId: candidato, proximoCursor: (i + 1) % ordem.length };
+    }
+  }
+  // Ninguém da ordem está elegível. O cursor NÃO anda: quando alguém voltar, a
+  // vez é de quem estava na vez, e não de quem o relógio calhou de alcançar.
+  return { userId: null, proximoCursor: cursor };
+}
+
+
 export function decideRouting(input: DecideRoutingInput): RoutingAction {
   // Idempotência (acceptance 3): conversa que já ganhou dono não é reatribuída.
   if (input.alreadyAssigned) return { kind: "skip", reason: "already_assigned" };

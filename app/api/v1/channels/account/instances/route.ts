@@ -23,8 +23,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
-import { importarInstancias } from "@/lib/channels/conta-de-instancias";
-import { env } from "@/lib/env";
+import { importarInstancias, publicBase } from "@/lib/channels/conta-de-instancias";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -49,21 +48,6 @@ const importarSchema = z.object({
     .min(1)
     .max(50),
 });
-
-/**
- * Base pública desta instalação — vai para o webhook registrado no provedor.
- *
- * `env.*` e NÃO `process.env.NEXT_PUBLIC_APP_URL` direto: variáveis
- * `NEXT_PUBLIC_` são substituídas no BUILD, e a imagem genérica do self-host é
- * construída com `https://placeholder.invalid` (Dockerfile). Lendo do
- * `process.env`, o webhook seria registrado apontando para o nada — e o canal
- * enviaria sem nunca receber, sem erro em lugar nenhum.
- */
-function publicBase(req: NextRequest): string {
-  const configurada = env.NEXT_PUBLIC_APP_URL;
-  const usavel = configurada && !configurada.includes("placeholder.invalid") ? configurada : null;
-  return usavel ?? req.headers.get("origin") ?? `${req.nextUrl.protocol}//${req.nextUrl.host}`;
-}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const requestId = randomUUID();
@@ -105,9 +89,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     requestId,
     metadata: {
       quantidade: r.desfechos.length,
-      // Quais ficaram sem webhook — é o que explica, meses depois, por que
-      // aquele número enviava e não recebia.
-      sem_webhook: r.desfechos.filter((d) => !d.recebendo).map((d) => d.id),
+      // Quais ficaram sem webhook, e por quê — é o que explica, meses depois,
+      // por que aquele número enviava e não recebia.
+      sem_webhook: r.desfechos
+        .filter((d) => !d.recebendo)
+        .map((d) => ({ id: d.id, motivo: d.motivo })),
     },
   });
 

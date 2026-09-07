@@ -25,11 +25,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PainelDoNo } from "./PainelDoNo";
 
-function montar(tipo: string) {
+function montar(tipo: string, categoria = "logic") {
   const aoApagar = vi.fn();
   render(
     <PainelDoNo
       tipo={tipo}
+      categoria={categoria}
       rotulo="Bloco"
       config={{}}
       aoMudarRotulo={vi.fn()}
@@ -42,7 +43,7 @@ function montar(tipo: string) {
 
 describe("PainelDoNo", () => {
   it("mostra o botão de remover no bloco de início", () => {
-    montar("trigger.lead_created");
+    montar("trigger.lead_created", "trigger");
     expect(screen.getByTestId("apagar-no")).toBeTruthy();
   });
 
@@ -52,7 +53,7 @@ describe("PainelDoNo", () => {
   });
 
   it("clicar no botão chama quem decide a remoção", async () => {
-    const { aoApagar } = montar("trigger.lead_created");
+    const { aoApagar } = montar("trigger.lead_created", "trigger");
     await userEvent.click(screen.getByTestId("apagar-no"));
     expect(aoApagar).toHaveBeenCalledTimes(1);
   });

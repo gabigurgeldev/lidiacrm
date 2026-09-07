@@ -35,6 +35,7 @@ const ROTAS = [
   "app/api/v1/flows/[id]/ai/interpretar/route.ts",
   "app/api/v1/flows/[id]/ai/plano/route.ts",
   "app/api/v1/flows/[id]/ai/montar/route.ts",
+  "app/api/v1/flows/[id]/ai/ajustar/route.ts",
 ];
 
 function fonteDe(rel: string): string {

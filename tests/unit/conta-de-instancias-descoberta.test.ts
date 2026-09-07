@@ -197,6 +197,20 @@ describe("descobrir os números da conta", () => {
     expect(escritas).toEqual([]);
   });
 
+  it("⭐ chave sem escopo devolve motivo distinto de chave recusada", async () => {
+    // 403 é chave VÁLIDA sem o escopo instances:read — ação diferente de 401
+    // (chave inválida/revogada). Ver comentário em instancias.ts.
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 403 })));
+    const { client, escritas } = makeDb();
+    const r = await validarContaDeInstancias(client as never, { organizationId: ORG, apiKey: "stevo_sk_x" });
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.motivo).toMatch(/escopo|permiss/);
+    expect(r.motivo).not.toMatch(/copiada inteira/);
+    expect(escritas).toEqual([]);
+  });
+
   it("rede caída e chave errada dão mensagens DIFERENTES", async () => {
     // As ações são opostas — tentar de novo mais tarde versus buscar outra chave.
     // Uma mensagem só para os dois manda o operador para o caminho errado metade
@@ -229,7 +243,7 @@ describe("importar", () => {
     expect(escritas[0]?.patch.organization_id).toBe(ORG);
   });
 
-  it("aponta o webhook para a rota NEUTRA desta instalação", async () => {
+  it("aponta o webhook para a rota NEUTRA desta instalação (QR)", async () => {
     // Os parâmetros são DECLARADOS mesmo sem uso: `vi.fn(async () => …)` infere
     // a lista de argumentos como tupla VAZIA, e aí `mock.calls.at(-1)` não tem
     // índice 0 nem 1 — o teste compila no `tsc` solto e falha no
@@ -245,7 +259,7 @@ describe("importar", () => {
       requestId: "r",
       apiKey: "k",
       baseDoWebhook: "https://crm.exemplo",
-      instancias: [instancia()],
+      instancias: [instancia({ modo: "qr" })],
     });
 
     const [url, init] = fetchMock.mock.calls.at(-1)!;
@@ -258,7 +272,52 @@ describe("importar", () => {
     expect(corpo.events).toContain("SEND_MESSAGE");
   });
 
-  it("⭐ webhook recusado NÃO desfaz a importação, mas é reportado", async () => {
+  it("⭐ oficial NÃO manda events — a spec da Stevo diz 'events só SM v2', e mandar recusa com 400", async () => {
+    // Medido em produção: chave com todos os escopos, número oficial, o PUT
+    // voltava "o provedor respondeu 400 ao configurar o webhook". A causa era
+    // este `events` sobrando no corpo de uma instância que não o aceita.
+    const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+      new Response("{}", { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { client } = makeDb();
+    await importarInstancias(client as never, {
+      organizationId: ORG,
+      userId: "u",
+      requestId: "r",
+      apiKey: "k",
+      baseDoWebhook: "https://crm.exemplo",
+      instancias: [instancia({ modo: "oficial" })],
+    });
+
+    const [, init] = fetchMock.mock.calls.at(-1)!;
+    const corpo = JSON.parse(String(init?.body));
+    expect(corpo).toEqual({ url: "https://crm.exemplo/api/v1/webhooks/channel/tok-novo" });
+    expect(corpo.events).toBeUndefined();
+  });
+
+  it("⭐ corpo do erro com error.message chega inteiro na tela, não só o status", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { code: "invalid_body", message: "events não é aceito para este motor" } }), {
+        status: 400,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const { client } = makeDb();
+    const r = await importarInstancias(client as never, {
+      organizationId: ORG,
+      userId: "u",
+      requestId: "r",
+      apiKey: "k",
+      baseDoWebhook: "https://crm.exemplo",
+      instancias: [instancia()],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.desfechos[0]?.motivo).toContain("events não é aceito para este motor");
+  });
+
+  it("⭐ webhook recusado NÃO desfaz a importação, mas é reportado com motivo", async () => {
     // O canal já envia. Um canal que envia e não recebe é ruim, mas é melhor que
     // canal nenhum — desde que a tela diga, que é para isso que `recebendo` sobe.
     const fetchMock = vi
@@ -279,6 +338,31 @@ describe("importar", () => {
     if (!r.ok) return;
     expect(escritas).toHaveLength(1);
     expect(r.desfechos[0]?.recebendo).toBe(false);
+    expect(r.desfechos[0]?.motivo).toMatch(/500/);
+  });
+
+  it("⭐ webhook recusado por falta de escopo devolve motivo distinto de chave inválida", async () => {
+    // 403 no PUT do webhook é a Stevo dizendo que a chave é VÁLIDA mas falta o
+    // escopo `instances:manage` — diferente de `instances:read`, que já basta
+    // pra listar/importar. Confundir os dois manda o operador reeditar uma
+    // chave que está certa.
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response("{}", { status: 403 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { client } = makeDb();
+    const r = await importarInstancias(client as never, {
+      organizationId: ORG,
+      userId: "u",
+      requestId: "r",
+      apiKey: "k",
+      baseDoWebhook: "https://crm.exemplo",
+      instancias: [instancia()],
+    });
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.desfechos[0]?.recebendo).toBe(false);
+    expect(r.desfechos[0]?.motivo).toMatch(/instances:manage|escopo|permiss/i);
+    expect(r.desfechos[0]?.motivo).not.toMatch(/copiada inteira/);
   });
 
   it("⭐ com uma linha ATIVA e uma ARQUIVADA do mesmo número, atualiza a ativa", async () => {

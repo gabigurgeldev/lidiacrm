@@ -172,7 +172,40 @@ export interface ExportPayload {
   activities: ActivityRow[];
   appointments: AppointmentRow[];
   webhook_captures: CaptureRow[];
+  flow_executions: FlowExecutionRow[];
   audit_log_extract: AuditRow[];
+}
+
+/**
+ * Uma execução de automação que envolveu este titular.
+ *
+ * ⚠️ ENTRA NO EXPORT PORQUE ENTROU NA REDAÇÃO. A migration 0208 pôs
+ * `flow_executions` na cascata de anonimização — `input` guarda o payload do
+ * evento que armou a execução, e num gatilho de "mensagem recebida" isso é a
+ * frase que o titular escreveu. O que se apaga a pedido dele é o que se entrega
+ * a pedido dele (Art. 18 II); as duas metades sempre andaram juntas neste repo,
+ * e foi o gate `lgpd-exporta-o-que-redige` que cobrou esta.
+ *
+ * O `input` VAI no relatório: é dado dele, e é justamente o que a anonimização
+ * apagaria. O `context` não — é o rascunho que os blocos escreveram sobre o
+ * processo, não declaração do titular.
+ */
+interface FlowExecutionRow {
+  id: string;
+  flow_name: string | null;
+  status: string;
+  outcome: string | null;
+  started_at: string;
+  input: Record<string, unknown>;
+  /**
+   * As FRENTES daquela execução — um fluxo com caminhos paralelos tem várias.
+   *
+   * O `vars` de cada uma guarda o que aquele ramo anotou, e num ramo que passou
+   * pelo bloco "Esperar acontecer" isso inclui o payload do evento: de novo, a
+   * frase do titular. A 0208 as redige junto; o Art. 18 II obriga a entregá-las
+   * junto.
+   */
+  frentes: Array<{ node_id: string; vars: Record<string, unknown> }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -501,6 +534,73 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
   }
 
   // Captação por webhook — a MESMA classe do bloco acima, achada pelo gate.
+  // Execuções de automação — `contact_id` direto em `flow_executions`.
+  let flow_executions: FlowExecutionRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("flow_executions")
+      .select("id, status, outcome, started_at, input, flows(name)")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("started_at", { ascending: false })
+      .limit(200);
+    if (error) {
+      logger.warn("[lgpd-export-worker] flow executions load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      flow_executions = (data as unknown as Array<{
+        id: string;
+        status: string;
+        outcome: string | null;
+        started_at: string;
+        input: Record<string, unknown> | null;
+        flows: { name: string } | null;
+      }>).map((e) => ({
+        id: e.id,
+        flow_name: e.flows?.name ?? null,
+        status: e.status,
+        outcome: e.outcome,
+        started_at: e.started_at,
+        input: e.input ?? {},
+        frentes: [],
+      }));
+
+      // As frentes das execuções coletadas, numa consulta só. Elas não têm
+      // `contact_id` próprio — o vínculo com o titular é a execução.
+      if (flow_executions.length > 0) {
+        const { data: frentes, error: erroFrentes } = await admin
+          .from("flow_execution_frames")
+          .select("execution_id, node_id, vars")
+          .eq("organization_id", organizationId)
+          .in("execution_id", flow_executions.map((e) => e.id))
+          .limit(1000);
+        if (erroFrentes) {
+          logger.warn("[lgpd-export-worker] flow frames load failed", {
+            request_id: requestId,
+            error: erroFrentes.message,
+          });
+        } else if (frentes) {
+          const porExecucao = new Map<string, Array<{ node_id: string; vars: Record<string, unknown> }>>();
+          for (const f of frentes as unknown as Array<{
+            execution_id: string;
+            node_id: string;
+            vars: Record<string, unknown> | null;
+          }>) {
+            const lista = porExecucao.get(f.execution_id) ?? [];
+            lista.push({ node_id: f.node_id, vars: f.vars ?? {} });
+            porExecucao.set(f.execution_id, lista);
+          }
+          flow_executions = flow_executions.map((e) => ({
+            ...e,
+            frentes: porExecucao.get(e.id) ?? [],
+          }));
+        }
+      }
+    }
+  }
+
   let webhook_captures: CaptureRow[] = [];
   if (contactId) {
     const { data, error } = await admin
@@ -566,6 +666,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     activities,
     appointments,
     webhook_captures,
+    flow_executions,
     audit_log_extract,
   };
 }
@@ -593,6 +694,7 @@ function emptyPayload(
     activities: [],
     appointments: [],
     webhook_captures: [],
+    flow_executions: [],
     audit_log_extract: [],
   };
 }

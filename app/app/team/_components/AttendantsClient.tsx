@@ -113,13 +113,16 @@ function ScheduleDialog({
   attendant: Attendant;
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  onSave: (windows: ScheduleWindow[], timezone: string) => void;
+  onSave: (windows: ScheduleWindow[], timezone: string, notificationPhone: string) => void;
   isPending: boolean;
 }) {
   const t = useT();
   const initial = attendant.availability?.schedule;
   const [timezone, setTimezone] = useState(initial?.timezone || "America/Sao_Paulo");
   const [windows, setWindows] = useState<ScheduleWindow[]>(initial?.windows ?? []);
+  const [notificationPhone, setNotificationPhone] = useState(
+    attendant.availability?.notification_phone ?? "",
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -152,6 +155,22 @@ function ScheduleDialog({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="notification_phone">{t("Telefone de aviso (WhatsApp)")}</Label>
+            <Input
+              id="notification_phone"
+              type="tel"
+              placeholder="+5511999998888"
+              value={notificationPhone}
+              onChange={(e) => setNotificationPhone(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t(
+                "Para onde vai o aviso quando um fluxo notifica o dono do lead. Formato +DDI e número, ex.: +5511999998888.",
+              )}
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -228,7 +247,10 @@ function ScheduleDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button disabled={isPending} onClick={() => onSave(windows, timezone)}>
+          <Button
+            disabled={isPending}
+            onClick={() => onSave(windows, timezone, notificationPhone)}
+          >
             Salvar
           </Button>
         </DialogFooter>
@@ -503,9 +525,17 @@ export function AttendantsClient({ canManage }: Props) {
           open={!!scheduleFor}
           onOpenChange={(o) => !o && setScheduleFor(null)}
           isPending={patch.isPending}
-          onSave={(windows, timezone) =>
+          onSave={(windows, timezone, notificationPhone) =>
             patch.mutate(
-              { userId: scheduleFor.userId, patch: { schedule: { timezone, windows } } },
+              {
+                userId: scheduleFor.userId,
+                patch: {
+                  schedule: { timezone, windows },
+                  // Campo vazio significa "sem telefone", e o schema só aceita
+                  // E.164 ou `null` — string vazia não passaria na regex.
+                  notification_phone: notificationPhone.trim() || null,
+                },
+              },
               { onSuccess: () => setScheduleFor(null) },
             )
           }

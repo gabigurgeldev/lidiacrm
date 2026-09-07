@@ -1052,6 +1052,50 @@
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
+   ENTRADAS DO PAINEL DE IA — as animações que o produto ACHAVA que tinha
+
+   ⚠️ `animate-in`, `fade-in`, `zoom-in-95`, `slide-in-from-*` são classes do
+   plugin `tailwindcss-animate`, que NÃO está instalado neste repo
+   (`plugins: []` em `tailwind.config.ts`). Elas apareciam em quatro lugares —
+   o overlay e o cartão de `ConstrutorComIa.tsx`, a bolha e o cartão de opção de
+   `ia/Pecas.tsx`, e o pop-in do bloco recém-criado em `NoDoFluxo.tsx` — e
+   nenhuma delas fazia nada. O comentário de `Pecas.tsx` já registrava a dívida.
+
+   Trazer o plugin por causa de cinco usos seria dependência nova no bundle de
+   todo self-hoster. Estas quatro regras cobrem o que era usado, no padrão que
+   `.barra-indeterminada` (acima) já estabeleceu.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@keyframes ia-surge {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes ia-aparece {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* A bolha e o cartão de opção entram de baixo; o overlay só aparece. */
+.ia-surge {
+  animation: ia-surge 240ms var(--ease-out) both;
+}
+
+.ia-aparece {
+  animation: ia-aparece 180ms var(--ease-out) both;
+}
+
+/* `both` acima é o que faz o `animation-delay` escalonado dos cartões de opção
+   valer: sem ele, as opções piscam todas visíveis antes de a cascata começar. */
+
+@media (prefers-reduced-motion: reduce) {
+  .ia-surge,
+  .ia-aparece {
+    animation: none;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
    CARTÃO AGRUPADO E SEGMENTADO — a linguagem de "Ajustes" do iOS
 
    Adotada em 2026-09-01 por decisão do dono do produto; os anti-patterns 5
@@ -1309,4 +1353,60 @@
 .inbox-selo-de-data {
   background-color: var(--color-surface);
   box-shadow: var(--shadow-xs);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   QUADRO DE FLUXO (@xyflow/react) — as cores do produto, nos dois temas
+
+   O @xyflow/react pinta minimapa, controles, linhas e rótulo de aresta a partir
+   de um conjunto próprio de variáveis `--xy-*`, com valores DEFAULT claros
+   embutidos na folha dele (`@xyflow/react/dist/style.css`). Este repo não
+   redefinia nenhuma — e a consequência era visível: o minimapa aparecia como um
+   retângulo branco sólido no canto do canvas escuro, a ponto de o construtor ter
+   sido escrito SEM minimapa e com um comentário explicando a ausência.
+
+   Tirar a peça era tratar o sintoma. A causa é a ponte que faltava entre as
+   `--xy-*` e os tokens do produto, e é ela que este bloco constrói.
+
+   Por que em `.react-flow` e não em `:root`: as `--color-*` já trocam de valor
+   sozinhas entre claro e escuro (`:root` e o bloco de tema logo abaixo dele),
+   então uma definição só, ancorada nos tokens, acompanha os dois temas sem
+   duplicar nada. Escrever os hex aqui devolveria o problema — invertido. */
+.react-flow {
+  --xy-background-color-default: var(--color-bg);
+  --xy-background-pattern-dots-color-default: var(--color-border);
+  --xy-background-pattern-lines-color-default: var(--color-border);
+
+  --xy-edge-stroke-default: var(--color-border);
+  --xy-edge-stroke-selected-default: var(--color-accent);
+  --xy-edge-label-background-color-default: var(--color-surface);
+  --xy-edge-label-color-default: var(--color-text-muted);
+
+  --xy-handle-background-color-default: var(--color-accent);
+  --xy-handle-border-color-default: var(--color-surface);
+
+  --xy-controls-button-background-color-default: var(--color-surface);
+  --xy-controls-button-background-color-hover-default: var(--color-surface-elevated);
+  --xy-controls-button-color-default: var(--color-text);
+  --xy-controls-button-color-hover-default: var(--color-text);
+  --xy-controls-button-border-color-default: var(--color-border);
+
+  --xy-minimap-background-color-default: var(--color-surface);
+  --xy-minimap-node-background-color-default: var(--color-border);
+  --xy-minimap-node-stroke-color-default: var(--color-border);
+  /* A máscara é o que fica FORA da vista atual. Translúcida sobre a superfície,
+     nunca opaca: opaca esconderia o formato do fluxo, que é a única coisa que o
+     minimapa serve para mostrar. */
+  --xy-minimap-mask-background-color-default: color-mix(in oklab, var(--color-bg) 70%, transparent);
+  --xy-minimap-mask-stroke-color-default: var(--color-border);
+
+  --xy-attribution-background-color-default: transparent;
+}
+
+/* O minimapa é chassi da tela, não superfície que se repete: borda e sombra
+   suave o descolam do canvas sem virar um cartão dentro do quadro. */
+.react-flow__minimap {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 }

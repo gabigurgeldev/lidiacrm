@@ -117,6 +117,14 @@ const envSchema = z.object({
   EVENT_LOG_DRAIN_INTERVAL_MS: z.coerce.number().int().positive().default(2_000),
   EVENT_LOG_DRAIN_IDLE_INTERVAL_MS: z.coerce.number().int().positive().default(10_000),
   EVENT_LOG_DRAIN_BATCH_SIZE: z.coerce.number().int().positive().default(50),
+  // Motor de FLUXOS dentro do worker. Mesmo remédio, mesmo formato: até
+  // 2026-09-04 `rodarTickDeFluxos` só tinha o cron `flow-engine-worker`
+  // (1×/min), e cada RETOMADA de fluxo custava até 60s — medido em produção,
+  // 59,1s entre dois nós que rodam em décimos de segundo. Ver o cabeçalho de
+  // lib/flow-engine/loop.ts. NÃO encurta espera configurada: o claim só pega
+  // execução com `next_eval_at <= now()`.
+  FLOW_ENGINE_LOOP_INTERVAL_MS: z.coerce.number().int().positive().default(2_000),
+  FLOW_ENGINE_LOOP_IDLE_INTERVAL_MS: z.coerce.number().int().positive().default(10_000),
   // Coalescência de rajada inbound: mensagens do MESMO contato dentro desta
   // janela viram UM job (responder em rajada é gatilho de ban). 0 = sem debounce.
   INBOUND_DEBOUNCE_MS: z.coerce.number().int().min(0).default(8_000),

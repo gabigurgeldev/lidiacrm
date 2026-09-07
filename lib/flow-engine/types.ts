@@ -33,7 +33,29 @@ import type { RoutingCandidate } from "@/lib/routing/decide";
  */
 export const RAMO_PADRAO = "else";
 
-export type FlowBranchKind = "match" | "fallback";
+/**
+ * O que uma saída SIGNIFICA — e é por isso que ela existe, e não só por
+ * enfeite na tela.
+ *
+ * - `match`     — o operador ESCREVEU esta saída: uma regra do "Decidir", uma
+ *                 opção do menu, uma frente do paralelo. Deixá-la solta é erro:
+ *                 quem escreveu a regra esperava que ela levasse a algum lugar.
+ * - `excecao`   — o bloco NÃO CONSEGUIU fazer o que se pediu (sem telefone, a
+ *                 mensagem não saiu, ninguém disponível). Vem de fábrica, o
+ *                 operador não a pediu, e ela pode ficar solta: aí o caminho
+ *                 termina ali, que é o que o motor já faz.
+ * - `fallback`  — o pega-tudo. Solto significa "termina aqui".
+ *
+ * A distinção entre os dois primeiros nasceu de um defeito real: TODA saída de
+ * exceção era `match`, e a validação de publicação exigia ligação em todas.
+ * Num fluxo com cinco blocos de mensagem isso são dez ligações obrigatórias
+ * para casos de erro que o operador não quer tratar — e o fluxo simplesmente
+ * não publicava. O motor sempre esteve certo: `engine.ts` encerra a frente com
+ * `sem_saida:<ramo>` e o comentário lá diz, desde antes disto, que "a validação
+ * de publicação só exige saída em ramo de REGRA". Era a validação que não sabia
+ * distinguir os dois.
+ */
+export type FlowBranchKind = "match" | "fallback" | "excecao";
 
 export interface FlowBranch {
   /** Estável dentro do nó. Renomear o rótulo nunca solta a aresta. */
@@ -45,6 +67,18 @@ export interface FlowBranch {
 
 export function ramoPadrao(label = "Senão"): FlowBranch {
   return { id: RAMO_PADRAO, label, kind: "fallback" };
+}
+
+/**
+ * Uma saída de FALHA do bloco: ele tentou e não deu. Ver `FlowBranchKind`.
+ *
+ * Helper e não `kind: "excecao"` escrito à mão em cada nó porque a escolha
+ * entre `match` e `excecao` é a decisão inteira: um `match` posto por descuido
+ * numa saída de falha volta a travar a publicação de qualquer fluxo que use
+ * aquele bloco, e o sintoma aparece longe daqui — na tela de publicar.
+ */
+export function ramoDeExcecao(id: string, label: string): FlowBranch {
+  return { id, label, kind: "excecao" };
 }
 
 // ─────────────────────────── resultado da execução ───────────────────────────
@@ -68,7 +102,59 @@ export type NodeExecutionResult =
   /** Falha REPETÍVEL: o motor tenta de novo com backoff até `max_attempts`. */
   | { kind: "fail"; error: string }
   /** Falha DEFINITIVA: não adianta repetir. Vai direto para `dead`. */
-  | { kind: "dead"; reason: string };
+  | { kind: "dead"; reason: string }
+  /**
+   * Abre N frentes paralelas, uma por ramo, e marca onde elas se reencontram.
+   *
+   * `modo: "todas"` é o AND — o merge só segue quando todas chegarem.
+   * `modo: "primeira"` é a corrida: a primeira frente a alcançar o merge vence e
+   * as irmãs são canceladas. É com ele que se escreve "espera o cliente
+   * responder OU o pagamento cair OU 24h passarem".
+   *
+   * O `join_node_id` é declarado pelo FORK, não descoberto pelo motor: um merge
+   * inferido por alcançabilidade acertaria no grafo simples e erraria em
+   * qualquer grafo com dois forks aninhados, e erraria em silêncio.
+   */
+  | { kind: "fork"; branch_ids: string[]; modo: "todas" | "primeira"; join_node_id: string }
+  /**
+   * Dorme até um EVENTO chegar — não até uma hora. Quem acorda é o matcher do
+   * `event_log`, comparando `event_type` e `match`.
+   *
+   * `timeout_at` não é opcional de propósito: uma espera por evento sem prazo é
+   * uma execução que nada no sistema jamais coleta, e o sintoma disso é um fluxo
+   * parado para sempre sem uma linha de erro em lugar nenhum. Vencido o prazo, a
+   * frente segue por `branch_on_timeout`.
+   */
+  | {
+      kind: "await_event";
+      event_type: string;
+      match?: Record<string, unknown>;
+      timeout_at: Date;
+      branch_on_timeout: string;
+    }
+  /**
+   * Chama outro fluxo como função e espera o resultado.
+   *
+   * A frente que chamou fica parada até a execução filha concluir; o `output`
+   * dela volta para o escopo de quem chamou. Ciclo (A chama B, B chama A) é
+   * barrado na PUBLICAÇÃO, não aqui — em runtime já seria tarde.
+   */
+  | { kind: "call_subflow"; flow_id: string; input: Record<string, unknown>; branch_id: string }
+  /**
+   * Repete o corpo uma vez por item, e sai pelo `done_branch_id` no fim.
+   *
+   * `max` é obrigatório e é a razão de o laço poder existir: a validação de
+   * publicação proibia QUALQUER ciclo justamente porque um ciclo sem teto queima
+   * `steps_taken` até o limite da execução. Com teto declarado, o ciclo passa a
+   * ter fim conhecido antes de começar.
+   */
+  | {
+      kind: "loop";
+      items: unknown[];
+      body_branch_id: string;
+      done_branch_id: string;
+      max: number;
+    };
 
 // ──────────────────────────── fatos e variáveis ──────────────────────────────
 
@@ -113,6 +199,24 @@ export interface FatosDaExecucao {
   } | null;
 }
 
+/** O que a frente sabe de si mesma. `null` fora de laço. */
+export interface EscopoDaFrente {
+  /**
+   * Variáveis LOCAIS desta frente.
+   *
+   * É o que impede dois ramos paralelos de se sobrescreverem: `advance` com
+   * `vars` fora de um fork grava no `vars` compartilhado da execução; dentro de
+   * um fork, grava aqui. Sem essa separação, dois ramos que gravassem a mesma
+   * chave produziriam o valor de quem terminou por último — e o fluxo seguiria
+   * entregando o resultado errado, sem erro nenhum.
+   */
+  vars: Record<string, unknown>;
+  /** Posição no laço, base 0. `null` quando a frente não está num laço. */
+  loop_index: number | null;
+  /** Quantos itens o laço tem ao todo. `null` fora de laço. */
+  loop_total: number | null;
+}
+
 /** Escopo visível a `{{...}}`. Montado pelo motor; o nó só lê. */
 export interface EscopoDeVariaveis {
   lead: FatosDaExecucao["lead"];
@@ -121,6 +225,26 @@ export interface EscopoDeVariaveis {
   /** `flow_executions.context` — o que os nós anteriores gravaram. */
   vars: Record<string, unknown>;
   execution: { id: string; started_at: string; steps_taken: number };
+  /**
+   * O PAYLOAD DO EVENTO — o que armou a execução, ou o que acordou esta frente.
+   *
+   * ⚠️ Isto não existia, e a ausência tornava metade dos gatilhos inúteis.
+   * `trigger-matcher.ts` gravava `context: {}` literal: do evento sobreviviam
+   * só `lead_id`, `contact_id` e a linhagem. Um gatilho de "mensagem recebida"
+   * não conseguia ler o TEXTO da mensagem; um de webhook não conseguia ler nada
+   * do corpo que o terceiro mandou.
+   *
+   * `{}` quando a execução não nasceu de evento (chamada manual, sub-fluxo).
+   */
+  event: Record<string, unknown>;
+  /** O que é desta frente, não da execução inteira. */
+  frame: EscopoDaFrente;
+  /**
+   * Variáveis da ORGANIZAÇÃO, iguais em todo fluxo dela
+   * (`organizations.settings.flow_globals`). Trocar o número do suporte num
+   * lugar só, em vez de em trinta fluxos.
+   */
+  global: Record<string, unknown>;
 }
 
 // ──────────────────────────────── as portas ──────────────────────────────────
@@ -140,6 +264,24 @@ export interface PortaDeRoteamento {
    * segunda cópia.
    */
   elegiveis(input: { organizationId: string }): Promise<AtendenteElegivel[]>;
+
+  /**
+   * A vez da FILA INDIANA: quem, na ordem declarada, atende este lead.
+   *
+   * O cursor vive no banco (`flow_routing_cursors`, migration 0211) e não no
+   * escopo da execução: cada lead abre uma execução nova, e um cursor por
+   * execução reiniciaria a fila a cada lead — entregando sempre ao primeiro da
+   * ordem. Uma fila que nunca anda, sem erro nenhum.
+   *
+   * Quem está na ordem e não está elegível agora é PULADO. Segurar a fila
+   * porque o terceiro saiu para almoçar pararia todos os leads atrás dele.
+   */
+  proximoDaFilaFixa(input: {
+    nodeId: string;
+    ordem: readonly string[];
+    /** Ids de quem pode receber agora, já filtrado por `elegiveis`. */
+    elegiveis: readonly string[];
+  }): Promise<{ userId: string | null; avancou: number }>;
 }
 
 export interface PortaDoCrm {
@@ -154,6 +296,19 @@ export interface PortaDoCrm {
     leadId: string;
     desde: string;
   }): Promise<boolean>;
+
+  /**
+   * Devolve o atendimento da conversa deste contato ao agente de IA.
+   *
+   * Passa por `devolverAtendimentoAoAgente` (`lib/escalacao/retomada.ts`), a
+   * mesma função do botão da tela — e não por um `update` paralelo. A razão
+   * está escrita lá: a passagem para humano tem TRÊS travas, e uma versão
+   * caseira soltaria a mais fraca, deixando o agente mudo para sempre enquanto
+   * a operação responde sucesso.
+   */
+  devolverAoAgente(input: {
+    contactId: string;
+  }): Promise<{ ok: true; jaEstavaComOAgente: boolean } | { ok: false; motivo: string }>;
 }
 
 export type DesfechoDeEnvio =
@@ -178,7 +333,97 @@ export interface PortaDeCanal {
     /** Marca o contato criado para o aviso, para ele não virar lead nem falar com a IA. */
     interno: boolean;
   }): Promise<DesfechoDeEnvio>;
+
+  /**
+   * Manda para o CONTATO do funil, na conversa dele — o cliente, não o vendedor.
+   *
+   * ⚠️ É outra porta, e não um parâmetro de `enviarTexto`, porque as duas
+   * respondem a perguntas diferentes. `enviarTexto` fala com um TELEFONE que
+   * pode nem ser cliente (o aviso ao vendedor cria um contato interno de
+   * propósito); esta fala com quem já está no funil, na thread que a pessoa vê
+   * no Inbox. Misturar as duas num booleano faria o bloco de aviso poder virar,
+   * por um parâmetro trocado, um envio ao cliente.
+   *
+   * ## O canal é ESCOLHIDO, e o nome dele não chega aqui
+   *
+   * `channelSessionId` é uma conexão concreta que a pessoa escolheu na tela.
+   * `null` mantém o que já acontecia: o motor pega a primeira conexão viva.
+   * Em nenhum dos dois casos o motor sabe QUEM é o canal — a diferença entre
+   * número por QR, API oficial e parceiro é vocabulário de `lib/channels/`, e
+   * a doutrina de restrição de canal proíbe que ela vaze para cá.
+   */
+  enviarParaContato(input: {
+    contactId: string;
+    tipo: TipoDeMensagemDoFluxo;
+    /** Texto da mensagem, ou legenda quando há mídia. */
+    texto: string;
+    /**
+     * Endereço público da mídia, quando `tipo` não é `texto`.
+     *
+     * URL, e NÃO caminho no Storage, de propósito: `sendMessageHandler` confere
+     * `media_storage_path` contra a conversa de destino (`isMediaPathOwnedBy`),
+     * e a mídia de um bloco é configurada UMA vez para ir a centenas de
+     * conversas diferentes. O caminho no Storage nunca casaria com todas.
+     */
+    mediaUrl?: string;
+    /** Conexão escolhida na tela; `null` = a primeira viva, como já era. */
+    channelSessionId: string | null;
+  }): Promise<DesfechoDeEnvio>;
 }
+
+/**
+ * O que um bloco de fluxo consegue mandar.
+ *
+ * Espelha os `type` que `sendMessageHandler` aceita. Acrescentar um valor aqui
+ * sem conferir lá produziria mensagem que o CRM grava e o canal não envia.
+ */
+export const TIPOS_DE_MENSAGEM_DO_FLUXO = [
+  "texto",
+  "imagem",
+  "audio",
+  "video",
+  "arquivo",
+] as const;
+export type TipoDeMensagemDoFluxo = (typeof TIPOS_DE_MENSAGEM_DO_FLUXO)[number];
+
+/**
+ * O pedido de uma campanha de disparo em massa, do jeito que o bloco a descreve.
+ *
+ * Formato PRÓPRIO, e não o `CriarDisparoInput` da rota HTTP, por uma razão de
+ * fronteira: aquele schema tem `z.discriminatedUnion` na audiência, e o motor
+ * de fluxos não pode depender de uma forma que o gerador de fluxo por IA
+ * recusa (ver o cabeçalho de `nodes/disparo-em-massa.ts`). A tradução entre os
+ * dois acontece no adapter, num lugar só.
+ */
+export interface PedidoDeDisparo {
+  nome: string;
+  canalId: string;
+  modo: "freeform" | "template";
+  texto?: string;
+  modeloNome?: string;
+  modeloIdioma?: string;
+  modeloValores: Record<string, string>;
+  audiencia: { tipo: "tags"; tags: string[] } | { tipo: "contatos"; contatos: string[] };
+  intervaloMs: number;
+  comecarSozinho: boolean;
+}
+
+export type DesfechoDoDisparo =
+  | { kind: "criado"; disparoId: string; vaoReceber: number; comecou: boolean }
+  | { kind: "recusado"; motivo: string };
+
+export interface PortaDeDisparo {
+  /**
+   * Cria a campanha pelo MESMO caminho da tela (`lib/bulk-send/criar-disparo.ts`).
+   *
+   * O bloco não manda mensagem: quem manda é o motor de disparos, com o ritmo,
+   * o teto diário, a janela e o opt-out que ele já aplica. Uma segunda
+   * implementação disso é como uma instalação manda campanha para quem pediu
+   * para sair.
+   */
+  criar(pedido: PedidoDeDisparo): Promise<DesfechoDoDisparo>;
+}
+
 
 export type SeveridadeDoAviso = "info" | "warn" | "critical";
 
@@ -215,6 +460,7 @@ export interface FlowExecutionContext {
   crm: PortaDoCrm;
   roteamento: PortaDeRoteamento;
   canal: PortaDeCanal;
+  disparo: PortaDeDisparo;
   avisos: PortaDeAvisos;
   agora: () => Date;
   /** Interpola `{{lead.name}}` e afins contra `escopo`. */
@@ -270,3 +516,26 @@ export interface FlowNodeDefinition<C = unknown> {
   branches(config: C): FlowBranch[];
   execute(ctx: FlowExecutionContext, config: C): Promise<NodeExecutionResult>;
 }
+
+/**
+ * As raízes que `{{...}}` enxerga, em RUNTIME.
+ *
+ * ⚠️ Existe porque o system prompt da IA precisa da lista, e o `keyof` de uma
+ * interface some na compilação. Enquanto a whitelist do prompt era escrita à
+ * mão, ela autorizava `lead` e `vars` e mandava "não invente outras" — o resto
+ * do escopo estava proibido para a IA e liberado para quem monta à mão, e o
+ * próprio `node-examples.ts` já usava `{{contact.name}}`.
+ *
+ * O `satisfies` é o que impede a divergência de voltar: raiz nova na interface
+ * sem entrada aqui não compila, porque `Record` cobra a chave.
+ */
+export const RAIZES_DE_VARIAVEL = {
+  lead: "o lead do funil (title, score, stage_id, custom_fields…)",
+  contact: "a pessoa (name, phone_e164, email)",
+  assigned_user: "quem atende o lead agora (name, email)",
+  vars: "o que os blocos anteriores gravaram nesta execução",
+  execution: "a execução em si (id, started_at, steps_taken)",
+  event: "o payload do evento que disparou o fluxo",
+  frame: "o que é desta frente, e não da execução inteira",
+  global: "variáveis da organização, iguais em todo fluxo dela",
+} as const satisfies Record<keyof EscopoDeVariaveis, string>;

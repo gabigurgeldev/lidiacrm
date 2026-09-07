@@ -207,6 +207,54 @@ export const DICIONARIO: Traducoes = {
   "o provedor recusou o webhook": { es: "el proveedor rechazó el webhook" },
   "Webhook reconectado.": { es: "Webhook reconectado." },
   "Reconectar webhook": { es: "Reconectar webhook" },
+  "Carregando as conexões…": { es: "Cargando las conexiones…" },
+  "Todos os números conectados": { es: "Todos los números conectados" },
+  "A primeira conexão disponível": { es: "La primera conexión disponible" },
+  "O fluxo começa por qualquer número que receber a mensagem.": { es: "El flujo empieza por cualquier número que reciba el mensaje." },
+  "Serve quando há um número só, e não quebra se ele for trocado.": { es: "Sirve cuando hay un solo número, y no se rompe si se cambia." },
+  "desconectado agora": { es: "desconectado ahora" },
+  "O fluxo só começa quando a mensagem chegar por este número.": { es: "El flujo solo empieza cuando el mensaje llega por este número." },
+  "Cobra por mensagem.": { es: "Cobra por mensaje." },
+  "Palavras que começam o fluxo": { es: "Palabras que inician el flujo" },
+  "orçamento, preço, quanto custa": { es: "presupuesto, precio, cuánto cuesta" },
+  "Separe por vírgula. Qualquer uma delas basta, e acento e maiúscula não fazem diferença.": { es: "Sepárelas por coma. Cualquiera de ellas basta, y el acento y las mayúsculas no cambian nada." },
+  "Como comparar": { es: "Cómo comparar" },
+  "A palavra aparece na mensagem": { es: "La palabra aparece en el mensaje" },
+  "A mensagem é exatamente a palavra": { es: "El mensaje es exactamente la palabra" },
+  "Serve para menu por número: com 'exata', a mensagem '10 reais' não escolhe a opção '1'.": { es: "Sirve para menú por número: con 'exacta', el mensaje '10 reales' no elige la opción '1'." },
+  "Pega a palavra no meio da frase. Cuidado com palavras curtas, que aparecem dentro de outras.": { es: "Toma la palabra en medio de la frase. Cuidado con palabras cortas, que aparecen dentro de otras." },
+  "Por quais números o fluxo escuta": { es: "Por qué números escucha el flujo" },
+  "Este fluxo começa sozinho toda vez que um cliente manda mensagem. Para reagir só a certas palavras, use o bloco de palavra-chave.": { es: "Este flujo empieza solo cada vez que un cliente manda un mensaje. Para reaccionar solo a ciertas palabras, use el bloque de palabra clave." },
+  "Enviar link para o cliente": { es: "Enviar enlace al cliente" },
+  "Link criado — vale por 30 min": { es: "Enlace creado — vale por 30 min" },
+  "Cancelar link": { es: "Cancelar enlace" },
+  "Abrir": { es: "Abrir" },
+  "Link cancelado.": { es: "Enlace cancelado." },
+  "Não deu para copiar. Selecione o link e copie à mão.": { es: "No se pudo copiar. Seleccione el enlace y cópielo a mano." },
+  "Qualquer pessoa com este link consegue parear um WhatsApp nesta linha.": { es: "Cualquier persona con este enlace puede vincular un WhatsApp a esta línea." },
+  "Este link expirou. Peça um novo para quem te enviou.": { es: "Este enlace expiró. Pida uno nuevo a quien se lo envió." },
+  "Este link já foi usado para conectar um aparelho.": { es: "Este enlace ya se usó para conectar un dispositivo." },
+  "Este link foi cancelado.": { es: "Este enlace fue cancelado." },
+  "Este link não é válido.": { es: "Este enlace no es válido." },
+  "Pode fechar esta página. Não é preciso fazer mais nada.": { es: "Puede cerrar esta página. No hace falta hacer nada más." },
+  "Você está conectando o WhatsApp de": { es: "Está conectando el WhatsApp de" },
+  "Escaneie com o WhatsApp": { es: "Escanee con WhatsApp" },
+  "Abra o WhatsApp no celular que será conectado.": { es: "Abra WhatsApp en el celular que se va a conectar." },
+  "Toque em Configurações → Aparelhos conectados.": { es: "Toque en Configuración → Dispositivos vinculados." },
+  "Toque em Conectar um aparelho e aponte para este QR.": { es: "Toque en Vincular un dispositivo y apunte a este QR." },
+  "O QR se renova sozinho.": { es: "El QR se renueva solo." },
+  "Este link é pessoal e expira sozinho. Não repasse para outras pessoas.": { es: "Este enlace es personal y expira solo. No lo reenvíe a otras personas." },
+  "Token de envio (API Oficial)": { es: "Token de envío (API Oficial)" },
+  "cole o token que aparece na instância": { es: "pegue el token que aparece en la instancia" },
+  "Token salvo. Envio liberado.": { es: "Token guardado. Envío liberado." },
+  "Token salvo. Envio liberado para": { es: "Token guardado. Envío liberado para" },
+  "Token salvo, mas este número está em modo de teste na Meta:": {
+    es: "Token guardado, pero este número está en modo de prueba en Meta:",
+  },
+  "A chave da conta não alcança este valor: ele só aparece no painel do provedor, dentro da instância. Sem ele o número recebe mensagem e não consegue responder.":
+    {
+      es: "La clave de la cuenta no alcanza este valor: solo aparece en el panel del proveedor, dentro de la instancia. Sin él, el número recibe mensajes y no puede responder.",
+    },
   "sem identificador": { es: "sin identificador" },
   "Chave de API da conta": { es: "Clave de API de la cuenta" },
   "Guardada cifrada. Não é exibida de volta em nenhum momento.": {
@@ -3208,6 +3256,10 @@ export const DICIONARIO: Traducoes = {
   "Espelho da conta": { es: "Espejo de la cuenta" },
   "template(s)": { es: "plantilla(s)" },
   "Sincronizando…": { es: "Sincronizando…" },
+  "Catálogo sincronizado.": { es: "Catálogo sincronizado." },
+  "Não deu para carregar os modelos. Tente de novo.": { es: "No se pudieron cargar los modelos. Inténtelo de nuevo." },
+  "O catálogo desta conta ainda não foi sincronizado.": { es: "El catálogo de esta cuenta todavía no se sincronizó." },
+  "Sincronizar catálogo agora": { es: "Sincronizar catálogo ahora" },
   "Sincronizar com a Meta": { es: "Sincronizar con Meta" },
   "Nenhum template ainda": { es: "Ninguna plantilla todavía" },
   "Crie templates no Gerenciador do WhatsApp e clique em": {
@@ -6412,7 +6464,6 @@ export const DICIONARIO: Traducoes = {
   "Publicado e pronto para ligar.": { es: "Publicado y listo para encender." },
   "Rascunho — publique antes de ligar.": { es: "Borrador — publique antes de encender." },
   "Ligado": { es: "Encendido" },
-  "Abrir": { es: "Abrir" },
   "Fluxo ligado.": { es: "Flujo encendido." },
   "Fluxo pausado.": { es: "Flujo pausado." },
 
@@ -6453,6 +6504,46 @@ export const DICIONARIO: Traducoes = {
   "Mínimo de 5 minutos — abaixo disso o relógio do sistema não distingue.":
     { es: "Mínimo de 5 minutos — por debajo de eso el reloj del sistema no distingue." },
   "Como registrar o fim": { es: "Cómo registrar el final" },
+  // ── os blocos do paralelo (fluxos) ──
+  "Aqui os caminhos que correm ao mesmo tempo voltam a ser um só. Aponte a bifurcação para este bloco.":
+    { es: "Aquí los caminos que corren al mismo tiempo vuelven a ser uno solo. Apunte la bifurcación a este bloque." },
+  "Lista a percorrer": { es: "Lista a recorrer" },
+  "O caminho da lista guardada por um bloco anterior — por exemplo vars.produtos.":
+    { es: "La ruta de la lista guardada por un bloque anterior — por ejemplo vars.produtos." },
+  "Repetir no máximo quantas vezes?": { es: "¿Repetir como máximo cuántas veces?" },
+  "O teto é obrigatório: é ele que garante que a repetição termina, mesmo se a lista vier maior do que o esperado.":
+    { es: "El tope es obligatorio: es lo que garantiza que la repetición termina, incluso si la lista viene más grande de lo esperado." },
+  "Esperar o quê?": { es: "¿Esperar qué?" },
+  "O cliente responder": { es: "Que el cliente responda" },
+  "O lead mudar de etapa": { es: "Que el lead cambie de etapa" },
+  "O lead ser ganho": { es: "Que el lead se gane" },
+  "O lead ser perdido": { es: "Que el lead se pierda" },
+  "Esperar por quantas horas?": { es: "¿Esperar cuántas horas?" },
+  "Vencido o prazo, o fluxo segue pela saída 'Venceu o prazo'. Toda espera precisa de prazo — sem ele o fluxo ficaria parado para sempre.":
+    { es: "Vencido el plazo, el flujo sigue por la salida 'Venció el plazo'. Toda espera necesita plazo — sin él el flujo quedaría detenido para siempre." },
+  "Qual fluxo chamar": { es: "Qué flujo llamar" },
+  "Novo caminho": { es: "Nuevo camino" },
+  "Como os caminhos se juntam": { es: "Cómo se juntan los caminos" },
+  "Esperar todos terminarem": { es: "Esperar a que todos terminen" },
+  "Seguir com o primeiro que terminar": { es: "Seguir con el primero que termine" },
+  "Quando o primeiro chegar, os outros caminhos são cancelados.":
+    { es: "Cuando llegue el primero, los demás caminos se cancelan." },
+  "O fluxo só continua depois que todos os caminhos chegarem ao reencontro.":
+    { es: "El flujo solo continúa después de que todos los caminos lleguen al reencuentro." },
+  "Bloco de reencontro": { es: "Bloque de reencuentro" },
+  "Escolha o bloco de reencontro": { es: "Elija el bloque de reencuentro" },
+  "Nenhum bloco de reencontro no fluxo ainda. Acrescente um pela paleta — é ele que junta os caminhos de volta.":
+    { es: "Todavía no hay bloque de reencuentro en el flujo. Agregue uno desde la paleta — es el que junta los caminos de vuelta." },
+  "Onde estes caminhos voltam a ser um só. Sem ele o fluxo não publica.":
+    { es: "Donde estos caminos vuelven a ser uno solo. Sin él el flujo no se publica." },
+  "Escolha o fluxo": { es: "Elija el flujo" },
+  "Nenhum outro fluxo publicado nesta organização. Publique o fluxo que você quer chamar primeiro.":
+    { es: "No hay otro flujo publicado en esta organización. Publique primero el flujo que quiere llamar." },
+  "Ele roda inteiro, e este fluxo continua quando ele terminar.":
+    { es: "Se ejecuta entero, y este flujo continúa cuando él termine." },
+  "Nome deste caminho": { es: "Nombre de este camino" },
+  "Remover este caminho": { es: "Quitar este camino" },
+  "Acrescentar caminho": { es: "Agregar camino" },
   "Aparece na tela de Execuções, para você separar o que deu certo do que não deu.":
     { es: "Aparece en la pantalla de Ejecuciones, para separar lo que salió bien de lo que no." },
   "Marcador": { es: "Etiqueta" },
@@ -6629,6 +6720,22 @@ export const DICIONARIO: Traducoes = {
   // Passo 3 — o ritmo
   "Tempo entre uma mensagem e outra": { es: "Tiempo entre un mensaje y otro" },
   "segundos": { es: "segundos" },
+  "Execuções deste fluxo": { es: "Ejecuciones de este flujo" },
+  "Quem disparou, em que passo está e quanto tempo levou entre um passo e outro.": { es: "Quién lo disparó, en qué paso está y cuánto tardó entre un paso y otro." },
+  "Este fluxo ainda não rodou nenhuma vez.": { es: "Este flujo todavía no se ejecutó ninguna vez." },
+  "Sem contato identificado": { es: "Sin contacto identificado" },
+  "Nenhum passo registrado ainda.": { es: "Todavía no hay ningún paso registrado." },
+  "Ver execuções": { es: "Ver ejecuciones" },
+  "Avançou": { es: "Avanzó" },
+  "Começou a esperar": { es: "Empezó a esperar" },
+  "Parou": { es: "Se detuvo" },
+  "Caminho concluído": { es: "Camino concluido" },
+  "minutos": { es: "minutos" },
+  "Esperar quanto tempo?": { es: "¿Esperar cuánto tiempo?" },
+  "Mínimo de 10 segundos. O fluxo retoma em cerca de 2 segundos depois do prazo — o tempo que você marca é respeitado.":
+    {
+      es: "Mínimo de 10 segundos. El flujo se reanuda unos 2 segundos después del plazo — el tiempo que usted marca se respeta.",
+    },
   "Mínimo de {s}s exigido por este canal — não dá para ir mais rápido.":
     { es: "Mínimo de {s}s exigido por este canal — no se puede ir más rápido." },
   "Mínimo de {s}s para o número não ser bloqueado. Dá para afrouxar em Conexões, por sua conta e risco.":
@@ -6738,6 +6845,38 @@ export const DICIONARIO: Traducoes = {
     { es: "Listo. Revisá los bloques en el tablero, ajustá lo que quieras y guardá el borrador." },
   "A conversa se perde se você sair desta tela antes de montar o fluxo.":
     { es: "La conversación se pierde si salís de esta pantalla antes de armar el flujo." },
+  // ── o painel de IA: responder escrevendo, ver o plano, descartar depois ────
+  "ou escreva sua resposta": { es: "o escribí tu respuesta" },
+  "escreva sua resposta": { es: "escribí tu respuesta" },
+  "Não tenho preferência": { es: "No tengo preferencia" },
+  "(sem preferência — escolha um padrão sensato)":
+    { es: "(sin preferencia — elegí un valor razonable)" },
+  "Corrigir a última resposta": { es: "Corregir la última respuesta" },
+  "Ver o que vai ser montado": { es: "Ver lo que se va a armar" },
+  "Montando o plano…": { es: "Armando el plan…" },
+  "{n} blocos vão ser criados:": { es: "Se van a crear {n} bloques:" },
+  "Isto substitui o que está no quadro agora. Dá para descartar depois.":
+    { es: "Esto reemplaza lo que hay en el tablero ahora. Se puede descartar después." },
+  "Pronto. Confira os blocos no quadro, ajuste o que quiser e publique.":
+    { es: "Listo. Revisá los bloques en el tablero, ajustá lo que quieras y publicá." },
+  "Pronto. Confira os blocos no quadro e resolva os pontos abaixo antes de publicar.":
+    { es: "Listo. Revisá los bloques en el tablero y resolvé los puntos de abajo antes de publicar." },
+  "Ajustes feitos automaticamente": { es: "Ajustes hechos automáticamente" },
+  "Ainda falta resolver, senão o fluxo não publica":
+    { es: "Todavía falta resolver esto, si no el flujo no se publica" },
+  "Ficar com este fluxo": { es: "Quedarme con este flujo" },
+  "O quadro voltou ao que era antes.": { es: "El tablero volvió a como estaba antes." },
+  // ── ajustar um fluxo que já existe, em vez de refazê-lo ───────────────────
+  "Ajustar o fluxo que está no quadro": { es: "Ajustar el flujo que está en el tablero" },
+  "Montar um fluxo do zero": { es: "Armar un flujo desde cero" },
+  "Descreva o fluxo que você quer, ou peça um ajuste no que já está no quadro — ex.: a espera passa a ser de 1 hora.":
+    {
+      es: "Describí el flujo que querés, o pedí un ajuste en lo que ya está en el tablero — ej.: la espera pasa a ser de 1 hora.",
+    },
+  "Ajustar mexe só no que você pediu e mantém o resto — inclusive os campos que você preencheu à mão. Do zero substitui o quadro inteiro.":
+    {
+      es: "Ajustar toca solo lo que pediste y mantiene el resto — incluidos los campos que completaste a mano. Desde cero reemplaza todo el tablero.",
+    },
   "Não consegui entender o pedido.": { es: "No pude entender el pedido." },
   "A geração falhou. Tente de novo.": { es: "La generación falló. Intentá de nuevo." },
   "A IA não conseguiu terminar o fluxo. Tente descrever de outro jeito.":
@@ -6761,6 +6900,219 @@ export const DICIONARIO: Traducoes = {
   "{n} blocos vieram com valores padrão — revise antes de publicar.":
     { es: "{n} bloques quedaron con valores por defecto — revisalos antes de publicar." },
 
+
+  // ─── Quadro do fluxo · barra e paleta ───
+  "Arrumar": { es: "Ordenar" },
+  "Duplicar com estes ajustes": { es: "Duplicar con estos ajustes" },
+  "Clique para acrescentar, ou arraste até o ponto do quadro.": {
+    es: "Haz clic para agregar, o arrastra hasta el punto del tablero.",
+  },
+
+  // ─── Quadro do fluxo · o resumo de cada cartão (resumoDoBloco.ts) ───
+  "Espera {n} segundos": { es: "Espera {n} segundos" },
+  "Espera {n} minutos": { es: "Espera {n} minutos" },
+  "Espera {n} horas": { es: "Espera {n} horas" },
+  "Espera {n} dias": { es: "Espera {n} días" },
+  "Espera {evento}, no máximo {n} segundos": { es: "Espera {evento}, máximo {n} segundos" },
+  "Espera {evento}, no máximo {n} minutos": { es: "Espera {evento}, máximo {n} minutos" },
+  "Espera {evento}, no máximo {n} horas": { es: "Espera {evento}, máximo {n} horas" },
+  "Espera {evento}, no máximo {n} dias": { es: "Espera {evento}, máximo {n} días" },
+  "Espera {evento}": { es: "Espera {evento}" },
+  "A mensagem contém {palavras}": { es: "El mensaje contiene {palavras}" },
+  "A mensagem é {palavras}": { es: "El mensaje es {palavras}" },
+  "Sem palavra escolhida": { es: "Sin palabra elegida" },
+  "Chamada de fora: {nome}": { es: "Llamada externa: {nome}" },
+  "Sem regra escrita": { es: "Sin regla escrita" },
+  "Se {regras}": { es: "Si {regras}" },
+  "{n} regras: {regras}": { es: "{n} reglas: {regras}" },
+  "Termina como {desfecho}": { es: "Termina como {desfecho}" },
+  "{n} ao mesmo tempo, espera todas: {nomes}": {
+    es: "{n} a la vez, espera todas: {nomes}",
+  },
+  "{n} ao mesmo tempo, vale a primeira: {nomes}": {
+    es: "{n} a la vez, vale la primera: {nomes}",
+  },
+  "Repete para cada {lista}": { es: "Repite para cada {lista}" },
+  "Repete para cada {lista}, até {max}": { es: "Repite para cada {lista}, hasta {max}" },
+  "Sem opção escrita": { es: "Sin opción escrita" },
+  "Espera a escolha: {opcoes}": { es: "Espera la elección: {opcoes}" },
+  "Falta escolher o fluxo": { es: "Falta elegir el flujo" },
+  "Chama outro fluxo e espera o resultado": { es: "Llama a otro flujo y espera el resultado" },
+  "Marca como {tag}": { es: "Marca como {tag}" },
+  "Passa o lead para {quem}": { es: "Pasa el lead a {quem}" },
+  "O dono respondeu depois do bloco anterior?": {
+    es: "¿El dueño respondió después del bloque anterior?",
+  },
+  "O dono respondeu desde que o fluxo começou?": {
+    es: "¿El dueño respondió desde que empezó el flujo?",
+  },
+  "Falta montar a fila": { es: "Falta armar la fila" },
+  "Fila fixa, {n} na vez": { es: "Fila fija, {n} en turno" },
+  "Manda um arquivo ao cliente": { es: "Manda un archivo al cliente" },
+  "“{msg}”": { es: "“{msg}”" },
+  "Avisa o dono do lead": { es: "Avisa al dueño del lead" },
+  "Avisa o dono: “{msg}”": { es: "Avisa al dueño: “{msg}”" },
+  "Avisa por WhatsApp: “{msg}”": { es: "Avisa por WhatsApp: “{msg}”" },
+  "Falta escolher o número": { es: "Falta elegir el número" },
+  "Dispara para uma lista fixa": { es: "Envía a una lista fija" },
+  "Dispara para quem tem {tags}": { es: "Envía a quien tiene {tags}" },
+  "Abre um aviso: {titulo}": { es: "Abre un aviso: {titulo}" },
+
+  // ─── Editor de fluxo · painel da ligação ───
+  "Esta ligação": { es: "Esta conexión" },
+  "Sai por qual saída": { es: "Sale por qué salida" },
+  "Este bloco tem uma saída só.": { es: "Este bloque tiene una sola salida." },
+  "As saídas que já têm outra linha não aparecem aqui — cada saída leva a um bloco só.": {
+    es: "Las salidas que ya tienen otra línea no aparecen aquí — cada salida lleva a un solo bloque.",
+  },
+  "Remover esta ligação": { es: "Quitar esta conexión" },
+
+  // ─── Editor de fluxo · entrega ao agente de IA ───
+  "A conversa volta para o agente de IA atender. Se ela tinha sido passada para uma pessoa, esta passagem é DESFEITA — inclusive quando foi um atendente que assumiu. Use depois de ter certeza de que o humano terminou.":
+    {
+      es: "La conversación vuelve al agente de IA. Si había sido pasada a una persona, ese traspaso se DESHACE — incluso cuando fue un agente quien la tomó. Úsalo después de confirmar que el humano terminó.",
+    },
+
+  // ─── Editor de fluxo · importador de planilha ───
+  "Não consegui ler a planilha.": { es: "No pude leer la planilla." },
+  "Não consegui enviar a planilha. Tente de novo.": {
+    es: "No pude enviar la planilla. Inténtalo de nuevo.",
+  },
+  "Trocar a planilha": { es: "Cambiar la planilla" },
+  "Escolher planilha": { es: "Elegir planilla" },
+  "{n} contato(s) nesta lista.": { es: "{n} contacto(s) en esta lista." },
+  "{c} criado(s), {e} já estavam na base.": { es: "{c} creado(s), {e} ya estaban en la base." },
+  "Fora:": { es: "Fuera:" },
+  "{n} linha(s) da planilha não puderam ser lidas.": {
+    es: "{n} línea(s) de la planilla no se pudieron leer.",
+  },
+
+  // ─── Editor de fluxo · menu de opções ───
+  "Nova opção": { es: "Nueva opción" },
+  "Este bloco só ESPERA a resposta. A pergunta com as opções sai de um bloco de mensagem antes dele.":
+    {
+      es: "Este bloque solo ESPERA la respuesta. La pregunta con las opciones sale de un bloque de mensaje anterior.",
+    },
+  "Vencido o prazo, o fluxo segue pela saída 'Não respondeu a tempo' — que é diferente de 'Não entendi a resposta'.":
+    {
+      es: "Vencido el plazo, el flujo sigue por la salida 'No respondió a tiempo' — que es distinta de 'No entendí la respuesta'.",
+    },
+  "Como comparar a resposta": { es: "Cómo comparar la respuesta" },
+  "A resposta é exatamente uma das opções": { es: "La respuesta es exactamente una de las opciones" },
+  "A resposta contém uma das opções": { es: "La respuesta contiene una de las opciones" },
+  "'Exata' é o certo para menu por número: com 'contém', a resposta '10' escolheria a opção '1'.": {
+    es: "'Exacta' es lo correcto para menú por número: con 'contiene', la respuesta '10' elegiría la opción '1'.",
+  },
+  "As opções": { es: "Las opciones" },
+  "O cliente pode responder": { es: "El cliente puede responder" },
+  "1, sim, quero": { es: "1, sí, quiero" },
+  "Remover esta opção": { es: "Quitar esta opción" },
+  "Acrescentar opção": { es: "Agregar opción" },
+
+  // ─── Editor de fluxo · caminhos paralelos ───
+  "Os caminhos": { es: "Los caminos" },
+
+  // ─── Editor de fluxo · fila fixa de atendimento ───
+  "Pessoa que não está mais na equipe": { es: "Persona que ya no está en el equipo" },
+  "A ordem": { es: "El orden" },
+  "Quem atende, e em que ordem": { es: "Quién atiende, y en qué orden" },
+  "Ninguém na fila ainda. Acrescente as pessoas na ordem em que devem atender.": {
+    es: "Nadie en la fila todavía. Agrega a las personas en el orden en que deben atender.",
+  },
+  "Subir na fila": { es: "Subir en la fila" },
+  "Descer na fila": { es: "Bajar en la fila" },
+  "Tirar da fila": { es: "Quitar de la fila" },
+  "Cada lead vai para o próximo da ordem, dando a volta no fim. Quem estiver indisponível na hora é pulado, e a vez dele não se perde.":
+    {
+      es: "Cada lead va al siguiente del orden, volviendo al principio al final. A quien no esté disponible en ese momento se le saltea, y su turno no se pierde.",
+    },
+  "Acrescentar à fila": { es: "Agregar a la fila" },
+  "Escolha quem entra na fila": { es: "Elige quién entra en la fila" },
+
+  // ─── Editor de fluxo · sorteio ───
+  "Sorteia entre quem está disponível. Sorteio concentra: três leads seguidos para a mesma pessoa é resultado normal. Para dividir parelho, use 'Distribuir para um vendedor'.":
+    {
+      es: "Sortea entre quienes están disponibles. El sorteo concentra: tres leads seguidos a la misma persona es un resultado normal. Para repartir parejo, usa 'Distribuir a un vendedor'.",
+    },
+
+  // ─── Editor de fluxo · gatilho por webhook ───
+  "Nome deste gatilho": { es: "Nombre de este disparador" },
+  "Só para você reconhecer este gatilho na lista de Webhooks. Não muda o endereço.": {
+    es: "Solo para que reconozcas este disparador en la lista de Webhooks. No cambia la dirección.",
+  },
+  "O endereço": { es: "La dirección" },
+  "O endereço deste gatilho é criado quando você PUBLICA o fluxo, e aparece em Canais › Webhooks. Ele não muda quando você publica de novo — dá para colar no outro sistema uma vez só.":
+    {
+      es: "La dirección de este disparador se crea cuando PUBLICAS el flujo, y aparece en Canales › Webhooks. No cambia cuando publicas de nuevo — se puede pegar en el otro sistema una sola vez.",
+    },
+
+  // ─── Editor de fluxo · disparo em massa ───
+  "A campanha": { es: "La campaña" },
+  "Nome da campanha": { es: "Nombre de la campaña" },
+  "Aparece na tela de Disparos. Aceita {{lead.title}} para distinguir uma execução da outra.": {
+    es: "Aparece en la pantalla de Envíos. Acepta {{lead.title}} para distinguir una ejecución de otra.",
+  },
+  "Por qual número disparar": { es: "Por qué número enviar" },
+  "O que enviar": { es: "Qué enviar" },
+  "Use {{contact.name}} para tratar cada pessoa pelo nome.": {
+    es: "Usa {{contact.name}} para tratar a cada persona por su nombre.",
+  },
+  "Carregando os modelos…": { es: "Cargando las plantillas…" },
+  "Nenhum modelo aprovado nesta conta. Crie e aprove o modelo na Meta, sincronize em Conexões › Modelos, e volte.":
+    {
+      es: "Ninguna plantilla aprobada en esta cuenta. Crea y aprueba la plantilla en Meta, sincroniza en Conexiones › Plantillas, y vuelve.",
+    },
+  "Escolha o modelo": { es: "Elige la plantilla" },
+  "Fora da janela de 24 horas, este número só entrega modelo aprovado — é regra da Meta, não do produto.":
+    {
+      es: "Fuera de la ventana de 24 horas, este número solo entrega plantilla aprobada — es regla de Meta, no del producto.",
+    },
+  "Valor de {k}": { es: "Valor de {k}" },
+  "De onde vêm os números": { es: "De dónde vienen los números" },
+  "Todo mundo com um marcador": { es: "Todos los que tengan una etiqueta" },
+  "Uma lista fixa de contatos": { es: "Una lista fija de contactos" },
+  "A lista é recortada na hora de cada execução — quem ganhar o marcador depois também entra.": {
+    es: "La lista se recorta en el momento de cada ejecución — quien reciba la etiqueta después también entra.",
+  },
+  "A lista é a mesma toda vez, não importa quem entrou na base depois.": {
+    es: "La lista es la misma siempre, sin importar quién entró en la base después.",
+  },
+  "Marcadores": { es: "Etiquetas" },
+  "clientes, black-friday": { es: "clientes, black-friday" },
+  "Separe por vírgula. Quem tiver QUALQUER um deles entra na lista.": {
+    es: "Sepáralas con coma. Quien tenga CUALQUIERA de ellas entra en la lista.",
+  },
+  "Planilha de contatos": { es: "Planilla de contactos" },
+  "A planilha é resolvida em contatos AGORA, e a lista fica congelada no bloco. Quem entrar na base depois não recebe — para isso, use marcador.":
+    {
+      es: "La planilla se resuelve en contactos AHORA, y la lista queda congelada en el bloque. Quien entre en la base después no recibe — para eso, usa etiqueta.",
+    },
+  "Como disparar": { es: "Cómo enviar" },
+  "Segundos entre uma mensagem e outra": { es: "Segundos entre un mensaje y otro" },
+  "O sistema nunca dispara mais rápido que o mínimo do número escolhido, mesmo que você peça.": {
+    es: "El sistema nunca envía más rápido que el mínimo del número elegido, aunque se lo pidas.",
+  },
+  "Começar sozinho?": { es: "¿Empezar solo?" },
+  "Não — deixar em rascunho para revisão": { es: "No — dejar en borrador para revisión" },
+  "Sim — disparar assim que for criado": { es: "Sí — enviar apenas se cree" },
+  "Ninguém confere a lista antes. Use só quando o fluxo já roda há tempo e você confia no recorte.": {
+    es: "Nadie revisa la lista antes. Úsalo solo cuando el flujo ya lleva tiempo funcionando y confías en el recorte.",
+  },
+  "A campanha nasce em rascunho e abre um aviso na Central. Alguém confere quantos vão receber e aperta o botão.":
+    {
+      es: "La campaña nace en borrador y abre un aviso en la Central. Alguien revisa cuántos van a recibir y aprieta el botón.",
+    },
+
+  // ─── Editor de fluxo · aviso ao vendedor e mensagem ao cliente ───
+  "De onde vem o telefone": { es: "De dónde viene el teléfono" },
+  "Tipo de mensagem": { es: "Tipo de mensaje" },
+  "O arquivo precisa estar num endereço público — o WhatsApp busca por lá na hora de enviar.": {
+    es: "El archivo tiene que estar en una dirección pública — WhatsApp lo busca ahí al momento de enviar.",
+  },
+  "Use {{lead.title}}, {{contact.name}} e {{lead.score}} para incluir os dados do lead.": {
+    es: "Usa {{lead.title}}, {{contact.name}} y {{lead.score}} para incluir los datos del lead.",
+  },
+  "Por onde enviar": { es: "Por dónde enviar" },
 };
 
 /**

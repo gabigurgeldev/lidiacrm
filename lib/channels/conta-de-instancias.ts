@@ -32,13 +32,15 @@ import {
   ROTULO_PARCEIRO_STEVO,
 } from "./tipo-de-conexao";
 import { reactivateChannelSession } from "./reactivate";
+import { env } from "@/lib/env";
 import { encryptWebhookSecret } from "@/lib/webhooks/secrets";
 import {
   apontarWebhookStevo,
   validarContaStevo,
+  validarTokenDeEnvioOficial,
   type StevoInstancia,
 } from "./stevo/instancias";
-import { stevoBaseUrl } from "./stevo/credentials";
+import { resolveStevoCreds, stevoBaseUrl, stevoBaseUrlOficial } from "./stevo/credentials";
 import type { ChannelProvider } from "./types";
 
 /**
@@ -187,6 +189,29 @@ export interface DesfechoDaImportacao {
   nome: string;
   /** O webhook foi apontado para esta instalação? */
   recebendo: boolean;
+  /** Por que não ficou recebendo — frase pronta pra tela. Só com `recebendo:false`. */
+  motivo?: string;
+}
+
+/**
+ * Base pública desta instalação — vai para o webhook registrado no provedor.
+ *
+ * Mora aqui e não numa rota porque passa a ter dois chamadores
+ * (`account/instances` e `account/instances/[id]/webhook`), e duplicar uma
+ * função que decide para onde a Stevo entrega mensagem é o tipo de cópia que
+ * diverge sem ninguém notar.
+ *
+ * Lida de `env.*` e NÃO de `process.env.NEXT_PUBLIC_APP_URL` direto: variáveis
+ * `NEXT_PUBLIC_` são substituídas no BUILD, e a imagem
+ * genérica do self-host é construída com `https://placeholder.invalid`
+ * (Dockerfile). Lendo do `process.env`, o webhook seria registrado apontando
+ * para o nada — e o canal enviaria sem nunca receber, sem erro em lugar
+ * nenhum.
+ */
+export function publicBase(req: { headers: Headers; nextUrl: { protocol: string; host: string } }): string {
+  const configurada = env.NEXT_PUBLIC_APP_URL;
+  const usavel = configurada && !configurada.includes("placeholder.invalid") ? configurada : null;
+  return usavel ?? req.headers.get("origin") ?? `${req.nextUrl.protocol}//${req.nextUrl.host}`;
 }
 
 /**
@@ -334,18 +359,142 @@ export async function importarInstancias(
       tokenDoWebhook = (criada as { webhook_path_token: string } | null)?.webhook_path_token ?? null;
     }
 
-    const recebendo = tokenDoWebhook
+    const webhook = tokenDoWebhook
       ? await apontarWebhookStevo({
           apiKey: input.apiKey,
           baseUrl: stevoBaseUrl(),
           instanceId: inst.id,
           // A rota NEUTRA de webhook — o caminho não cita provider nenhum.
           url: `${input.baseDoWebhook}/api/v1/webhooks/channel/${tokenDoWebhook}`,
+          oficial: inst.modo === MODO_OFICIAL,
         })
-      : false;
+      : { ok: false as const, motivo: "linha sem webhook_path_token — não deveria acontecer" };
 
-    desfechos.push({ id: inst.id, nome, recebendo });
+    desfechos.push({ id: inst.id, nome, recebendo: webhook.ok, motivo: webhook.motivo });
   }
 
   return { ok: true, desfechos };
+}
+
+/**
+ * Tenta de novo, SEM reimportar — para quando o operador corrige do lado da
+ * Stevo (ex.: adiciona o escopo `instances:manage` na API Key) e só precisa
+ * que o CRM avise a Stevo de novo. Reaproveita a chave já cifrada na linha via
+ * `resolveStevoCreds`: o operador não cola nada de novo.
+ */
+export async function reapontarWebhookDaConta(
+  admin: SupabaseClient,
+  input: { organizationId: string; channelSessionId: string; baseDoWebhook: string },
+): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const base = () =>
+    admin
+      .from("channel_sessions")
+      .select(`id, stevo_instance_id, webhook_path_token, provider_mode, ${ARCHIVED_AT}`)
+      .eq("organization_id", input.organizationId)
+      .eq("provider", ACCOUNT_CHANNEL_PROVIDER)
+      .eq("id", input.channelSessionId);
+  const { data } = await queryTolerantToMissingArchived(
+    () => base().is(ARCHIVED_AT, null).maybeSingle(),
+    () =>
+      admin
+        .from("channel_sessions")
+        .select("id, stevo_instance_id, webhook_path_token, provider_mode")
+        .eq("organization_id", input.organizationId)
+        .eq("provider", ACCOUNT_CHANNEL_PROVIDER)
+        .eq("id", input.channelSessionId)
+        .maybeSingle(),
+  );
+  const linha = data as {
+    id: string;
+    stevo_instance_id: string | null;
+    webhook_path_token: string;
+    provider_mode: string | null;
+  } | null;
+  if (!linha || !linha.stevo_instance_id) {
+    return { ok: false, motivo: "canal não encontrado" };
+  }
+
+  const creds = await resolveStevoCreds(admin, {
+    organizationId: input.organizationId,
+    instanceId: linha.stevo_instance_id,
+  });
+  if (!creds) {
+    return { ok: false, motivo: "sem credencial gravada para este canal" };
+  }
+
+  const r = await apontarWebhookStevo({
+    apiKey: creds.apiKey,
+    baseUrl: creds.baseUrl,
+    instanceId: linha.stevo_instance_id,
+    url: `${input.baseDoWebhook}/api/v1/webhooks/channel/${linha.webhook_path_token}`,
+    oficial: linha.provider_mode === MODO_OFICIAL,
+  });
+  return r.ok ? { ok: true } : { ok: false, motivo: r.motivo ?? "o provedor recusou" };
+}
+
+/**
+ * Grava o TOKEN DE ENVIO de um canal da API Oficial, depois de validá-lo.
+ *
+ * ─── Por que este token é colado, e não descoberto ──────────────────────────
+ *
+ * A chave da conta descobre tudo o mais sozinha — instâncias, números, estado —
+ * e é por isso que esta forma de conectar existe. Este é a exceção: a API de
+ * conta devolve `token: null` para TODA instância da API Oficial (medido em
+ * produção, e preenchido para toda instância por QR), porque a Oficial não tem
+ * servidor de instância. O token do gateway só aparece no painel do provedor,
+ * para o operador. Não há o que sincronizar.
+ *
+ * Recusa canal que não seja da modalidade oficial: um canal por QR já envia
+ * pelo proxy, e gravar um token de gateway nele criaria um caminho de envio que
+ * nunca funcionaria — pior que não ter campo nenhum.
+ */
+export async function gravarTokenDeEnvioDaConta(
+  admin: SupabaseClient,
+  input: { organizationId: string; channelSessionId: string; token: string },
+): Promise<{ ok: true; numero: string | null; modo: string | null } | { ok: false; motivo: string }> {
+  const base = () =>
+    admin
+      .from("channel_sessions")
+      .select(`id, stevo_instance_id, provider_mode, ${ARCHIVED_AT}`)
+      .eq("organization_id", input.organizationId)
+      .eq("provider", ACCOUNT_CHANNEL_PROVIDER)
+      .eq("id", input.channelSessionId);
+  const { data } = await queryTolerantToMissingArchived(
+    () => base().is(ARCHIVED_AT, null).maybeSingle(),
+    () =>
+      admin
+        .from("channel_sessions")
+        .select("id, stevo_instance_id, provider_mode")
+        .eq("organization_id", input.organizationId)
+        .eq("provider", ACCOUNT_CHANNEL_PROVIDER)
+        .eq("id", input.channelSessionId)
+        .maybeSingle(),
+  );
+  const linha = data as { id: string; provider_mode: string | null } | null;
+  if (!linha) return { ok: false, motivo: "canal não encontrado" };
+  if (linha.provider_mode !== MODO_OFICIAL) {
+    return { ok: false, motivo: "este canal não é da API Oficial — ele já envia pela chave da conta" };
+  }
+
+  const v = await validarTokenDeEnvioOficial({
+    token: input.token,
+    baseUrl: stevoBaseUrlOficial(),
+  });
+  if (!v.ok) return { ok: false, motivo: v.motivo ?? "o provedor recusou o token" };
+
+  const cifrado = await encryptWebhookSecret(admin, input.token);
+  if (cifrado === null) {
+    // Mesma regra do resto do repo: sem chave de cifra configurada, NÃO grava em
+    // claro. O 422 que o chamador devolve diz qual variável falta.
+    return { ok: false, motivo: "a cifra de credenciais não está configurada nesta instalação" };
+  }
+
+  const { error } = await admin
+    .from("channel_sessions")
+    .update({ stevo_official_token_encrypted: cifrado })
+    .eq("organization_id", input.organizationId)
+    .eq("id", input.channelSessionId);
+  if (error) return { ok: false, motivo: "não deu para gravar o token neste canal" };
+
+  return { ok: true, numero: v.numero ?? null, modo: v.modo ?? null };
 }

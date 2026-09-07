@@ -19,7 +19,23 @@ import {
   routingRedistribute,
   routingRoundRobin,
 } from "./nodes/crm-e-roteamento";
+import { crmHandoffToAgent, routingFixedOrder, routingRandom } from "./nodes/distribuicao";
+import { whatsappDisparoEmMassa } from "./nodes/disparo-em-massa";
+import { whatsappEnviarAoCliente } from "./nodes/enviar-ao-cliente";
+import {
+  logicChoiceMenu,
+  triggerKeyword,
+  triggerMessageReceived,
+  triggerWebhook,
+} from "./nodes/gatilhos-e-menu";
 import { logicEnd, logicIf, logicWait, triggerLeadCreated } from "./nodes/logica";
+import {
+  flowCall,
+  logicAwaitEvent,
+  logicFork,
+  logicLoop,
+  logicMerge,
+} from "./nodes/paralelo";
 
 let registrado = false;
 
@@ -27,15 +43,29 @@ let registrado = false;
 export function garantirNosRegistrados(): void {
   if (registrado) return;
   registrarNo(triggerLeadCreated);
+  registrarNo(triggerMessageReceived);
+  registrarNo(triggerKeyword);
+  registrarNo(triggerWebhook);
   registrarNo(logicIf);
   registrarNo(logicWait);
   registrarNo(logicEnd);
+  registrarNo(logicFork);
+  registrarNo(logicMerge);
+  registrarNo(logicLoop);
+  registrarNo(logicAwaitEvent);
+  registrarNo(logicChoiceMenu);
+  registrarNo(flowCall);
   registrarNo(crmAddTag);
   registrarNo(crmAssignOwner);
   registrarNo(crmDonoRespondeu);
   registrarNo(routingRoundRobin);
   registrarNo(routingRedistribute);
+  registrarNo(routingRandom);
+  registrarNo(routingFixedOrder);
+  registrarNo(crmHandoffToAgent);
   registrarNo(whatsappNotifyUser);
+  registrarNo(whatsappEnviarAoCliente);
+  registrarNo(whatsappDisparoEmMassa);
   registrarNo(notifyInternal);
   registrado = true;
 }

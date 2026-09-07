@@ -101,9 +101,16 @@ const FORA_DO_SEAM: Record<string, { arquivo: string; marcador: string }> = {
   // Os dois pontos do Flow Engine chamam `resolverModeloDoPonto`
   // POSICIONALMENTE (mesmo molde de `ai-sentiment-worker.ts` acima), não
   // `purpose: 'x'` — a varredura textual não os alcança de propósito.
+  // ⚠️ O marcador desta rota mudou de `resolverModeloDoPonto` para
+  // `resolverCadeia`, e a troca é o comportamento pretendido — foi este teste
+  // que a pegou. `interpretar` era a única das três rotas de IA de fluxo que
+  // chamava `generateObject` na mão, sem fallback de modelo nem escalada de
+  // teto; passar pela porta (`resolverCadeia` + `portaComFallback`) é o que
+  // trouxe as duas recuperações. O ponto continua vivo, e continua sendo este
+  // arquivo que o executa.
   flow_ai_interpretar: {
     arquivo: "app/api/v1/flows/[id]/ai/interpretar/route.ts",
-    marcador: "resolverModeloDoPonto",
+    marcador: "resolverCadeia",
   },
   flow_ai_gerar: {
     // A geração virou DUAS rotas (`plano` decide os blocos, `montar` preenche

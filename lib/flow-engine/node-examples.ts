@@ -27,6 +27,37 @@ export function configExemploDoTipo(tipo: string): Record<string, unknown> {
       return { duracao_ms: 300_000 };
     case "logic.end":
       return { desfecho: "concluido" };
+    case "logic.fork":
+      // `encontro` aponta para o id de um `logic.merge` do MESMO grafo. Como
+      // valor de queda ele nasce apontando para um nó que talvez não exista —
+      // e é por isso que a validação de publicação cobra o alvo antes de o
+      // fluxo poder rodar, em vez de o motor descobrir em runtime.
+      return {
+        ramos: [
+          { id: "caminho_a", label: "Avisar o vendedor" },
+          { id: "caminho_b", label: "Marcar o lead" },
+        ],
+        modo: "todas",
+        encontro: "reencontro",
+      };
+    case "logic.merge":
+      return {};
+    case "logic.loop":
+      return { lista: "vars.itens", max: 10 };
+    case "logic.await_event":
+      return {
+        evento: "message.received",
+        quando: {},
+        // Uma hora. O schema exige no mínimo cinco minutos — abaixo disso o
+        // relógio do worker (1×/min) não distingue uma espera da outra.
+        prazo_ms: 3_600_000,
+      };
+    case "flow.call":
+      // UUID nulo de propósito: como valor de queda ele NÃO pode apontar para
+      // um fluxo real por acidente. A validação de publicação recusa, que é o
+      // comportamento certo — melhor um bloco que não publica do que um que
+      // chama o fluxo errado de alguém.
+      return { fluxo_id: "00000000-0000-0000-0000-000000000000", entrada: {} };
     case "crm.add_tag":
       // Não pode ser `""`: `addTagConfigSchema.tag` exige min(1). Um exemplo
       // vazio passava despercebido no clique manual porque `branches()` deste
@@ -46,6 +77,64 @@ export function configExemploDoTipo(tipo: string): Record<string, unknown> {
       return {
         destinatario: { tipo: "dono_do_lead" },
         mensagem: "Novo lead: {{lead.title}}",
+      };
+    case "trigger.message_received":
+      return {};
+    case "trigger.webhook":
+      return { nome: "Gatilho do fluxo" };
+    case "trigger.keyword":
+      // Palavra de queda com sentido: o schema exige ao menos uma, e um bloco
+      // que nasce inválido aparece no editor sem saídas, sem dizer por quê.
+      return { palavras: ["orçamento"], modo: "contem" };
+    case "logic.choice_menu":
+      return {
+        opcoes: [
+          { id: "sim", label: "Sim", aceita: ["1", "sim"] },
+          { id: "nao", label: "Não", aceita: ["2", "nao", "não"] },
+        ],
+        // `exata` por padrão: com `contem`, "10 reais" escolheria a opção "1".
+        modo: "exata",
+        prazo_ms: 3_600_000,
+      };
+    case "routing.random":
+      return { quando_ninguem: "tentar_depois", tentar_de_novo_em_ms: 300_000 };
+    case "routing.fixed_order":
+      // UUID nulo pelo mesmo motivo de `flow.call`: como valor de queda ele NÃO
+      // pode apontar para uma pessoa real por acidente. A publicação recusa, que
+      // é melhor que uma fila entregando leads a quem ninguém escolheu.
+      return {
+        ordem: ["00000000-0000-0000-0000-000000000000"],
+        quando_ninguem: "tentar_depois",
+        tentar_de_novo_em_ms: 300_000,
+      };
+    case "crm.handoff_to_agent":
+      return {};
+    case "whatsapp.send_to_lead":
+      return {
+        tipo: "texto",
+        // Texto de queda com conteúdo de verdade: o schema exige mensagem não
+        // vazia quando o tipo é texto, e um bloco que nasce inválido aparece no
+        // editor sem saídas — sem nada dizendo por quê.
+        texto: "Oi {{contact.name}}, tudo bem?",
+        canal_id: null,
+      };
+    case "whatsapp.bulk_send":
+      return {
+        nome: "Disparo do fluxo",
+        // UUID nulo de propósito, pelo mesmo motivo de `flow.call`: como valor
+        // de queda ele NÃO pode apontar para uma conexão real por acidente. Uma
+        // campanha saindo pelo número errado é pior que uma que não publica.
+        canal_id: "00000000-0000-0000-0000-000000000000",
+        modo: "freeform",
+        texto: "Oi {{contact.name}}, tudo bem?",
+        modelo_nome: "",
+        modelo_idioma: "",
+        modelo_valores: {},
+        audiencia: "tags",
+        tags: ["clientes"],
+        contatos: [],
+        intervalo_ms: 5_000,
+        comecar_sozinho: false,
       };
     case "notify.internal":
       // Mesmo caso de `crm.add_tag`: `notifyInternalConfigSchema` exige

@@ -76,6 +76,7 @@ import { runCronLoop } from '@/lib/agent-engine/cron/scheduler';
 import { createPool } from '@/lib/agent-engine/db/pool';
 import { runDrainLoop } from '@/lib/agent-engine/edge/crm/drain';
 import { runEventLogDrainLoop } from '@/lib/event-log/drain-loop';
+import { runFlowEngineLoop } from '@/lib/flow-engine/loop';
 import { crmEdgeConfigFromEnv } from '@/lib/agent-engine/edge/crm/mcp-client';
 import { enforceHolds, sessionHealthMetrics } from '@/lib/agent-engine/edge/crm/session-watchdog';
 import { runSessionWatchdogLoop } from '@/lib/agent-engine/edge/crm/session-reconciler';
@@ -304,6 +305,20 @@ export async function startWorker(
     loopsAbort.signal,
   );
 
+  // Motor de FLUXOS no ritmo do worker, pelo mesmo motivo do laço acima e com a
+  // mesma rede de segurança. Antes disto `rodarTickDeFluxos` só tinha o cron
+  // (1×/min): medido em produção, 59,1s entre dois nós que rodam em décimos de
+  // segundo, com todo evento caindo em `HH:MM:00` — a assinatura do relógio.
+  // NÃO encurta espera configurada: o claim só pega `next_eval_at <= now()`.
+  const flowEngineLoop = runFlowEngineLoop(
+    {
+      intervalMs: env.FLOW_ENGINE_LOOP_INTERVAL_MS,
+      idleIntervalMs: env.FLOW_ENGINE_LOOP_IDLE_INTERVAL_MS,
+    },
+    log,
+    loopsAbort.signal,
+  );
+
   // Watchdog de sessão (4A-2): reconcilia channel_sessions×WAHA + redrive de
   // queued. Liga só com as credenciais do WAHA no env (sem elas: warn + off).
   const sessionWatchdogLoop =
@@ -455,7 +470,15 @@ export async function startWorker(
     server.close();
     server.closeIdleConnections();
     loopsAbort.abort();
-    await Promise.all([drainLoop, eventLogLoop, healthLoop, cronLoop, sessionWatchdogLoop, flywheelLoop]);
+    await Promise.all([
+      drainLoop,
+      eventLogLoop,
+      flowEngineLoop,
+      healthLoop,
+      cronLoop,
+      sessionWatchdogLoop,
+      flywheelLoop,
+    ]);
     await workerLoop;
     let graceTimer: NodeJS.Timeout | undefined;
     const grace = new Promise<'grace'>((resolve) => {

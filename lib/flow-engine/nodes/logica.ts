@@ -82,8 +82,25 @@ export const logicIf: FlowNodeDefinition<IfConfig> = {
 
 // ─────────────────────────────── logic.wait ──────────────────────────────────
 
-/** Cinco minutos. Menos que isso o relógio do worker (1×/min) não distingue. */
-const ESPERA_MINIMA_MS = 5 * 60_000;
+/**
+ * Dez segundos.
+ *
+ * Era CINCO MINUTOS, e a razão estava escrita aqui: "menos que isso o relógio
+ * do worker (1×/min) não distingue". Era verdade — com um tick por minuto, uma
+ * espera de 10s seria uma mentira na tela, arredondada para até 60s pelo
+ * relógio.
+ *
+ * `lib/flow-engine/loop.ts` tirou esse relógio do caminho: o motor passou a
+ * rodar em laço de ~2s dentro do worker, e a retomada saiu de até 60s para
+ * ~2s. O piso baixa junto porque a razão dele caiu — não porque alguém quis um
+ * número menor.
+ *
+ * E para em 10s, não em 1s, pelo MESMO argumento: abaixo da cadência do laço o
+ * número volta a ser ficção. Se um dia o laço ficar mais rápido, este piso pode
+ * acompanhar; enquanto ele for ~2s, 10s é o menor valor que o produto consegue
+ * cumprir com folga e sem prometer precisão que não tem.
+ */
+const ESPERA_MINIMA_MS = 10_000;
 /** 90 dias — o mesmo teto do `wait` do follow-up. */
 const ESPERA_MAXIMA_MS = 90 * 24 * 60 * 60_000;
 

@@ -172,6 +172,11 @@ export const AUDIT_ACTIONS = [
   "ai.inbox_item_status_changed",
   "ai.flywheel_proposal_applied",
   "ai.org_memory_published",
+  // Alguém puxou a sincronização do catálogo (OpenRouter) fora do relógio
+  // diário — normalmente porque o cron nunca rodou nesta instalação e o
+  // seletor de modelo estava mudo. `metadata` carrega recebidos/gravados/
+  // depreciados; é o que responde "por que a lista mudou" depois.
+  "ai.model_catalog_synced",
   "ai.org_memory_entry_created",
   "ai.org_memory_entry_updated",
   /** Provedor/modelo de um ponto do sistema que usa IA foi trocado no painel. */
@@ -201,6 +206,19 @@ export const AUDIT_ACTIONS = [
   // troca silenciosa faz a pessoa seguinte mandar pelo número errado achando que
   // mandou pelo certo. O histórico precisa saber quem renomeou o quê.
   "channel.renamed",
+  // O CRM avisou de novo o provedor pra onde entregar mensagem, sem reimportar —
+  // uso normal quando o operador corrige um escopo/permissão no painel do
+  // provedor depois de um import que ficou sem webhook.
+  "channel.webhook_reconfigured",
+  // O operador colou o token de ENVIO de um canal que recebia e não enviava.
+  // É troca de credencial e audita como tal: quem gravou, em qual canal, quando.
+  // O valor nunca entra no registro — nem aqui, nem mascarado.
+  "channel.send_token_updated",
+  // Link público de pareamento: gerar é abrir uma porta por onde QUALQUER
+  // pessoa com a URL vincula um WhatsApp à operação. Quem abriu e quem fechou,
+  // e quando, é a única forma de responder depois "de onde veio este número".
+  "channel.pairing_link_created",
+  "channel.pairing_link_revoked",
   "authz.denied",
   "team.role_changed",
   "leads.bulk_assigned",

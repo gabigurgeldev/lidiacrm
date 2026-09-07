@@ -64,12 +64,38 @@ describe("todo nó registrado", () => {
     }
   });
 
-  it("declara `eventos` se — e SÓ se — for gatilho", () => {
+  /**
+   * Gatilhos que NÃO escutam o barramento, e por quê.
+   *
+   * ⚠️ A lista só encolhe, e cada entrada precisa de um caminho de despacho
+   * PRÓPRIO que exista de verdade — o teste confere o arquivo no disco. Sem
+   * isso, esta allowlist viraria o jeito de calar o invariante que ela existe
+   * para preservar: gatilho que fica na tela e nunca dispara.
+   */
+  const GATILHOS_SEM_BARRAMENTO: ReadonlyArray<{
+    tipo: string;
+    porque: string;
+    rota: string;
+  }> = [
+    {
+      tipo: "trigger.webhook",
+      porque:
+        "A chave é a IDENTIDADE (um token secreto pertence a UM fluxo), e o barramento é broadcast: passar por ele faria toda chamada acordar todo fluxo com gatilho de webhook.",
+      rota: "app/api/v1/webhooks/flow/[token]/route.ts",
+    },
+  ];
+
+  it("declara `eventos` se — e SÓ se — for gatilho de barramento", () => {
     // O matcher deriva a assinatura daqui. Gatilho sem eventos fica registrado
     // na tela e nunca dispara; nó comum COM eventos faria o matcher escutar um
     // evento que ninguém consome.
+    const dispensados = new Set(GATILHOS_SEM_BARRAMENTO.map((g) => g.tipo));
     for (const no of todosOsNos()) {
       if (no.category === "trigger") {
+        if (dispensados.has(no.type)) {
+          expect(no.eventos, `${no.type}: dispensado do barramento, não declara eventos`).toBeUndefined();
+          continue;
+        }
         expect(no.eventos ?? [], `${no.type}: gatilho precisa declarar eventos`).not.toHaveLength(0);
         for (const evento of no.eventos ?? []) {
           // O CHECK `event_type_format` do event_log exige este formato.
@@ -83,10 +109,31 @@ describe("todo nó registrado", () => {
     }
   });
 
+  it("⭐ gatilho dispensado do barramento TEM caminho próprio, no disco", async () => {
+    // O controle que impede a allowlist de virar carimbo: a justificativa fala
+    // de uma rota, e a rota precisa existir. Um gatilho dispensado sem rota é
+    // exatamente o defeito do invariante — só que com uma desculpa por escrito.
+    const fs = await import("node:fs");
+    for (const g of GATILHOS_SEM_BARRAMENTO) {
+      expect(g.porque.trim().length, `${g.tipo}: dispensa sem motivo escrito`).toBeGreaterThan(40);
+      expect(
+        fs.existsSync(g.rota),
+        `${g.tipo}: a rota declarada (${g.rota}) não existe — o gatilho não dispara por caminho nenhum`,
+      ).toBe(true);
+    }
+  });
+
   it("tem o pega-tudo `else` por último — exceto o nó terminal, que não tem saída", () => {
     for (const no of todosOsNos()) {
       const ramos = no.branches(exemploDeConfig(no.type) as never);
       if (ramos.length === 0) continue; // logic.end
+      // `logic.fork` é a única exceção, e é por construção: CADA ramo dele vira
+      // uma frente de execução. Um pega-tudo aqui seria um handle no canvas que
+      // a pessoa pode ligar e que nunca abre frente nenhuma — o `execute` só
+      // bifurca pelos ramos declarados em `config.ramos`. Handle que não faz
+      // nada é pior que handle ausente: o desenho promete um caminho que o
+      // motor não percorre, e nada acusa.
+      if (no.type === "logic.fork") continue;
       const ultimo = ramos[ramos.length - 1]!;
       expect(ultimo.id, `${no.type}: último ramo`).toBe("else");
       expect(ultimo.kind, `${no.type}: o último é o pega-tudo`).toBe("fallback");
@@ -156,6 +203,20 @@ function exemploDeConfig(type: string): unknown {
       return { duracao_ms: 300_000 };
     case "logic.end":
       return { desfecho: "fim" };
+    case "logic.fork":
+      return {
+        ramos: [{ id: "a", label: "A" }, { id: "b", label: "B" }],
+        modo: "todas",
+        encontro: "junta",
+      };
+    case "logic.merge":
+      return {};
+    case "logic.loop":
+      return { lista: "vars.itens", max: 5 };
+    case "logic.await_event":
+      return { evento: "message.received", quando: {}, prazo_ms: 3_600_000 };
+    case "flow.call":
+      return { fluxo_id: "00000000-0000-0000-0000-000000000000", entrada: {} };
     case "crm.add_tag":
       return { tag: "x" };
     case "crm.assign_owner":

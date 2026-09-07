@@ -13,7 +13,6 @@
  * CRIAR, não editar um nó existente).
  */
 import { randomUUID } from "node:crypto";
-import { generateObject } from "ai";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 
@@ -21,10 +20,13 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { logger } from "@/lib/logger";
 import { requireRole } from "@/lib/auth/require-role";
 import { orcamentoPermite } from "@/lib/flow-engine/ai/budget-gate";
+import { motivoDaEntradaRecusada } from "@/lib/flow-engine/ai/entrada";
 import { promptDeInterpretacao, promptDoUsuario } from "@/lib/flow-engine/ai/prompt";
-import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
-import { causaDe } from "@/lib/flow-engine/ai/modelo-com-fallback";
-import { DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
+import {
+  causaDe,
+  portaComFallback,
+  resolverCadeia,
+} from "@/lib/flow-engine/ai/modelo-com-fallback";
 
 export const dynamic = "force-dynamic";
 
@@ -92,7 +94,17 @@ const saidaSchema = z.object({
     .array(z.string().max(80))
     .max(5)
     .optional()
-    .describe("Obrigatório quando kind='perguntar'. De 2 a 5 respostas possíveis."),
+    .describe(
+      "Quando kind='perguntar' e resposta_livre=false: de 2 a 5 respostas possíveis. " +
+        "Vazio quando a pergunta é aberta.",
+    ),
+  resposta_livre: z
+    .boolean()
+    .optional()
+    .describe(
+      "true quando a resposta não cabe numa lista (o texto de uma mensagem, o nome de uma " +
+        "etiqueta, um telefone). Nesse caso 'opcoes' fica vazio e a pessoa digita.",
+    ),
   resumo: z
     .string()
     .max(400)
@@ -113,7 +125,15 @@ type Saida = z.infer<typeof saidaSchema>;
  */
 function coerente(s: Saida): boolean {
   if (s.kind === "perguntar") {
-    return (s.pergunta?.trim().length ?? 0) > 0 && (s.opcoes?.length ?? 0) >= 2;
+    if ((s.pergunta?.trim().length ?? 0) === 0) return false;
+    // ⚠️ PERGUNTA ABERTA É COERENTE, e antes não era. A regra exigia ≥2 opções
+    // de TODA pergunta, então o modelo, para perguntar "qual o texto da
+    // mensagem?", tinha de inventar três textos — e a pessoa era obrigada a
+    // escolher entre coisas que não eram as dela. O beco sem saída que a regra
+    // existe para impedir é pergunta sem pergunta e sem caminho, não pergunta
+    // que se responde escrevendo.
+    if (s.resposta_livre === true) return true;
+    return (s.opcoes?.length ?? 0) >= 2;
   }
   return (s.resumo?.trim().length ?? 0) > 0;
 }
@@ -125,11 +145,14 @@ export async function POST(
   const requestId = randomUUID();
   const authz = await requireRole("manager", { requestId, resource: "flows" });
   if (!authz.ok) return authz.response;
-  await ctx.params; // valida a forma da rota; ver o cabeçalho sobre o [id] não ser usado.
+  // O `[id]` não é lido do banco (ver o cabeçalho), mas entra no log da porta:
+  // sem ele, uma falha de provedor no `docker logs` não diz de qual fluxo veio.
+  const { id: flowId } = await ctx.params;
 
-  const lido = entradaSchema.safeParse(await req.json().catch(() => ({})));
+  const corpo = await req.json().catch(() => ({}));
+  const lido = entradaSchema.safeParse(corpo);
   if (!lido.success) {
-    return fail("validation_failed", "Descreva o que você quer antes de continuar.", 422, {
+    return fail("validation_failed", motivoDaEntradaRecusada(lido.error, corpo), 422, {
       requestId,
     });
   }
@@ -141,8 +164,14 @@ export async function POST(
     });
   }
 
-  const resolvido = await resolverModeloDoPonto(PURPOSE, authz.org.orgId, DEFAULT_CLASSIFIER_MODEL);
-  if (!resolvido) {
+  // ⚠️ PELA PORTA, e não `generateObject` direto. Esta era a única das três
+  // rotas de IA de fluxo que chamava o SDK na mão, e por isso a única sem
+  // fallback de modelo e sem a escalada de teto quando a resposta volta
+  // cortada — as duas recuperações que as irmãs ganham de graça. Aqui a
+  // ausência doía mais: é o PRIMEIRO passo da conversa, então uma recusa do
+  // provedor matava o painel antes de a pessoa ter chegado a pedir um fluxo.
+  const cadeia = await resolverCadeia(PURPOSE, authz.org.orgId);
+  if (cadeia === null) {
     return fail(
       "ai_provider_error",
       "Nenhum provedor de IA está configurado nesta organização. Configure um em Uso de IA › Provedores.",
@@ -165,23 +194,51 @@ export async function POST(
     requestId,
     // Canônico, NÃO o id enviado ao provedor: a tradução para o nome que a
     // OpenRouter usa acontece depois, dentro do provider. Ver idNaOpenRouter.
-    modeloCanonico: resolvido.modelId,
-    origem: resolvido.origem,
+    modeloCanonico: cadeia.primario.modelId,
+    origem: cadeia.primario.origem,
   });
 
   try {
-    const gerado = await generateObject({
-      model: resolvido.model,
+    const porta = portaComFallback(cadeia, {
+      organizationId: authz.org.orgId,
+      requestId,
+      flowId,
+    });
+    const resposta = await porta.objeto({
       schema: saidaSchema,
       system: promptDeInterpretacao(),
       prompt: promptDoUsuario(lido.data.pedido, lido.data.historico),
-      temperature: 0.2,
+      rotulo: "interpretar",
+      sinal: req.signal,
       // Uma pergunta + opções, ou um resumo curto — nenhum dos dois precisa
       // de espaço. Baixo de propósito: a lição medida em
       // workers/ai-sentiment-worker.ts é que pouco tokens trunca o JSON no
-      // meio; 400 é folgado para o teto de 300/400 caracteres dos campos.
+      // meio; 600 é folgado para o teto de 300/400 caracteres dos campos. E,
+      // se ainda assim vier cortada, a porta escala uma vez sozinha.
       maxOutputTokens: 600,
     });
+
+    if (!resposta.ok || resposta.objeto === undefined) {
+      logger.error("flow.ai.interpretar.falhou", {
+        organizationId: authz.org.orgId,
+        requestId,
+        ms: Date.now() - t0,
+        modeloCanonico: resposta.modeloUsado,
+        causa: resposta.causa ?? "sem causa",
+        finishReason: resposta.finishReason,
+        // `warnings` e não `avisos`: é o nome que as rotas irmãs usam, e é por ele
+        // que a cerca de observabilidade procura em todas as três.
+        warnings: resposta.avisos,
+      });
+      // A causa do provedor, e não uma frase nossa: é ela que distingue
+      // "nenhum provedor configurado" de "o modelo recusou o formato".
+      return fail("ai_provider_error", resposta.causa ?? "A IA não respondeu. Tente de novo.", 502, {
+        requestId,
+        details: { causa: resposta.causa },
+      });
+    }
+
+    const gerado = { object: resposta.objeto };
 
     if (!coerente(gerado.object)) {
       // Trata como falha do provedor, e não como sucesso pela metade: mandar
@@ -193,15 +250,17 @@ export async function POST(
         ms: Date.now() - t0,
         // Canônico, NÃO o id enviado ao provedor: a tradução para o nome que a
         // OpenRouter usa acontece depois, dentro do provider. Ver idNaOpenRouter.
-        modeloCanonico: resolvido.modelId,
-        origem: resolvido.origem,
+        modeloCanonico: cadeia.primario.modelId,
+        origem: cadeia.primario.origem,
         kind: gerado.object.kind,
         // Ver o comentário irmão em `ai/gerar`: "length" acusa o teto de tokens,
         // "stop" acusa o modelo; e `warnings` é onde o SDK avisa que o provedor
         // IGNOROU um ajuste (o `response_format`, tipicamente).
-        finishReason: gerado.finishReason,
-        avisos: gerado.warnings?.map((w) => JSON.stringify(w).slice(0, 200)) ?? [],
-        tokens_saida: gerado.usage?.outputTokens ?? null,
+        finishReason: resposta.finishReason,
+        // `warnings` e não `avisos`: é o nome que as rotas irmãs usam, e é por ele
+        // que a cerca de observabilidade procura em todas as três.
+        warnings: resposta.avisos,
+        tokens_saida: resposta.tokensSaida,
       });
       return fail(
         "ai_provider_error",
@@ -215,10 +274,15 @@ export async function POST(
       requestId,
       ms: Date.now() - t0,
       kind: gerado.object.kind,
-      finishReason: gerado.finishReason,
-      avisos: gerado.warnings?.map((w) => JSON.stringify(w).slice(0, 200)) ?? [],
-      tokens_entrada: gerado.usage?.inputTokens ?? null,
-      tokens_saida: gerado.usage?.outputTokens ?? null,
+      finishReason: resposta.finishReason,
+      // `warnings` e não `avisos`: é o nome que as rotas irmãs usam, e é por ele
+      // que a cerca de observabilidade procura em todas as três.
+      warnings: resposta.avisos,
+      // Sobe quando o primário recusou e a reserva salvou — é o número que diz
+      // se o fallback desta rota está sendo usado de verdade.
+      usouReserva: resposta.usouReserva,
+      tokens_entrada: resposta.tokensEntrada,
+      tokens_saida: resposta.tokensSaida,
     });
     return ok(gerado.object, { requestId });
   } catch (err) {
@@ -230,8 +294,8 @@ export async function POST(
       ms: Date.now() - t0,
       // Canônico, NÃO o id enviado ao provedor: a tradução para o nome que a
       // OpenRouter usa acontece depois, dentro do provider. Ver idNaOpenRouter.
-      modeloCanonico: resolvido.modelId,
-      origem: resolvido.origem,
+      modeloCanonico: cadeia.primario.modelId,
+      origem: cadeia.primario.origem,
       // `causaDe`, e não `err.message`: a mensagem do SDK para uma resposta
       // cortada fala de PARSE, e foi ela que mandou cinco correções seguidas
       // procurarem no schema e no provedor. Ver o cabeçalho da função.

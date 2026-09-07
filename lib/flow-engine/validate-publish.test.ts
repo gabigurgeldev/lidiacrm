@@ -48,19 +48,33 @@ function grafoBom(): FlowGraph {
 }
 
 describe("o registry decide o que existe", () => {
-  it("os 11 nós desta entrega estão registrados", () => {
+  it("os 25 nós desta entrega estão registrados", () => {
     expect(tiposRegistrados()).toEqual([
       "crm.add_tag",
       "crm.assign_owner",
+      "crm.handoff_to_agent",
       "crm.owner_responded",
+      "flow.call",
+      "logic.await_event",
+      "logic.choice_menu",
       "logic.end",
+      "logic.fork",
       "logic.if",
+      "logic.loop",
+      "logic.merge",
       "logic.wait",
       "notify.internal",
+      "routing.fixed_order",
+      "routing.random",
       "routing.redistribute",
       "routing.round_robin",
+      "trigger.keyword",
       "trigger.lead_created",
+      "trigger.message_received",
+      "trigger.webhook",
+      "whatsapp.bulk_send",
       "whatsapp.notify_user",
+      "whatsapp.send_to_lead",
     ]);
   });
 
@@ -123,6 +137,35 @@ describe("validarParaPublicar", () => {
     semSenao.edges = semSenao.edges.filter((e) => e.target !== "fim_baixo");
     const r = validarParaPublicar(semSenao);
     expect(r.erros).toEqual([]);
+  });
+
+  it("⭐ aceita saída de EXCEÇÃO solta — senão nenhum fluxo com mensagem publica", () => {
+    // O defeito que este caso trava, relatado em produção: "Mandar mensagem
+    // para o cliente" traz de fábrica duas saídas de falha ("Sem telefone do
+    // cliente", "Não saiu agora"), e elas eram exigidas como se fossem regras
+    // escritas pelo operador. Um fluxo com cinco desses blocos precisava de dez
+    // ligações para casos de erro que ninguém quis tratar — e sem elas a
+    // publicação era recusada.
+    const g = grafoBom();
+    g.nodes.push(
+      no("manda", "whatsapp.send_to_lead", { tipo: "texto", texto: "oi" }),
+      no("fim_manda", "logic.end", { desfecho: "atendido" }),
+    );
+    // Só o "Depois de enviar" ligado. As duas saídas de falha ficam soltas.
+    g.edges.push(aresta("e4", "decide", "manda", "alto"), aresta("e5", "manda", "fim_manda"));
+    g.edges = g.edges.filter((e) => e.id !== "e2");
+
+    const r = validarParaPublicar(g);
+    expect(r.erros.map((e) => e.codigo)).not.toContain("ramo_sem_saida");
+    expect(r.erros).toEqual([]);
+  });
+
+  it("⭐ a saída de REGRA continua obrigatória — o conserto não afrouxou isso", () => {
+    // Controle do caso acima: se a validação tivesse passado a aceitar QUALQUER
+    // ramo solto, o teste anterior passaria medindo nada.
+    const g = grafoBom();
+    g.edges = g.edges.filter((e) => e.branch_id !== "alto");
+    expect(validarParaPublicar(g).erros.map((e) => e.codigo)).toContain("ramo_sem_saida");
   });
 
   it("recusa ligação presa a uma saída que não existe mais", () => {
@@ -195,5 +238,99 @@ describe("o schema de forma", () => {
       edges: [],
     });
     expect(r.success).toBe(true);
+  });
+});
+
+describe("o paralelo, no portão da publicação", () => {
+  /** Bifurca em dois e reencontra. O desenho que a doutrina do fork exige. */
+  function grafoComFork(over: { encontro?: string } = {}): FlowGraph {
+    return {
+      nodes: [
+        no("inicio", "trigger.lead_created"),
+        no("bifurca", "logic.fork", {
+          ramos: [
+            { id: "a", label: "A" },
+            { id: "b", label: "B" },
+          ],
+          modo: "todas",
+          encontro: over.encontro ?? "junta",
+        }),
+        no("marca_a", "crm.add_tag", { tag: "a" }),
+        no("marca_b", "crm.add_tag", { tag: "b" }),
+        no("junta", "logic.merge"),
+        no("fim", "logic.end", { desfecho: "ok" }),
+      ],
+      edges: [
+        aresta("e1", "inicio", "bifurca"),
+        aresta("e2", "bifurca", "marca_a", "a"),
+        aresta("e3", "bifurca", "marca_b", "b"),
+        aresta("e4", "marca_a", "junta"),
+        aresta("e5", "marca_b", "junta"),
+        aresta("e6", "junta", "fim"),
+      ],
+    };
+  }
+
+  it("um fluxo que bifurca e reencontra PUBLICA", () => {
+    expect(validarParaPublicar(grafoComFork()).ok).toBe(true);
+  });
+
+  it("reencontro que não existe no grafo é ERRO", () => {
+    // `encontro` é declarado pelo fork, não descoberto pelo motor. O preço de
+    // declarar é alguém conferir: sem isto, o defeito aparece só em runtime,
+    // como um fluxo que bifurca e nunca mais se junta — e o motor não distingue
+    // isso de um fluxo que termina em ramos separados de propósito.
+    const r = validarParaPublicar(grafoComFork({ encontro: "nao_existe" }));
+    expect(r.ok).toBe(false);
+    expect(r.erros.map((e) => e.codigo)).toContain("encontro_inexistente");
+  });
+
+  it("reencontro que aponta para um bloco que NÃO é reencontro é ERRO", () => {
+    const r = validarParaPublicar(grafoComFork({ encontro: "marca_a" }));
+    expect(r.ok).toBe(false);
+    expect(r.erros.map((e) => e.codigo)).toContain("encontro_nao_e_reencontro");
+  });
+
+  it("um laço com contador PUBLICA, mesmo formando círculo", () => {
+    // A regra antiga era "nenhum ciclo", e o motivo estava certo: ciclo sem fim
+    // consome `steps_taken` até a execução morrer. `logic.loop` tem `max`
+    // obrigatório, então o círculo que passa por ele tem fim conhecido antes de
+    // começar — e sem isto o bloco de repetição não poderia ser publicado nunca.
+    const grafo: FlowGraph = {
+      nodes: [
+        no("inicio", "trigger.lead_created"),
+        no("repete", "logic.loop", { lista: "vars.itens", max: 5 }),
+        no("corpo", "crm.add_tag", { tag: "x" }),
+        no("fim", "logic.end", { desfecho: "ok" }),
+      ],
+      edges: [
+        aresta("e1", "inicio", "repete"),
+        aresta("e2", "repete", "corpo", "corpo"),
+        aresta("e3", "corpo", "repete"),
+        aresta("e4", "repete", "fim", "else"),
+      ],
+    };
+    expect(validarParaPublicar(grafo).ok).toBe(true);
+  });
+
+  it("círculo SEM contador segue sendo erro", () => {
+    // A contra-prova do caso acima: se a regra tivesse sido simplesmente
+    // removida para o laço caber, todo círculo passaria — e um fluxo que volta
+    // ao mesmo bloco para sempre publica sem ninguém notar.
+    const grafo: FlowGraph = {
+      nodes: [
+        no("inicio", "trigger.lead_created"),
+        no("marca", "crm.add_tag", { tag: "x" }),
+        no("marca2", "crm.add_tag", { tag: "y" }),
+      ],
+      edges: [
+        aresta("e1", "inicio", "marca"),
+        aresta("e2", "marca", "marca2"),
+        aresta("e3", "marca2", "marca"),
+      ],
+    };
+    const r = validarParaPublicar(grafo);
+    expect(r.ok).toBe(false);
+    expect(r.erros.map((e) => e.codigo)).toContain("ciclo");
   });
 });

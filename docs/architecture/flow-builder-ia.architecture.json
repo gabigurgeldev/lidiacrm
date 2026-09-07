@@ -135,6 +135,22 @@
       "sublabel": "BFS a partir do trigger · a IA NUNCA escolhe posição"
     },
     {
+      "id": "publicavel",
+      "lane": "regra",
+      "col": 6,
+      "type": "lib",
+      "label": "publicavel.ts + reparar.ts",
+      "sublabel": "roda validarParaPublicar no fluxo gerado · repara o que tem conserto único · UMA correção paga, e só se melhorar · o resto vira pendências na tela"
+    },
+    {
+      "id": "ajustar",
+      "lane": "borda",
+      "col": 5,
+      "type": "api",
+      "label": "POST /flows/:id/ai/ajustar",
+      "sublabel": "o quadro atual entra como plano · só o bloco tocado paga etapa 2 · config escrita à mão atravessa intacta"
+    },
+    {
       "id": "canvas",
       "lane": "humano",
       "col": 7,
@@ -331,9 +347,49 @@
       "from": "binding",
       "to": "montar",
       "label": "mesma cadeia de modelo, com reserva"
+    },
+    {
+      "id": "e27",
+      "from": "montagem",
+      "to": "publicavel",
+      "label": "grafo montado, antes de voltar à tela"
+    },
+    {
+      "id": "e28",
+      "from": "publicavel",
+      "to": "canvas",
+      "label": "grafo que PUBLICA, mais o que foi consertado e o que falta"
+    },
+    {
+      "id": "e29",
+      "from": "publicavel",
+      "to": "plan_schema",
+      "label": "a correção pede o MESMO plano, com os erros escritos"
+    },
+    {
+      "id": "e30",
+      "from": "construtor",
+      "to": "ajustar",
+      "label": "pedido de alteração + o grafo que está no quadro"
+    },
+    {
+      "id": "e31",
+      "from": "ajustar",
+      "to": "montagem",
+      "label": "plano ajustado + configs preservadas por id"
     }
   ],
   "naoLigacoes": [
+    {
+      "de": "publicavel",
+      "para": "draft",
+      "porque": "o laço de publicação NÃO grava: ele devolve um grafo melhor e a lista do que falta. Quem persiste continua sendo o clique em Salvar rascunho — a mesma regra da montagem, e por isso 'a IA consertou' nunca vira uma escrita que a pessoa não pediu."
+    },
+    {
+      "de": "ajustar",
+      "para": "interpretar",
+      "porque": "o ajuste NÃO passa por perguntas. O pedido é uma alteração sobre um fluxo que a pessoa está vendo na tela; perguntar 'o que você quer dizer com isso?' seria pedir que ela explique a própria tela. Quem esclarece é a criação do zero, onde não há nada na tela para olhar."
+    },
     {
       "de": "gerar",
       "para": "draft",
