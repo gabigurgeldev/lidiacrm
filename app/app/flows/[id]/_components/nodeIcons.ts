@@ -6,6 +6,7 @@ import {
   ChatCircle,
   Clock,
   Flag,
+  FlowArrow,
   Funnel,
   GitBranch,
   PaperPlaneTilt,
@@ -42,6 +43,7 @@ import {
  */
 export const ICONE_DO_TIPO: Partial<Record<string, PhosphorIcon>> = {
   "trigger.lead_created": Play,
+  "trigger.manual": FlowArrow,
   "logic.if": GitBranch,
   "logic.wait": Clock,
   "logic.end": Flag,

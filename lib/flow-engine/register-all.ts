@@ -20,6 +20,7 @@ import {
   routingRoundRobin,
 } from "./nodes/crm-e-roteamento";
 import { logicEnd, logicIf, logicWait, triggerLeadCreated } from "./nodes/logica";
+import { triggerManual } from "./nodes/gatilho-manual";
 
 let registrado = false;
 
@@ -27,6 +28,7 @@ let registrado = false;
 export function garantirNosRegistrados(): void {
   if (registrado) return;
   registrarNo(triggerLeadCreated);
+  registrarNo(triggerManual);
   registrarNo(logicIf);
   registrarNo(logicWait);
   registrarNo(logicEnd);

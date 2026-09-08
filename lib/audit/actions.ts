@@ -205,6 +205,9 @@ export const AUDIT_ACTIONS = [
   // uso normal quando o operador corrige um escopo/permissão no painel do
   // provedor depois de um import que ficou sem webhook.
   "channel.webhook_reconfigured",
+  // Um atendente disparou um fluxo à mão, pelo botão "Ativar fluxo" da conversa
+  // — o gatilho `trigger.manual`. Registra quem, qual fluxo e para qual contato.
+  "flow.started_manually",
   "authz.denied",
   "team.role_changed",
   "leads.bulk_assigned",

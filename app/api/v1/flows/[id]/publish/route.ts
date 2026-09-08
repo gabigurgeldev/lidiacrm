@@ -16,6 +16,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { flowGraphSchema } from "@/lib/flow-engine/graph-schema";
+import { kindDoGatilho } from "@/lib/flow-engine/gatilho";
 import { garantirNosRegistrados } from "@/lib/flow-engine/register-all";
 import { validarParaPublicar } from "@/lib/flow-engine/validate-publish";
 import { createClient } from "@/lib/supabase/server";
@@ -70,6 +71,11 @@ export async function POST(_req: NextRequest, ctx: Contexto): Promise<Response> 
     .maybeSingle();
   const proximo = ((ultima as { version_number: number } | null)?.version_number ?? 0) + 1;
 
+  // Derivado do grafo, não fixo: um gatilho sem `eventos` (o `trigger.manual`)
+  // só é disparado pelo botão da conversa, e o motor precisa saber disso para
+  // NÃO o armar por evento. `validarParaPublicar` já garantiu que há um gatilho.
+  const kindGatilho = kindDoGatilho(forma.data) ?? "event";
+
   const { data: versao, error: errVersao } = await supabase
     .from("flow_versions")
     .insert({
@@ -79,7 +85,7 @@ export async function POST(_req: NextRequest, ctx: Contexto): Promise<Response> 
       graph: forma.data,
       // Congelado JUNTO do grafo. O ponteiro pode mudar de gatilho amanhã, e a
       // execução em voo tem de continuar sabendo sob qual condição foi armada.
-      trigger_config: { kind: "event" },
+      trigger_config: { kind: kindGatilho },
       published_by_user_id: authz.user.id,
     })
     .select("id, version_number, published_at")
@@ -98,7 +104,14 @@ export async function POST(_req: NextRequest, ctx: Contexto): Promise<Response> 
   const novaVersao = versao as { id: string; version_number: number; published_at: string };
   const { error: errPonteiro } = await supabase
     .from("flows")
-    .update({ active_version_id: novaVersao.id, updated_at: new Date().toISOString() })
+    .update({
+      active_version_id: novaVersao.id,
+      // Espelha no PONTEIRO o kind da versão ativa, para a lista de "fluxos que
+      // o botão pode disparar" filtrar por `trigger_config->>kind = 'manual'`
+      // sem abrir o grafo de cada fluxo.
+      trigger_config: { kind: kindGatilho },
+      updated_at: new Date().toISOString(),
+    })
     .eq("organization_id", authz.org.orgId)
     .eq("id", id);
   if (errPonteiro) return fail("internal_error", errPonteiro.message, 500, { requestId });

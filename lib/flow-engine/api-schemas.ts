@@ -16,13 +16,13 @@ export const criarFluxoSchema = z.strictObject({
 });
 
 /**
- * O gatilho no formato que o ponteiro guarda. Hoje só há um tipo, e ele é
- * derivado do nó de início do grafo — mas o campo existe desde já porque a
- * VERSÃO o congela na publicação, e mudar isso depois obrigaria a migrar
- * versões publicadas.
+ * O gatilho no formato que o ponteiro guarda. O kind é DERIVADO do nó de início
+ * do grafo (`lib/flow-engine/gatilho.ts`): "event" quando o gatilho escuta o
+ * barramento, "manual" quando só o botão da conversa o dispara. A VERSÃO o
+ * congela na publicação, e por isso o campo existe desde a 0203.
  */
 export const gatilhoSchema = z.strictObject({
-  kind: z.literal("event"),
+  kind: z.enum(["event", "manual"]),
 });
 
 export const editarFluxoSchema = z.strictObject({
