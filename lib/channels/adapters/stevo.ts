@@ -41,6 +41,7 @@ import type {
 import { resolveStevoCreds } from "../stevo/credentials";
 import { corpoDeEnvioStevo, idDaRespostaStevo } from "../stevo/envelope";
 import { lerInstanciaStevo } from "../stevo/instancias";
+import { fetchFotoDePerfilStevo } from "../stevo/perfil";
 
 /** E.164 em dígitos, sem `+` e sem sufixo de domínio — é o que o `to` espera. */
 function digitos(bruto: string): string {
@@ -174,6 +175,32 @@ export const stevoAdapter: ChannelAdapter = {
       status: instancia.conectada ? "WORKING" : (instancia.status ?? "STOPPED"),
       detail: instancia.conectada ? null : (instancia.status ?? "instância desconectada"),
     };
+  },
+
+  /**
+   * Foto de perfil do contato — best-effort, e SÓ dá em número por QR.
+   *
+   * Instância oficial é Cloud API da Meta por baixo, que não expõe foto de
+   * contato (privacidade): lá isto devolve `null` e o contato fica na silhueta,
+   * o que é o correto. Em número por QR pode haver foto; o caminho exato não é
+   * documentado, então `fetchFotoDePerfilStevo` tenta o endpoint mais plausível
+   * e degrada para `null` sem lançar. Ver `../stevo/perfil.ts`.
+   */
+  async fetchProfilePictureUrl(
+    input: ChannelTenantScope & { sessionRef: string; recipient: string },
+  ): Promise<string | null> {
+    const admin = createAdminClient();
+    const creds = await resolveStevoCreds(admin, {
+      organizationId: input.organizationId,
+      instanceId: input.sessionRef,
+    });
+    if (!creds) return null;
+    return fetchFotoDePerfilStevo({
+      apiKey: creds.apiKey,
+      baseUrl: creds.baseUrl,
+      instanceId: creds.instanceId,
+      numero: digitos(input.recipient),
+    });
   },
 
   codes: {

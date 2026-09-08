@@ -33,6 +33,15 @@ export interface CorpoDeEnvioStevo {
   media_type?: "image" | "video" | "audio" | "document";
   caption?: string;
   filename?: string;
+  /**
+   * ⚠️ BEST-EFFORT, A VALIDAR na instância viva. Sem esta flag, um áudio chega
+   * como ANEXO de música (com ícone de nota musical), não como a BOLHA de voz —
+   * na modalidade oficial é a mesma regra da Cloud API da Meta (`audio.voice`).
+   * O nome do campo no contrato do provedor não está nos specs públicos; `voice`
+   * é o mais provável. Só acompanha `media_type: "audio"`. Se o provedor recusar
+   * campo desconhecido, é UMA linha para remover — ver `corpoDeEnvioStevo`.
+   */
+  voice?: boolean;
 }
 
 /**
@@ -56,6 +65,9 @@ export function corpoDeEnvioStevo(env: OutboundEnvelope): CorpoDeEnvioStevo {
   if (env.media?.url) {
     corpo.media_url = env.media.url;
     corpo.media_type = tipoDeMidia(env.kind);
+    // Nota de voz: pede a BOLHA de voz em vez do anexo de música. Best-effort,
+    // ver o campo `voice` no contrato acima — a validar na instância viva.
+    if (env.kind === "audio") corpo.voice = true;
     // A legenda vai em `caption` e NÃO em `text`: com os dois preenchidos o
     // provedor manda duas mensagens, e o cliente recebe a foto e um texto solto
     // repetindo a legenda.
