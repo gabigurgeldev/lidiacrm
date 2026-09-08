@@ -120,3 +120,46 @@ export function useApagarFluxo() {
     },
   });
 }
+
+/** Um fluxo que o botão "Ativar fluxo" da conversa pode disparar. */
+export interface FluxoManual {
+  id: string;
+  name: string;
+}
+
+/**
+ * Os fluxos LIGADOS de gatilho manual — a lista do seletor "Ativar fluxo".
+ * Acessível a `agent` (a rota `/flows/manuais` é agent+), ao contrário de
+ * `useFluxos`, que bate na rota manager+.
+ */
+export function useFluxosManuais(enabled = true) {
+  return useQuery({
+    queryKey: [...CHAVE_DOS_FLUXOS, "manuais"] as const,
+    queryFn: () =>
+      apiClient.get<{ data: FluxoManual[] }>(`${ROTA}/manuais`).then((r) => r.data),
+    enabled,
+  });
+}
+
+/** Dispara um fluxo manual para um contato (o botão da conversa). */
+export function useAtivarFluxoManual() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      flowId: string;
+      contact_id: string;
+      conversation_id?: string | null;
+    }) =>
+      apiClient
+        .post<{
+          data: { execucao: { id: string; status: string }; ja_estava_rodando: boolean };
+        }>(`${doFluxo(input.flowId)}/start`, {
+          contact_id: input.contact_id,
+          conversation_id: input.conversation_id ?? null,
+        })
+        .then((r) => r.data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["flow-executions"] });
+    },
+  });
+}

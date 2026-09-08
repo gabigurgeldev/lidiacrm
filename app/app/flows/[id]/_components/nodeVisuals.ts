@@ -69,6 +69,7 @@ export interface VisualDoNo {
 
 export const ICONE_DO_TIPO: Partial<Record<string, PhosphorIcon>> = {
   "trigger.lead_created": Play,
+  "trigger.manual": FlowArrow,
   "trigger.message_received": ChatCircle,
   "trigger.keyword": Tag,
   "trigger.webhook": WebhooksLogo,

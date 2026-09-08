@@ -219,6 +219,9 @@ export const AUDIT_ACTIONS = [
   // e quando, é a única forma de responder depois "de onde veio este número".
   "channel.pairing_link_created",
   "channel.pairing_link_revoked",
+  // Um atendente disparou um fluxo à mão, pelo botão "Ativar fluxo" da conversa
+  // — o gatilho `trigger.manual`. Registra quem, qual fluxo e para qual contato.
+  "flow.started_manually",
   "authz.denied",
   "team.role_changed",
   "leads.bulk_assigned",

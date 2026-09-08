@@ -36,6 +36,7 @@ import {
   logicLoop,
   logicMerge,
 } from "./nodes/paralelo";
+import { triggerManual } from "./nodes/gatilho-manual";
 
 let registrado = false;
 
@@ -43,6 +44,7 @@ let registrado = false;
 export function garantirNosRegistrados(): void {
   if (registrado) return;
   registrarNo(triggerLeadCreated);
+  registrarNo(triggerManual);
   registrarNo(triggerMessageReceived);
   registrarNo(triggerKeyword);
   registrarNo(triggerWebhook);

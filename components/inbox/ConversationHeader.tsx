@@ -8,7 +8,14 @@ import { TipoDeCanal } from "@/components/channels/TipoDeCanal";
 import { Badge } from "@/components/ui/badge";
 import { JanelaSelo } from "@/components/inbox/JanelaSelo";
 import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
-import { Phone, ArrowRight } from "@/lib/ui/icons";
+import { Phone, ArrowRight, DotsThree, FlowArrow } from "@/lib/ui/icons";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { AtivarFluxoDialog } from "@/components/inbox/AtivarFluxoDialog";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useReleaseConversation } from "@/hooks/inbox/useReleaseConversation";
@@ -58,6 +65,7 @@ export function ConversationHeader({ conversation }: Props) {
   // atendendo em instalação que nunca configurou agente nenhum.
   const automaticoDaOrg = useAutomaticoAtivo();
   const [reassignOpen, setReassignOpen] = useState(false);
+  const [ativarFluxoOpen, setAtivarFluxoOpen] = useState(false);
 
   const c = conversation.contacts ?? null;
   const displayName = rotuloDoContato(c);
@@ -360,11 +368,44 @@ export function ConversationHeader({ conversation }: Props) {
             </Link>
           </Button>
         )}
+        {/* O ⋮ do WhatsApp: ações menos frequentes, fora da barra principal. Por
+            ora "Ativar fluxo" — disparar à mão um fluxo de gatilho manual para
+            este contato. Só com contato: sem ele não há a quem aplicar o fluxo. */}
+        {c?.id && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                className="px-2"
+                aria-label={t("Mais ações")}
+                data-testid="menu-acoes-conversa"
+              >
+                <DotsThree size={18} weight="bold" aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                data-testid="acao-ativar-fluxo"
+                onSelect={() => setAtivarFluxoOpen(true)}
+              >
+                <FlowArrow size={16} aria-hidden className="mr-2" />
+                {t("Ativar fluxo")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
       <ReassignDialog
         conversationId={conversation.id}
         open={reassignOpen}
         onOpenChange={setReassignOpen}
+      />
+      <AtivarFluxoDialog
+        conversationId={conversation.id}
+        contactId={c?.id ?? null}
+        open={ativarFluxoOpen}
+        onOpenChange={setAtivarFluxoOpen}
       />
     </div>
   );
