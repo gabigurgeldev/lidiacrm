@@ -39,6 +39,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { logger } from "@/lib/logger";
+
 /** O que o WhatsApp aceita como nota de voz. */
 export const VOICE_MIME = "audio/ogg";
 
@@ -105,9 +107,23 @@ export async function transcodificarNotaDeVoz(
     // qualidade para chegar ao mesmo lugar.
     await executar(["-i", entrada, "-vn", "-c:a", "copy", "-f", "ogg", saida], dir);
     const buffer = await readFile(saida);
-    if (buffer.length === 0) return { buffer: input.buffer, mime: input.mime, convertido: false };
+    if (buffer.length === 0) {
+      // Precisava converter e saiu vazio: um canal `opus-only` recusará este
+      // `webm` na entrega. Não é o silêncio de "não precisava" — merece rastro.
+      logger.warn("[voice-transcode] conversão devolveu vazio, seguindo com o original", {
+        mime: input.mime,
+      });
+      return { buffer: input.buffer, mime: input.mime, convertido: false };
+    }
     return { buffer, mime: VOICE_MIME, convertido: true };
-  } catch {
+  } catch (err) {
+    // ffmpeg ausente/erro: o áudio segue em `webm` e um canal `opus-only` vai
+    // recusar a ENTREGA depois. O rastro aqui é o que liga esse "falhou" no
+    // envio à causa real (o guard de `lib/channels/voz.ts` barra na saída).
+    logger.warn("[voice-transcode] conversão falhou, seguindo com o original", {
+      mime: input.mime,
+      motivo: err instanceof Error ? err.message : "desconhecido",
+    });
     return { buffer: input.buffer, mime: input.mime, convertido: false };
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});

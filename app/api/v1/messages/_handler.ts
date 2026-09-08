@@ -12,12 +12,14 @@ import { ApiError } from "@/lib/api/types";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
 import {
+  capabilitiesOfSession,
   CHANNEL_SESSION_REF_COLUMNS,
   DEFAULT_CHANNEL_PROVIDER,
   getAdapter,
   resolveSessionRef,
   type ChannelSessionRef,
 } from "@/lib/channels";
+import { motivoDeVozNaoEnviavel } from "@/lib/channels/voz";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
 import { isMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
@@ -610,6 +612,21 @@ export async function sendMessageHandler(
               values: input.template_values ?? {},
             });
       } else if (input.media_storage_path) {
+        // Guarda de FORMATO de voz, capability-aware: um canal `opus-only`
+        // recusa a ENTREGA de um áudio que não seja ogg/opus (131053) DEPOIS de
+        // aceitar o envio — erro que culpa a URL. Falhar aqui troca esse erro
+        // críptico por um acionável, e não gasta uma URL assinada num envio que
+        // a plataforma vai recusar. Canal que converte sozinho passa reto.
+        const vozBarrada = motivoDeVozNaoEnviavel(
+          capabilitiesOfSession({
+            provider: c.channel_sessions.provider,
+            mode: (c.channel_sessions as { provider_mode?: string | null }).provider_mode,
+          }),
+          input.type,
+          input.media_mime ?? "application/octet-stream",
+        );
+        if (vozBarrada) throw new Error(vozBarrada);
+
         // Storage-first: signed URL curta só pro canal baixar (nunca base64).
         const admin = createAdminClient();
         const { data: signed, error: signErr } = await admin.storage
