@@ -147,6 +147,35 @@ describe("o adapter", () => {
     vi.unstubAllGlobals();
   });
 
+  it("⭐ 409 com error OBJETO ({code,message}) mostra o motivo de verdade, não [object Object]", async () => {
+    // A spec da Stevo devolve error como objeto, não string — é o formato real,
+    // não o que o teste acima (com string) testava. 409 = not_ready (instância
+    // não conectada do lado da Stevo).
+    const { resolveStevoCreds } = await import("@/lib/channels/stevo/credentials");
+    vi.mocked(resolveStevoCreds).mockResolvedValue({
+      instanceId: "inst-1",
+      apiKey: "k",
+      baseUrl: "https://provedor.test",
+      source: "session",
+    });
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ error: { code: "not_ready", message: "instância não conectada" } }),
+        { status: 409 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { stevoAdapter } = await import("@/lib/channels/adapters/stevo");
+    await expect(stevoAdapter.send(envelope())).rejects.toThrow(/instância não conectada/);
+    try {
+      await stevoAdapter.send(envelope());
+    } catch (e) {
+      expect(String(e)).not.toContain("[object Object]");
+    }
+    vi.unstubAllGlobals();
+  });
+
   it("grupo não tem endereço neste canal", () => {
     // A API de grupos dele é outro recurso, com id próprio. Fingir que um chatId
     // de grupo cabe no campo `to` manda a mensagem para o lugar errado.

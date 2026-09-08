@@ -18,6 +18,7 @@ import {
   useConexoesDaConta,
   useDescobrirInstancias,
   useImportarInstancias,
+  useReconectarWebhook,
   type InstanciaDaConta,
 } from "@/hooks/channels/useContaDeInstancias";
 import { CircleNotch, Warning } from "@/lib/ui/icons";
@@ -54,6 +55,7 @@ export function CanalContaClient() {
   const { label, conectados, isPending } = useConexoesDaConta();
   const descobrir = useDescobrirInstancias();
   const importar = useImportarInstancias();
+  const reconectarWebhook = useReconectarWebhook();
 
   const [apiKey, setApiKey] = useState("");
   const [instancias, setInstancias] = useState<InstanciaDaConta[] | null>(null);
@@ -83,9 +85,12 @@ export function CanalContaClient() {
     } else {
       // NÃO é sucesso silencioso: o canal envia e não recebe, que é o defeito
       // mais confuso possível — o operador manda, o cliente responde, e nada
-      // chega. Precisa ser dito na hora, com o nome de quem ficou de fora.
+      // chega. Precisa ser dito na hora, com o nome de quem ficou de fora — e
+      // com o MOTIVO, não "tente importar de novo": se a causa é escopo da
+      // chave, reimportar do zero falha exatamente igual.
+      const motivo = semWebhook[0]?.motivo ?? t("o provedor recusou o webhook");
       toast.warning(
-        `${t("Conectado, mas sem receber:")} ${semWebhook.map((d) => d.nome).join(", ")}. ${t("Tente importar de novo.")}`,
+        `${t("Conectado, mas sem receber:")} ${semWebhook.map((d) => d.nome).join(", ")}. ${motivo}.`,
       );
     }
 
@@ -126,6 +131,28 @@ export function CanalContaClient() {
                 estado={estado ? { rotulo: t(estado.rotulo), tom: estado.tom } : null}
                 detalhe={
                   <span className="font-mono">{c.instanceId ?? t("sem identificador")}</span>
+                }
+                acoes={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    data-testid="btn-reconectar-webhook"
+                    disabled={reconectarWebhook.isPending}
+                    onClick={async () => {
+                      try {
+                        await reconectarWebhook.mutateAsync(c.id);
+                        toast.success(t("Webhook reconectado."));
+                      } catch {
+                        // erro já mostrado pelo onError do hook (showApiError)
+                      }
+                    }}
+                  >
+                    {reconectarWebhook.isPending ? (
+                      <CircleNotch size={14} className="animate-spin" aria-hidden />
+                    ) : null}
+                    {t("Reconectar webhook")}
+                  </Button>
                 }
               />
             );

@@ -27,7 +27,7 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 const SELECT_COLS =
-  "user_id, is_available, capacity, schedule, last_heartbeat_at, updated_at";
+  "user_id, is_available, capacity, schedule, notification_phone, last_heartbeat_at, updated_at";
 
 export async function PATCH(
   req: NextRequest,
@@ -89,6 +89,7 @@ export async function PATCH(
   if (input.is_available !== undefined) patch.is_available = input.is_available;
   if (input.capacity !== undefined) patch.capacity = input.capacity;
   if (input.schedule !== undefined) patch.schedule = input.schedule;
+  if (input.notification_phone !== undefined) patch.notification_phone = input.notification_phone;
   // "online" = ping de vida (heartbeat AT-08).
   if (input.is_available === true) patch.last_heartbeat_at = now;
 

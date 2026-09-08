@@ -131,3 +131,68 @@ describe("o que NÃO é mensagem", () => {
     expect(lerEventoStevo({ from: "123", text: "oi" }).tipo).toBe("ignorado");
   });
 });
+
+describe("Cloud API oficial — MEDIDO em produção (não é chute)", () => {
+  // Achado: uma conta Oficial manda o envelope cru da WhatsApp Cloud API da
+  // Meta. O log estruturado mediu `chaves: ["object","entry"]` — o achatador
+  // genérico parava aí porque ele não desce em array, e `entry`/`changes`/
+  // `messages` são array em TODO nível. Formato abaixo é o documentado
+  // publicamente pela Meta (Cloud API webhooks), não um chute.
+  function envelope(value: Record<string, unknown>) {
+    return {
+      object: "whatsapp_business_account",
+      entry: [{ id: "WABA_ID", changes: [{ value, field: "messages" }] }],
+    };
+  }
+
+  it("⭐ lê remetente, texto, id e carimbo de dentro de entry[0].changes[0].value.messages[0]", () => {
+    const e = lerEventoStevo(
+      envelope({
+        messaging_product: "whatsapp",
+        metadata: { display_phone_number: "5531999990000", phone_number_id: "123" },
+        contacts: [{ profile: { name: "Cliente" }, wa_id: "5531999998888" }],
+        messages: [
+          {
+            from: "5531999998888",
+            id: "wamid.HBgLABC",
+            timestamp: "1767225600",
+            type: "text",
+            text: { body: "oi" },
+          },
+        ],
+      }),
+    );
+    expect(e.tipo).toBe("mensagem");
+    if (e.tipo !== "mensagem") return;
+    expect(e.telefone).toBe("5531999998888");
+    expect(e.texto).toBe("oi");
+    expect(e.externalId).toBe("wamid.HBgLABC");
+    expect(e.daEmpresa).toBe(false);
+    expect(e.enviadaEm.getTime()).toBe(1_767_225_600 * 1000);
+  });
+
+  it("status de entrega (statuses, sem messages) é ignorado com motivo distinto — não é erro", () => {
+    const e = lerEventoStevo(
+      envelope({
+        statuses: [{ id: "wamid.HBgLABC", status: "delivered", timestamp: "1767225600" }],
+      }),
+    );
+    expect(e.tipo).toBe("ignorado");
+    if (e.tipo !== "ignorado") return;
+    expect(e.motivo).toBe("status_de_entrega");
+  });
+
+  it("value sem messages nem statuses vira motivo próprio, não confunde com falta de remetente", () => {
+    const e = lerEventoStevo(envelope({}));
+    expect(e.tipo === "ignorado" && e.motivo).toBe("cloud_api_sem_mensagem");
+  });
+
+  it("Cloud API nunca ecoa o que este CRM mandou — daEmpresa é sempre false aqui", () => {
+    const e = lerEventoStevo(
+      envelope({
+        messages: [{ from: "5531999998888", id: "x", timestamp: "1767225600", type: "text", text: { body: "oi" } }],
+      }),
+    );
+    expect(e.tipo === "mensagem" && e.daEmpresa).toBe(false);
+  });
+});

@@ -201,6 +201,10 @@ export const AUDIT_ACTIONS = [
   // troca silenciosa faz a pessoa seguinte mandar pelo número errado achando que
   // mandou pelo certo. O histórico precisa saber quem renomeou o quê.
   "channel.renamed",
+  // O CRM avisou de novo o provedor pra onde entregar mensagem, sem reimportar —
+  // uso normal quando o operador corrige um escopo/permissão no painel do
+  // provedor depois de um import que ficou sem webhook.
+  "channel.webhook_reconfigured",
   "authz.denied",
   "team.role_changed",
   "leads.bulk_assigned",

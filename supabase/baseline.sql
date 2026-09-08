@@ -14226,11 +14226,18 @@ create index if not exists meta_templates_sessao_idx
   on public.meta_templates (channel_session_id, status)
   where channel_session_id is not null;
 
--- ---- o arquivo do webhook aceita os canais novos (migration 0151) ----
+-- ---- o arquivo do webhook aceita os canais novos (migrations 0151, 0209) ----
 -- `webhook_events_log` guarda o corpo CRU do que o provedor mandou — é o único
 -- lugar onde ele fica. O CHECK do dump conhecia três provedores e nenhum dos
 -- canais do seam, então a rota genérica de canal não tinha como gravar sem
 -- mentir sobre a origem ('generic' para um canal que se sabe qual é).
+--
+-- 'stevo' entrou na 0209: a 0206 recriou os dois CHECKs de `channel_sessions`
+-- para aceitar o provider novo, mas esqueceu que ESTA tabela tem o SEU
+-- PRÓPRIO check — medido em produção como toda entrega Stevo falhando ao
+-- arquivar ("violates check constraint webhook_events_log_provider_check"),
+-- sem derrubar a ingestão (o `abrirArquivoDoWebhook` degrada), mas sem o
+-- corpo cru que é exatamente o instrumento que faltava pra medir o formato.
 --
 -- Este é o BLOCO ÚNICO desta constraint (regra da issue #159): canal novo edita
 -- ESTA lista, e não acrescenta um segundo bloco — dois blocos fazem o
@@ -14243,7 +14250,7 @@ alter table public.webhook_events_log
   drop constraint if exists webhook_events_log_provider_check;
 alter table public.webhook_events_log
   add constraint webhook_events_log_provider_check check (provider in (
-    'waha', 'nuvemshop', 'generic', 'meta_cloud', 'zernio'
+    'waha', 'nuvemshop', 'generic', 'meta_cloud', 'zernio', 'stevo'
   ));
 
 -- ---- a marca da instalação sai do .env e vai para o banco (migration 0155) ----
