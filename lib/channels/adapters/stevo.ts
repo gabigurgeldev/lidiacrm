@@ -49,7 +49,7 @@ import type {
 } from "../types";
 
 import { corpoCloudApi } from "../cloud-api/corpo";
-import { resolveEnvioStevo, stevoBaseUrlOficial } from "../stevo/credentials";
+import { resolveEnvioStevo, resolveStevoCreds, stevoBaseUrlOficial } from "../stevo/credentials";
 import { corpoDeEnvioStevo, idDaRespostaStevo } from "../stevo/envelope";
 import { lerInstanciaStevo } from "../stevo/instancias";
 import { fetchFotoDePerfilStevo } from "../stevo/perfil";
