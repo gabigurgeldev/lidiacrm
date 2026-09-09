@@ -39,7 +39,13 @@ import { FORMULARIO_DO_TIPO } from "./nodeFormRegistry";
  * TÊM formulário — um que explica o que o bloco faz. Explicar é ajuste também:
  * o painel em branco é o que fazia a pessoa achar que faltava algo.)
  */
-const SEM_FORMULARIO_POR_ORA: ReadonlyArray<{ tipo: string; porque: string }> = [];
+const SEM_FORMULARIO_POR_ORA: ReadonlyArray<{ tipo: string; porque: string }> = [
+  {
+    tipo: "trigger.manual",
+    porque:
+      "Config vazia por construção: o gatilho manual não tem nada a ajustar — ele é disparado pelo botão 'Ativar fluxo' da conversa, não por parâmetro de tela.",
+  },
+];
 
 describe("todo bloco registrado tem formulário", () => {
   it("a varredura enxerga os dois lados (senão ela mede o vazio)", () => {

@@ -83,6 +83,12 @@ describe("todo nó registrado", () => {
         "A chave é a IDENTIDADE (um token secreto pertence a UM fluxo), e o barramento é broadcast: passar por ele faria toda chamada acordar todo fluxo com gatilho de webhook.",
       rota: "app/api/v1/webhooks/flow/[token]/route.ts",
     },
+    {
+      tipo: "trigger.manual",
+      porque:
+        "O botão 'Ativar fluxo' da conversa dispara ESTE contato, não um evento de broadcast: passar pelo barramento faria um clique acordar todo fluxo de gatilho manual. Quem arma a execução é a rota de start, não o matcher.",
+      rota: "app/api/v1/flows/[id]/start/route.ts",
+    },
   ];
 
   it("declara `eventos` se — e SÓ se — for gatilho de barramento", () => {

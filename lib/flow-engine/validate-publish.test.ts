@@ -48,7 +48,7 @@ function grafoBom(): FlowGraph {
 }
 
 describe("o registry decide o que existe", () => {
-  it("os 25 nós desta entrega estão registrados", () => {
+  it("os 26 nós desta entrega estão registrados", () => {
     expect(tiposRegistrados()).toEqual([
       "crm.add_tag",
       "crm.assign_owner",
@@ -70,6 +70,7 @@ describe("o registry decide o que existe", () => {
       "routing.round_robin",
       "trigger.keyword",
       "trigger.lead_created",
+      "trigger.manual",
       "trigger.message_received",
       "trigger.webhook",
       "whatsapp.bulk_send",
