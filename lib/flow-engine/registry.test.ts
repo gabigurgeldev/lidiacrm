@@ -86,8 +86,8 @@ describe("todo nó registrado", () => {
     {
       tipo: "trigger.manual",
       porque:
-        "O botão 'Ativar fluxo' da conversa dispara ESTE contato, não um evento de broadcast: passar pelo barramento faria um clique acordar todo fluxo de gatilho manual. Quem arma a execução é a rota de start, não o matcher.",
-      rota: "app/api/v1/flows/[id]/start/route.ts",
+        "O botão 'Ativar fluxo' da conversa dispara ESTE contato, não um evento de broadcast: passar pelo barramento faria um clique acordar todo fluxo de gatilho manual. Quem arma a execução é a rota de ativação da conversa, não o matcher.",
+      rota: "app/api/v1/conversations/[id]/ativar-fluxo/route.ts",
     },
   ];
 

@@ -30,7 +30,7 @@ interface Props {
  */
 export function AtivarFluxoDialog({ conversationId, contactId, open, onOpenChange }: Props) {
   const t = useT();
-  const fluxos = useFluxosManuais(open);
+  const fluxos = useFluxosManuais(conversationId, open);
   const ativar = useAtivarFluxoManual();
 
   function disparar(flowId: string, nome: string) {
@@ -39,7 +39,7 @@ export function AtivarFluxoDialog({ conversationId, contactId, open, onOpenChang
       return;
     }
     ativar.mutate(
-      { flowId, contact_id: contactId, conversation_id: conversationId },
+      { conversationId, flow_id: flowId },
       {
         onSuccess: (d) => {
           toast.success(

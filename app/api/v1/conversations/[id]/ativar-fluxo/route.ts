@@ -1,18 +1,20 @@
 /**
- * POST /api/v1/flows/[id]/start — dispara um fluxo À MÃO para um contato.
+ * POST /api/v1/conversations/[id]/ativar-fluxo — dispara um fluxo À MÃO para o
+ * contato DESTA conversa (o botão "Ativar fluxo" do cabeçalho).
  *
- * É o outro lado do `trigger.manual`: o matcher nunca arma esse gatilho (ele
- * não escuta o barramento), então quem cria a execução é esta rota, acionada
- * pelo botão “Ativar fluxo” dentro da conversa.
+ * É o outro lado do gatilho `trigger.manual`: o matcher nunca o arma (ele não
+ * escuta o barramento), então quem cria a execução é esta rota.
  *
- * RBAC `agent`: quem atende é quem dispara. Diferente de criar/publicar fluxo
- * (manager+, montar algo que fala com cliente sozinho) — aqui o fluxo JÁ foi
+ * ─── Por que fica sob `conversations/`, e não sob `flows/` ──────────────────
+ *
+ * Disparar um fluxo JÁ publicado para o contato que se está atendendo é ação de
+ * ATENDIMENTO (papel `agent`), não de autoria de fluxo (`manager`, que o
+ * invariante `flows-rbac-alinhado` cobra em todo `/api/v1/flows`). O fluxo foi
  * montado e publicado por um manager; o agente só o aplica a este contato.
  *
- * Escreve pela sessão do usuário (RLS), nunca pelo admin client: a policy
- * `tenant_isolation_flow_executions_all` já garante que a linha nasce na org do
- * usuário, e o `organization_id` explícito vem da org ATIVA resolvida do cookie
- * — nunca do corpo.
+ * O contato sai da CONVERSA (resolvido no servidor pelo `[id]`), nunca do corpo:
+ * é o anti-pattern nº 10 da doutrina, e aqui evitaria que um agente disparasse
+ * um fluxo para um contato que não é o desta conversa.
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
@@ -27,19 +29,15 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-const corpoSchema = z.strictObject({
-  contact_id: z.string().uuid(),
-  conversation_id: z.string().uuid().nullable().optional(),
-  lead_id: z.string().uuid().nullable().optional(),
-});
+const corpoSchema = z.strictObject({ flow_id: z.string().uuid() });
 
 type Contexto = { params: Promise<{ id: string }> };
 
 export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
   const requestId = randomUUID();
-  const authz = await requireRole("agent", { requestId, resource: "flows" });
+  const authz = await requireRole("agent", { requestId, resource: "conversation_flow" });
   if (!authz.ok) return authz.response;
-  const { id: flowId } = await ctx.params;
+  const { id: conversationId } = await ctx.params;
   const orgId = authz.org.orgId;
 
   let cru: unknown = {};
@@ -50,15 +48,29 @@ export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
   }
   const parsed = corpoSchema.safeParse(cru);
   if (!parsed.success) {
-    return fail("invalid_request", "Dados inválidos.", 400, {
+    return fail("invalid_request", "Informe o flow_id.", 400, {
       requestId,
       details: parsed.error.flatten(),
     });
   }
-  const { contact_id, conversation_id, lead_id } = parsed.data;
+  const flowId = parsed.data.flow_id;
 
   garantirNosRegistrados();
   const supabase = await createClient();
+
+  // A conversa precisa ser da org; o contato dela é quem recebe o fluxo.
+  const { data: conv } = await supabase
+    .from("conversations")
+    .select("id, contact_id")
+    .eq("id", conversationId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  const conversa = conv as { id: string; contact_id: string | null } | null;
+  if (!conversa) return fail("not_found", "Conversa não encontrada.", 404, { requestId });
+  if (!conversa.contact_id) {
+    return fail("invalid_request", "Esta conversa ainda não tem contato.", 422, { requestId });
+  }
+  const contactId = conversa.contact_id;
 
   // O fluxo tem de ser da org, estar ATIVO e ter versão publicada.
   const { data: fluxo } = await supabase
@@ -77,7 +89,6 @@ export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
     });
   }
 
-  // A versão publicada, e o nó por onde ela começa.
   const { data: versao } = await supabase
     .from("flow_versions")
     .select("id, graph")
@@ -106,33 +117,21 @@ export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
     return fail("invalid_request", "O fluxo não tem bloco de início.", 422, { requestId });
   }
 
-  // O contato tem de ser da org (RLS + filtro explícito).
-  const { data: contato } = await supabase
-    .from("contacts")
-    .select("id")
-    .eq("organization_id", orgId)
-    .eq("id", contact_id)
-    .maybeSingle();
-  if (contato === null) return fail("not_found", "Contato não encontrado.", 404, { requestId });
-
   // Idempotência: não empilha uma segunda execução do MESMO fluxo para o MESMO
-  // contato enquanto a anterior não terminou. Cobre o clique duplo e o disparo
-  // repetido — a chave `uniq_flow_executions_trigger_event` não protege aqui
-  // porque `trigger_event_id` é nulo no disparo manual (nulos não colidem).
+  // contato enquanto a anterior não terminou. Cobre o clique duplo — a chave
+  // `uniq_flow_executions_trigger_event` não protege aqui (trigger_event_id é
+  // nulo no disparo manual, e nulos não colidem).
   const { data: emAndamento } = await supabase
     .from("flow_executions")
     .select("id, status")
     .eq("organization_id", orgId)
     .eq("flow_id", flowId)
-    .eq("contact_id", contact_id)
+    .eq("contact_id", contactId)
     .is("completed_at", null)
     .limit(1)
     .maybeSingle();
   if (emAndamento !== null) {
-    return ok(
-      { execucao: emAndamento, ja_estava_rodando: true },
-      { requestId, status: 200 },
-    );
+    return ok({ execucao: emAndamento, ja_estava_rodando: true }, { requestId, status: 200 });
   }
 
   const { data: exec, error: insErr } = await supabase
@@ -143,14 +142,11 @@ export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
       version_id: v.id,
       status: "pending",
       current_node_id: gatilho.id,
-      // Vencida AGORA: o próximo tick do worker pega. Não é `null` porque o
-      // CHECK de relógio recusa estado ativo sem hora (mesma regra do matcher).
+      // Vencida AGORA: o próximo tick do worker pega. Não é `null` porque o CHECK
+      // de relógio recusa estado ativo sem hora (mesma regra do matcher).
       next_eval_at: new Date().toISOString(),
-      contact_id,
-      conversation_id: conversation_id ?? null,
-      lead_id: lead_id ?? null,
-      // Manual não tem evento de origem; nulo é o correto, e é o que faz a chave
-      // de dedup de evento não se aplicar (por isso a guarda acima).
+      contact_id: contactId,
+      conversation_id: conversationId,
       trigger_event_id: null,
       lineage: { origem: "manual", user_id: authz.user.id },
       context: {},
@@ -158,9 +154,7 @@ export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
     .select("id, status, current_node_id, started_at")
     .single();
 
-  if (insErr !== null) {
-    return fail("internal_error", insErr.message, 500, { requestId });
-  }
+  if (insErr !== null) return fail("internal_error", insErr.message, 500, { requestId });
 
   void audit({
     action: "flow.started_manually",
@@ -169,7 +163,7 @@ export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
     resourceType: "flow",
     resourceId: flowId,
     requestId,
-    metadata: { execution_id: (exec as { id: string }).id, contact_id, flow_name: f.name },
+    metadata: { execution_id: (exec as { id: string }).id, contact_id: contactId, flow_name: f.name },
   });
 
   return ok({ execucao: exec, ja_estava_rodando: false }, { requestId, status: 201 });

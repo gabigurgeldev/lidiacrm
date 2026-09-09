@@ -129,33 +129,34 @@ export interface FluxoManual {
 
 /**
  * Os fluxos LIGADOS de gatilho manual — a lista do seletor "Ativar fluxo".
- * Acessível a `agent` (a rota `/flows/manuais` é agent+), ao contrário de
- * `useFluxos`, que bate na rota manager+.
+ *
+ * Sob a CONVERSA (`/api/v1/conversations/[id]/fluxos-manuais`), papel `agent`:
+ * é o seletor de uma ação de atendimento, não a tela de autoria de fluxo (que
+ * é manager+, em `/api/v1/flows`). Ver o invariante `flows-rbac-alinhado`.
  */
-export function useFluxosManuais(enabled = true) {
+export function useFluxosManuais(conversationId: string, enabled = true) {
   return useQuery({
-    queryKey: [...CHAVE_DOS_FLUXOS, "manuais"] as const,
+    queryKey: [...CHAVE_DOS_FLUXOS, "manuais", conversationId] as const,
+    enabled: enabled && !!conversationId,
     queryFn: () =>
-      apiClient.get<{ data: FluxoManual[] }>(`${ROTA}/manuais`).then((r) => r.data),
-    enabled,
+      apiClient
+        .get<{ data: FluxoManual[] }>(
+          `/api/v1/conversations/${encodeURIComponent(conversationId)}/fluxos-manuais`,
+        )
+        .then((r) => r.data),
   });
 }
 
-/** Dispara um fluxo manual para um contato (o botão da conversa). */
+/** Dispara um fluxo manual para o contato DESTA conversa (o botão do cabeçalho). */
 export function useAtivarFluxoManual() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: {
-      flowId: string;
-      contact_id: string;
-      conversation_id?: string | null;
-    }) =>
+    mutationFn: (input: { conversationId: string; flow_id: string }) =>
       apiClient
         .post<{
           data: { execucao: { id: string; status: string }; ja_estava_rodando: boolean };
-        }>(`${doFluxo(input.flowId)}/start`, {
-          contact_id: input.contact_id,
-          conversation_id: input.conversation_id ?? null,
+        }>(`/api/v1/conversations/${encodeURIComponent(input.conversationId)}/ativar-fluxo`, {
+          flow_id: input.flow_id,
         })
         .then((r) => r.data),
     onSuccess: () => {

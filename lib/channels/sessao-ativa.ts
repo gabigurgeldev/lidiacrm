@@ -81,6 +81,10 @@ export async function sessaoAtivaDaOrg(
   admin: SupabaseClient,
   organizationId: string,
 ): Promise<SessaoAtiva | null> {
+  // Filtra por org + status, nunca por identificador de provider — então o
+  // recorte `archived_at` do invariante `canal-consulta` (que vale para quem
+  // resolve UMA linha por id de provider) não se aplica aqui. Busca as WORKING e
+  // itera até a primeira com ref resolvível.
   const { data } = await admin
     .from("channel_sessions")
     .select(CHANNEL_SESSION_REF_COLUMNS)

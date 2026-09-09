@@ -41,7 +41,9 @@ vi.mock("@/lib/supabase/admin", () => ({
         const dados =
           tabela === "contacts"
             ? [{ id: CONTATO, organization_id: ORG, wa_identity: "phone:+5511999990000", avatar_storage_path: null }]
-            : { waha_session_name: "sessao-de-teste", provider: "waha" };
+            // channel_sessions: ARRAY — `sessaoAtivaDaOrg` agora busca as sessões
+            // WORKING e itera até achar uma com ref resolvível (não mais maybeSingle).
+            : [{ waha_session_name: "sessao-de-teste", provider: "waha" }];
         const proxy: Record<string, unknown> = new Proxy(
           {},
           {

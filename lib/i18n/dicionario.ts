@@ -107,6 +107,23 @@ export const DICIONARIO: Traducoes = {
   Transferir: { es: "Transferir" },
   Lembrar: { es: "Recordar" },
   Fechar: { es: "Cerrar" },
+  "Mais ações": { es: "Más acciones" },
+  // Ativar fluxo (gatilho manual pelo botão da conversa)
+  "Ativar fluxo": { es: "Activar flujo" },
+  "Escolha um fluxo para disparar agora para este contato.": {
+    es: "Elige un flujo para disparar ahora a este contacto.",
+  },
+  "Carregando fluxos...": { es: "Cargando flujos..." },
+  "Nenhum fluxo de ativação manual ligado. Crie um fluxo com o bloco de início “Ativação manual pelo botão”, publique e ligue-o.":
+    {
+      es: "Ningún flujo de activación manual activado. Crea un flujo con el bloque de inicio “Activación manual por el botón”, publícalo y actívalo.",
+    },
+  "Esta conversa ainda não tem um contato para receber o fluxo.": {
+    es: "Esta conversación aún no tiene un contacto para recibir el flujo.",
+  },
+  "Não deu para ativar o fluxo. Tente de novo.": {
+    es: "No se pudo activar el flujo. Inténtalo de nuevo.",
+  },
   "Devolver ao automático": { es: "Devolver al automático" },
   Aberta: { es: "Abierta" },
   Fechada: { es: "Cerrada" },

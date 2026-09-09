@@ -7,7 +7,9 @@ function fakeAdmin(rows: unknown[]) {
   const q: Record<string, unknown> = {};
   q.select = () => q;
   q.eq = () => q;
-  q.then = (resolve: (v: { data: unknown[] }) => unknown) => resolve({ data: rows });
+  q.is = () => q; // `.is(archived_at, null)` do queryTolerantToMissingArchived
+  q.then = (resolve: (v: { data: unknown[]; error: null }) => unknown) =>
+    resolve({ data: rows, error: null });
   return { from: () => q } as never;
 }
 
