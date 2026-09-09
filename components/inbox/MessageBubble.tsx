@@ -196,7 +196,7 @@ export function MessageBubble({
             : cn(
                 "bolha px-2.5 py-1.5 shadow-sm",
                 isOutbound
-                  ? "bg-primary text-primary-foreground"
+                  ? "bolha-saida"
                   : "bg-surface-elevated text-foreground",
               ),
           isFailed && "border border-destructive",
@@ -213,7 +213,7 @@ export function MessageBubble({
             className={cn(
               "mb-1 rounded border-l-2 px-2 py-1 text-xs",
               isOutbound
-                ? "border-primary-foreground/50 bg-primary-foreground/10"
+                ? "border-current/40 bg-current/10"
                 : "border-primary bg-background/60",
             )}
           >
@@ -288,7 +288,7 @@ export function MessageBubble({
           className={cn(
             "flex items-center justify-end gap-1 text-[10px]",
             horaFlutuante ? "bolha-meta-flutuante" : "mt-1",
-            isOutbound ? "text-primary-foreground/70" : "text-muted-foreground",
+            isOutbound ? "text-current opacity-70" : "text-muted-foreground",
           )}
         >
           {/* DE ONDE VEIO ESTA MENSAGEM — primeiro da fila de metadados porque é
@@ -302,7 +302,9 @@ export function MessageBubble({
               provider={canalProvider}
               modo={canalModo}
               variante="bolha"
-              className={isOutbound ? "text-primary-foreground/70" : undefined}
+              // Herda a cor da bolha (o meta já está em opacity-70); antes era
+              // `primary-foreground`, que não contrasta no verde claro do tema light.
+              className={isOutbound ? "text-current" : undefined}
             />
           )}
           {editada && (

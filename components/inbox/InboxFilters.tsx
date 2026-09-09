@@ -254,7 +254,7 @@ export function InboxFilters({ value, onChange }: Props) {
         usa leitor de tela.
       */}
       <Tabs value={value.tab} onValueChange={(v) => onChange({ ...value, tab: v as InboxTab })}>
-        <TabsList className="nav-rolagem flex h-auto w-full justify-start gap-1 overflow-x-auto rounded-none bg-transparent px-3 pb-2">
+        <TabsList className="nav-rolagem flex h-auto w-full flex-wrap justify-start gap-1 rounded-none bg-transparent px-2 pb-2">
           {tabs.map((tab) => {
             const meta = INBOX_TABS.find((t) => t.value === tab)!;
             const count = countFor[tab];
@@ -262,7 +262,7 @@ export function InboxFilters({ value, onChange }: Props) {
               <TabsTrigger
                 key={tab}
                 value={tab}
-                className="h-7 shrink-0 gap-1.5 rounded-full px-3 text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent data-[state=active]:shadow-none"
+                className="h-7 shrink-0 gap-1.5 rounded-full px-2.5 text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent data-[state=active]:shadow-none"
               >
                 {t(meta.label)}
                 {typeof count === "number" && count > 0 && (

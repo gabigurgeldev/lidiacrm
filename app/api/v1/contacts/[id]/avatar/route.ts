@@ -18,6 +18,7 @@ import type { NextRequest } from "next/server";
 
 import { fail } from "@/lib/api/wrappers";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { sessaoDaConversaDoContato } from "@/lib/channels/sessao-ativa";
 import { sincronizarAvatar } from "@/lib/contacts/avatar-do-contato";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ok } from "@/lib/api/wrappers";
@@ -160,6 +161,11 @@ export async function POST(
     return ok({ buscou: false }, { requestId });
   }
 
-  const resultado = await sincronizarAvatar(admin, contato, { requestId });
+  // A sessão da CONVERSA do contato — o canal em que ele fala é o único que sabe
+  // a foto dele. Numa org com mais de um canal, perguntar ao canal errado
+  // devolve sempre "sem foto". Ausente, `sincronizarAvatar` cai na sessão ativa
+  // da org.
+  const sessao = await sessaoDaConversaDoContato(admin, activeOrg.orgId, contato.id);
+  const resultado = await sincronizarAvatar(admin, contato, { requestId }, sessao ?? undefined);
   return ok({ buscou: true, resultado }, { requestId });
 }

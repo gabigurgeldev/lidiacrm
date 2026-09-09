@@ -1260,6 +1260,24 @@
   border-radius: 12px;
 }
 
+/* A bolha de SAÍDA tem verde PRÓPRIO de mensageiro, não a cor de marca.
+   Decisão do dono do produto: aqui o look de WhatsApp vence o white-label DA
+   BOLHA — o accent do revendedor segue mandando no resto da tela (abas, botões,
+   selos). O hex mora aqui, no globals, como toda cor do produto; o rabo herda
+   por `background-color: inherit`, então segue a bolha sem repetir o valor. */
+:root {
+  --bolha-saida-bg: #d9fdd3;
+  --bolha-saida-fg: #111b21;
+}
+[data-theme="dark"] {
+  --bolha-saida-bg: #005c4b;
+  --bolha-saida-fg: #e9edef;
+}
+.bolha-saida {
+  background-color: var(--bolha-saida-bg);
+  color: var(--bolha-saida-fg);
+}
+
 /* O RABO, só na PRIMEIRA mensagem de cada bloco do mesmo autor.
    É o que transforma uma pilha de retângulos numa conversa: sem ele, dez
    mensagens seguidas da mesma pessoa parecem dez interrupções.
