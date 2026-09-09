@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getAdapter } from "@/lib/channels";
-import { sessaoAtivaDaOrg } from "@/lib/channels/sessao-ativa";
+import { sessaoAtivaDaOrg, type SessaoAtiva } from "@/lib/channels/sessao-ativa";
 import { logger } from "@/lib/logger";
 
 /**
@@ -55,6 +55,14 @@ export async function sincronizarAvatar(
   admin: SupabaseClient,
   contato: ContatoParaAvatar,
   contexto: { requestId?: string } = {},
+  /**
+   * A sessão por onde perguntar. Quando o chamador sabe a conversa do contato,
+   * passa a sessão DELA — a foto de um contato tem que ser perguntada ao canal
+   * em que ele fala, não a outro canal da org que nunca falou com ele. Ausente,
+   * cai na sessão ativa da org (o cron, que processa contatos em lote sem uma
+   * conversa em mãos).
+   */
+  sessaoPreferida?: SessaoAtiva,
 ): Promise<ResultadoDoAvatar> {
   const chatId = contato.wa_identity ? chatIdDaIdentidade(contato.wa_identity) : null;
 
@@ -90,7 +98,7 @@ export async function sincronizarAvatar(
   }
 
   try {
-    const sessao = await sessaoAtivaDaOrg(admin, contato.organization_id);
+    const sessao = sessaoPreferida ?? (await sessaoAtivaDaOrg(admin, contato.organization_id));
     if (!sessao) {
       await carimbar(null);
       return "sem_foto";
