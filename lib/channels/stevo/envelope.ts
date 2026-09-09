@@ -80,6 +80,38 @@ export function corpoDeEnvioStevo(env: OutboundEnvelope): CorpoDeEnvioStevo {
   return corpo;
 }
 
+export interface CorpoDeTemplateStevo {
+  to: string;
+  template_name: string;
+  template_language?: string;
+  template_params?: string[];
+}
+
+/**
+ * Nosso envio de template → o corpo do provedor. ⚠️ FORMATO A VALIDAR (docs SPA)
+ * — ver `adapters/stevo.ts:sendTemplate`. Pura para ser testável sem rede.
+ *
+ * `{{1}}`, `{{2}}`… viram posições NA ORDEM NUMÉRICA. Chave não-numérica fica de
+ * fora em vez de entrar em ordem alfabética: ordem inventada manda o valor
+ * errado para o lugar errado, e o cliente recebe o nome de outra pessoa.
+ */
+export function corpoDeTemplateStevo(
+  name: string,
+  language: string,
+  values: Record<string, string>,
+): CorpoDeTemplateStevo {
+  const params = Object.keys(values)
+    .filter((k) => /^\d+$/.test(k))
+    .sort((a, b) => Number(a) - Number(b))
+    .map((k) => values[k] ?? "");
+  return {
+    to: "", // preenchido pelo chamador; mantém a forma estável para o teste
+    template_name: name,
+    ...(language ? { template_language: language } : {}),
+    ...(params.length ? { template_params: params } : {}),
+  };
+}
+
 /**
  * Onde quer que o id da mensagem esteja na resposta.
  *

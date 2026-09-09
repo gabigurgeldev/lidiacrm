@@ -39,7 +39,7 @@ import type {
 } from "../types";
 
 import { resolveStevoCreds } from "../stevo/credentials";
-import { corpoDeEnvioStevo, idDaRespostaStevo } from "../stevo/envelope";
+import { corpoDeEnvioStevo, corpoDeTemplateStevo, idDaRespostaStevo } from "../stevo/envelope";
 import { lerInstanciaStevo } from "../stevo/instancias";
 import { fetchFotoDePerfilStevo } from "../stevo/perfil";
 
@@ -201,6 +201,76 @@ export const stevoAdapter: ChannelAdapter = {
       instanceId: creds.instanceId,
       numero: digitos(input.recipient),
     });
+  },
+
+  /**
+   * Envia uma definição APROVADA — o caminho de volta quando a janela de 24h
+   * fechou numa instância OFICIAL (a WABA da Meta por baixo).
+   *
+   * ⚠️ POR QUE ISTO EXISTE, mesmo best-effort: sem `sendTemplate` no adapter, o
+   * `_handler` desvia `type:"template"` para `sendTemplateForSession`, que lê
+   * `META_PHONE_NUMBER_ID`/`META_SYSTEM_USER_TOKEN` do ambiente — ou seja, o
+   * template sairia pelo NÚMERO DA META, não pela instância Stevo do cliente.
+   * Para o canal intermediado isso não é "falha de envio": é a mensagem saindo
+   * pelo número ERRADO. Rotear pelo adapter conserta isso mesmo que o formato do
+   * corpo ainda precise de ajuste.
+   *
+   * ⚠️ FORMATO A VALIDAR na instância viva: o contrato de envio de template do
+   * provedor não está nos specs públicos (docs são SPA). A instância oficial é
+   * Cloud API da Meta por baixo, então os campos abaixo seguem esse vocabulário;
+   * se o provedor exigir outro nome (ou um objeto `cloud_api`), é aqui que se
+   * ajusta — sem tocar em quem chama. Falha sai com `stevo_template_failed`
+   * legível, no número certo, nunca `sent` sem id.
+   */
+  async sendTemplate(input: ChannelTenantScope & {
+    sessionRef: string;
+    to: string;
+    name: string;
+    language: string;
+    values: Record<string, string>;
+  }): Promise<{ externalId: string | null }> {
+    const admin = createAdminClient();
+    const creds = await resolveStevoCreds(admin, {
+      organizationId: input.organizationId,
+      instanceId: input.sessionRef,
+    });
+    if (!creds) {
+      throw new Error(
+        "stevo_not_configured: nenhuma credencial para esta instância (nem na sessão, nem no ambiente).",
+      );
+    }
+
+    const corpo = { ...corpoDeTemplateStevo(input.name, input.language, input.values), to: input.to };
+
+    const res = await fetch(
+      `${creds.baseUrl}/v1/instances/${encodeURIComponent(creds.instanceId)}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${creds.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(corpo),
+      },
+    );
+
+    const json = (await res.json().catch(() => null)) as {
+      sent?: boolean;
+      result?: unknown;
+      error?: { code?: string; message?: string } | string;
+      message?: string;
+    } | null;
+
+    if (!res.ok || json?.sent === false) {
+      const erro = json?.error;
+      const detalhe =
+        typeof erro === "string"
+          ? erro
+          : (erro?.message ?? erro?.code ?? json?.message ?? res.statusText);
+      throw new Error(`stevo_template_failed: ${res.status} ${detalhe}`.trim());
+    }
+
+    return { externalId: idDaRespostaStevo(json?.result ?? json) };
   },
 
   codes: {
