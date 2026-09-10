@@ -6610,6 +6610,14 @@ export const DICIONARIO: Traducoes = {
   "Para quem": { es: "Para quién" },
   "Quem está com o lead": { es: "Quien tiene el lead" },
   "Um número fixo": { es: "Un número fijo" },
+  // destinatário por PESSOA e escolha da conexão no bloco de aviso ao vendedor
+  "Uma pessoa da equipe": { es: "Una persona del equipo" },
+  "Quem da equipe recebe o aviso": { es: "Quién del equipo recibe el aviso" },
+  "Escolha a pessoa": { es: "Elija la persona" },
+  "Ninguém na equipe ainda. Convide alguém em Equipe para poder escolher.":
+    { es: "Todavía no hay nadie en el equipo. Invite a alguien en Equipo para poder elegir." },
+  "Esta pessoa ainda não tem telefone de aviso. Cadastre em Equipe › Atendimento, no botão Editar horário — sem ele o aviso não sai.":
+    { es: "Esta persona todavía no tiene teléfono de aviso. Regístrelo en Equipo › Atención, en el botón Editar horario — sin él el aviso no sale." },
   "Número que recebe o aviso": { es: "Número que recibe el aviso" },
   "Com DDI. Pode usar {{contact.phone_number}} ou uma variável do fluxo. Número fora do formato segue pela saída 'Sem telefone cadastrado'.":
     {

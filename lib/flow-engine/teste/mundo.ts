@@ -35,7 +35,10 @@ export interface Mundo {
   esperas: Map<string, { desde: Date; ate: Date }>;
   atribuicoes: Array<{ leadId: string; userId: string }>;
   tags: string[];
-  enviados: Array<{ telefone: string; texto: string }>;
+  /** `channelSessionId` entra porque a ESCOLHA da conexão é o que o bloco de aviso
+   *  passou a poder fazer — um falso que a descartasse deixaria o campo novo sem
+   *  vigia nenhum. */
+  enviados: Array<{ telefone: string; texto: string; channelSessionId: string | null }>;
   /** O que foi mandado ao CLIENTE — outra lista, porque é outro destinatário. */
   /** Campanhas que o bloco de disparo pediu. */
   disparosPedidos: Array<Record<string, unknown>>;
@@ -66,6 +69,8 @@ export interface Mundo {
   desfechoDoEnvio: DesfechoDeEnvio;
   score: number | null;
   telefoneDoDono: string | null;
+  /** Telefone de aviso por pessoa da equipe, para o destinatário por USUÁRIO. */
+  telefonesDaEquipe: Map<string, string>;
   agora: Date;
   frentes: Map<string, FrenteRow>;
   encontros: Map<string, {
@@ -127,6 +132,7 @@ export function mundoNovo(): Mundo {
     desfechoDoEnvio: { kind: "enviado", messageId: "msg-1" },
     score: 82,
     telefoneDoDono: "+5563999112061",
+    telefonesDaEquipe: new Map(),
     agora: new Date("2026-08-30T12:00:00.000Z"),
     frentes: new Map(),
     encontros: new Map(),
@@ -358,6 +364,7 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
         mundo.tags.push(tag);
       },
       houveRespostaDoDono: async () => mundo.donoRespondeu,
+      telefoneDoUsuario: async ({ userId }) => mundo.telefonesDaEquipe.get(userId) ?? null,
       devolverAoAgente: async ({ contactId }) => {
         if (mundo.semConversaParaAgente) return { ok: false as const, motivo: "sem_conversa" };
         const jaEstava = mundo.devolvidasAoAgente.includes(contactId);
@@ -412,8 +419,8 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
       },
     },
     canal: {
-      enviarTexto: async ({ telefone, texto }) => {
-        mundo.enviados.push({ telefone, texto });
+      enviarTexto: async ({ telefone, texto, channelSessionId }) => {
+        mundo.enviados.push({ telefone, texto, channelSessionId: channelSessionId ?? null });
         return mundo.desfechoDoEnvio;
       },
       enviarParaContato: async ({ contactId, tipo, texto, mediaUrl, channelSessionId }) => {
