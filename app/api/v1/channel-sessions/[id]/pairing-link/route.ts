@@ -20,16 +20,25 @@ import { requireRole } from "@/lib/auth/require-role";
 import { canalParaParear } from "@/lib/channels/pareamento/canal";
 import { VALIDADE_DO_LINK_MS } from "@/lib/channels/pareamento/link";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { basePublica } from "@/lib/url-publica";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** A base pública desta instalação, como o import de instâncias já a resolve. */
-function baseDaInstalacao(req: NextRequest): string {
-  const daEnv = process.env.NEXT_PUBLIC_APP_URL;
-  if (daEnv) return daEnv.replace(/\/+$/, "");
-  return new URL(req.url).origin;
-}
+/*
+ * A base pública vem de `basePublica` (`lib/url-publica.ts`), e NÃO de
+ * `process.env.NEXT_PUBLIC_APP_URL`.
+ *
+ * ⚠️ Este era o defeito: a versão anterior lia o `process.env` direto e
+ * devolvia o valor se ele fosse truthy. Numa imagem self-host ele é SEMPRE
+ * truthy e SEMPRE errado — `NEXT_PUBLIC_*` é substituída no build, e o
+ * Dockerfile constrói com `https://placeholder.invalid`. O fallback que ela
+ * mesma trazia (o host da requisição) nunca era alcançado.
+ *
+ * Medido em produção: o link saía `https://placeholder.invalid/pair/<token>`.
+ * A tela mostrava o link com ar de pronto, o botão "Copiar" copiava, e o
+ * cliente recebia um endereço morto — sem um erro em lugar nenhum.
+ */
 
 export async function POST(
   req: NextRequest,
@@ -98,7 +107,7 @@ export async function POST(
   // barato que ter uma rota que devolve credencial viva.
   return ok(
     {
-      url: `${baseDaInstalacao(req)}/pair/${linha.token}`,
+      url: `${basePublica(req)}/pair/${linha.token}`,
       expira_em: linha.expires_at,
     },
     { requestId },
