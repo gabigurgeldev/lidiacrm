@@ -14,6 +14,11 @@ export {
   // flow engine: fila indiana (ordem declarada) e sorteio
   ListNumbers,
   Shuffle,
+  // flow engine: dividir o TRÁFEGO entre as saídas (logic.split). Não é
+  // ArrowsSplit, que já é o "Fazer ao mesmo tempo" — os dois abrem caminhos, e
+  // dois blocos com o mesmo ícone no quadro é o jeito mais rápido de alguém
+  // ligar a linha no bloco errado.
+  ShareNetwork,
   Plugs,
   PlugsConnected,
   QrCode,

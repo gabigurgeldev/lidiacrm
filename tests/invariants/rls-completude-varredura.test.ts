@@ -98,6 +98,16 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "por ACERTO ali.",
   },
   {
+    tabela: "flow_split_counters",
+    razao:
+      "tests/invariants/placar-da-divisao-anda-no-banco.test.ts prova as duas " +
+      "direções com `countAs` real, o pedido da tabela INTEIRA e o gate de " +
+      "papel (o `agent` da própria org NÃO lê). Fora de TABLES pelo mesmo " +
+      "motivo das três tabelas do motor acima: a policy exige `manager` e o " +
+      "usuário semeado em rls-isolation.test.ts é `agent` — lá o controle " +
+      "positivo falharia por ACERTO.",
+  },
+  {
     tabela: "meta_templates",
     razao:
       "tests/invariants/meta-templates-rls.test.ts (\"membro da org B NÃO vê " +

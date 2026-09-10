@@ -17,6 +17,7 @@ import { LogicForkForm } from "./forms/LogicForkForm";
 import { LogicIfForm } from "./forms/LogicIfForm";
 import { LogicLoopForm } from "./forms/LogicLoopForm";
 import { LogicMergeForm } from "./forms/LogicMergeForm";
+import { LogicSplitForm } from "./forms/LogicSplitForm";
 import { LogicWaitForm } from "./forms/LogicWaitForm";
 import { NotifyInternalForm } from "./forms/NotifyInternalForm";
 import { RoutingRedistributeForm } from "./forms/RoutingRedistributeForm";
@@ -68,6 +69,7 @@ export const FORMULARIO_DO_TIPO: Record<string, ComponentType<PropsDoFormulario>
   "logic.loop": LogicLoopForm,
   "logic.await_event": LogicAwaitEventForm,
   "logic.choice_menu": LogicChoiceMenuForm,
+  "logic.split": LogicSplitForm,
   "flow.call": FlowCallForm,
   "crm.add_tag": CrmAddTagForm,
   "crm.assign_owner": CrmAssignOwnerForm,

@@ -145,3 +145,59 @@ test.describe("os blocos do paralelo no construtor", () => {
     await expect(page.getByText(/reencontro/i).first()).toBeVisible({ timeout: 15_000 });
   });
 });
+
+test.describe("dividir os caminhos, no construtor", () => {
+  /**
+   * O bloco `logic.split` entra aqui, e não numa spec própria, de propósito: ele
+   * é da mesma família (abre saídas no quadro) e uma spec nova exigiria mexer
+   * nas `SPECS_PARTE_*` do `.github/workflows/e2e.yml` — que é onde uma spec
+   * some do CI sem ninguém notar.
+   */
+  test("está na paleta, nasce com dois caminhos, e o modo é escolha explícita", async ({
+    page,
+  }) => {
+    await loginComoAdmin(page, lerCreds());
+    await abrirEditorDeFluxoNovo(page, "E2E divide caminhos");
+
+    await expect(
+      page.getByTestId("paleta-logic.split"),
+      "bloco registrado que não aparece na paleta não existe para o usuário",
+    ).toBeVisible();
+
+    await page.getByTestId("paleta-logic.split").click();
+    await expect(page.getByTestId("painel-do-no")).toBeVisible();
+
+    // Dois caminhos de nascença: é o mínimo do schema, e um bloco que nascesse
+    // com zero não desenharia saída nenhuma no quadro.
+    const caminhos = page.locator('[data-testid^="rotulo-do-caminho-"]');
+    await expect(caminhos).toHaveCount(2);
+
+    await page.getByTestId("add-caminho").click();
+    await expect(caminhos).toHaveCount(3);
+
+    // Os três modos precisam estar escritos em português de operação. "fila",
+    // "igualitario" e "aleatorio" são nomes do código, não da tela.
+    await page.getByTestId("campo-modo-da-divisao").click();
+    await expect(page.getByRole("option", { name: /em fila/i })).toBeVisible();
+    await expect(page.getByRole("option", { name: /igualando/i })).toBeVisible();
+    await expect(page.getByRole("option", { name: /sorteando/i })).toBeVisible();
+  });
+
+  test("publicar com um caminho SOLTO é recusado — senão um em cada N leads some", async ({
+    page,
+  }) => {
+    // As saídas são de REGRA (`kind: "match"`), e é isso que faz a publicação
+    // cobrar ligação em cada uma. Se passasse, o lead que caísse no caminho
+    // solto terminaria ali, com o fluxo dizendo que deu certo.
+    await loginComoAdmin(page, lerCreds());
+    await abrirEditorDeFluxoNovo(page, "E2E divide caminho solto");
+
+    await page.getByTestId("paleta-trigger.lead_created").click();
+    await page.getByTestId("paleta-logic.split").click();
+
+    await page.getByTestId("salvar-rascunho").click();
+    await page.getByTestId("publicar-fluxo").click();
+
+    await expect(page.getByText(/sa[ií]da/i).first()).toBeVisible({ timeout: 15_000 });
+  });
+});

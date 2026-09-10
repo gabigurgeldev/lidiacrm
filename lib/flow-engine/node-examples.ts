@@ -40,6 +40,18 @@ export function configExemploDoTipo(tipo: string): Record<string, unknown> {
         modo: "todas",
         encontro: "reencontro",
       };
+    case "logic.split":
+      // Nasce em `fila` de propósito: é o único modo cujo resultado a pessoa
+      // consegue conferir olhando (um, o outro, um, o outro). Nascer em
+      // `aleatorio` faria a primeira prova parecer defeito — três execuções
+      // seguidas pelo mesmo caminho é resultado normal do sorteio.
+      return {
+        modo: "fila",
+        caminhos: [
+          { id: "caminho_a", label: "Caminho A" },
+          { id: "caminho_b", label: "Caminho B" },
+        ],
+      };
     case "logic.merge":
       return {};
     case "logic.loop":

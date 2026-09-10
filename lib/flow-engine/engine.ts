@@ -35,6 +35,7 @@ import type {
   PortaDeCanal,
   PortaDeDisparo,
   PortaDoCrm,
+  PortaDeDivisao,
   PortaDeRoteamento,
 } from "./types";
 
@@ -259,6 +260,7 @@ export interface FlowAdminClient {
 export interface PortasDaExecucao {
   crm: PortaDoCrm;
   roteamento: PortaDeRoteamento;
+  divisao: PortaDeDivisao;
   canal: PortaDeCanal;
   disparo: PortaDeDisparo;
   avisos: PortaDeAvisos;
@@ -540,6 +542,7 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
       esperaEmCurso: espera,
       crm: p.portas.crm,
       roteamento: p.portas.roteamento,
+      divisao: p.portas.divisao,
       canal: p.portas.canal,
       disparo: p.portas.disparo,
       avisos: p.portas.avisos,
