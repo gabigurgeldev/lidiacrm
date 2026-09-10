@@ -286,6 +286,18 @@ export interface PortaDeRoteamento {
 
 export interface PortaDoCrm {
   atribuirDono(input: { leadId: string; userId: string }): Promise<void>;
+
+  /**
+   * O telefone de aviso de UMA pessoa da equipe — a que o bloco nomeou, que não
+   * é necessariamente quem está com o lead.
+   *
+   * Existe porque o `whatsapp.notify_user` com destinatário fixo por pessoa
+   * respondia `{ kind: "dead" }` e matava a execução: o fato daquele usuário não
+   * está em `ctx.fatos` (que só carrega o DONO), e o nó não pode ler o banco.
+   * Uma porta é a saída certa — a mesma que o cabeçalho daquele bloco já
+   * apontava enquanto declarava o caminho como não suportado.
+   */
+  telefoneDoUsuario(input: { userId: string }): Promise<string | null>;
   removerDono(input: { leadId: string }): Promise<void>;
   adicionarTag(input: { leadId: string; tag: string }): Promise<void>;
   /**
@@ -332,6 +344,18 @@ export interface PortaDeCanal {
     texto: string;
     /** Marca o contato criado para o aviso, para ele não virar lead nem falar com a IA. */
     interno: boolean;
+    /**
+     * Por qual conexão o aviso sai. `null` = a primeira disponível, que é o que
+     * acontecia sempre antes de este campo existir.
+     *
+     * ⚠️ A ausência da escolha era um defeito, e não uma simplificação: numa
+     * organização com mais de um número, "a primeira disponível" é a mais
+     * ANTIGA por `created_at` — e, quando nenhuma está `WORKING`, o seletor cai
+     * para qualquer uma, inclusive desconectada. O aviso saía por um número que
+     * o operador não escolheu, ou não saía, e nos dois casos ele não tinha onde
+     * dizer qual queria.
+     */
+    channelSessionId?: string | null;
   }): Promise<DesfechoDeEnvio>;
 
   /**

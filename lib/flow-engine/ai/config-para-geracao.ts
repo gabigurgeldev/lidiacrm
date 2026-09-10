@@ -77,13 +77,17 @@ const ifConfigParaGeracao = z.strictObject({
  * forma: `destinatario` é `discriminatedUnion`, que emite `oneOf` — recusado
  * por saída estruturada.
  *
- * O segundo: a variante `{ tipo: "usuario" }` é RECUSADA PELO PRÓPRIO MOTOR.
- * `lib/flow-engine/nodes/avisos.ts` devolve
- * `{ kind: "dead", reason: "destinatario_fixo_ainda_nao_suportado" }` ao
- * executá-la. Era uma forma que a IA podia gerar e que morreria em execução —
- * o fluxo nasceria bonito na tela e falharia calado no primeiro lead. Oferecer
- * à IA só o que o motor sabe rodar é o comportamento correto, independente de
- * provedor.
+ * O segundo: as outras duas variantes pedem um dado que a IA NÃO TEM. A
+ * `{ tipo: "usuario" }` exige o identificador de uma pessoa da equipe, e a
+ * `{ tipo: "telefone" }`, um número — nenhum dos dois aparece no pedido em
+ * português que o modelo recebe, e um valor inventado vira um fluxo que nasce
+ * bonito na tela e não avisa ninguém. Quem escolhe pessoa ou número escolhe
+ * na tela, onde há lista.
+ *
+ * (Este parágrafo dizia que a variante `usuario` era RECUSADA PELO MOTOR, que
+ * devolvia `dead`. Era verdade e deixou de ser: o bloco resolve o telefone
+ * daquela pessoa por porta desde o conserto de 2026-09-10. O motivo de ela
+ * continuar fora daqui é outro, e é o de cima.)
  */
 const notifyUserConfigParaGeracao = z.strictObject({
   destinatario: z
@@ -91,6 +95,12 @@ const notifyUserConfigParaGeracao = z.strictObject({
     .default({ tipo: "dono_do_lead" })
     .describe("Sempre o dono do lead — é o único destinatário que o motor executa hoje."),
   mensagem: z.string().min(1).max(4000),
+  canal_id: z
+    .null()
+    .default(null)
+    .describe(
+      "Sempre null: a conexao por onde o aviso sai e escolhida na tela, numa lista. Um identificador inventado aqui faria o aviso ser recusado.",
+    ),
 });
 
 /**

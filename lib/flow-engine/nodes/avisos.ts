@@ -95,6 +95,15 @@ export const notifyUserConfigSchema = z.strictObject({
     ])
     .default({ tipo: "dono_do_lead" }),
   mensagem: z.string().min(1).max(4000),
+  /**
+   * Por qual conexão o aviso sai. `null` = a primeira disponível.
+   *
+   * Nullable com default, e não obrigatório, por duas razões: quem tem UM número
+   * não deveria carregar uma decisão que não tem, e todo fluxo já publicado tem
+   * config sem este campo — exigi-lo faria a `strictObject` recusar o grafo de
+   * quem já usa o bloco, e o fluxo pararia de rodar na atualização.
+   */
+  canal_id: z.string().uuid().nullable().default(null),
 });
 export type NotifyUserConfig = z.infer<typeof notifyUserConfigSchema>;
 
@@ -111,29 +120,38 @@ export const whatsappNotifyUser: FlowNodeDefinition<NotifyUserConfig> = {
     ramoPadrao("Depois de avisar"),
   ],
   execute: async (ctx, config): Promise<NodeExecutionResult> => {
-    // Destinatário por id de usuário ainda não resolve telefone: o fato do
-    // usuário nomeado não está em `ctx.fatos`, e buscar aqui dentro violaria a
-    // regra de o nó não falar com o banco. Fica declarado em vez de fingir que
-    // funciona — expor um caminho que não envia é pior que não expor. Quem quer
-    // avisar alguém que não é o dono usa `tipo: "telefone"`.
-    if (config.destinatario.tipo === "usuario") {
-      return { kind: "dead", reason: "destinatario_fixo_ainda_nao_suportado" };
-    }
-
+    // Destinatário por PESSOA: o fato daquele usuário não está em `ctx.fatos`
+    // (que carrega só o dono do lead), e o nó não lê banco — então a resposta
+    // vem por porta. Antes disto, este caminho devolvia `{ kind: "dead" }` e a
+    // execução MORRIA em silêncio: nenhum aviso, nenhuma mensagem, nada na
+    // tela. Era o pior desfecho possível num bloco cujo propósito é avisar.
     const telefone =
-      config.destinatario.tipo === "telefone"
-        ? telefoneEmE164(ctx.render(config.destinatario.telefone))
-        : (ctx.fatos.assigned_user?.notification_phone ?? null);
+      config.destinatario.tipo === "usuario"
+        ? await ctx.crm.telefoneDoUsuario({ userId: config.destinatario.user_id })
+        : config.destinatario.tipo === "telefone"
+          ? telefoneEmE164(ctx.render(config.destinatario.telefone))
+          : (ctx.fatos.assigned_user?.notification_phone ?? null);
 
     if (telefone === null || telefone.trim() === "") {
       // Ramo próprio, e não falha: telefone em branco é configuração faltando,
       // e quem monta o fluxo precisa poder desenhar o que fazer nesse caso
       // (avisar o gerente, seguir sem avisar). Falhar esconderia a escolha.
+      //
+      // Mas a saída sozinha não bastava: ela é `excecao`, então pode ficar
+      // SOLTA — e aí o caminho termina ali sem uma linha em lugar nenhum. Era
+      // exatamente o "não avisou nada e não enviou" relatado. A Central passa a
+      // registrar, sempre, que o vendedor não foi avisado.
+      await avisarQueNaoSaiu(ctx, "sem_telefone", "ninguém tem telefone de aviso cadastrado");
       return { kind: "advance", branch_id: RAMO_SEM_TELEFONE };
     }
 
     const texto = ctx.render(config.mensagem);
-    const desfecho = await ctx.canal.enviarTexto({ telefone, texto, interno: true });
+    const desfecho = await ctx.canal.enviarTexto({
+      telefone,
+      texto,
+      interno: true,
+      channelSessionId: config.canal_id ?? null,
+    });
 
     switch (desfecho.kind) {
       case "enviado":
@@ -146,16 +164,55 @@ export const whatsappNotifyUser: FlowNodeDefinition<NotifyUserConfig> = {
         // Ficou na fila do CRM (fora de janela, número parado). NÃO é sucesso e
         // NÃO é erro: o desfecho vem do ESTADO da mensagem, nunca da ausência de
         // exceção — a lição que `lib/automation/desfecho-do-envio.ts` já pagou.
+        await avisarQueNaoSaiu(ctx, "na_fila", desfecho.motivo);
         return {
           kind: "advance",
           branch_id: RAMO_NAO_SAIU,
           vars: { aviso_na_fila_por: desfecho.motivo },
         };
       case "recusado":
+        await avisarQueNaoSaiu(ctx, "recusado", desfecho.motivo);
         return { kind: "advance", branch_id: RAMO_NAO_SAIU, vars: { aviso_recusado_por: desfecho.motivo } };
     }
   },
 };
+
+/**
+ * O aviso ao vendedor não saiu — e alguém precisa ficar sabendo.
+ *
+ * ⚠️ Isto NÃO substitui as saídas de exceção do bloco: quem quiser tratar o caso
+ * no desenho continua podendo. Ele cobre o caso que era invisível — as saídas
+ * são `excecao`, a publicação não cobra ligação nelas (de propósito), e uma
+ * saída solta encerra o caminho sem registro. Um vendedor que não foi avisado
+ * some, e o fluxo termina dizendo que deu certo.
+ *
+ * A severidade é `warn` e não `critical` porque não há nada quebrado no sistema:
+ * é configuração faltando ou canal indisponível, e as duas se resolvem na tela.
+ *
+ * Nunca lança: falhar ao registrar não pode desfazer nem travar o que já
+ * aconteceu. A porta de avisos já engole o erro dela, e o `catch` aqui cobre o
+ * resto.
+ */
+async function avisarQueNaoSaiu(
+  ctx: Parameters<FlowNodeDefinition<NotifyUserConfig>["execute"]>[0],
+  motivoCurto: string,
+  detalhe: string,
+): Promise<void> {
+  const lead = ctx.fatos.lead?.title ?? "sem lead";
+  try {
+    await ctx.avisos.abrir({
+      titulo: "O aviso ao vendedor não saiu",
+      corpo:
+        `O bloco "${ctx.nodeId}" de um fluxo tentou avisar a equipe sobre "${lead}" e não ` +
+        `conseguiu (${motivoCurto}: ${detalhe}). O vendedor NÃO foi avisado. ` +
+        "Confira o telefone de aviso em Equipe › Atendimento e a conexão escolhida no bloco.",
+      severidade: "warn",
+      refId: ctx.executionId,
+    });
+  } catch {
+    // Registrar é secundário ao fluxo seguir. Ver o cabeçalho.
+  }
+}
 
 // ─────────────────────────── notify.internal ─────────────────────────────────
 

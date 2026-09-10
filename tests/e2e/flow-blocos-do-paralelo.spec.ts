@@ -201,3 +201,42 @@ test.describe("dividir os caminhos, no construtor", () => {
     await expect(page.getByText(/sa[ií]da/i).first()).toBeVisible({ timeout: 15_000 });
   });
 });
+
+test.describe("avisar o vendedor, no construtor", () => {
+  /**
+   * Os três defeitos deste bloco eram MUDOS, e dois deles só se veem pela tela:
+   * não havia onde escolher a conexão, e o destinatário por pessoa nem aparecia
+   * no menu (a variante existia no schema e matava a execução).
+   *
+   * Fica nesta spec, e não numa própria, pelo mesmo motivo do bloco de divisão:
+   * spec nova exigiria mexer nas `SPECS_PARTE_*` do `.github/workflows/e2e.yml`.
+   */
+  test("dá para escolher por qual número o aviso sai, e avisar uma pessoa da equipe", async ({
+    page,
+  }) => {
+    await loginComoAdmin(page, lerCreds());
+    await abrirEditorDeFluxoNovo(page, "E2E aviso ao vendedor");
+
+    await page.getByTestId("paleta-whatsapp.notify_user").click();
+    await expect(page.getByTestId("painel-do-no")).toBeVisible();
+
+    // 1. A escolha da conexão existe. Antes disto o aviso saía sempre pela
+    //    conexão mais antiga da organização, sem nada na tela dizendo qual.
+    await expect(
+      page.getByText(/Por onde enviar/i),
+      "o bloco de aviso precisa deixar escolher a conexão, como os outros de envio",
+    ).toBeVisible();
+
+    // 2. As TRÊS opções de destinatário estão no menu. É aqui que o browser de
+    //    verdade paga o que o jsdom não consegue: o Select é Radix e não abre lá.
+    await page.getByTestId("campo-destinatario-do-aviso").click();
+    await expect(page.getByRole("option", { name: /quem está com o lead/i })).toBeVisible();
+    await expect(page.getByRole("option", { name: /pessoa da equipe/i })).toBeVisible();
+    await expect(page.getByRole("option", { name: /número fixo/i })).toBeVisible();
+
+    // 3. Escolher a pessoa abre o campo de quem recebe — a opção que antes
+    //    existia só no schema, e que matava a execução ao rodar.
+    await page.getByRole("option", { name: /pessoa da equipe/i }).click();
+    await expect(page.getByText(/Quem da equipe recebe o aviso/i)).toBeVisible();
+  });
+});

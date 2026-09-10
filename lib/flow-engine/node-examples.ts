@@ -89,6 +89,10 @@ export function configExemploDoTipo(tipo: string): Record<string, unknown> {
       return {
         destinatario: { tipo: "dono_do_lead" },
         mensagem: "Novo lead: {{lead.title}}",
+        // `null` = a primeira conexão disponível. Nasce assim porque quem tem
+        // UM número não deveria carregar uma decisão que não tem — e um id de
+        // queda apontaria para a conexão de outra pessoa.
+        canal_id: null,
       };
     case "trigger.message_received":
       return {};

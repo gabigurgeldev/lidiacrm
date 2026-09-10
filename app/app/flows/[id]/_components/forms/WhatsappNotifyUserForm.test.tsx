@@ -5,9 +5,12 @@
  *
  * Ele é o único da leva migrada que grava um campo que a pessoa NÃO vê: junto
  * da mensagem, ele sempre regrava `destinatario: { tipo: "dono_do_lead" }`.
- * O motor recusa a config sem esse campo, e o bloco tem uma segunda opção de
- * destinatário que ainda não existe (`destinatario_fixo_ainda_nao_suportado`,
- * em `lib/flow-engine/nodes/avisos.ts`).
+ * O motor recusa a config sem esse campo.
+ *
+ * (Este parágrafo dizia que o bloco tinha "uma segunda opção de destinatário que
+ * ainda não existe", citando `destinatario_fixo_ainda_nao_suportado`. Era
+ * verdade e deixou de ser: as TRÊS opções funcionam desde 2026-09-10, e a que
+ * devolvia `dead` era justamente a que matava a execução em silêncio.)
  *
  * Numa migração de dezesseis formulários entre arquivos, o campo invisível é
  * exatamente o que se perde sem ninguém notar: a tela continua idêntica, o
@@ -17,17 +20,31 @@
  * Cobre também os primitivos compartilhados (`Secao`/`Campo`/`Dica`), que agora
  * servem os dezesseis formulários: um erro neles quebra todos de uma vez.
  */
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { notifyUserConfigSchema } from "@/lib/flow-engine/nodes/avisos";
 
 import { WhatsappNotifyUserForm } from "./WhatsappNotifyUserForm";
 
+// O formulário passou a ler duas listas do servidor — a equipe (para avisar uma
+// PESSOA) e as conexões (para escolher por qual número o aviso sai). As duas
+// entram por react-query, então o teste precisa do provider; sem ele o render
+// morre com "No QueryClient set", que não é defeito do formulário.
+vi.mock("@/lib/api/client", () => ({ apiClient: { get: vi.fn(async () => ({ data: [] })) } }));
+
 function montar(config: Record<string, unknown> = {}) {
   const aoMudarConfig = vi.fn();
-  render(<WhatsappNotifyUserForm config={config} aoMudarConfig={aoMudarConfig} />);
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const Wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  );
+  render(<WhatsappNotifyUserForm config={config} aoMudarConfig={aoMudarConfig} />, {
+    wrapper: Wrapper,
+  });
   return { aoMudarConfig };
 }
 
@@ -85,5 +102,32 @@ describe("o formulário do aviso ao vendedor", () => {
     // A saída "Sem telefone cadastrado" existe no motor; se a tela não a
     // menciona, quem monta descobre o ramo pendurado só ao ver o quadro.
     expect(screen.getByText(/Sem telefone cadastrado/i)).toBeInTheDocument();
+  });
+
+  it("⭐ tem onde escolher POR QUAL número o aviso sai", () => {
+    // O defeito que este caso barra: o bloco mandava sempre pela conexão mais
+    // antiga da organização, e não havia campo nenhum para escolher outra.
+    montar({ mensagem: "Oi" });
+    expect(screen.getByText(/Por onde enviar/i)).toBeInTheDocument();
+  });
+
+  it("⭐ com destinatário por PESSOA, a tela mostra onde escolher quem", () => {
+    // A opção existia no schema e matava a execução; a tela nem a mostrava.
+    //
+    // Mede o EFEITO de escolher, e não o clique no menu: o Select do design
+    // system é Radix, que não abre em jsdom (depende de pointer capture). Quem
+    // prova que a opção está no menu e é clicável é o e2e, em browser de
+    // verdade — `tests/e2e/flow-blocos-do-paralelo.spec.ts`.
+    montar({ mensagem: "Oi", destinatario: { tipo: "usuario", user_id: "u1" } });
+    expect(screen.getByText(/Quem da equipe recebe o aviso/i)).toBeInTheDocument();
+    // E o campo de número fixo NÃO aparece junto: são destinatários exclusivos.
+    expect(screen.queryByTestId("campo-telefone-do-aviso")).not.toBeInTheDocument();
+  });
+
+  it("com a equipe vazia, DIZ o que fazer em vez de mostrar uma caixa vazia", () => {
+    // `apiClient.get` devolve lista vazia neste teste — que é o estado de uma
+    // instalação recém-criada, e o pior momento para a tela ficar muda.
+    montar({ mensagem: "Oi", destinatario: { tipo: "usuario", user_id: "" } });
+    expect(screen.getByTestId("sem-equipe-para-avisar")).toBeInTheDocument();
   });
 });

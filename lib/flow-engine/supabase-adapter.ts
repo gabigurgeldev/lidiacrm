@@ -586,6 +586,14 @@ export function criarPortas(
       async devolverAoAgente({ contactId }) {
         return devolverAoAgenteDoFluxo(admin, orgId, { contactId, exec });
       },
+
+      async telefoneDoUsuario({ userId }) {
+        // Reusa `carregarDono`: ela já sabe que o telefone de aviso mora em
+        // `attendant_availability.notification_phone`, e uma segunda consulta
+        // com a mesma pergunta é como as duas divergem no primeiro conserto.
+        const pessoa = await carregarDono(admin, orgId, userId);
+        return pessoa?.notification_phone ?? null;
+      },
     },
 
     roteamento: {
@@ -609,8 +617,14 @@ export function criarPortas(
     },
 
     canal: {
-      async enviarTexto({ telefone, texto, interno }) {
-        return enviarTextoParaTelefone(admin, orgId, { telefone, texto, interno, exec });
+      async enviarTexto({ telefone, texto, interno, channelSessionId }) {
+        return enviarTextoParaTelefone(admin, orgId, {
+          telefone,
+          texto,
+          interno,
+          channelSessionId: channelSessionId ?? null,
+          exec,
+        });
       },
 
       async enviarParaContato({ contactId, tipo, texto, mediaUrl, channelSessionId }) {
@@ -972,9 +986,30 @@ async function enviarParaContatoDoFunil(
 async function enviarTextoParaTelefone(
   admin: SupabaseClient,
   orgId: string,
-  input: { telefone: string; texto: string; interno: boolean; exec: FlowExecutionRow },
+  input: {
+    telefone: string;
+    texto: string;
+    interno: boolean;
+    channelSessionId: string | null;
+    exec: FlowExecutionRow;
+  },
 ): Promise<DesfechoDeEnvio> {
-  const sessionId = await sessaoProntaParaEnvio(admin, orgId);
+  // A conexão escolhida precisa ser DESTA organização — mesma conferência de
+  // `enviarParaContatoDoFunil`, e pelo mesmo motivo: o cliente admin passa por
+  // cima da RLS, então um id copiado para o config de um fluxo mandaria o aviso
+  // pelo número de outro cliente.
+  let sessionId = input.channelSessionId;
+  if (sessionId !== null) {
+    const { data } = await admin
+      .from("channel_sessions")
+      .select("id")
+      .eq("id", sessionId)
+      .eq("organization_id", orgId)
+      .maybeSingle();
+    if (data === null) return { kind: "recusado", motivo: "conexao_nao_encontrada" };
+  } else {
+    sessionId = await sessaoProntaParaEnvio(admin, orgId);
+  }
   if (sessionId === null) return { kind: "recusado", motivo: "sem_conexao_de_whatsapp" };
 
   let contactId: string;

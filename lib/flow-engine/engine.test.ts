@@ -110,7 +110,15 @@ describe("a fatia vertical, ponta a ponta", () => {
 
     // Avisou no telefone do vendedor, com as variáveis resolvidas.
     expect(mundo.enviados).toEqual([
-      { telefone: "+5563999112061", texto: "Novo lead: Loja do Gabriel — score 82" },
+      {
+        telefone: "+5563999112061",
+        texto: "Novo lead: Loja do Gabriel — score 82",
+        // `null` = a primeira conexão disponível, que é o que este fluxo pede.
+        // O campo entra na asserção de propósito: por qual número o aviso sai
+        // passou a ser escolha do bloco, e uma asserção que o ignorasse deixaria
+        // de acusar o dia em que a escolha parar de chegar ao envio.
+        channelSessionId: null,
+      },
     ]);
 
     // Parou no nó de espera, com relógio para daqui a 5 minutos.
