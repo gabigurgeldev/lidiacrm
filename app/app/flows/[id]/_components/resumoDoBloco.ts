@@ -208,6 +208,19 @@ export function resumoDoBloco(
         valores: { n: String(nomes.length), nomes: encurtar(nomes.join(", ")) },
       };
     }
+    case "logic.split": {
+      const nomes = rotulos(lista(config, "caminhos"));
+      if (nomes.length === 0) return { chave: "Sem caminho escrito" };
+      // O MODO entra no cartão porque é a única coisa que distingue dois
+      // blocos de divisão com as mesmas saídas — e é o que a pessoa esquece.
+      const chave =
+        config["modo"] === "aleatorio"
+          ? "Sorteia entre {n}: {nomes}"
+          : config["modo"] === "igualitario"
+            ? "Divide igualando entre {n}: {nomes}"
+            : "Divide em fila entre {n}: {nomes}";
+      return { chave, valores: { n: String(nomes.length), nomes: encurtar(nomes.join(", ")) } };
+    }
     case "logic.loop": {
       const de = texto(config, "lista");
       const max = numero(config, "max");

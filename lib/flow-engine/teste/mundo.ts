@@ -13,6 +13,7 @@
  * contra um Postgres real.
  */
 
+import { escolherPorPlacar } from "../divisao";
 import { garantirNosRegistrados } from "../register-all";
 import type {
   FlowAdminClient,
@@ -40,6 +41,12 @@ export interface Mundo {
   disparosPedidos: Array<Record<string, unknown>>;
   /** A vez de cada fila indiana, por bloco — o que a tabela guarda de verdade. */
   cursoresDaFila: Map<string, number>;
+  /** A vez de cada bloco `logic.split` em modo fila. Mesma natureza do de cima. */
+  cursoresDaDivisao: Map<string, number>;
+  /** Quantas vezes cada caminho de cada `logic.split` já saiu: chave `${nodeId}::${ramo}`. */
+  placarDaDivisao: Map<string, number>;
+  /** Quando true, as portas de divisão falham — para provar que o bloco segue mesmo assim. */
+  divisaoIndisponivel: boolean;
   /** Conversas devolvidas ao agente de IA. */
   devolvidasAoAgente: string[];
   /** Quando true, a porta de devolução recusa (contato sem conversa). */
@@ -104,6 +111,9 @@ export function mundoNovo(): Mundo {
     enviados: [],
     disparosPedidos: [],
     cursoresDaFila: new Map(),
+    cursoresDaDivisao: new Map(),
+    placarDaDivisao: new Map(),
+    divisaoIndisponivel: false,
     devolvidasAoAgente: [],
     semConversaParaAgente: false,
     desfechoDoDisparo: { kind: "criado", disparoId: "disparo-1", vaoReceber: 3, comecou: false },
@@ -372,6 +382,33 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
           }
         }
         return { userId: null, avancou: cursor };
+      },
+    },
+    divisao: {
+      // Cursor e placar de VERDADE, pelo mesmo motivo do falso acima: um que
+      // devolvesse sempre 0 (ou sempre o primeiro ramo) faria os três modos
+      // passarem no teste mandando tudo pelo mesmo caminho — que é exatamente
+      // o defeito que a tabela existe para evitar.
+      proximoDaFila: async ({ nodeId, tamanho }) => {
+        if (mundo.divisaoIndisponivel) return 0;
+        const cursor = mundo.cursoresDaDivisao.get(nodeId) ?? 0;
+        mundo.cursoresDaDivisao.set(nodeId, (cursor + 1) % Math.max(1, tamanho));
+        return cursor;
+      },
+      proximoPorPlacar: async ({ nodeId, ramos }) => {
+        if (mundo.divisaoIndisponivel) return null;
+        // Chama `escolherPorPlacar` em vez de repetir a regra aqui. Uma segunda
+        // cópia passaria a valer sozinha: sabotar a original deixaria o teste
+        // do bloco VERDE, e é exatamente esse teste que deveria acusar.
+        const placar: Record<string, number> = {};
+        for (const ramo of ramos) {
+          placar[ramo] = mundo.placarDaDivisao.get(`${nodeId}::${ramo}`) ?? 0;
+        }
+        const escolhido = escolherPorPlacar(ramos, placar);
+        if (escolhido !== null) {
+          mundo.placarDaDivisao.set(`${nodeId}::${escolhido}`, (placar[escolhido] ?? 0) + 1);
+        }
+        return escolhido;
       },
     },
     canal: {

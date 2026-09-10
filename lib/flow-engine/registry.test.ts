@@ -139,7 +139,10 @@ describe("todo nó registrado", () => {
       // bifurca pelos ramos declarados em `config.ramos`. Handle que não faz
       // nada é pior que handle ausente: o desenho promete um caminho que o
       // motor não percorre, e nada acusa.
-      if (no.type === "logic.fork") continue;
+      // `logic.split` sai pelo mesmo argumento: o `execute` só escolhe entre
+      // os caminhos declarados em `config.caminhos`, então um pega-tudo ali
+      // seria um handle que a pessoa liga e que nenhum modo alcança.
+      if (no.type === "logic.fork" || no.type === "logic.split") continue;
       const ultimo = ramos[ramos.length - 1]!;
       expect(ultimo.id, `${no.type}: último ramo`).toBe("else");
       expect(ultimo.kind, `${no.type}: o último é o pega-tudo`).toBe("fallback");
@@ -214,6 +217,11 @@ function exemploDeConfig(type: string): unknown {
         ramos: [{ id: "a", label: "A" }, { id: "b", label: "B" }],
         modo: "todas",
         encontro: "junta",
+      };
+    case "logic.split":
+      return {
+        modo: "fila",
+        caminhos: [{ id: "a", label: "A" }, { id: "b", label: "B" }],
       };
     case "logic.merge":
       return {};

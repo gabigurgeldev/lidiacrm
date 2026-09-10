@@ -598,6 +598,16 @@ export function criarPortas(
       },
     },
 
+    divisao: {
+      async proximoDaFila({ nodeId, tamanho }) {
+        return proximoDaFilaDaDivisao(admin, orgId, { exec, nodeId, tamanho });
+      },
+
+      async proximoPorPlacar({ nodeId, ramos }) {
+        return caminhoMenosUsado(admin, orgId, { exec, nodeId, ramos });
+      },
+    },
+
     canal: {
       async enviarTexto({ telefone, texto, interno }) {
         return enviarTextoParaTelefone(admin, orgId, { telefone, texto, interno, exec });
@@ -672,6 +682,67 @@ async function proximoDaFilaFixaNoBanco(
 
   const escolha = selectFixedOrder(input.ordem, elegiveis, cursor);
   return { userId: escolha.userId, avancou: cursor };
+}
+
+// ─────────────── a vez e o placar do "Dividir os caminhos" ───────────────────
+
+/**
+ * A posição da vez na fila deste bloco de divisão.
+ *
+ * Reusa `fn_flow_routing_next_in_order` — a MESMA RPC da fila indiana de
+ * vendedores. O que ela guarda é "em que índice de uma lista de tamanho N este
+ * bloco parou", e isso não sabe nem precisa saber se a lista é de gente ou de
+ * arestas. Uma segunda tabela de cursor, idêntica e com outro nome, seria a
+ * duplicação que a doutrina DIRC manda recusar.
+ *
+ * Se a RPC falhar, devolve 0: a divisão sai levemente torta e a execução SEGUE.
+ */
+async function proximoDaFilaDaDivisao(
+  admin: SupabaseClient,
+  orgId: string,
+  input: { exec: FlowExecutionRow; nodeId: string; tamanho: number },
+): Promise<number> {
+  const { data, error } = await admin.rpc("fn_flow_routing_next_in_order", {
+    p_organization_id: orgId,
+    p_flow_id: input.exec.flow_id,
+    p_node_id: input.nodeId,
+    p_tamanho: input.tamanho,
+  });
+  if (error !== null || typeof data !== "number") {
+    logger.warn("[flow.divisao] cursor indisponivel, seguindo pelo primeiro caminho", {
+      erro: error?.message ?? "resposta inesperada",
+    });
+    return 0;
+  }
+  return data;
+}
+
+/**
+ * O caminho que está ATRÁS no placar — e o uso já contado.
+ *
+ * Escolher lendo daqui e gravando depois seria corrida: duas execuções no mesmo
+ * tique leriam o mesmo placar e mandariam as DUAS pelo mesmo caminho, que é o
+ * oposto do que "igualitário" promete, e o desvio aparece exatamente sob carga.
+ * A RPC resolve numa transação só, sob lock consultivo por bloco.
+ */
+async function caminhoMenosUsado(
+  admin: SupabaseClient,
+  orgId: string,
+  input: { exec: FlowExecutionRow; nodeId: string; ramos: readonly string[] },
+): Promise<string | null> {
+  const { data, error } = await admin.rpc("fn_flow_split_least_used", {
+    p_organization_id: orgId,
+    p_flow_id: input.exec.flow_id,
+    p_node_id: input.nodeId,
+    p_ramos: [...input.ramos],
+  });
+  if (error !== null || typeof data !== "string") {
+    logger.warn("[flow.divisao] placar indisponivel, seguindo pelo primeiro caminho", {
+      erro: error?.message ?? "resposta inesperada",
+    });
+    return null;
+  }
+  return data;
 }
 
 // ──────────────────── devolver o atendimento à IA ────────────────────────────

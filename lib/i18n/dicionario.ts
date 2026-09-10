@@ -6561,6 +6561,28 @@ export const DICIONARIO: Traducoes = {
   "Nome deste caminho": { es: "Nombre de este camino" },
   "Remover este caminho": { es: "Quitar este camino" },
   "Acrescentar caminho": { es: "Agregar camino" },
+  // bloco "Dividir os caminhos" (logic.split): rotulo/descricao do registry,
+  // formulario e as frases do cartao no quadro.
+  "Dividir os caminhos": { es: "Dividir los caminos" },
+  "Reparte as execuções entre as saídas: por sorteio, equilibrando ou em fila, na ordem.":
+    { es: "Reparte las ejecuciones entre las salidas: por sorteo, equilibrando o en fila, en orden." },
+  "Como dividir": { es: "Cómo dividir" },
+  "Modo de distribuição": { es: "Modo de reparto" },
+  "Em fila, na ordem": { es: "En fila, en orden" },
+  "Igualando o total de cada caminho": { es: "Igualando el total de cada camino" },
+  "Sorteando": { es: "Sorteando" },
+  "Gira na ordem dos caminhos abaixo: um, o outro, e volta ao primeiro. Não olha o passado — só a ordem.":
+    { es: "Gira en el orden de los caminos de abajo: uno, el otro, y vuelve al primero. No mira el pasado — solo el orden." },
+  "Olha quantas vezes cada caminho já saiu e manda para o que está atrás. Caminho acrescentado depois recebe mais até empatar.":
+    { es: "Mira cuántas veces salió cada camino y manda al que está atrás. Un camino agregado después recibe más hasta empatar." },
+  "Sorteio puro. Pode cair no mesmo caminho várias vezes seguidas — isso é o sorteio funcionando, não defeito.":
+    { es: "Sorteo puro. Puede caer en el mismo camino varias veces seguidas — eso es el sorteo funcionando, no un defecto." },
+  "Cada caminho vira uma saída do bloco, e toda saída precisa ir a algum lugar.":
+    { es: "Cada camino se vuelve una salida del bloque, y toda salida tiene que ir a algún lado." },
+  "Sem caminho escrito": { es: "Sin camino escrito" },
+  "Sorteia entre {n}: {nomes}": { es: "Sortea entre {n}: {nomes}" },
+  "Divide igualando entre {n}: {nomes}": { es: "Divide igualando entre {n}: {nomes}" },
+  "Divide em fila entre {n}: {nomes}": { es: "Divide en fila entre {n}: {nomes}" },
   "Aparece na tela de Execuções, para você separar o que deu certo do que não deu.":
     { es: "Aparece en la pantalla de Ejecuciones, para separar lo que salió bien de lo que no." },
   "Marcador": { es: "Etiqueta" },

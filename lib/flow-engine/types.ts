@@ -425,6 +425,37 @@ export interface PortaDeDisparo {
 }
 
 
+/**
+ * O estado que o bloco "Dividir os caminhos" (`logic.split`) precisa lembrar
+ * ENTRE execuções.
+ *
+ * Porta própria, e não um método a mais em `PortaDeRoteamento`, porque a
+ * pergunta é outra: aquela escolhe PESSOA (quem atende o lead), esta escolhe
+ * ARESTA (por onde a execução segue). Juntar as duas faria um bloco de decisão
+ * depender da porta que fala de disponibilidade, capacidade e horário de
+ * atendimento — nada do que ele usa.
+ *
+ * As duas leituras vivem no banco pelo mesmo motivo da fila indiana
+ * (`flow_routing_cursors`, migration 0211): cada lead abre uma execução nova, e
+ * um contador por execução nasceria zerado toda vez — a divisão mandaria tudo
+ * pelo primeiro caminho, sem erro nenhum.
+ */
+export interface PortaDeDivisao {
+  /**
+   * Avança a fila deste bloco e devolve a posição da VEZ (a anterior ao
+   * avanço). Atômico: ler e gravar em duas idas faria dois leads no mesmo tique
+   * receberem a mesma posição.
+   */
+  proximoDaFila(input: { nodeId: string; tamanho: number }): Promise<number>;
+
+  /**
+   * Escolhe o ramo com MENOS usos entre `ramos`, e já conta o uso. `null` só
+   * quando o banco não respondeu — quem chama decide o que fazer, e o bloco
+   * segue pelo primeiro caminho em vez de segurar a execução.
+   */
+  proximoPorPlacar(input: { nodeId: string; ramos: readonly string[] }): Promise<string | null>;
+}
+
 export type SeveridadeDoAviso = "info" | "warn" | "critical";
 
 export interface PortaDeAvisos {
@@ -459,6 +490,7 @@ export interface FlowExecutionContext {
   esperaEmCurso: EsperaEmCurso | null;
   crm: PortaDoCrm;
   roteamento: PortaDeRoteamento;
+  divisao: PortaDeDivisao;
   canal: PortaDeCanal;
   disparo: PortaDeDisparo;
   avisos: PortaDeAvisos;
