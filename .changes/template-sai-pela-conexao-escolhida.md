@@ -13,9 +13,8 @@ O efeito era um pedido para um endereço sem número, com autorização vazia �
 plataforma recusava, e a mensagem de erro falava do template. O problema estava
 na credencial.
 
-E o sintoma enganava mais que o normal: **pelo mesmo número, texto ia e modelo
-não**. Nada na tela ligava uma coisa à outra, porque os dois pareciam o mesmo
-canal.
+E o sintoma enganava mais que o normal: **pelo mesmo número, texto ia e modelo não**.
+Nada na tela ligava uma coisa à outra, porque os dois pareciam o mesmo canal.
 
 Agora o modelo sai pela credencial **da conexão escolhida**, com o ambiente
 apenas como reserva — exatamente a regra que o envio de texto já seguia. E
