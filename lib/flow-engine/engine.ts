@@ -25,6 +25,7 @@ import {
 import { analisarGrafo, arestaDoRamo, flowGraphSchema, noPorId } from "./graph-schema";
 import { exigirNo } from "./registry";
 import { ehDesfechoEsperado } from "./desfecho-esperado";
+import { diagnosticoDasVars } from "./diagnostico-do-passo";
 import { interpolar } from "./variaveis";
 import type {
   EscopoDeVariaveis,
@@ -580,7 +581,22 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
         execution_id: execucao.id,
         node_id: nodeId,
         event_type: "no_avancou",
-        payload: { ramo: resultado.branch_id, proximo: aresta?.target ?? null },
+        payload: {
+          ramo: resultado.branch_id,
+          proximo: aresta?.target ?? null,
+          // ⚠️ O MOTIVO DA RECUSA VEM JUNTO — e uma LISTA, nunca `vars` inteiro.
+          //
+          // O bloco de envio não mata a execução quando a mensagem não sai: ele
+          // segue pela saída "Não saiu agora" e grava o porquê em `vars`. Sem
+          // esta linha o motivo morria ali, a execução aparecia concluída, e não
+          // havia UMA LINHA em lugar nenhum dizendo por que nada chegou ao
+          // cliente. Custou três rodadas de conserto às cegas.
+          //
+          // A lista é curta de propósito: `flow_execution_events.payload` NÃO é
+          // limpo pela cascata da LGPD (a 0208 para nas execuções e nas frentes),
+          // então só entra aqui diagnóstico que o próprio sistema escreveu.
+          ...diagnosticoDasVars(resultado.vars),
+        },
         // A chave inclui o número do passo E a frente: o MESMO nó pode ser
         // visitado de novo (a redistribuição volta ao rodízio, o laço repete o
         // corpo), e duas frentes irmãs podem pisar no mesmo nó no mesmo passo.

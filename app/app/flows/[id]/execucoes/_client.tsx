@@ -19,6 +19,7 @@ import {
 } from "@/hooks/flows/useFlowExecutionTrail";
 import { NOME_DO_ESTADO } from "@/app/app/flows/execucoes/_client";
 import { diagnosticoDoMotivo, ehDesfechoEsperado } from "@/lib/flow-engine/desfecho-esperado";
+import { diagnosticosDoPayload } from "@/lib/flow-engine/diagnostico-do-passo";
 
 /**
  * As execuções de UM fluxo, ao vivo.
@@ -162,18 +163,35 @@ function Trilha({ execucaoId }: { execucaoId: string }) {
     <ol className="mt-3 flex flex-col gap-1 border-t pt-3" data-testid={`trilha-${execucaoId}`}>
       {passos.map((p, i) => {
         const seg = segundosDesdeOPassoAnterior(passos, i);
+        // ⚠️ O MOTIVO DA RECUSA, se houver. Um bloco de envio que falha NÃO mata
+        // a execução — ele segue pela saída "Não saiu agora". Sem esta linha, o
+        // passo aparecia como qualquer outro e o porquê não existia em tela
+        // nenhuma: o envio falhava, a execução ficava "concluída", e não havia o
+        // que reportar. É o que transforma "não funcionou" em um erro nomeado.
+        const diagnosticos = diagnosticosDoPayload(p.payload);
         return (
-          <li key={p.id} className="flex items-baseline justify-between gap-3 text-xs">
-            <span className="min-w-0 truncate">
-              <span className="font-medium">{t(NOME_DO_PASSO[p.event_type] ?? p.event_type)}</span>
-              {p.node_id !== null && (
-                <span className="ml-2 font-mono text-muted-foreground">{p.node_id}</span>
-              )}
-            </span>
-            <span className="shrink-0 text-muted-foreground">
-              {new Date(p.created_at).toLocaleTimeString(tag)}
-              {seg !== null && ` · +${seg}s`}
-            </span>
+          <li key={p.id} className="text-xs">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="min-w-0 truncate">
+                <span className="font-medium">{t(NOME_DO_PASSO[p.event_type] ?? p.event_type)}</span>
+                {p.node_id !== null && (
+                  <span className="ml-2 font-mono text-muted-foreground">{p.node_id}</span>
+                )}
+              </span>
+              <span className="shrink-0 text-muted-foreground">
+                {new Date(p.created_at).toLocaleTimeString(tag)}
+                {seg !== null && ` · +${seg}s`}
+              </span>
+            </div>
+            {diagnosticos.map((d) => (
+              <p
+                key={d.chave}
+                className="mt-0.5 break-words text-error-fg"
+                data-testid={`diagnostico-${p.id}-${d.chave}`}
+              >
+                {t(d.rotulo)}: <span className="font-mono">{d.motivo}</span>
+              </p>
+            ))}
           </li>
         );
       })}

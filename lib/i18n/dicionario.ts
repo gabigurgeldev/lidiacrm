@@ -7249,6 +7249,14 @@ export const DICIONARIO: Traducoes = {
   // ─── Execuções: o desfecho que não é erro ───
   "Não era para este fluxo": { es: "No era para este flujo" },
   "A mensagem não era para este fluxo.": { es: "El mensaje no era para este flujo." },
+
+  // ─── Trilha da execução: por que não saiu ───
+  "A mensagem não saiu": { es: "El mensaje no salió" },
+  "A mensagem ficou na fila do canal": { es: "El mensaje quedó en la cola del canal" },
+  "O aviso ao vendedor não saiu": { es: "El aviso al vendedor no salió" },
+  "O aviso ficou na fila do canal": { es: "El aviso quedó en la cola del canal" },
+  "A campanha não foi criada": { es: "La campaña no fue creada" },
+  "A entrega ao agente falhou": { es: "La entrega al agente falló" },
 };
 
 /**
