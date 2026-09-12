@@ -21,6 +21,7 @@ import {
 } from "./nodes/crm-e-roteamento";
 import { crmHandoffToAgent, routingFixedOrder, routingRandom } from "./nodes/distribuicao";
 import { logicSplit } from "./nodes/divisao-de-caminho";
+import { logicHorarioDeFuncionamento } from "./nodes/horario-de-funcionamento";
 import { whatsappDisparoEmMassa } from "./nodes/disparo-em-massa";
 import { whatsappEnviarAoCliente } from "./nodes/enviar-ao-cliente";
 import {
@@ -57,6 +58,7 @@ export function garantirNosRegistrados(): void {
   registrarNo(logicLoop);
   registrarNo(logicAwaitEvent);
   registrarNo(logicSplit);
+  registrarNo(logicHorarioDeFuncionamento);
   registrarNo(logicChoiceMenu);
   registrarNo(flowCall);
   registrarNo(crmAddTag);

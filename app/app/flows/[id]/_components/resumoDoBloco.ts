@@ -143,6 +143,24 @@ export const PRAZO_POR_UNIDADE: Record<UnidadeDeTempo, string> = {
 };
 
 /**
+ * O expediente, ESCRITO UMA FRASE A UMA — mesmo motivo dos dois mapas acima.
+ *
+ * E a lista de dias NÃO atravessa como valor: `{dias}` receberia "Seg a Sex"
+ * montado aqui, em português, e ele sairia cru no meio de uma tela em espanhol
+ * — o `{n}` de `logic.wait` pode atravessar porque número não se traduz. Daí as
+ * três formas: as duas que valem a esmagadora maioria dos casos viram frase
+ * própria, e o resto cai na contagem.
+ */
+export const EXPEDIENTE_POR_FORMA: Record<string, string> = {
+  semana_desviar: "Seg a Sex, das {inicio} às {fim}",
+  semana_esperar: "Seg a Sex, das {inicio} às {fim} · segura até abrir",
+  todo_dia_desviar: "Todo dia, das {inicio} às {fim}",
+  todo_dia_esperar: "Todo dia, das {inicio} às {fim} · segura até abrir",
+  outros_desviar: "{n} dias por semana, das {inicio} às {fim}",
+  outros_esperar: "{n} dias por semana, das {inicio} às {fim} · segura até abrir",
+};
+
+/**
  * O UUID que os exemplos usam para dizer "ainda não escolhido".
  *
  * Três blocos nascem com ele de propósito (`node-examples.ts`), para não
@@ -177,6 +195,26 @@ export function resumoDoBloco(
     }
 
     // ── lógica ──
+    case "logic.business_hours": {
+      const inicio = texto(config, "inicio");
+      const fim = texto(config, "fim");
+      if (inicio === null || fim === null) return null;
+      const dias = lista(config, "dias").filter((d): d is number => typeof d === "number");
+      if (dias.length === 0) return null;
+      const seguraAteAbrir = config["fora_do_horario"] === "esperar";
+      const sufixo = seguraAteAbrir ? "_esperar" : "_desviar";
+      const semana = [1, 2, 3, 4, 5];
+      const forma =
+        dias.length === 7
+          ? "todo_dia"
+          : dias.length === 5 && semana.every((d) => dias.includes(d))
+            ? "semana"
+            : "outros";
+      return {
+        chave: EXPEDIENTE_POR_FORMA[`${forma}${sufixo}`] as string,
+        valores: { inicio, fim, n: String(dias.length) },
+      };
+    }
     case "logic.wait": {
       const ms = numero(config, "duracao_ms");
       if (ms === null) return null;
