@@ -11,12 +11,18 @@
  *      comparado como texto faz "9" ser maior que "10";
  *   3. o operador aparece em português na tela, mas viaja como identificador.
  */
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { LogicIfForm } from "./LogicIfForm";
+
+// O campo da regra passou a oferecer o seletor de variáveis, e ele lê os campos
+// declarativos dos funis por react-query. Sem o provider o render morre com
+// "No QueryClient set", que não é defeito deste formulário.
+vi.mock("@/lib/api/client", () => ({ apiClient: { get: vi.fn(async () => ({ data: [] })) } }));
 
 interface Saida {
   id: string;
@@ -53,7 +59,11 @@ function montar(inicial: Record<string, unknown>) {
       />
     );
   }
-  render(<Harness />);
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const Wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  );
+  render(<Harness />, { wrapper: Wrapper });
   return { aoMudarConfig: espiao };
 }
 

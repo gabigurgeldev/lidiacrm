@@ -1,6 +1,5 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -8,10 +7,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 import { TIPOS_DE_MENSAGEM_DO_FLUXO } from "@/lib/flow-engine/types";
 
+import { CampoComVariavel } from "./CampoComVariavel";
 import { SeletorDeCanal } from "./SeletorDeCanal";
 import { Campo, Dica, Secao, type PropsDoFormulario } from "./shared";
 
@@ -71,12 +70,12 @@ export function WhatsappSendToLeadForm({ config, aoMudarConfig }: PropsDoFormula
 
         {!ehTexto && (
           <Campo rotulo={t(ROTULO_DA_MIDIA[tipo] ?? "Endereço do arquivo")}>
-            <Input
-              value={String(config.media_url ?? "")}
+            <CampoComVariavel
+              valor={String(config.media_url ?? "")}
               maxLength={2000}
               placeholder="https://"
-              onChange={(e) => mudar({ media_url: e.target.value })}
-              data-testid="campo-endereco-da-midia"
+              aoMudar={(v) => mudar({ media_url: v })}
+              testid="campo-endereco-da-midia"
             />
             <Dica
               texto={t(
@@ -87,17 +86,13 @@ export function WhatsappSendToLeadForm({ config, aoMudarConfig }: PropsDoFormula
         )}
 
         <Campo rotulo={ehTexto ? t("Mensagem") : t("Legenda (opcional)")}>
-          <Textarea
-            rows={ehTexto ? 6 : 3}
+          <CampoComVariavel
+            multilinha
+            linhas={ehTexto ? 6 : 3}
             maxLength={4000}
-            value={String(config.texto ?? "")}
-            onChange={(e) => mudar({ texto: e.target.value })}
-            data-testid="campo-texto-ao-cliente"
-          />
-          <Dica
-            texto={t(
-              "Use {{lead.title}}, {{contact.name}} e {{lead.score}} para incluir os dados do lead.",
-            )}
+            valor={String(config.texto ?? "")}
+            aoMudar={(v) => mudar({ texto: v })}
+            testid="campo-texto-ao-cliente"
           />
         </Campo>
       </Secao>

@@ -10,10 +10,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 
+import { CampoComVariavel } from "./CampoComVariavel";
 import { ImportadorDeLista } from "./ImportadorDeLista";
 import { SeletorDeCanal, useConexoesParaEnvio } from "./SeletorDeCanal";
 import { Campo, Dica, Secao, type PropsDoFormulario } from "./shared";
@@ -79,14 +79,16 @@ export function WhatsappBulkSendForm({ config, aoMudarConfig }: PropsDoFormulari
     <div className="flex flex-col gap-4">
       <Secao titulo={t("A campanha")}>
         <Campo rotulo={t("Nome da campanha")}>
-          <Input
-            value={String(config.nome ?? "")}
+          <CampoComVariavel
+            valor={String(config.nome ?? "")}
             maxLength={120}
-            onChange={(e) => mudar({ nome: e.target.value })}
-            data-testid="campo-nome-do-disparo"
+            aoMudar={(v) => mudar({ nome: v })}
+            testid="campo-nome-do-disparo"
           />
           <Dica
-            texto={t("Aparece na tela de Disparos. Aceita {{lead.title}} para distinguir uma execução da outra.")}
+            texto={t(
+              "Aparece na tela de Disparos. Aceita variável — é o que distingue uma execução da outra.",
+            )}
           />
         </Campo>
       </Secao>
@@ -111,14 +113,14 @@ export function WhatsappBulkSendForm({ config, aoMudarConfig }: PropsDoFormulari
       <Secao titulo={t("O que enviar")}>
         {!exigeModelo && (
           <Campo rotulo={t("Mensagem")}>
-            <Textarea
-              rows={5}
+            <CampoComVariavel
+              multilinha
+              linhas={5}
               maxLength={4096}
-              value={String(config.texto ?? "")}
-              onChange={(e) => mudar({ texto: e.target.value })}
-              data-testid="campo-texto-do-disparo"
+              valor={String(config.texto ?? "")}
+              aoMudar={(v) => mudar({ texto: v })}
+              testid="campo-texto-do-disparo"
             />
-            <Dica texto={t("Use {{contact.name}} para tratar cada pessoa pelo nome.")} />
           </Campo>
         )}
 
@@ -170,12 +172,10 @@ export function WhatsappBulkSendForm({ config, aoMudarConfig }: PropsDoFormulari
         {modeloEscolhido !== null &&
           modeloEscolhido.slots.map((slot) => (
             <Campo key={slot.key} rotulo={t("Valor de {k}").replace("{k}", slot.key)}>
-              <Input
-                value={valores[slot.key] ?? ""}
-                onChange={(e) =>
-                  mudar({ modelo_valores: { ...valores, [slot.key]: e.target.value } })
-                }
-                data-testid={`campo-valor-${slot.key}`}
+              <CampoComVariavel
+                valor={valores[slot.key] ?? ""}
+                aoMudar={(v) => mudar({ modelo_valores: { ...valores, [slot.key]: v } })}
+                testid={`campo-valor-${slot.key}`}
               />
             </Campo>
           ))}

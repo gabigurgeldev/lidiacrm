@@ -1,6 +1,5 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -8,9 +7,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 
+import { CampoComVariavel } from "./CampoComVariavel";
 import { Campo, Secao, type PropsDoFormulario } from "./shared";
 
 /** `notify.internal` — abre um aviso na Central. */
@@ -21,20 +20,21 @@ export function NotifyInternalForm({ config, aoMudarConfig }: PropsDoFormulario)
   return (
     <Secao>
       <Campo rotulo={t("Título do aviso")}>
-        <Input
-          value={String(config.titulo ?? "")}
+        <CampoComVariavel
+          valor={String(config.titulo ?? "")}
           maxLength={120}
-          onChange={(e) => mudar({ titulo: e.target.value })}
-          data-testid="campo-titulo-do-aviso"
+          aoMudar={(v) => mudar({ titulo: v })}
+          testid="campo-titulo-do-aviso"
         />
       </Campo>
       <Campo rotulo={t("Texto do aviso")}>
-        <Textarea
-          rows={4}
+        <CampoComVariavel
+          multilinha
+          linhas={4}
           maxLength={1000}
-          value={String(config.corpo ?? "")}
-          onChange={(e) => mudar({ corpo: e.target.value })}
-          data-testid="campo-corpo-do-aviso"
+          valor={String(config.corpo ?? "")}
+          aoMudar={(v) => mudar({ corpo: v })}
+          testid="campo-corpo-do-aviso"
         />
       </Campo>
       <Campo rotulo={t("Gravidade")}>

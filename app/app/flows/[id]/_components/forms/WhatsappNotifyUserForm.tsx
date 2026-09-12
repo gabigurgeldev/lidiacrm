@@ -1,6 +1,5 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -8,10 +7,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 import { useAttendants } from "@/hooks/team/useAttendants";
 
+import { CampoComVariavel } from "./CampoComVariavel";
 import { SeletorDeCanal } from "./SeletorDeCanal";
 import { Campo, Dica, Secao, type PropsDoFormulario } from "./shared";
 
@@ -95,18 +94,16 @@ export function WhatsappNotifyUserForm({ config, aoMudarConfig }: PropsDoFormula
 
         {tipo === "telefone" && (
           <Campo rotulo={t("Número que recebe o aviso")}>
-            <Input
-              value={String(destinatario.telefone ?? "")}
+            <CampoComVariavel
+              valor={String(destinatario.telefone ?? "")}
               maxLength={64}
               placeholder="+55 11 99999-8888"
-              onChange={(e) =>
-                mudar({ destinatario: { tipo: "telefone", telefone: e.target.value } })
-              }
-              data-testid="campo-telefone-do-aviso"
+              aoMudar={(v) => mudar({ destinatario: { tipo: "telefone", telefone: v } })}
+              testid="campo-telefone-do-aviso"
             />
             <Dica
               texto={t(
-                "Com DDI. Pode usar {{contact.phone_number}} ou uma variável do fluxo. Número fora do formato segue pela saída 'Sem telefone cadastrado'.",
+                "Com DDI. Número fora do formato segue pela saída 'Sem telefone cadastrado'.",
               )}
             />
           </Campo>
@@ -156,17 +153,13 @@ export function WhatsappNotifyUserForm({ config, aoMudarConfig }: PropsDoFormula
         )}
 
         <Campo rotulo={t("Mensagem para o vendedor")}>
-          <Textarea
-            rows={6}
+          <CampoComVariavel
+            multilinha
+            linhas={6}
             maxLength={4000}
-            value={String(config.mensagem ?? "")}
-            onChange={(e) => mudar({ mensagem: e.target.value })}
-            data-testid="campo-mensagem-do-aviso"
-          />
-          <Dica
-            texto={t(
-              "Use {{lead.title}}, {{lead.score}} e {{contact.phone_number}} para incluir os dados.",
-            )}
+            valor={String(config.mensagem ?? "")}
+            aoMudar={(v) => mudar({ mensagem: v })}
+            testid="campo-mensagem-do-aviso"
           />
         </Campo>
       </Secao>

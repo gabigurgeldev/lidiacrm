@@ -12,6 +12,7 @@ import {
 import { useT } from "@/hooks/i18n/useT";
 import { OPERADORES, operadorPedeValor, type Operador } from "@/lib/flow-engine/condicoes";
 
+import { CampoComVariavel } from "./CampoComVariavel";
 import type { PropsDoFormulario } from "./shared";
 
 interface Saida {
@@ -102,17 +103,24 @@ export function LogicIfForm({ config, aoMudarConfig }: PropsDoFormulario) {
 
           {saida.quando.itens.map((regra, j) => (
             <div key={j} className="mt-2 flex flex-col gap-1.5">
-              <Input
-                value={regra.campo}
+              {/*
+                MODO `caminho`: aqui o texto NÃO é interpolado. `condicoes.ts`
+                RESOLVE `lead.score` como caminho, e um `{{lead.score}}` posto
+                aqui não daria erro nenhum — a condição simplesmente devolveria
+                falso, e o fluxo seguiria pelo outro lado para sempre.
+              */}
+              <CampoComVariavel
+                modo="caminho"
+                valor={regra.campo}
                 placeholder="lead.score"
-                onChange={(e) => {
+                aoMudar={(v) => {
                   const novas = [...saidas];
                   const itens = [...saida.quando.itens];
-                  itens[j] = { ...regra, campo: e.target.value };
+                  itens[j] = { ...regra, campo: v };
                   novas[i] = { ...saida, quando: { ...saida.quando, itens } };
                   trocar(novas);
                 }}
-                data-testid={`campo-da-regra-${saida.id}-${j}`}
+                testid={`campo-da-regra-${saida.id}-${j}`}
               />
               <div className="flex gap-1.5">
                 <Select
