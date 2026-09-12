@@ -156,9 +156,59 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
+  // ─── ESPELHO VAZIO: pergunta à PLATAFORMA, em vez de dizer que não há ─────
+  //
+  // O espelho só é escrito pelo POST desta rota (o botão "sincronizar"). Um
+  // canal recém-conectado, ou um que ganhou `templates` depois, tem definições
+  // aprovadas de sobra e espelho vazio — e a tela dizia "nenhum modelo
+  // aprovado", que é a frase mais enganosa possível: ela descreve a CONTA e o
+  // que estava vazio era o nosso cache.
+  //
+  // Leitura direta, e não uma sincronização escondida num GET: gravar em cima
+  // de uma leitura faria toda abertura de tela disputar a escrita com o botão, e
+  // um GET que muda o banco é o tipo de efeito que ninguém procura quando algo
+  // sai errado. O espelho continua sendo escrito por quem tem esse trabalho.
+  //
+  // Falha da plataforma NÃO derruba a tela: devolve lista vazia e o formulário
+  // cai no caminho de escrever o nome do modelo à mão, que é a saída que já
+  // existe. Trocar um seletor vazio por um 502 tiraria essa saída também.
+  const espelhadas = data ?? [];
+  if (espelhadas.length === 0) {
+    const adapter = getAdapter(r.ctx.provider);
+    if (adapter.templates) {
+      try {
+        const remotas = await adapter.templates.list({
+          organizationId: r.ctx.orgId,
+          sessionRef: r.ctx.sessionRef,
+        });
+        return ok(
+          {
+            templates: remotas.map((t) => ({
+              name: t.name,
+              language: t.language,
+              status: t.status,
+              category: t.category ?? null,
+              rejectedReason: t.rejectedReason ?? null,
+              // Não veio do espelho: não há `synced_at` para inventar, e uma
+              // data de agora mentiria dizendo que sincronizamos.
+              syncedAt: null,
+              components: t.components ?? [],
+            })),
+          },
+          { requestId },
+        );
+      } catch (err) {
+        logger.warn("[partner/templates] leitura direta falhou", {
+          detail: err instanceof Error ? err.message : "erro",
+          requestId,
+        });
+      }
+    }
+  }
+
   return ok(
     {
-      templates: (data ?? []).map((t) => ({
+      templates: espelhadas.map((t) => ({
         name: t.name as string,
         language: t.language as string,
         status: t.status as string,

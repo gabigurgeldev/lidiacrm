@@ -90,6 +90,36 @@ export async function sendTemplate(input: SendTemplateInput): Promise<SendTempla
     };
   }
 
+  return postarTemplate({
+    phoneNumberId: input.phoneNumberId,
+    token: input.token,
+    graphVersion: input.graphVersion,
+    to: input.to,
+    name: input.binding.name,
+    language: input.binding.language,
+    components,
+  });
+}
+
+/**
+ * O POST cru para a Graph API — sem contrato, sem bind, sem espelho.
+ *
+ * Extraído de `sendTemplate` porque há DOIS chamadores com o mesmo pedido e
+ * pré-voos diferentes: o de cima confere o bind contra o espelho; o de baixo
+ * (`sendTemplateForSession`, quando a definição não está espelhada) deixa a
+ * plataforma responder. Duas cópias do `fetch` divergiriam na primeira vez que
+ * a Meta pedisse um campo a mais — e a divergência apareceria como "por um
+ * caminho manda e pelo outro não".
+ */
+export async function postarTemplate(input: {
+  phoneNumberId: string;
+  token: string;
+  graphVersion: string;
+  to: string;
+  name: string;
+  language: string;
+  components: MetaSendComponent[];
+}): Promise<SendTemplateResult> {
   const url = `https://graph.facebook.com/${input.graphVersion}/${input.phoneNumberId}/messages`;
   const res = await fetch(url, {
     method: "POST",
@@ -102,11 +132,11 @@ export async function sendTemplate(input: SendTemplateInput): Promise<SendTempla
       to: input.to,
       type: "template",
       template: {
-        name: input.binding.name,
-        language: { code: input.binding.language },
+        name: input.name,
+        language: { code: input.language },
         // Template sem parâmetro nenhum NÃO leva `components` — mandar um array
         // vazio é recusado pela Meta.
-        ...(components.length > 0 ? { components } : {}),
+        ...(input.components.length > 0 ? { components: input.components } : {}),
       },
     }),
   });

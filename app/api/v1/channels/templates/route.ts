@@ -16,6 +16,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { metaSessionForOrg } from "@/lib/channels/meta/session";
 import { normalizeRejectedReason } from "@/lib/channels/meta/webhook";
+import { recorteDoEspelho } from "@/lib/channels/meta/recorte-do-espelho";
 import { deriveTemplateContract, describeAddress } from "@/lib/channels/meta/template-contract";
 import { syncTemplates } from "@/lib/channels/meta/template-sync";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -93,6 +94,30 @@ async function orgOrFail(requestId: string, papel: "admin" | "manager" = "admin"
   return { autorizado: true, orgId: authz.org.orgId };
 }
 
+/**
+ * A WABA de uma conexão, quando ela tem uma.
+ *
+ * `organization_id` no filtro À MÃO: o cliente admin passa por cima da RLS, e
+ * um `canal_id` copiado de outro tenant devolveria a WABA dele — e, com ela, a
+ * lista de definições de outra empresa. O id vem da query; a organização, do
+ * cookie validado.
+ *
+ * Tolerante à coluna ausente pelo mesmo motivo do resto do repo: `meta_waba_id`
+ * nasceu na 0087, e um clone que suba o código antes do schema perderia a lista
+ * inteira por causa de um 42703 — em vez de cair no recorte de queda.
+ */
+async function wabaDaConexao(orgId: string, canalId: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("channel_sessions")
+    .select("meta_waba_id")
+    .eq("id", canalId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  const waba = (data as { meta_waba_id?: string | null } | null)?.meta_waba_id;
+  return waba !== null && waba !== undefined && waba !== "" ? waba : null;
+}
+
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const requestId = randomUUID();
   const r = await orgOrFail(requestId, "manager");
@@ -122,21 +147,34 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   //
   // O caso comum não muda: vários números sob a MESMA WABA compartilham os
   // mesmos templates, que é como a Meta modela isso.
-  // ⚠️ `canal_id` GANHA da WABA quando vem.
+  // ⚠️ O RECORTE DE `canal_id` É PELA WABA DA CONEXÃO, NUNCA POR
+  // `channel_session_id` — e essa distinção já custou a lista inteira.
   //
-  // A conexão é a pergunta mais específica ("o que posso usar NESTE número?") e
-  // é a que o bloco de fluxo faz, porque ele já escolheu por onde vai mandar.
-  // Filtrar pela WABA nesse caso devolveria também as definições dos OUTROS
-  // números da mesma conta — o que é quase sempre certo (a Meta compartilha
-  // templates por WABA) e erra silenciosamente quando não é.
+  // A primeira versão deste filtro fazia `.eq("channel_session_id", canalId)`,
+  // que é o que o nome da coluna sugere. Só que `template-sync.ts` — o caminho
+  // que espelha as definições do canal oficial — NÃO grava essa coluna: ele
+  // chaveia por `(organization_id, waba_id, name, language)` e deixa
+  // `channel_session_id` nulo (a 0154 chama isso de "estado legítimo": as
+  // linhas vieram da WABA e ninguém sabe de qual número são).
   //
-  // O `organization_id` do filtro já está aplicado acima e vem do cookie
-  // validado: um `canal_id` de outro tenant devolve lista vazia, nunca a dele.
-  const escopada = canalId !== null
-    ? consulta.eq("channel_session_id", canalId)
-    : sessao?.wabaId
-      ? consulta.eq("waba_id", sessao.wabaId)
-      : consulta;
+  // Resultado medido: escolher o número no bloco de fluxo devolvia ZERO linhas
+  // para toda organização do canal oficial, e a tela dizia "nenhum modelo
+  // aprovado" com o espelho cheio. O filtro mais específico era o mais errado.
+  //
+  // Pela WABA é também o modelo REAL da plataforma: template é aprovado por
+  // conta, e todos os números daquela conta compartilham os mesmos. O que este
+  // parâmetro conserta é outra coisa — a lista deixa de ser sempre a da conexão
+  // oficial MAIS ANTIGA (`metaSessionForOrg`) e passa a ser a da conexão que o
+  // operador escolheu, que é o ponto de uma organização com duas contas.
+  //
+  // `channel_session_id` continua valendo como recorte de queda para as linhas
+  // que o TÊM (as que a rota do parceiro espelha, que sempre o gravam).
+  const recorte = recorteDoEspelho({
+    canalId,
+    wabaDoCanal: canalId === null ? null : await wabaDaConexao(r.orgId, canalId),
+    wabaDaSessao: sessao?.wabaId ?? null,
+  });
+  const escopada = recorte === null ? consulta : consulta.eq(recorte.coluna, recorte.valor);
 
   const { data, error } = await escopada.order("status").order("name");
 

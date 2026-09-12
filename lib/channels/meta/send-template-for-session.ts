@@ -15,7 +15,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { sendTemplate } from "./send-template";
+import { componentsPorChave } from "../cloud-api/template-por-chaves";
+import { postarTemplate, sendTemplate } from "./send-template";
 
 export interface SendTemplateForSessionInput {
   organizationId: string;
@@ -52,6 +53,41 @@ export async function sendTemplateForSession(
 
   if (error) throw new Error(`template_lookup_failed: ${error.message}`);
 
+  // ─── NÃO ESPELHADA: a plataforma responde, este espelho não veta ──────────
+  //
+  // `bindingState` devolve `missing` quando não há linha, e a tradução disso era
+  // `template_missing: … não está no espelho` — SEM chamar a Meta. Medido pelo
+  // dono do produto: escolher a conexão oficial, escrever o nome e o idioma de
+  // um template aprovado, e a mensagem não sair. O nome do erro culpava o
+  // template; o que estava errado era a exigência.
+  //
+  // A regra certa já estava escrita no repo, em `conferir-definicao.ts`:
+  // "recusar o que não se sabe é pior que deixar o provedor responder — ele é a
+  // autoridade, não este espelho". Aquele pré-voo deixa passar o não espelhado
+  // de propósito, e esta função anulava a decisão dele três linhas depois.
+  //
+  // Sem espelho não há contrato para derivar, então os `components` saem das
+  // CHAVES dos valores (`1`, `2`, `header:1`) — ver `componentsPorChave`, que
+  // cobre corpo e cabeçalho de texto e recusa adivinhar o resto. Se o nome, o
+  // idioma ou a quantidade de parâmetros estiverem errados, quem diz é a Meta,
+  // com o código dela (132001, 132000, 133010) — que é acionável, ao contrário
+  // de "não está no espelho".
+  if (!linha) {
+    const resultadoCru = await postarTemplate({
+      phoneNumberId: process.env.META_PHONE_NUMBER_ID ?? "",
+      token: process.env.META_SYSTEM_USER_TOKEN ?? "",
+      graphVersion: process.env.META_GRAPH_VERSION ?? "v22.0",
+      to: input.to,
+      name: input.name,
+      language: input.language,
+      components: componentsPorChave(input.values),
+    });
+    if (resultadoCru.sent) return resultadoCru.externalId;
+    // O único desfecho possível aqui é `api_error` (não houve bind para checar),
+    // mas o `switch` de baixo é exaustivo e serve aos dois caminhos.
+    return traduzirRecusa(input, resultadoCru);
+  }
+
   const resultado = await sendTemplate({
     phoneNumberId: process.env.META_PHONE_NUMBER_ID ?? "",
     token: process.env.META_SYSTEM_USER_TOKEN ?? "",
@@ -77,7 +113,18 @@ export async function sendTemplateForSession(
   });
 
   if (resultado.sent) return resultado.externalId;
+  return traduzirRecusa(input, resultado);
+}
 
+/**
+ * A recusa vira exceção com o MOTIVO REAL — é isso que o operador lê em
+ * `error_message`. Sempre lança; o `never` é o compilador cobrando que nenhum
+ * desfecho novo passe em silêncio.
+ */
+function traduzirRecusa(
+  input: SendTemplateForSessionInput,
+  resultado: Exclude<Awaited<ReturnType<typeof sendTemplate>>, { sent: true }>,
+): never {
   switch (resultado.reason) {
     case "missing":
       throw new Error(`template_missing: ${input.name} (${input.language}) não está no espelho`);

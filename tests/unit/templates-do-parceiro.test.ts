@@ -134,11 +134,32 @@ describe("os elos que somem sem barulho", () => {
   it("criar TAMBÉM sincroniza — senão o operador cria a mesma duas vezes", () => {
     // A definição nasce em revisão e não aparece na lista de envio. Se a tela
     // não a mostrasse pendente, ele concluiria que não salvou.
+    //
+    // ⚠️ A sonda é recortada ao POST, e a versão anterior não era. Ela procurava
+    // a PRIMEIRA ocorrência de `adapter.templates.list` no arquivo inteiro, e
+    // ficou vermelha no dia em que o GET ganhou uma leitura direta — medindo uma
+    // chamada que não tem nada a ver com a garantia. O invariante nunca mudou;
+    // o que mudou foi o arquivo ter duas chamadas em vez de uma.
     const fonte = readFileSync("app/api/v1/channels/partner/templates/route.ts", "utf8");
-    const iCriar = fonte.indexOf('corpo.acao === "criar"');
-    const iSync = fonte.indexOf("adapter.templates.list");
+    const post = fonte.slice(fonte.indexOf("export async function POST"));
+    expect(post, "o POST sumiu do arquivo — a sonda está medindo o vazio").not.toBe("");
+    const iCriar = post.indexOf('corpo.acao === "criar"');
+    const iSync = post.indexOf("adapter.templates.list");
     expect(iCriar).toBeGreaterThan(-1);
     expect(iSync).toBeGreaterThan(iCriar);
+  });
+
+  it("⭐ o GET responde com a PLATAFORMA quando o espelho não tem nada", () => {
+    // O espelho só é escrito pelo botão de sincronizar. Um canal recém-conectado
+    // tem definições aprovadas e espelho vazio — e a tela dizia "nenhum modelo
+    // aprovado", frase que descreve a CONTA quando o vazio era o nosso cache.
+    const fonte = readFileSync("app/api/v1/channels/partner/templates/route.ts", "utf8");
+    const get = fonte.slice(fonte.indexOf("export async function GET"), fonte.indexOf("export async function POST"));
+    expect(get).toMatch(/espelhadas.length === 0/);
+    expect(get).toMatch(/adapter.templates.list/);
+    // E a leitura NÃO grava: um GET que escreve disputaria a escrita com o botão
+    // a cada abertura de tela.
+    expect(get, "o GET está gravando no espelho").not.toContain(".upsert(");
   });
 });
 

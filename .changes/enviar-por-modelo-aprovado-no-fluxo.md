@@ -18,7 +18,7 @@ recebe e o número do pedido que um bloco anterior calculou.
 Quando a conexão escolhida só entrega modelo, a pergunta some e o bloco diz por
 quê, em vez de oferecer uma opção que a plataforma vai recusar.
 
-**Três consertos entraram junto, e os três eram invisíveis:**
+**Cinco consertos entraram junto, e os cinco eram invisíveis:**
 
 - **O modo de modelo do disparo por fluxo estava morto.** A tela lia a resposta
   da listagem no formato errado, a busca falhava por dentro, e o resultado era a
@@ -31,9 +31,27 @@ quê, em vez de oferecer uma opção que a plataforma vai recusar.
 - **Número por QR numa conta intermediada aparecia como só-modelo**, e o texto
   livre que ele aceita ficava sem caminho no seletor.
 
-**A lista de modelos agora é da conexão que você escolheu** — e não da conta mais antiga da organização — quem tem duas contas oficiais via só a primeira. E
-quando não dá para listar os modelos de uma conexão, o bloco oferece escrever o
-nome e o idioma do modelo já aprovado, em vez de deixar você sem saída.
+- **Escolher o número ESVAZIAVA a lista.** O recorte por conexão filtrava por
+  uma coluna que o espelho do canal oficial nunca preenche — ele é chaveado pela
+  CONTA, não pelo número. Resultado: "nenhum modelo aprovado nesta conta" com o
+  espelho cheio, culpando a sua conta pelo nosso filtro.
+- **Escrever o nome do modelo à mão não enviava.** O envio exigia que a
+  definição estivesse espelhada aqui e recusava ANTES de chamar a plataforma,
+  com "não está no espelho" — culpando o template. Agora quem responde é a
+  plataforma, com o código dela: nome que não existe é 132001, parâmetro a menos
+  é 132000, template não aprovado é 133010. Definição que o espelho SABE que
+  está reprovada continua barrada antes de gastar.
+
+**A lista de modelos agora é da conta da conexão que você escolheu** — e não da
+conta mais antiga da organização, que é o que quem tem duas contas oficiais via.
+
+**A conexão intermediada passou a listar os modelos dela.** Ela sabia mandar e
+não sabia listar, então o seletor vinha vazio numa conta cheia de modelos
+aprovados. E quando o espelho local ainda não foi sincronizado, a lista é
+perguntada à plataforma na hora, em vez de a tela dizer que não há nenhum.
+
+Se mesmo assim não der para listar, o bloco oferece escrever o nome e o idioma
+do modelo já aprovado — e agora esse caminho de fato envia.
 
 Nada muda para quem opera o servidor: sem variável nova, sem passo de
 atualização, sem mudança de banco.

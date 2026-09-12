@@ -1156,6 +1156,11 @@ automação: quando ele erra, não há operador na tela para perceber e corrigir
 | J26.11 | Modelo numa conexão por QR | recusa com nome próprio, sem chamar a rede | **PASS** (unit) |
 | J26.12 | Parâmetros do modelo | ordem NUMÉRICA (`10` depois de `2`), e passam por `render` | **PASS** (unit) |
 | J26.13 | Número por QR em conta intermediada | deixa de ser anunciado como "só envia modelo aprovado" | **PASS** (unit — `capabilitiesOfSession` na rota de conexões) |
+| J26.17 | Escolher o número não esvazia a lista | recorta pela CONTA da conexão, não por `channel_session_id` | **PASS** (unit `modelo-aprovado-chega-na-tela`) — **era regressão nossa, relatada pelo dono** |
+| J26.18 | Nome do modelo escrito à mão | SAI; quem recusa é a plataforma, com o código dela | **PASS** (unit) — **era regressão nossa, relatada pelo dono** |
+| J26.19 | Definição espelhada e reprovada | continua barrada antes de gastar | **PASS** (unit) |
+| J26.20 | Listar modelos da conexão intermediada | `GET /v1/templates` do gateway, corpo cru `{data:[…]}` | **PASS** (unit `stevo-lista-templates`) |
+| J26.21 | Espelho vazio | a lista é perguntada à plataforma, e o GET não grava | **PASS** (unit `templates-do-parceiro`) |
 | J26.14 | Montar o bloco de horário pela TELA | paleta → painel → dias e horário → publica | **NÃO MEDIDO NA TELA** — spec escrita (`flow-horario-variaveis-modelo.spec.ts`), registrada no CI |
 | J26.15 | Inserir variável pela TELA | popover abre, escolhe, texto entra no cursor | **NÃO MEDIDO NA TELA** — idem |
 | J26.16 | Escolher modelo pela TELA | seletor aparece, um campo por lacuna | **NÃO MEDIDO NA TELA** — idem |
@@ -1167,14 +1172,24 @@ automação: quando ele erra, não há operador na tela para perceber e corrigir
   sobe na máquina de desenvolvimento usada (Windows). A prova pela tela sai no
   CI — está registrado aqui em vez de omitido, porque a doutrina de QA Visual
   pede a prova e ela está devendo. **Quem retomar roda a spec primeiro.**
-- **O gateway de definições da conexão intermediada.** O envio de modelo por ela
-  foi implementado e testado (J26.10/11/12) contra o endpoint de mensagens, que
-  o repo já conhecia e media. A LISTAGEM de definições daquela plataforma **não
-  foi verificada contra a API real** — não houve credencial nem conta nesta
-  sessão. Por isso o seletor não inventa endpoint: quando a lista não vem, ele
-  oferece escrever o nome e o idioma do modelo aprovado, caminho que o pré-voo
-  (`conferir-definicao.ts`) já suporta de propósito. Quem tiver a conta em mãos
-  mede o endpoint e liga a sincronização.
+- ~~**O gateway de definições da conexão intermediada.**~~ **MEDIDO em
+  2026-09-12, depois de o dono relatar a lista vazia.** `GET /v1/templates`
+  responde `401 unauthorized` (rota existe, falta token) e
+  `GET /v1/message_templates` — o nome da Graph API — responde `404 Route not
+  found`. Confirmado no OpenAPI publicado do gateway
+  (`doc.stevo.chat/api/whatsapp-oficial.v1.yaml`), que documenta o corpo como o
+  CRU da Meta: `{ data: [...] }`. `stevoTemplateOps` foi implementado contra
+  isso. **O que continua NÃO medido é a chamada com token de verdade:** o
+  contrato está preso por teste com `fetch` falso, e nenhuma conta real
+  respondeu nesta sessão.
+
+- **Os dois defeitos de J26.17 e J26.18 eram NOSSOS, e passaram pela entrega
+  anterior.** Vale escrever por que: os dois estavam cobertos por teste de
+  unidade que media a REGRA (o recorte existe; o pré-voo deixa passar) e nenhum
+  media o CAMINHO INTEIRO até a tela. O sintoma dos dois era uma lista vazia ou
+  um envio que não sai — os dois com frase que culpava a conta do operador. É
+  exatamente o vão que a doutrina de QA Visual descreve, e a prova pela tela
+  continua devendo (J26.14–16).
 - **Envio real de um modelo por WhatsApp.** Nenhuma mensagem de verdade saiu
   nesta sessão. O que está provado é o corpo do pedido e o destino dele, não a
   entrega.

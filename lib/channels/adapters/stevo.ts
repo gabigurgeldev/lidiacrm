@@ -53,6 +53,7 @@ import { componentsPorChave } from "../cloud-api/template-por-chaves";
 import { resolveEnvioStevo, resolveStevoCreds, stevoBaseUrlOficial } from "../stevo/credentials";
 import { corpoDeEnvioStevo, idDaRespostaStevo } from "../stevo/envelope";
 import { lerInstanciaStevo } from "../stevo/instancias";
+import { stevoTemplateOps } from "../stevo/templates";
 import { fetchFotoDePerfilStevo } from "../stevo/perfil";
 
 /** E.164 em dígitos, sem `+` e sem sufixo de domínio — é o que o `to` espera. */
@@ -281,6 +282,15 @@ export const stevoAdapter: ChannelAdapter = {
    * em vez de deixar a plataforma responder um código — quem escolheu o modelo
    * no fluxo precisa saber que a conexão é que está errada, não o modelo.
    */
+  /**
+   * Gestão das definições aprovadas — listar, criar, apagar.
+   *
+   * Sem isto, a rota de definições lia o espelho local e não tinha quem o
+   * escrevesse para este canal: o seletor do bloco de fluxo vinha VAZIO numa
+   * conta cheia de modelos aprovados.
+   */
+  templates: stevoTemplateOps,
+
   async sendTemplate(input: ChannelTenantScope & {
     sessionRef: string;
     to: string;
