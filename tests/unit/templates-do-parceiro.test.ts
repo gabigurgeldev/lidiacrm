@@ -48,6 +48,31 @@ describe("de onde vêm as definições", () => {
     expect(fonteDeTemplates("waha")).toBeNull();
   });
 
+  it("⭐ o provider de DUAS caras responde pela MODALIDADE, não pelo nome", () => {
+    // A instância oficial do intermediário tem WABA da Meta por baixo, e
+    // portanto definições aprovadas; o número ligado por QR na mesma conta não
+    // tem nenhuma. Antes disto o provider inteiro respondia null, e o inbox
+    // BARRAVA o texto livre fora das 24h sem oferecer modelo — o operador ficava
+    // sem caminho, que é o defeito que este arquivo inteiro existe para fechar.
+    expect(fonteDeTemplates("stevo", "oficial")).toBe("parceiro");
+    expect(fonteDeTemplates("stevo", "qr")).toBeNull();
+  });
+
+  it("⭐ modalidade não gravada responde o CONSERVADOR, não o provável", () => {
+    // `provider_mode` é nullable por desenho (migration 0206). Sem ela, oferecer
+    // um seletor faria o número por QR mostrar lista vazia e o operador concluir
+    // que a sincronização quebrou.
+    expect(fonteDeTemplates("stevo")).toBeNull();
+    expect(fonteDeTemplates("stevo", null)).toBeNull();
+  });
+
+  it("a modalidade não muda quem tem uma cara só", () => {
+    // Um `modo` que chegasse por engano não pode desviar o canal oficial.
+    expect(fonteDeTemplates("meta_cloud", "oficial")).toBe("oficial");
+    expect(fonteDeTemplates("zernio", "qr")).toBe("parceiro");
+    expect(fonteDeTemplates("waha", "oficial")).toBeNull();
+  });
+
   it("sem canal resolvido, não busca nada", () => {
     expect(fonteDeTemplates(null)).toBeNull();
     expect(fonteDeTemplates(undefined)).toBeNull();
@@ -69,11 +94,13 @@ describe("os elos que somem sem barulho", () => {
     expect(fonte, "a tela está nomeando provider").not.toMatch(/"zernio"|"meta_cloud"|"waha"/);
   });
 
-  it("o cache é POR FONTE — senão a lista de uma conta vaza para a outra", () => {
+  it("o cache é POR FONTE E POR CONEXÃO — senão a lista de uma conta vaza para a outra", () => {
     // Trocar de conversa entre canais com a mesma chave serviria o cache do
     // anterior, e o operador mandaria um modelo que não existe nesta conta.
     const fonte = readFileSync("components/inbox/JanelaFechadaAviso.tsx", "utf8");
-    expect(fonte).toMatch(/queryKey: \["templates-da-conversa", fonte\]/);
+    // A conexão entrou na chave junto com o ?canal_id=: duas conexões do MESMO
+    // provider também têm definições diferentes, e a fonte sozinha não as separa.
+    expect(fonte).toMatch(/queryKey: \["templates-da-conversa", fonte, canalId\]/);
   });
 
   it("a aba existe dentro do canal do parceiro", () => {

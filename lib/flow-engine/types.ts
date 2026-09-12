@@ -329,6 +329,38 @@ export type DesfechoDeEnvio =
   | { kind: "na_fila"; motivo: string }
   | { kind: "recusado"; motivo: string };
 
+/**
+ * O envio por DEFINIÇÃO APROVADA, quando o bloco escolheu esse modo.
+ *
+ * ## Por que um objeto opcional, e não três campos soltos
+ *
+ * Porque os três só fazem sentido juntos: nome sem idioma não endereça definição
+ * nenhuma (`pt_BR` e `pt` são definições DISTINTAS na plataforma), e valores sem
+ * nome não têm onde entrar. Três opcionais soltos permitiriam as combinações
+ * meio-preenchidas que o `superRefine` do bloco existe para recusar — e a porta
+ * é o último lugar onde dá para recusá-las antes de virar 400 da plataforma.
+ *
+ * ## O que o motor NÃO sabe daqui
+ *
+ * Que canal entrega definição aprovada. Isso é vocabulário de `lib/channels/`, e
+ * a doutrina de restrição de canal proíbe que vaze para cá — quem recusa a
+ * combinação impossível (uma conexão sem WABA e um modelo) é o adapter, alto e
+ * com nome próprio.
+ */
+export interface ModeloDeEnvio {
+  /** Nome exato aprovado na plataforma. */
+  nome: string;
+  /** `pt_BR` e `pt` são definições diferentes — o idioma faz parte do endereço. */
+  idioma: string;
+  /**
+   * Valor por slot, chaveado como `slotKey` chaveia
+   * (`lib/channels/meta/build-components.ts`): corpo sem prefixo (`1`, `2`),
+   * cabeçalho com `header:`. Chave montada de outro jeito manda o valor certo
+   * para o buraco errado.
+   */
+  valores: Record<string, string>;
+}
+
 export interface PortaDeCanal {
   /**
    * Manda texto para um telefone E.164 que não é necessariamente um contato do
@@ -356,6 +388,8 @@ export interface PortaDeCanal {
      * dizer qual queria.
      */
     channelSessionId?: string | null;
+    /** Quando presente, o aviso sai por DEFINIÇÃO APROVADA e `texto` é ignorado. */
+    modelo?: ModeloDeEnvio;
   }): Promise<DesfechoDeEnvio>;
 
   /**
@@ -392,6 +426,12 @@ export interface PortaDeCanal {
     mediaUrl?: string;
     /** Conexão escolhida na tela; `null` = a primeira viva, como já era. */
     channelSessionId: string | null;
+    /**
+     * Quando presente, o envio é por DEFINIÇÃO APROVADA — `tipo`, `texto` e
+     * `mediaUrl` são ignorados. É o único caminho de volta quando a janela de 24h
+     * fechou, e o bloco de envio é justamente o que roda sem ninguém olhando.
+     */
+    modelo?: ModeloDeEnvio;
   }): Promise<DesfechoDeEnvio>;
 }
 

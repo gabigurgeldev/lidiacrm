@@ -48,7 +48,7 @@ function grafoBom(): FlowGraph {
 }
 
 describe("o registry decide o que existe", () => {
-  it("os 27 nós desta entrega estão registrados", () => {
+  it("o catálogo inteiro está registrado — a LISTA é a régua, não a contagem", () => {
     expect(tiposRegistrados()).toEqual([
       "crm.add_tag",
       "crm.assign_owner",
@@ -56,6 +56,7 @@ describe("o registry decide o que existe", () => {
       "crm.owner_responded",
       "flow.call",
       "logic.await_event",
+      "logic.business_hours",
       "logic.choice_menu",
       "logic.end",
       "logic.fork",

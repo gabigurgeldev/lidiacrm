@@ -1,13 +1,13 @@
 /**
- * De ONDE a tela busca as definições aprovadas de uma conversa.
+ * De ONDE a tela busca as definições aprovadas de uma conexão.
  *
  * ─── Por que isto não é um `if` na tela ────────────────────────────────────
  *
- * Há duas rotas: a do canal oficial (`/channels/templates`, que resolve a
- * conexão pela sessão da Meta) e a do canal intermediado
- * (`/channels/partner/templates`, que resolve pela conexão de parceiro).
- * Perguntar "qual delas?" com o nome do provider na mão é o `if (provider ===
- * ...)` que o invariante 1 da doutrina proíbe — e que o `lint:channels` reprova.
+ * Há duas rotas: a do canal oficial (`/channels/templates`, que lê o espelho da
+ * WABA) e a do canal intermediado (`/channels/partner/templates`, que pergunta
+ * ao adapter da conexão). Perguntar "qual delas?" com o nome do provider na mão
+ * é o `if (provider === ...)` que o invariante 1 da doutrina proíbe — e que o
+ * `lint:channels` reprova.
  *
  * A tela recebe um rótulo NEUTRO e monta a URL com ele. Um canal novo entra
  * aqui, e nenhuma linha muda do lado de lá.
@@ -18,13 +18,27 @@
  * um modelo que existe só na outra conta produz um envio que a plataforma
  * recusa — e o operador, que escolheu de uma lista que o CRM lhe ofereceu,
  * conclui que o sistema está quebrado. Melhor mostrar menos e certo.
+ *
+ * ─── A MODALIDADE entrou, e ela é a correção que estava escrita aqui ───────
+ *
+ * Este arquivo mapeava `stevo → null` com um comentário dizendo, com todas as
+ * letras, que a instância OFICIAL daquele provider tem definições aprovadas (a
+ * WABA é da Meta) e que escolher pela modalidade "exigiria que este mapa
+ * recebesse a sessão, e não o provider — mudança que atravessa todos os
+ * chamadores".
+ *
+ * A mudança aconteceu. O custo de não fazê-la era concreto: numa conversa por
+ * canal intermediado oficial fora das 24h, o inbox BARRAVA o texto livre (a
+ * janela sabe da modalidade desde a 0206) e não oferecia modelo nenhum — o
+ * operador ficava sem caminho, que é exatamente o que `JanelaFechadaAviso`
+ * existe para não deixar acontecer.
  */
-import type { ChannelProvider } from "./types";
+import type { ChannelMode, ChannelProvider } from "./types";
 
 export type FonteDeTemplates = "oficial" | "parceiro";
 
 /**
- * Qual rota serve as definições de cada canal.
+ * Qual rota serve as definições de cada canal de modalidade ÚNICA.
  *
  * MAPA EXPLÍCITO, e não derivado de uma capability. A primeira versão usava
  * `canManageTemplates` como discriminante e estava errada: o canal oficial
@@ -42,25 +56,51 @@ const FONTE: Record<ChannelProvider, FonteDeTemplates | null> = {
   waha: null,
   meta_cloud: "oficial",
   zernio: "parceiro",
-  // `null` — e esta é uma decisão, não um esquecimento.
-  //
-  // A instância OFICIAL deste intermediário tem, sim, definições aprovadas (a
-  // WABA é da Meta), e elas vivem na API oficial dele. Mas a fonte é escolhida
-  // aqui pelo PROVIDER, e este provider hospeda as duas modalidades: apontar
-  // para uma rota de templates faria o número ligado por QR — que não tem
-  // definição nenhuma — oferecer um seletor vazio, e o operador concluir que a
-  // sincronização quebrou.
-  //
-  // Escolher pela MODALIDADE exigiria que este mapa recebesse a sessão, e não o
-  // provider — mudança que atravessa todos os chamadores. Enquanto ela não
-  // acontece, `null` é a resposta honesta: a tela não oferece definições que não
-  // pode garantir, e o envio livre (que é o caminho comum aqui) segue intacto.
+  /**
+   * O que responder quando a MODALIDADE não foi gravada.
+   *
+   * `null`, e é a resposta conservadora: este provider hospeda os dois mundos, e
+   * sem saber qual deles é esta conexão, oferecer um seletor faria o número por
+   * QR — que não tem definição nenhuma — mostrar uma lista vazia, com o operador
+   * concluindo que a sincronização quebrou. Quem sabe é `FONTE_POR_MODO`, logo
+   * abaixo; esta linha é o que sobra quando o banco não diz.
+   */
   stevo: null,
 };
 
-/** `null` quando este canal não trabalha com definições aprovadas. */
-export function fonteDeTemplates(provider: string | null | undefined): FonteDeTemplates | null {
+/**
+ * A fonte por MODALIDADE, para os providers que hospedam mais de uma.
+ *
+ * Mesma forma de `CAPACIDADES_POR_MODO` em `capabilities.ts`, e pelo mesmo
+ * motivo: só entra aqui quem de fato tem duas caras, e um `Record` completo
+ * obrigaria a inventar duas linhas idênticas para os canais de modalidade única.
+ */
+const FONTE_POR_MODO: Partial<Record<ChannelProvider, Record<ChannelMode, FonteDeTemplates | null>>> = {
+  stevo: {
+    // Por baixo é a WABA da Meta, mas quem guarda as definições é a conta do
+    // intermediário — então a rota é a do seam (`adapter.templates`), e não a
+    // do canal oficial direto, que lê `metaSessionForOrg` e devolveria vazio.
+    oficial: "parceiro",
+    // Número ligado por QR: não há WABA por trás, e portanto não há definição
+    // aprovada para listar.
+    qr: null,
+  },
+};
+
+/**
+ * `null` quando esta conexão não trabalha com definições aprovadas.
+ *
+ * `modo` é opcional porque nem todo chamador tem a sessão em mãos — e porque a
+ * coluna `provider_mode` é nullable por desenho (a 0206 explica: `null` afirma
+ * "este provider tem modalidade única, pergunte a ele").
+ */
+export function fonteDeTemplates(
+  provider: string | null | undefined,
+  modo?: string | null,
+): FonteDeTemplates | null {
   if (!provider) return null;
+  const porModo = FONTE_POR_MODO[provider as ChannelProvider];
+  if (porModo && modo) return porModo[modo as ChannelMode] ?? null;
   return FONTE[provider as ChannelProvider] ?? null;
 }
 

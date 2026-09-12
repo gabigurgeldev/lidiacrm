@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 
 import { CrmHandoffToAgentForm } from "./forms/CrmHandoffToAgentForm";
+import { LogicBusinessHoursForm } from "./forms/LogicBusinessHoursForm";
 import { LogicChoiceMenuForm } from "./forms/LogicChoiceMenuForm";
 import { RoutingFixedOrderForm } from "./forms/RoutingFixedOrderForm";
 import { RoutingRandomForm } from "./forms/RoutingRandomForm";
@@ -63,6 +64,7 @@ export const FORMULARIO_DO_TIPO: Record<string, ComponentType<PropsDoFormulario>
   "trigger.webhook": TriggerWebhookForm,
   "logic.if": LogicIfForm,
   "logic.wait": LogicWaitForm,
+  "logic.business_hours": LogicBusinessHoursForm,
   "logic.end": LogicEndForm,
   "logic.fork": LogicForkForm,
   "logic.merge": LogicMergeForm,

@@ -34,6 +34,7 @@ import type {
   DesfechoDoDisparo,
   EsperaEmCurso,
   FatosDaExecucao,
+  ModeloDeEnvio,
   PedidoDeDisparo,
   TipoDeMensagemDoFluxo,
 } from "./types";
@@ -617,23 +618,25 @@ export function criarPortas(
     },
 
     canal: {
-      async enviarTexto({ telefone, texto, interno, channelSessionId }) {
+      async enviarTexto({ telefone, texto, interno, channelSessionId, modelo }) {
         return enviarTextoParaTelefone(admin, orgId, {
           telefone,
           texto,
           interno,
           channelSessionId: channelSessionId ?? null,
+          modelo,
           exec,
         });
       },
 
-      async enviarParaContato({ contactId, tipo, texto, mediaUrl, channelSessionId }) {
+      async enviarParaContato({ contactId, tipo, texto, mediaUrl, channelSessionId, modelo }) {
         return enviarParaContatoDoFunil(admin, orgId, {
           contactId,
           tipo,
           texto,
           mediaUrl,
           channelSessionId,
+          modelo,
           exec,
         });
       },
@@ -915,6 +918,49 @@ const TIPO_NA_MENSAGEM: Record<TipoDeMensagemDoFluxo, string> = {
  * bloqueio do contato, janela do número, pacing anti-banimento e idempotência —
  * e um atalho pelo adapter arriscaria o número da empresa.
  */
+/**
+ * O corpo que `sendMessageHandler` recebe: texto, mídia ou DEFINIÇÃO APROVADA.
+ *
+ * Uma função só para os dois chamadores (o envio ao cliente e o aviso ao
+ * vendedor) porque a tradução é a mesma — e é a mesma de
+ * `lib/bulk-send/enviar.ts`, o terceiro caminho que manda modelo pelo ponto
+ * único de saída. Três cópias divergiriam na primeira vez que a plataforma
+ * pedisse um campo a mais, e a divergência apareceria como "o disparo manda
+ * modelo e o fluxo não".
+ *
+ * ⚠️ Em `template` NÃO vai `body`. É o mesmo corpo que o disparo em massa já
+ * manda, e a razão é que o texto que o cliente vê é a DEFINIÇÃO aprovada, não
+ * uma cópia nossa dela: gravar um `body` montado aqui faria o inbox mostrar um
+ * texto que pode não ser o que saiu. `sendMessageSchema` exige `body`, mas quem
+ * o aplica é a ROTA HTTP — este caminho chama o handler direto, como o disparo.
+ */
+function corpoParaOHandler(input: {
+  conversationId: string;
+  tipo?: TipoDeMensagemDoFluxo;
+  texto: string;
+  mediaUrl?: string;
+  modelo?: ModeloDeEnvio;
+}): Record<string, unknown> {
+  if (input.modelo) {
+    return {
+      conversation_id: input.conversationId,
+      type: "template",
+      template_name: input.modelo.nome,
+      template_language: input.modelo.idioma,
+      template_values: input.modelo.valores,
+    };
+  }
+  return {
+    conversation_id: input.conversationId,
+    type: input.tipo === undefined ? "text" : TIPO_NA_MENSAGEM[input.tipo],
+    body: input.texto,
+    // `media_url`, nunca `media_storage_path`: ver a nota da porta em
+    // `types.ts` — o caminho no Storage é conferido contra a conversa de
+    // destino, e a mídia de um bloco vai para muitas conversas diferentes.
+    ...(input.mediaUrl === undefined ? {} : { media_url: input.mediaUrl }),
+  };
+}
+
 async function enviarParaContatoDoFunil(
   admin: SupabaseClient,
   orgId: string,
@@ -924,6 +970,7 @@ async function enviarParaContatoDoFunil(
     texto: string;
     mediaUrl?: string;
     channelSessionId: string | null;
+    modelo?: ModeloDeEnvio;
     exec: FlowExecutionRow;
   },
 ): Promise<DesfechoDeEnvio> {
@@ -953,15 +1000,13 @@ async function enviarParaContatoDoFunil(
         actor: { type: "webhook_source", id: input.exec.flow_id },
         requestId: `flow:${input.exec.id}`,
       },
-      {
-        conversation_id: conversationId,
-        type: TIPO_NA_MENSAGEM[input.tipo],
-        body: input.texto,
-        // `media_url`, nunca `media_storage_path`: ver a nota da porta em
-        // `types.ts` — o caminho no Storage é conferido contra a conversa de
-        // destino, e a mídia de um bloco vai para muitas conversas diferentes.
-        ...(input.mediaUrl === undefined ? {} : { media_url: input.mediaUrl }),
-      } as Parameters<typeof sendMessageHandler>[2],
+      corpoParaOHandler({
+        conversationId,
+        tipo: input.tipo,
+        texto: input.texto,
+        mediaUrl: input.mediaUrl,
+        modelo: input.modelo,
+      }) as Parameters<typeof sendMessageHandler>[2],
     )) as unknown as MensagemEnviada;
 
     // O desfecho vem do ESTADO da mensagem: `sendMessageHandler` não lança
@@ -991,6 +1036,7 @@ async function enviarTextoParaTelefone(
     texto: string;
     interno: boolean;
     channelSessionId: string | null;
+    modelo?: ModeloDeEnvio;
     exec: FlowExecutionRow;
   },
 ): Promise<DesfechoDeEnvio> {
@@ -1028,9 +1074,11 @@ async function enviarTextoParaTelefone(
         actor: { type: "webhook_source", id: input.exec.flow_id },
         requestId: `flow:${input.exec.id}`,
       },
-      { conversation_id: conversationId, type: "text", body: input.texto } as Parameters<
-        typeof sendMessageHandler
-      >[2],
+      corpoParaOHandler({
+        conversationId,
+        texto: input.texto,
+        modelo: input.modelo,
+      }) as Parameters<typeof sendMessageHandler>[2],
     )) as unknown as MensagemEnviada;
 
     // O desfecho vem do ESTADO da mensagem. `sendMessageHandler` NÃO lança

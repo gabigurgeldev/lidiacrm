@@ -1122,6 +1122,64 @@ descoberta de "falta escolher" acontecia no erro de publicação, longe do bloco
 
 ---
 
+## J26 — O fluxo respeita o expediente, sabe as variáveis e entrega fora das 24h `[P1]` (2026-09-12)
+
+Três buracos do editor de fluxos, com o mesmo formato de falha: nada na tela
+dizia que existiam.
+
+1. **Tempo.** O único bloco de tempo era "Esperar", de duração fixa. Um fluxo
+   respondia 3h de domingo como responderia 10h de terça, e quem quisesse
+   expediente escrevia "espere 10 horas" à mão — número que acerta uma vez.
+2. **Variáveis.** Os campos aceitam `{{lead.title}}` e afins, e a única pista era
+   uma frase de ajuda por formulário, cada uma citando campos diferentes. Errar o
+   nome não dá erro: `interpolar` troca marcador ausente por VAZIO de propósito,
+   então a mensagem sai com um buraco, para o cliente, em silêncio.
+3. **Modelo aprovado.** Fora da janela de 24h uma conexão oficial não entrega
+   texto livre. Só o disparo em massa sabia mandar modelo — e mesmo ele estava
+   quebrado (ver J26.9).
+
+**O que muda no risco:** os três acontecem sem ninguém olhando. Um fluxo é
+automação: quando ele erra, não há operador na tela para perceber e corrigir.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J26.1 | Dentro do expediente | segue pela saída de sempre | **PASS** (unit, motor real) |
+| J26.2 | Fora, modo "desviar" | sai AGORA pela outra saída, com quanto falta para abrir | **PASS** (unit) |
+| J26.3 | Fora, modo "esperar" | ninguém é marcado; a execução dorme até a abertura | **PASS** (unit) |
+| J26.4 | Acordada cedo, ainda fechado | volta a dormir na MESMA hora — não reinicia | **PASS** (unit) |
+| J26.5 | Domingo 09:00 | fechado: o dia da semana conta, não só a hora | **PASS** (unit) |
+| J26.6 | Fuso com acento (`America/Asunción`) | execução morre com `grafo_invalido`, e a tela recusa antes | **PASS** (unit) |
+| J26.7 | Botão de variável em campo que interpola | presente em TODO bloco que chama `ctx.render` | **PASS** (unit — varre o registry por definição) |
+| J26.8 | Campo da regra do "Decidir" | insere caminho CRU, sem chaves | **PASS** (unit) |
+| J26.9 | Lista de modelos do disparo por fluxo | aparece — lia o payload no formato errado e dizia "nenhum modelo aprovado nesta conta" | **PASS** (unit RTL, com o formato real da rota) |
+| J26.10 | Modelo numa conexão intermediada | sai pelo gateway DELA, não pelo número da plataforma direta | **PASS** (unit) |
+| J26.11 | Modelo numa conexão por QR | recusa com nome próprio, sem chamar a rede | **PASS** (unit) |
+| J26.12 | Parâmetros do modelo | ordem NUMÉRICA (`10` depois de `2`), e passam por `render` | **PASS** (unit) |
+| J26.13 | Número por QR em conta intermediada | deixa de ser anunciado como "só envia modelo aprovado" | **PASS** (unit — `capabilitiesOfSession` na rota de conexões) |
+| J26.14 | Montar o bloco de horário pela TELA | paleta → painel → dias e horário → publica | **NÃO MEDIDO NA TELA** — spec escrita (`flow-horario-variaveis-modelo.spec.ts`), registrada no CI |
+| J26.15 | Inserir variável pela TELA | popover abre, escolhe, texto entra no cursor | **NÃO MEDIDO NA TELA** — idem |
+| J26.16 | Escolher modelo pela TELA | seletor aparece, um campo por lacuna | **NÃO MEDIDO NA TELA** — idem |
+
+### O que ficou NÃO MEDIDO, e por quê
+
+- **A tela, com servidor de pé.** A spec existe e está no CI, e não rodou nesta
+  sessão: o Playwright deste repo exige Supabase local, e o CLI do Supabase não
+  sobe na máquina de desenvolvimento usada (Windows). A prova pela tela sai no
+  CI — está registrado aqui em vez de omitido, porque a doutrina de QA Visual
+  pede a prova e ela está devendo. **Quem retomar roda a spec primeiro.**
+- **O gateway de definições da conexão intermediada.** O envio de modelo por ela
+  foi implementado e testado (J26.10/11/12) contra o endpoint de mensagens, que
+  o repo já conhecia e media. A LISTAGEM de definições daquela plataforma **não
+  foi verificada contra a API real** — não houve credencial nem conta nesta
+  sessão. Por isso o seletor não inventa endpoint: quando a lista não vem, ele
+  oferece escrever o nome e o idioma do modelo aprovado, caminho que o pré-voo
+  (`conferir-definicao.ts`) já suporta de propósito. Quem tiver a conta em mãos
+  mede o endpoint e liga a sincronização.
+- **Envio real de um modelo por WhatsApp.** Nenhuma mensagem de verdade saiu
+  nesta sessão. O que está provado é o corpo do pedido e o destino dele, não a
+  entrega.
+
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

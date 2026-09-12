@@ -78,7 +78,8 @@ export function telefoneEmE164(bruto: string): string | null {
   return `+${digitos}`;
 }
 
-export const notifyUserConfigSchema = z.strictObject({
+export const notifyUserConfigSchema = z
+  .strictObject({
   /**
    * Quem avisar. `dono_do_lead` resolve pelo dono atual; `telefone` manda para
    * um número escrito no bloco (o do gerente, o do plantão), e aceita
@@ -94,7 +95,26 @@ export const notifyUserConfigSchema = z.strictObject({
       z.strictObject({ tipo: z.literal("telefone"), telefone: z.string().min(1).max(64) }),
     ])
     .default({ tipo: "dono_do_lead" }),
-  mensagem: z.string().min(1).max(4000),
+  /**
+   * ⚠️ PERDEU o `min(1)`, e a garantia mudou de lugar em vez de sumir.
+   *
+   * Quando o aviso sai por DEFINIÇÃO APROVADA, o texto que o vendedor lê é a
+   * definição, não esta string — exigir mensagem ali obrigaria a escrever um
+   * texto que ninguém veria. Quem cobra a mensagem no modo livre é o
+   * `superRefine` abaixo, com a mesma frase de antes.
+   */
+  mensagem: z.string().max(4000).default(""),
+  /**
+   * TEXTO LIVRE ou DEFINIÇÃO APROVADA — os mesmos nomes de campo de
+   * `whatsapp.bulk_send` e `whatsapp.send_to_lead`. O aviso ao vendedor precisa
+   * disto pelo mesmo motivo que o envio ao cliente: numa conexão oficial, fora
+   * da janela de 24h, texto livre é recusado pela plataforma — e o vendedor
+   * simplesmente não é avisado.
+   */
+  modo: z.enum(["freeform", "template"]).default("freeform"),
+  modelo_nome: z.string().max(200).default(""),
+  modelo_idioma: z.string().max(20).default(""),
+  modelo_valores: z.record(z.string(), z.string()).default({}),
   /**
    * Por qual conexão o aviso sai. `null` = a primeira disponível.
    *
@@ -104,7 +124,26 @@ export const notifyUserConfigSchema = z.strictObject({
    * quem já usa o bloco, e o fluxo pararia de rodar na atualização.
    */
   canal_id: z.string().uuid().nullable().default(null),
-});
+  })
+  .superRefine((config, ctx) => {
+    if (config.modo === "template") {
+      if (config.modelo_nome === "" || config.modelo_idioma === "") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["modelo_nome"],
+          message: "Escolha o modelo aprovado e o idioma dele.",
+        });
+      }
+      return;
+    }
+    if (config.mensagem.trim() === "") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["mensagem"],
+        message: "Escreva a mensagem que o vendedor vai receber.",
+      });
+    }
+  });
 export type NotifyUserConfig = z.infer<typeof notifyUserConfigSchema>;
 
 export const whatsappNotifyUser: FlowNodeDefinition<NotifyUserConfig> = {
@@ -151,6 +190,17 @@ export const whatsappNotifyUser: FlowNodeDefinition<NotifyUserConfig> = {
       texto,
       interno: true,
       channelSessionId: config.canal_id ?? null,
+      ...(config.modo === "template"
+        ? {
+            modelo: {
+              nome: config.modelo_nome,
+              idioma: config.modelo_idioma,
+              valores: Object.fromEntries(
+                Object.entries(config.modelo_valores).map(([k, v]) => [k, ctx.render(v)]),
+              ),
+            },
+          }
+        : {}),
     });
 
     switch (desfecho.kind) {

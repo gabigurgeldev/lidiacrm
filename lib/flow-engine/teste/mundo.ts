@@ -23,7 +23,12 @@ import type {
 } from "../engine";
 import type { FrenteNova, FrenteRow } from "../frentes";
 import type { FlowGraph } from "../graph-schema";
-import type { AtendenteElegivel, DesfechoDeEnvio, FatosDaExecucao } from "../types";
+import type {
+  AtendenteElegivel,
+  DesfechoDeEnvio,
+  FatosDaExecucao,
+  ModeloDeEnvio,
+} from "../types";
 
 const ORG = "org-1";
 const LEAD = "lead-1";
@@ -38,7 +43,13 @@ export interface Mundo {
   /** `channelSessionId` entra porque a ESCOLHA da conexão é o que o bloco de aviso
    *  passou a poder fazer — um falso que a descartasse deixaria o campo novo sem
    *  vigia nenhum. */
-  enviados: Array<{ telefone: string; texto: string; channelSessionId: string | null }>;
+  enviados: Array<{
+    telefone: string;
+    texto: string;
+    channelSessionId: string | null;
+    /** Ver a nota em `enviadosAoCliente`: é a evidência do modo de envio. */
+    modelo?: ModeloDeEnvio;
+  }>;
   /** O que foi mandado ao CLIENTE — outra lista, porque é outro destinatário. */
   /** Campanhas que o bloco de disparo pediu. */
   disparosPedidos: Array<Record<string, unknown>>;
@@ -62,6 +73,15 @@ export interface Mundo {
     texto: string;
     mediaUrl?: string;
     channelSessionId: string | null;
+    /**
+     * A definição aprovada, quando o bloco escolheu o modo de modelo.
+     *
+     * Entra no falso porque é a ÚNICA evidência de que o modo chegou à porta:
+     * um mundo que a descartasse deixaria o caminho de template verde sem
+     * nenhum teste enxergando o que foi mandado — e "mandou modelo" e "mandou
+     * texto" produzem a mesma mensagem na tela do falso.
+     */
+    modelo?: ModeloDeEnvio;
   }>;
   avisos: Array<{ titulo: string; corpo: string }>;
   elegiveis: AtendenteElegivel[];
@@ -419,12 +439,24 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
       },
     },
     canal: {
-      enviarTexto: async ({ telefone, texto, channelSessionId }) => {
-        mundo.enviados.push({ telefone, texto, channelSessionId: channelSessionId ?? null });
+      enviarTexto: async ({ telefone, texto, channelSessionId, modelo }) => {
+        mundo.enviados.push({
+          telefone,
+          texto,
+          channelSessionId: channelSessionId ?? null,
+          modelo,
+        });
         return mundo.desfechoDoEnvio;
       },
-      enviarParaContato: async ({ contactId, tipo, texto, mediaUrl, channelSessionId }) => {
-        mundo.enviadosAoCliente.push({ contactId, tipo, texto, mediaUrl, channelSessionId });
+      enviarParaContato: async ({ contactId, tipo, texto, mediaUrl, channelSessionId, modelo }) => {
+        mundo.enviadosAoCliente.push({
+          contactId,
+          tipo,
+          texto,
+          mediaUrl,
+          channelSessionId,
+          modelo,
+        });
         return mundo.desfechoDoEnvio;
       },
     },

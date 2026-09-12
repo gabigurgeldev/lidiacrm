@@ -23,6 +23,17 @@ export function configExemploDoTipo(tipo: string): Record<string, unknown> {
           },
         ],
       };
+    case "logic.business_hours":
+      // Seg a sex, 08:00-18:00. É o expediente mais comum do público do
+      // produto, e nascer com ele significa que o bloco já responde certo
+      // para a maioria sem ninguém tocar em nada.
+      return {
+        fuso: "America/Sao_Paulo",
+        inicio: "08:00",
+        fim: "18:00",
+        dias: [1, 2, 3, 4, 5],
+        fora_do_horario: "desviar",
+      };
     case "logic.wait":
       return { duracao_ms: 300_000 };
     case "logic.end":

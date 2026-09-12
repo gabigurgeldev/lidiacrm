@@ -32,7 +32,11 @@ import {
   MAX_DESTINATARIOS,
   type Recorte,
 } from "@/lib/bulk-send/montagem";
-import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
+import {
+  ARCHIVED_AT,
+  consultaTolerante,
+  queryTolerantToMissingArchived,
+} from "@/lib/channels/archived";
 import type { ChannelProvider } from "@/lib/channels/capabilities";
 import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
 import type { CriarDisparoInput } from "@/lib/schemas/bulk-sends";
@@ -71,26 +75,43 @@ export async function criarDisparo(
   const orgId = deps.organizationId;
 
   // ─── A conexão, e o modo que ELA permite ────────────────────────────────────
-  const select = (comArchived: boolean) =>
-    `id, provider, status${comArchived ? `, ${ARCHIVED_AT}` : ""}`;
-  const { data: sessaoRaw } = await queryTolerantToMissingArchived(
-    () =>
-      supabase
-        .from("channel_sessions")
-        .select(select(true))
-        .eq("id", entrada.channel_session_id)
-        .eq("organization_id", orgId)
-        .maybeSingle(),
-    () =>
-      supabase
-        .from("channel_sessions")
-        .select(select(false))
-        .eq("id", entrada.channel_session_id)
-        .eq("organization_id", orgId)
-        .maybeSingle(),
+  //
+  // DUAS tolerâncias ANINHADAS, e a ordem importa: `provider_mode` (0206) por
+  // fora, `archived_at` (0106) por dentro. Ao contrário, um clone sem a coluna
+  // mais nova perderia junto o filtro de arquivados — e uma campanha sairia por
+  // uma conexão excluída. Mesmo desenho de `app/api/v1/channel-sessions`.
+  const select = (comModo: boolean, comArchived: boolean) =>
+    `id, provider, status${comModo ? ", provider_mode" : ""}${comArchived ? `, ${ARCHIVED_AT}` : ""}`;
+  const buscar = (comModo: boolean) => () =>
+    queryTolerantToMissingArchived(
+      () =>
+        supabase
+          .from("channel_sessions")
+          .select(select(comModo, true))
+          .eq("id", entrada.channel_session_id)
+          .eq("organization_id", orgId)
+          .maybeSingle(),
+      () =>
+        supabase
+          .from("channel_sessions")
+          .select(select(comModo, false))
+          .eq("id", entrada.channel_session_id)
+          .eq("organization_id", orgId)
+          .maybeSingle(),
+    );
+  const { data: sessaoRaw } = await consultaTolerante(
+    "provider_mode",
+    buscar(true),
+    buscar(false),
   );
   const sessao = sessaoRaw as unknown as
-    | { id: string; provider: ChannelProvider; status: string; archived_at?: string | null }
+    | {
+        id: string;
+        provider: ChannelProvider;
+        status: string;
+        provider_mode?: string | null;
+        archived_at?: string | null;
+      }
     | null;
 
   if (!sessao) {
@@ -115,7 +136,13 @@ export async function criarDisparo(
   // O modo é consequência da conexão, nunca uma segunda pergunta — ver
   // `lib/bulk-send/modo.ts`. A tela nem oferece a combinação impossível; este
   // gate é para quem chegou pela API ou por um bloco de fluxo.
-  const recusa = recusaDeModo(sessao.provider, entrada.mode);
+  // A CONEXÃO, e não o provider: um provider hospeda instância oficial (que
+  // exige modelo) e número por QR (que aceita texto livre) na mesma conta, e
+  // perguntar pelo nome dele recusaria metade dos envios legítimos.
+  const recusa = recusaDeModo(
+    { provider: sessao.provider, mode: sessao.provider_mode ?? null },
+    entrada.mode,
+  );
   if (recusa) {
     return { ok: false, recusa: { codigo: "modo_incompativel", mensagem: recusa } };
   }
