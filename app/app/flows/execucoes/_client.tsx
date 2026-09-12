@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useT } from "@/hooks/i18n/useT";
+import { diagnosticoDoMotivo, ehDesfechoEsperado } from "@/lib/flow-engine/desfecho-esperado";
 import { useExecucoes, type ExecucaoDeFluxo } from "@/hooks/flows/useFlowExecutions";
 import { useFluxos } from "@/hooks/flows/useFlows";
 
@@ -81,7 +82,13 @@ function LinhaDaExecucao({
   nomeDoFluxo: string;
 }) {
   const t = useT();
-  const morreu = execucao.status === "dead";
+  // "Não era para este fluxo" NÃO é erro: um fluxo que começa por palavra é
+  // armado por toda mensagem que chega, e a que não traz a palavra encerra sem
+  // que nada tenha quebrado. Pintar isso de vermelho ensina a ignorar vermelho.
+  const naoEraParaEsteFluxo = ehDesfechoEsperado(execucao.last_error);
+  const morreu = execucao.status === "dead" && !naoEraParaEsteFluxo;
+  const diagnostico =
+    execucao.last_error === null ? "" : diagnosticoDoMotivo(execucao.last_error);
 
   return (
     <li>
@@ -101,13 +108,30 @@ function LinhaDaExecucao({
               {execucao.last_error}
             </p>
           )}
+          {naoEraParaEsteFluxo && (
+            // O diagnóstico VAI JUNTO, e é o ponto: sem ele, "não era para este
+            // fluxo" é indistinguível de "o texto nunca chegou ao bloco" — e o
+            // segundo já matou 100% das execuções deste gatilho uma vez.
+            <p
+              className="mt-1 text-xs text-muted-foreground"
+              data-testid={`motivo-da-execucao-${execucao.id}`}
+            >
+              {diagnostico === "" ? t("A mensagem não era para este fluxo.") : diagnostico}
+            </p>
+          )}
           {execucao.outcome !== null && (
             <p className="mt-1 text-xs text-muted-foreground">
               {t("Desfecho")}: {execucao.outcome}
             </p>
           )}
         </div>
-        <Badge variant={morreu ? "destructive" : "secondary"}>{t(NOME_DO_ESTADO[execucao.status] ?? execucao.status)}</Badge>
+        <Badge variant={morreu ? "destructive" : "secondary"}>
+          {t(
+            naoEraParaEsteFluxo
+              ? "Não era para este fluxo"
+              : (NOME_DO_ESTADO[execucao.status] ?? execucao.status),
+          )}
+        </Badge>
       </Card>
     </li>
   );

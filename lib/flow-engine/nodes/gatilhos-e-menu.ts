@@ -155,6 +155,32 @@ function textoDoEvento(evento: Record<string, unknown>): string {
   return "";
 }
 
+/** Quanto do texto do cliente vai para o motivo. O bastante para reconhecer. */
+const LIMITE_DO_TRECHO = 120;
+
+/**
+ * O motivo, com o diagnóstico junto.
+ *
+ * O texto do cliente entra em `flow_executions.last_error`, que a cascata de
+ * anonimização da LGPD já limpa (migration 0208 zera `last_error` junto com
+ * `input`, `context` e `output`) — então ele não cria um lugar novo onde a
+ * frase de uma pessoa sobrevive ao pedido de exclusão dela.
+ */
+export function motivoDeNaoCasar(
+  texto: string,
+  palavras: readonly string[],
+  modo: "contem" | "exata",
+): string {
+  const trecho = texto.trim();
+  const recebido =
+    trecho === ""
+      ? "nenhum texto"
+      : `"${trecho.slice(0, LIMITE_DO_TRECHO)}${trecho.length > LIMITE_DO_TRECHO ? "…" : ""}"`;
+  const esperado = palavras.length === 0 ? "nenhuma palavra configurada" : palavras.join(", ");
+  const comparacao = modo === "exata" ? "a mensagem inteira tinha de ser" : "a mensagem tinha de conter";
+  return `mensagem_sem_a_palavra: recebi ${recebido}; ${comparacao}: ${esperado}`;
+}
+
 export const triggerKeyword: FlowNodeDefinition<GatilhoPorPalavraConfig> = {
   type: "trigger.keyword",
   version: 1,
@@ -168,8 +194,16 @@ export const triggerKeyword: FlowNodeDefinition<GatilhoPorPalavraConfig> = {
     const texto = textoDoEvento(ctx.escopo.event);
     if (!mensagemCasa(texto, config.palavras, config.modo)) {
       // `dead`, e não `fail`: não houve erro nenhum. A mensagem simplesmente
-      // não era para este fluxo — ver a nota do cabeçalho sobre o custo disto.
-      return { kind: "dead", reason: "mensagem_sem_a_palavra" };
+      // não era para este fluxo — `desfecho-esperado.ts` é quem tira o vermelho
+      // e o aviso da Central.
+      //
+      // ⚠️ O motivo CARREGA O QUE FOI COMPARADO, e isso não é conforto: o slug
+      // sozinho era idêntico nos dois casos que precisam ser distinguidos —
+      // "a mensagem não era para este fluxo" e "o texto não chegou ao bloco". O
+      // segundo já aconteceu neste arquivo, matou 100% das execuções, e durou
+      // porque a tela ficava igual. Com o texto escrito ali, a diferença entre
+      // `recebi ""` e `recebi "oi tudo bem"` é a primeira coisa que se vê.
+      return { kind: "dead", reason: motivoDeNaoCasar(texto, config.palavras, config.modo) };
     }
     return { kind: "advance", branch_id: "else" };
   },

@@ -24,6 +24,7 @@ import {
 } from "./frentes";
 import { analisarGrafo, arestaDoRamo, flowGraphSchema, noPorId } from "./graph-schema";
 import { exigirNo } from "./registry";
+import { ehDesfechoEsperado } from "./desfecho-esperado";
 import { interpolar } from "./variaveis";
 import type {
   EscopoDeVariaveis,
@@ -1110,7 +1111,14 @@ async function matar(
     completed_at: agora.toISOString(),
     updated_at: agora.toISOString(),
   });
-  await avisarQueMorreu(execucao, deps, motivo);
+  // ⚠️ AVISO SÓ PARA O QUE É FALHA DE VERDADE.
+  //
+  // Um fluxo que começa por palavra é armado por TODA mensagem que chega — o
+  // matcher não lê a config do bloco, então ele cria a execução e o bloco
+  // decide. Avisar em cada "oi" que não era para aquele fluxo enche a Central de
+  // "Automação parou" e ensina o operador a ignorar o vermelho, que é o oposto
+  // do que este aviso existe para fazer. Ver `desfecho-esperado.ts`.
+  if (!ehDesfechoEsperado(motivo)) await avisarQueMorreu(execucao, deps, motivo);
   resumo.mortas += 1;
 }
 

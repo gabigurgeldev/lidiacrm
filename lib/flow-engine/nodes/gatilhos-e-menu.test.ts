@@ -78,16 +78,45 @@ describe("trigger.keyword com o payload REAL do evento", () => {
       modo: "contem",
       canal_id: null,
     });
-    expect(r).toEqual({ kind: "dead", reason: "mensagem_sem_a_palavra" });
+    expect(r.kind).toBe("dead");
+    expect((r as { reason: string }).reason).toMatch(/^mensagem_sem_a_palavra:/u);
   });
 
-  it("evento sem texto nenhum continua morrendo", async () => {
+  it("⭐ o motivo DIZ o que comparou — é o que separa 'não era para mim' de 'não chegou'", async () => {
+    // Este arquivo já pagou um defeito em que o texto NÃO chegava ao bloco:
+    // toda execução morria com este mesmo slug, 100% das vezes, e a tela ficava
+    // idêntica ao caso normal. Com o texto no motivo, a diferença entre
+    // `recebi nenhum texto` e `recebi "bom dia"` é a primeira coisa que se vê.
+    const r = await triggerKeyword.execute(ctx({ ...PAYLOAD_REAL, body_preview: "bom dia" }), {
+      palavras: ["orçamento", "preço"],
+      modo: "contem",
+      canal_id: null,
+    });
+    const motivo = (r as { reason: string }).reason;
+    expect(motivo).toContain('recebi "bom dia"');
+    expect(motivo).toContain("orçamento, preço");
+    expect(motivo).toContain("tinha de conter");
+  });
+
+  it("evento sem texto nenhum continua morrendo — e o motivo NOMEIA a ausência", async () => {
     const r = await triggerKeyword.execute(ctx({ type: "image", direction: "inbound" }), {
       palavras: ["oi"],
       modo: "contem",
       canal_id: null,
     });
-    expect(r).toEqual({ kind: "dead", reason: "mensagem_sem_a_palavra" });
+    expect(r.kind).toBe("dead");
+    // "nenhum texto" é a frase que acusa o defeito de contrato: se ela aparecer
+    // para uma mensagem de texto de verdade, o payload parou de chegar.
+    expect((r as { reason: string }).reason).toContain("recebi nenhum texto");
+  });
+
+  it("⭐ modo exata diz que era a mensagem INTEIRA — a confusão mais comum", async () => {
+    const r = await triggerKeyword.execute(ctx({ ...PAYLOAD_REAL, body_preview: "oi, tudo bem?" }), {
+      palavras: ["oi"],
+      modo: "exata",
+      canal_id: null,
+    });
+    expect((r as { reason: string }).reason).toContain("a mensagem inteira tinha de ser");
   });
 
   it("as chaves antigas seguem valendo — outro emissor pode usá-las", async () => {

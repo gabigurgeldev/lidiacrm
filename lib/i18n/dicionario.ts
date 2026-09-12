@@ -7245,6 +7245,10 @@ export const DICIONARIO: Traducoes = {
   "Numa conexão oficial, o vendedor que não escreve há mais de 24 horas só recebe modelo aprovado — e é ele quem precisa ser avisado.": { es: "En una conexión oficial, el vendedor que no escribe hace más de 24 horas solo recibe plantilla aprobada — y es él quien necesita el aviso." },
   "Modelo aprovado sai mesmo fora da janela de 24 horas — é o único caminho quando o cliente não escreve há um dia.": { es: "La plantilla aprobada sale incluso fuera de la ventana de 24 horas — es el único camino cuando el cliente no escribe hace un día." },
   "Texto livre só é entregue dentro da janela de 24 horas numa conexão oficial. Fora dela, use um modelo.": { es: "El texto libre solo se entrega dentro de la ventana de 24 horas en una conexión oficial. Fuera de ella, usa una plantilla." },
+
+  // ─── Execuções: o desfecho que não é erro ───
+  "Não era para este fluxo": { es: "No era para este flujo" },
+  "A mensagem não era para este fluxo.": { es: "El mensaje no era para este flujo." },
 };
 
 /**

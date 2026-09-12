@@ -18,6 +18,7 @@ import {
   useTrilhaDaExecucao,
 } from "@/hooks/flows/useFlowExecutionTrail";
 import { NOME_DO_ESTADO } from "@/app/app/flows/execucoes/_client";
+import { diagnosticoDoMotivo, ehDesfechoEsperado } from "@/lib/flow-engine/desfecho-esperado";
 
 /**
  * As execuções de UM fluxo, ao vivo.
@@ -74,7 +75,13 @@ function LinhaDaExecucao({
   const tag = useTagDeIdioma();
   const contato = contatoDaExecucao(execucao);
   const nome = nomeDoContato(contato);
-  const morreu = execucao.status === "dead";
+  // Mesma regra da tela geral, do mesmo módulo: duas listas divergiriam no
+  // primeiro motivo novo, e o sintoma seria uma tela chamando de normal o que a
+  // outra pinta de erro.
+  const naoEraParaEsteFluxo = ehDesfechoEsperado(execucao.last_error);
+  const morreu = execucao.status === "dead" && !naoEraParaEsteFluxo;
+  const diagnostico =
+    execucao.last_error === null ? "" : diagnosticoDoMotivo(execucao.last_error);
 
   return (
     <li>
@@ -102,9 +109,24 @@ function LinhaDaExecucao({
                 {execucao.last_error}
               </p>
             )}
+            {naoEraParaEsteFluxo && (
+              // O diagnóstico VAI JUNTO, e é o ponto: sem ele, "não era para
+              // este fluxo" fica idêntico a "o texto nunca chegou ao bloco" — e
+              // o segundo já matou 100% das execuções deste gatilho uma vez.
+              <p
+                className="mt-1 text-xs text-muted-foreground"
+                data-testid={`motivo-${execucao.id}`}
+              >
+                {diagnostico === "" ? t("A mensagem não era para este fluxo.") : diagnostico}
+              </p>
+            )}
           </div>
           <Badge variant={morreu ? "destructive" : "secondary"}>
-            {t(NOME_DO_ESTADO[execucao.status] ?? execucao.status)}
+            {t(
+              naoEraParaEsteFluxo
+                ? "Não era para este fluxo"
+                : (NOME_DO_ESTADO[execucao.status] ?? execucao.status),
+            )}
           </Badge>
         </button>
 
