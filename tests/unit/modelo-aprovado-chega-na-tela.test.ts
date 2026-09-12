@@ -57,8 +57,15 @@ describe("1. qual coluna recorta o espelho", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const consultaDoEspelho = { data: null as unknown, error: null as unknown };
+/** O que `resolveMetaCreds` devolve — o teste troca para exercitar a ausência. */
+const credencial = {
+  data: null as null | { phoneNumberId: string; token: string; graphVersion: string },
+};
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
+vi.mock("@/lib/channels/meta/credentials", () => ({
+  resolveMetaCreds: vi.fn(async () => credencial.data),
+}));
 
 /** Um cliente que devolve o que o teste puser em `consultaDoEspelho`. */
 function dbFalso() {
@@ -75,8 +82,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   consultaDoEspelho.data = null;
   consultaDoEspelho.error = null;
-  process.env.META_PHONE_NUMBER_ID = "phone-1";
-  process.env.META_SYSTEM_USER_TOKEN = "token-meta";
+  credencial.data = { phoneNumberId: "phone-da-sessao", token: "token-da-sessao", graphVersion: "v22.0" };
   fetchMock = vi.fn(async () => ({
     ok: true,
     status: 200,
@@ -89,7 +95,61 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("2. o nome escrito à mão sai pelo fio", () => {
+describe("2. a credencial é a DA CONEXÃO, e não a do ambiente", () => {
+  it("⭐ o template sai pelo número e pelo token da CONEXÃO escolhida", async () => {
+    // O defeito: esta função lia `META_PHONE_NUMBER_ID` e
+    // `META_SYSTEM_USER_TOKEN` do ambiente, e quem conecta o canal oficial pela
+    // tela do produto não tem essas variáveis — o número e o token ficam em
+    // `channel_sessions`, cifrados. O POST ia para
+    // `graph.facebook.com/v22.0//messages` com `Bearer` vazio.
+    //
+    // O sintoma enganava: TEXTO funcionava, porque `metaCloudAdapter.send`
+    // sempre usou `resolveMetaCreds`. Só o caminho de template tinha ficado no
+    // env — e nada na tela ligava uma coisa à outra.
+    const { sendTemplateForSession } = await import(
+      "@/lib/channels/meta/send-template-for-session"
+    );
+    await sendTemplateForSession(dbFalso(), {
+      organizationId: "org-1",
+      sessionRef: "phone-da-sessao",
+      to: "5511999998888",
+      name: "boas_vindas",
+      language: "pt_BR",
+      values: {},
+    });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain("/phone-da-sessao/messages");
+    // A URL com o número VAZIO é a assinatura exata do defeito antigo.
+    expect(String(url)).not.toContain("//messages");
+    expect((init as { headers: Record<string, string> }).headers.Authorization).toBe(
+      "Bearer token-da-sessao",
+    );
+  });
+
+  it("⭐ sem credencial nenhuma, RECUSA com nome próprio — não posta numa URL torta", async () => {
+    // O POST para uma URL sem número devolvia um erro da Meta que mandava o
+    // operador procurar no template. O problema estava na conexão.
+    credencial.data = null;
+    const { sendTemplateForSession } = await import(
+      "@/lib/channels/meta/send-template-for-session"
+    );
+
+    await expect(
+      sendTemplateForSession(dbFalso(), {
+        organizationId: "org-1",
+        sessionRef: null,
+        to: "5511999998888",
+        name: "boas_vindas",
+        language: "pt_BR",
+        values: {},
+      }),
+    ).rejects.toThrow(/template_sem_credencial/u);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("3. o nome escrito à mão sai pelo fio", () => {
   it("⭐ definição NÃO espelhada é MANDADA — a plataforma é a autoridade", async () => {
     // O defeito: `bindingState` devolvia `missing` e a tradução era
     // `template_missing: … não está no espelho` — SEM chamar a Meta. O operador
@@ -102,6 +162,7 @@ describe("2. o nome escrito à mão sai pelo fio", () => {
 
     const id = await sendTemplateForSession(dbFalso(), {
       organizationId: "org-1",
+      sessionRef: "phone-da-sessao",
       to: "5511999998888",
       name: "confirmacao_pedido",
       language: "pt_BR",
@@ -124,6 +185,7 @@ describe("2. o nome escrito à mão sai pelo fio", () => {
     );
     await sendTemplateForSession(dbFalso(), {
       organizationId: "org-1",
+      sessionRef: "phone-da-sessao",
       to: "5511999998888",
       name: "boas_vindas",
       language: "pt_BR",
@@ -149,6 +211,7 @@ describe("2. o nome escrito à mão sai pelo fio", () => {
     await expect(
       sendTemplateForSession(dbFalso(), {
         organizationId: "org-1",
+        sessionRef: "phone-da-sessao",
         to: "5511999998888",
         name: "nao_existe",
         language: "pt_BR",
@@ -164,6 +227,7 @@ describe("2. o nome escrito à mão sai pelo fio", () => {
     await expect(
       sendTemplateForSession(dbFalso(), {
         organizationId: "org-1",
+        sessionRef: "phone-da-sessao",
         to: "5511999998888",
         name: "",
         language: "pt_BR",
@@ -190,6 +254,7 @@ describe("2. o nome escrito à mão sai pelo fio", () => {
     await expect(
       sendTemplateForSession(dbFalso(), {
         organizationId: "org-1",
+        sessionRef: "phone-da-sessao",
         to: "5511999998888",
         name: "promo",
         language: "pt_BR",

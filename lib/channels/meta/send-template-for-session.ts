@@ -15,11 +15,32 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { createAdminClient } from "@/lib/supabase/admin";
+
 import { componentsPorChave } from "../cloud-api/template-por-chaves";
+import { resolveMetaCreds } from "./credentials";
 import { postarTemplate, sendTemplate } from "./send-template";
 
 export interface SendTemplateForSessionInput {
   organizationId: string;
+  /**
+   * A CONEXÃO que vai mandar — `channel_sessions.meta_phone_number_id`.
+   *
+   * ⚠️ SEM ISTO, O TEMPLATE NÃO SAÍA. Esta função lia `META_PHONE_NUMBER_ID` e
+   * `META_SYSTEM_USER_TOKEN` do AMBIENTE, e quem conecta o canal oficial pela
+   * tela do produto não tem essas variáveis: o número e o token ficam em
+   * `channel_sessions`, cifrados. O resultado era um POST para
+   * `graph.facebook.com/v22.0//messages` com `Bearer` vazio.
+   *
+   * E o sintoma enganava: TEXTO funcionava. `metaCloudAdapter.send` sempre usou
+   * `resolveMetaCreds` (sessão primeiro, env como queda) — só o caminho de
+   * template tinha ficado no env. Então o operador via o mesmo número mandar
+   * texto e recusar modelo, e nada na tela ligava uma coisa à outra.
+   *
+   * `null` mantém o comportamento antigo (só env), para chamador que ainda não
+   * sabe de qual conexão está falando.
+   */
+  sessionRef: string | null;
   /** Destinatário em dígitos E.164, já resolvido pelo adapter. */
   to: string;
   name: string;
@@ -41,6 +62,24 @@ export async function sendTemplateForSession(
 ): Promise<string | null> {
   if (!input.name || !input.language) {
     throw new Error("template_incompleto: nome e idioma são obrigatórios em type=template");
+  }
+
+  // SESSÃO PRIMEIRO, env como queda — a mesma resolução que o envio de texto
+  // deste canal usa desde sempre. `createAdminClient` e não o `db` recebido: a
+  // leitura precisa passar por cima da RLS para decifrar o token, e é o que
+  // `metaCloudAdapter` já faz. O `organization_id` do filtro vem do chamador,
+  // que o resolveu de fonte confiável.
+  const creds = await resolveMetaCreds(createAdminClient(), {
+    organizationId: input.organizationId,
+    phoneNumberId: input.sessionRef ?? "",
+  });
+  if (!creds) {
+    // Nome próprio em vez de um POST para uma URL sem número: aquele devolvia um
+    // erro da Meta que mandava o operador procurar no template.
+    throw new Error(
+      "template_sem_credencial: esta conexão não tem número e token da API Oficial " +
+        "gravados, e não há credencial no ambiente. Reconecte o canal em Conexões.",
+    );
   }
 
   const { data: linha, error } = await db
@@ -74,9 +113,9 @@ export async function sendTemplateForSession(
   // de "não está no espelho".
   if (!linha) {
     const resultadoCru = await postarTemplate({
-      phoneNumberId: process.env.META_PHONE_NUMBER_ID ?? "",
-      token: process.env.META_SYSTEM_USER_TOKEN ?? "",
-      graphVersion: process.env.META_GRAPH_VERSION ?? "v22.0",
+      phoneNumberId: creds.phoneNumberId,
+      token: creds.token,
+      graphVersion: creds.graphVersion,
       to: input.to,
       name: input.name,
       language: input.language,
@@ -89,9 +128,9 @@ export async function sendTemplateForSession(
   }
 
   const resultado = await sendTemplate({
-    phoneNumberId: process.env.META_PHONE_NUMBER_ID ?? "",
-    token: process.env.META_SYSTEM_USER_TOKEN ?? "",
-    graphVersion: process.env.META_GRAPH_VERSION ?? "v22.0",
+    phoneNumberId: creds.phoneNumberId,
+    token: creds.token,
+    graphVersion: creds.graphVersion,
     to: input.to,
     binding: {
       name: input.name,

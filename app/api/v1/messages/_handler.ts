@@ -606,6 +606,9 @@ export async function sendMessageHandler(
             ).externalId
           : await sendTemplateForSession(supabase, {
               organizationId: ctx.organization_id,
+              // A CONEXÃO da conversa. Sem ela o envio caía no número e no token
+              // do ambiente — que quem conectou o canal pela tela não tem.
+              sessionRef: resolveSessionRef(c.channel_sessions),
               to: chatId,
               name: input.template_name ?? "",
               language: input.template_language ?? "",
