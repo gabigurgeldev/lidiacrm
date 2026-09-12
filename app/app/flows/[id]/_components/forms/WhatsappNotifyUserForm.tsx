@@ -11,7 +11,8 @@ import { useT } from "@/hooks/i18n/useT";
 import { useAttendants } from "@/hooks/team/useAttendants";
 
 import { CampoComVariavel } from "./CampoComVariavel";
-import { SeletorDeCanal } from "./SeletorDeCanal";
+import { SeletorDeCanal, useConexoesParaEnvio } from "./SeletorDeCanal";
+import { SeletorDeModelo } from "./SeletorDeModelo";
 import { Campo, Dica, Secao, type PropsDoFormulario } from "./shared";
 
 /**
@@ -60,6 +61,14 @@ export function WhatsappNotifyUserForm({ config, aoMudarConfig }: PropsDoFormula
   };
   const tipo = destinatario.tipo ?? "dono_do_lead";
   const escolhida = equipe.find((a) => a.user_id === destinatario.user_id);
+
+  const canalId = (config.canal_id as string | null) ?? null;
+  const { data: conexoes } = useConexoesParaEnvio();
+  const conexao = (conexoes ?? []).find((c) => c.id === canalId) ?? null;
+  // A conexão que SÓ entrega modelo tira a escolha, como no envio ao cliente.
+  const soModelo = conexao?.modo === "template";
+  const modo = soModelo ? "template" : String(config.modo ?? "freeform");
+  const porModelo = modo === "template";
 
   const trocarTipo = (v: string) => {
     if (v === "telefone") {
@@ -152,16 +161,45 @@ export function WhatsappNotifyUserForm({ config, aoMudarConfig }: PropsDoFormula
           </Campo>
         )}
 
-        <Campo rotulo={t("Mensagem para o vendedor")}>
-          <CampoComVariavel
-            multilinha
-            linhas={6}
-            maxLength={4000}
-            valor={String(config.mensagem ?? "")}
-            aoMudar={(v) => mudar({ mensagem: v })}
-            testid="campo-mensagem-do-aviso"
+        <Campo rotulo={t("Como enviar")}>
+          {soModelo ? (
+            <p className="text-xs text-muted-foreground" data-testid="so-modelo">
+              {t(
+                "Esta conexão só entrega modelo aprovado — é regra da plataforma. Escolha o modelo abaixo.",
+              )}
+            </p>
+          ) : (
+            <Select value={modo} onValueChange={(v) => mudar({ modo: v })}>
+              <SelectTrigger data-testid="campo-modo-de-envio">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="freeform">{t("Escrever a mensagem")}</SelectItem>
+                <SelectItem value="template">{t("Usar um modelo aprovado")}</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          <Dica
+            texto={t(
+              "Numa conexão oficial, o vendedor que não escreve há mais de 24 horas só recebe modelo aprovado — e é ele quem precisa ser avisado.",
+            )}
           />
         </Campo>
+
+        {porModelo && <SeletorDeModelo canalId={canalId} config={config} mudar={mudar} />}
+
+        {!porModelo && (
+          <Campo rotulo={t("Mensagem para o vendedor")}>
+            <CampoComVariavel
+              multilinha
+              linhas={6}
+              maxLength={4000}
+              valor={String(config.mensagem ?? "")}
+              aoMudar={(v) => mudar({ mensagem: v })}
+              testid="campo-mensagem-do-aviso"
+            />
+          </Campo>
+        )}
       </Secao>
 
       <div className="space-y-1.5">
@@ -169,8 +207,14 @@ export function WhatsappNotifyUserForm({ config, aoMudarConfig }: PropsDoFormula
           {t("Por onde enviar")}
         </p>
         <SeletorDeCanal
-          valor={(config.canal_id as string | null) ?? null}
-          aoEscolher={(id) => mudar({ canal_id: id })}
+          valor={canalId}
+          aoEscolher={(id) => {
+            // Mesma razão do bloco de envio ao cliente: trocar para uma conexão
+            // que só entrega modelo GRAVA o modo. Sem isto, a tela mostraria o
+            // seletor e o grafo publicado continuaria dizendo "freeform".
+            const nova = (conexoes ?? []).find((c) => c.id === id) ?? null;
+            mudar({ canal_id: id, ...(nova?.modo === "template" ? { modo: "template" } : {}) });
+          }}
         />
       </div>
     </div>

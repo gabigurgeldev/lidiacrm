@@ -443,6 +443,12 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
               <JanelaFechadaAviso
                 conversationId={selectedConversation.id}
                 provider={selectedConversation.channel_sessions?.provider ?? null}
+                // A MESMA modalidade que decidiu barrar o texto livre logo
+                // acima. Sem ela, o canal intermediado oficial barrava e não
+                // oferecia modelo nenhum — o operador ficava sem caminho, que é
+                // o que este aviso existe para não deixar acontecer.
+                modo={modoDoCanal}
+                canalId={selectedConversation.channel_sessions?.id ?? null}
                 motivo={motivoDaJanela}
               />
             )}

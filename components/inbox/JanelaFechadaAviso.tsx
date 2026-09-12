@@ -60,26 +60,42 @@ function textoDoModelo(modelo: ModeloAprovado): string {
 export function JanelaFechadaAviso({
   conversationId,
   provider,
+  modo,
+  canalId,
   motivo,
 }: {
   conversationId: string;
   /** Decide de ONDE vêm as definições. A tela não interpreta este valor. */
   provider: string | null;
+  /**
+   * A modalidade da conexão, quando o banco a tem. Existe porque um provider
+   * hospeda instância oficial (que TEM definições aprovadas) e número por QR
+   * (que não tem) na mesma conta — e a tela não pode saber qual é qual.
+   */
+  modo: string | null;
+  /**
+   * Qual conexão. Duas conexões do mesmo provider têm definições DIFERENTES, e
+   * uma lista sem este recorte ofereceria o modelo de uma conta na conversa da
+   * outra — envio que a plataforma recusa, com a culpa caindo no CRM.
+   */
+  canalId: string | null;
   motivo: string;
 }) {
   const t = useT();
   const send = useSendMessage();
   const [escolhido, setEscolhido] = useState("");
 
-  const fonte = fonteDeTemplates(provider);
+  const fonte = fonteDeTemplates(provider, modo);
   const { data } = useQuery({
-    // A chave inclui a fonte: sem isso, trocar de conversa entre canais serviria
-    // a lista em cache do canal anterior, e o operador mandaria um modelo que
-    // não existe na conta desta conversa.
-    queryKey: ["templates-da-conversa", fonte],
+    // A chave inclui a fonte E a conexão: sem isso, trocar de conversa entre
+    // canais serviria a lista em cache do canal anterior, e o operador mandaria
+    // um modelo que não existe na conta desta conversa.
+    queryKey: ["templates-da-conversa", fonte, canalId],
     enabled: fonte !== null,
     queryFn: async () =>
-      apiClient.get<{ data: { templates: ModeloAprovado[] } }>(rotaDeTemplates(fonte!)),
+      apiClient.get<{ data: { templates: ModeloAprovado[] } }>(
+        rotaDeTemplates(fonte!) + (canalId === null ? "" : `?canal_id=${canalId}`),
+      ),
     staleTime: 30_000,
   });
 

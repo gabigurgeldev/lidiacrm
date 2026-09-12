@@ -29,10 +29,15 @@ import { warmupCapFor } from "@/lib/agent-engine/pacing/engine";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { configDePacingDoCanal } from "@/lib/automation/janela-do-canal";
-import { modoPermitido, temCustoPorMensagem, temRiscoDeBanimento } from "@/lib/bulk-send/modo";
+import { modoPermitidoNaConexao } from "@/lib/bulk-send/modo";
 import { pisoDoIntervalo } from "@/lib/bulk-send/ritmo";
-import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
-import { capabilitiesOf, type ChannelProvider } from "@/lib/channels/capabilities";
+import {
+  ARCHIVED_AT,
+  consultaTolerante,
+  queryTolerantToMissingArchived,
+} from "@/lib/channels/archived";
+import { capabilitiesOfSession, type ChannelProvider } from "@/lib/channels/capabilities";
+import { fonteDeTemplates } from "@/lib/channels/templates-fonte";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -47,24 +52,33 @@ export async function GET(req: NextRequest): Promise<Response> {
   const orgId = authz.org.orgId;
 
   const supabase = await createClient();
-  const colunas = (comArchived: boolean) =>
-    `id, provider, status, display_name, phone_number, daily_message_limit${comArchived ? `, ${ARCHIVED_AT}` : ""}`;
+  const colunas = (comModo: boolean, comArchived: boolean) =>
+    `id, provider, status, display_name, phone_number, daily_message_limit${
+      comModo ? ", provider_mode" : ""
+    }${comArchived ? `, ${ARCHIVED_AT}` : ""}`;
 
-  const { data, error } = await queryTolerantToMissingArchived(
-    () =>
-      supabase
-        .from("channel_sessions")
-        .select(colunas(true))
-        .eq("organization_id", orgId)
-        .is(ARCHIVED_AT, null)
-        .order("created_at", { ascending: true }),
-    () =>
-      supabase
-        .from("channel_sessions")
-        .select(colunas(false))
-        .eq("organization_id", orgId)
-        .order("created_at", { ascending: true }),
-  );
+  // DUAS tolerâncias ANINHADAS: `provider_mode` (0206) por fora, `archived_at`
+  // (0106) por dentro. Ao contrário, um clone sem a coluna mais nova perderia
+  // junto o filtro de arquivados, e uma conexão excluída voltaria ao seletor de
+  // disparo — regressão de verdade para consertar um campo mais novo. Mesmo
+  // desenho de `app/api/v1/channel-sessions`.
+  const buscar = (comModo: boolean) => () =>
+    queryTolerantToMissingArchived(
+      () =>
+        supabase
+          .from("channel_sessions")
+          .select(colunas(comModo, true))
+          .eq("organization_id", orgId)
+          .is(ARCHIVED_AT, null)
+          .order("created_at", { ascending: true }),
+      () =>
+        supabase
+          .from("channel_sessions")
+          .select(colunas(comModo, false))
+          .eq("organization_id", orgId)
+          .order("created_at", { ascending: true }),
+    );
+  const { data, error } = await consultaTolerante("provider_mode", buscar(true), buscar(false));
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
   const sessoes = (data ?? []) as unknown as Array<{
@@ -74,6 +88,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     display_name: string | null;
     phone_number: string | null;
     daily_message_limit: number | null;
+    provider_mode?: string | null;
   }>;
 
   // `channel_knobs` é lida com o client admin: a tabela é de configuração do
@@ -85,7 +100,15 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const conexoes = await Promise.all(
     sessoes.map(async (session) => {
-      const capabilities = capabilitiesOf(session.provider);
+      // ⚠️ `capabilitiesOfSession`, e não `capabilitiesOf`.
+      //
+      // Com o provider sozinho, um provider que hospeda as DUAS modalidades cai
+      // na linha conservadora de fallback — `requiresTemplates: true` e
+      // `minIntervalMs` do lado oficial. Medido na tela: um número ligado por QR
+      // naquela conta era anunciado como "Só envia modelo aprovado", e o texto
+      // livre que ele aceita ficava sem caminho no seletor de disparo.
+      const modo = session.provider_mode ?? null;
+      const capabilities = capabilitiesOfSession({ provider: session.provider, mode: modo });
       const { knobs, numberActivatedAt } = await configDePacingDoCanal(admin, orgId, session.id);
       const { pisoMs, origem } = pisoDoIntervalo(knobs, capabilities);
 
@@ -109,11 +132,18 @@ export async function GET(req: NextRequest): Promise<Response> {
         telefone: session.phone_number,
         conectada: session.status === "WORKING",
         // Vocabulário de PRODUTO. A tela nunca vê o nome do canal.
-        modo: modoPermitido(session.provider),
+        modo: modoPermitidoNaConexao({ provider: session.provider, mode: modo }),
+        // ROTULO NEUTRO de onde vêm as definições aprovadas DESTA conexão —
+        // "oficial", "parceiro" ou `null`. A tela monta a URL com ele e nunca vê
+        // o nome do canal (`scripts/lint-channels.ts` varre `app/` e reprova).
+        // Sem este campo, um bloco de fluxo que oferece envio por modelo teria de
+        // adivinhar a rota, e adivinhar aqui é oferecer o modelo de uma conta na
+        // conversa de outra.
+        fonte_de_modelos: fonteDeTemplates(session.provider, modo),
         piso_ms: pisoMs,
         piso_origem: origem,
-        cobra_por_mensagem: temCustoPorMensagem(session.provider),
-        risco_de_banimento: temRiscoDeBanimento(session.provider),
+        cobra_por_mensagem: capabilities.costPerMessage,
+        risco_de_banimento: capabilities.banRisk,
         teto_de_hoje: Number.isFinite(tetoDeHoje) ? tetoDeHoje : null,
         em_aquecimento: capDoWarmup !== null,
         janela: { inicio: knobs.windowStartHour, fim: knobs.windowEndHour, fuso: knobs.timezone },

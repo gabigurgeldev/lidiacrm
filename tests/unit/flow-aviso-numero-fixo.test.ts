@@ -30,6 +30,21 @@ import {
 
 type Ctx = Parameters<typeof whatsappNotifyUser.execute>[0];
 
+/**
+ * Os campos do modo de envio, com o default do schema.
+ *
+ * Espalhados em vez de repetidos linha a linha porque eles não são o assunto de
+ * nenhum destes casos: o bloco passou a poder mandar DEFINIÇÃO APROVADA, e o
+ * caminho de texto livre — que é o que este arquivo mede — continua sendo o
+ * padrão. Escrever os quatro em treze lugares esconderia o que cada caso testa.
+ */
+const MODO_LIVRE = {
+  modo: "freeform",
+  modelo_nome: "",
+  modelo_idioma: "",
+  modelo_valores: {},
+} as const;
+
 const CANAL = "3f2b9f7e-0000-4000-8000-aaaaaaaaaaaa";
 
 function ctxFalso(opts: {
@@ -101,6 +116,7 @@ describe("whatsapp.notify_user — destinatário por número fixo", () => {
       destinatario: { tipo: "telefone", telefone: "+55 (11) 99999-8888" },
       mensagem: "Lead novo",
       canal_id: null,
+      ...MODO_LIVRE,
     });
 
     expect(desfecho.kind).toBe("advance");
@@ -121,6 +137,7 @@ describe("whatsapp.notify_user — destinatário por número fixo", () => {
       destinatario: { tipo: "telefone", telefone: "{{vars.plantao}}" },
       mensagem: "Lead novo",
       canal_id: null,
+      ...MODO_LIVRE,
     });
 
     expect(ctx.canal.enviarTexto).toHaveBeenCalledWith(
@@ -134,6 +151,7 @@ describe("whatsapp.notify_user — destinatário por número fixo", () => {
       destinatario: { tipo: "telefone", telefone: "{{vars.nao_existe}}" },
       mensagem: "Lead novo",
       canal_id: null,
+      ...MODO_LIVRE,
     });
 
     expect(desfecho).toEqual({ kind: "advance", branch_id: "sem_telefone" });
@@ -149,6 +167,7 @@ describe("whatsapp.notify_user — destinatário por número fixo", () => {
       destinatario: { tipo: "dono_do_lead" },
       mensagem: "Lead novo",
       canal_id: null,
+      ...MODO_LIVRE,
     });
 
     expect(ctx.canal.enviarTexto).toHaveBeenCalledWith(
@@ -170,6 +189,7 @@ describe("whatsapp.notify_user — por qual conexão o aviso sai", () => {
       destinatario: { tipo: "dono_do_lead" },
       mensagem: "Lead novo",
       canal_id: CANAL,
+      ...MODO_LIVRE,
     });
 
     expect(ctx.canal.enviarTexto).toHaveBeenCalledWith(
@@ -211,6 +231,7 @@ describe("whatsapp.notify_user — destinatário por PESSOA da equipe", () => {
       destinatario: { tipo: "usuario", user_id: "user-7" },
       mensagem: "Lead novo",
       canal_id: null,
+      ...MODO_LIVRE,
     });
 
     expect(desfecho.kind).toBe("advance");
@@ -226,6 +247,7 @@ describe("whatsapp.notify_user — destinatário por PESSOA da equipe", () => {
       destinatario: { tipo: "usuario", user_id: "user-sem-telefone" },
       mensagem: "Lead novo",
       canal_id: null,
+      ...MODO_LIVRE,
     });
 
     expect(desfecho).toEqual({ kind: "advance", branch_id: "sem_telefone" });
@@ -242,6 +264,7 @@ describe("whatsapp.notify_user — quando o aviso não sai, alguém fica sabendo
       destinatario: { tipo: "dono_do_lead" },
       mensagem: "Lead novo",
       canal_id: null,
+      ...MODO_LIVRE,
     });
 
     expect(ctx.avisos.abrir).toHaveBeenCalledTimes(1);
@@ -259,6 +282,7 @@ describe("whatsapp.notify_user — quando o aviso não sai, alguém fica sabendo
       destinatario: { tipo: "dono_do_lead" },
       mensagem: "Lead novo",
       canal_id: null,
+      ...MODO_LIVRE,
     });
 
     expect(desfecho).toMatchObject({ kind: "advance", branch_id: "nao_saiu" });
@@ -278,6 +302,7 @@ describe("whatsapp.notify_user — quando o aviso não sai, alguém fica sabendo
       destinatario: { tipo: "dono_do_lead" },
       mensagem: "Lead novo",
       canal_id: null,
+      ...MODO_LIVRE,
     });
 
     expect(desfecho).toMatchObject({ branch_id: "nao_saiu" });
@@ -296,6 +321,7 @@ describe("whatsapp.notify_user — quando o aviso não sai, alguém fica sabendo
       destinatario: { tipo: "dono_do_lead" },
       mensagem: "Lead novo",
       canal_id: null,
+      ...MODO_LIVRE,
     });
 
     expect(ctx.avisos.abrir).not.toHaveBeenCalled();
@@ -312,6 +338,7 @@ describe("whatsapp.notify_user — quando o aviso não sai, alguém fica sabendo
       destinatario: { tipo: "dono_do_lead" },
       mensagem: "Lead novo",
       canal_id: null,
+      ...MODO_LIVRE,
     });
 
     expect(desfecho).toMatchObject({ kind: "advance", branch_id: "nao_saiu" });

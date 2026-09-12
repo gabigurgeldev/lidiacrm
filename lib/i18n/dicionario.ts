@@ -7231,6 +7231,20 @@ export const DICIONARIO: Traducoes = {
   "Aparece na tela de Disparos. Aceita variável — é o que distingue uma execução da outra.": { es: "Aparece en la pantalla de Envíos. Acepta variable — es lo que distingue una ejecución de otra." },
 
   "Em 'Do fluxo', a variável dono_escolhido pega quem o bloco de distribuição escolheu. Ou cole o identificador de uma pessoa.": { es: "En 'Del flujo', la variable dono_escolhido toma a quien el bloque de distribución eligió. O pega el identificador de una persona." },
+
+  // ─── Envio por modelo aprovado nos blocos de fluxo ───
+  "Escolha primeiro por qual conexão enviar — os modelos são aprovados por conta.": { es: "Elige primero por cuál conexión enviar — las plantillas se aprueban por cuenta." },
+  "Não consegui listar os modelos desta conexão. Escreva abaixo o nome e o idioma exatos do modelo já aprovado.": { es: "No pude listar las plantillas de esta conexión. Escribe abajo el nombre y el idioma exactos de la plantilla ya aprobada." },
+  "Fora da janela de 24 horas, uma conexão oficial só entrega modelo aprovado — é regra da plataforma, não do produto.": { es: "Fuera de la ventana de 24 horas, una conexión oficial solo entrega plantilla aprobada — es regla de la plataforma, no del producto." },
+  "Idioma do modelo": { es: "Idioma de la plantilla" },
+  "Exatamente como está aprovado: pt_BR e pt são modelos diferentes na plataforma.": { es: "Exactamente como está aprobado: pt_BR y pt son plantillas distintas en la plataforma." },
+  "Como enviar": { es: "Cómo enviar" },
+  "Esta conexão só entrega modelo aprovado — é regra da plataforma. Escolha o modelo abaixo.": { es: "Esta conexión solo entrega plantilla aprobada — es regla de la plataforma. Elige la plantilla abajo." },
+  "Escrever a mensagem": { es: "Escribir el mensaje" },
+  "Usar um modelo aprovado": { es: "Usar una plantilla aprobada" },
+  "Numa conexão oficial, o vendedor que não escreve há mais de 24 horas só recebe modelo aprovado — e é ele quem precisa ser avisado.": { es: "En una conexión oficial, el vendedor que no escribe hace más de 24 horas solo recibe plantilla aprobada — y es él quien necesita el aviso." },
+  "Modelo aprovado sai mesmo fora da janela de 24 horas — é o único caminho quando o cliente não escreve há um dia.": { es: "La plantilla aprobada sale incluso fuera de la ventana de 24 horas — es el único camino cuando el cliente no escribe hace un día." },
+  "Texto livre só é entregue dentro da janela de 24 horas numa conexão oficial. Fora dela, use um modelo.": { es: "El texto libre solo se entrega dentro de la ventana de 24 horas en una conexión oficial. Fuera de ella, usa una plantilla." },
 };
 
 /**

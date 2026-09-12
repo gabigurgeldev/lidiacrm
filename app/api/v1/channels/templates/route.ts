@@ -75,16 +75,31 @@ type OrgGate =
   | { autorizado: true; orgId: string }
   | { autorizado: false; resposta: NextResponse };
 
-async function orgOrFail(requestId: string): Promise<OrgGate> {
-  const authz = await requireRole("admin", { requestId, resource: "channels_templates" });
+/**
+ * LER é `manager`; SINCRONIZAR continua `admin`.
+ *
+ * A assimetria é deliberada e nasceu de um 403 real: o editor de fluxos é gated
+ * em `manager` (migration 0205), e os blocos de envio passaram a oferecer
+ * "mandar por modelo aprovado". Com `admin` nos dois verbos, um gerente montando
+ * um fluxo via a lista vazia — o mesmo sintoma de "não tenho modelo nenhum" que
+ * uma conta cheia deles apresentava antes da rota do parceiro existir.
+ *
+ * O POST fica onde estava: ele fala com a plataforma, gasta cota e reescreve o
+ * espelho da organização inteira.
+ */
+async function orgOrFail(requestId: string, papel: "admin" | "manager" = "admin"): Promise<OrgGate> {
+  const authz = await requireRole(papel, { requestId, resource: "channels_templates" });
   if (!authz.ok) return { autorizado: false, resposta: authz.response };
   return { autorizado: true, orgId: authz.org.orgId };
 }
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
   const requestId = randomUUID();
-  const r = await orgOrFail(requestId);
+  const r = await orgOrFail(requestId, "manager");
   if (!r.autorizado) return r.resposta;
+
+  const canalBruto = req.nextUrl.searchParams.get("canal_id");
+  const canalId = canalBruto === null || canalBruto.trim() === "" ? null : canalBruto.trim();
 
   const sessao = await metaSessionForOrg(r.orgId);
   const admin = createAdminClient();
@@ -107,12 +122,23 @@ export async function GET(): Promise<NextResponse> {
   //
   // O caso comum não muda: vários números sob a MESMA WABA compartilham os
   // mesmos templates, que é como a Meta modela isso.
-  const { data, error } = await (sessao?.wabaId
-    ? consulta.eq("waba_id", sessao.wabaId)
-    : consulta
-  )
-    .order("status")
-    .order("name");
+  // ⚠️ `canal_id` GANHA da WABA quando vem.
+  //
+  // A conexão é a pergunta mais específica ("o que posso usar NESTE número?") e
+  // é a que o bloco de fluxo faz, porque ele já escolheu por onde vai mandar.
+  // Filtrar pela WABA nesse caso devolveria também as definições dos OUTROS
+  // números da mesma conta — o que é quase sempre certo (a Meta compartilha
+  // templates por WABA) e erra silenciosamente quando não é.
+  //
+  // O `organization_id` do filtro já está aplicado acima e vem do cookie
+  // validado: um `canal_id` de outro tenant devolve lista vazia, nunca a dele.
+  const escopada = canalId !== null
+    ? consulta.eq("channel_session_id", canalId)
+    : sessao?.wabaId
+      ? consulta.eq("waba_id", sessao.wabaId)
+      : consulta;
+
+  const { data, error } = await escopada.order("status").order("name");
 
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
@@ -164,7 +190,7 @@ export async function GET(): Promise<NextResponse> {
 
 export async function POST(_req: NextRequest): Promise<NextResponse> {
   const requestId = randomUUID();
-  const r = await orgOrFail(requestId);
+  const r = await orgOrFail(requestId, "admin");
   if (!r.autorizado) return r.resposta;
 
   const sessao = await metaSessionForOrg(r.orgId);

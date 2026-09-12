@@ -1,7 +1,5 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -11,21 +9,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
-import { apiClient } from "@/lib/api/client";
 
 import { CampoComVariavel } from "./CampoComVariavel";
 import { ImportadorDeLista } from "./ImportadorDeLista";
 import { SeletorDeCanal, useConexoesParaEnvio } from "./SeletorDeCanal";
+import { SeletorDeModelo } from "./SeletorDeModelo";
 import { Campo, Dica, Secao, type PropsDoFormulario } from "./shared";
-
-/** O que a lista de modelos aprovados devolve, do que esta tela precisa. */
-interface ModeloAprovado {
-  name: string;
-  language: string;
-  status: string;
-  slots: Array<{ key: string; expects: string; onde: string }>;
-  previews: Array<{ onde: string; text: string }>;
-}
 
 /**
  * `whatsapp.bulk_send` — a campanha que o fluxo cria.
@@ -37,13 +26,20 @@ interface ModeloAprovado {
  * para a pessoa escrever algo que vai ser jogado fora. É a mesma ordem que o
  * diálogo de disparo da tela de Disparos usa, e pelo mesmo motivo.
  *
- * ## Limite herdado, escrito para não virar surpresa
+ * ## A lista de modelos, e o defeito que ela tinha
  *
- * A lista de modelos vem de `/api/v1/channels/templates`, que hoje devolve os
- * da WABA que a tela de Conexões sincroniza — a conexão oficial mais antiga da
- * organização. Numa organização com DUAS contas oficiais, os modelos da segunda
- * não aparecem aqui. É a limitação que aquela rota já tem, não uma introduzida
- * por este bloco; consertá-la é mudar a rota para aceitar a conexão escolhida.
+ * Ela sai agora de `SeletorDeModelo`, compartilhado com os dois blocos de envio
+ * 1:1 — e a rota é escolhida pela CONEXÃO, não pela conta mais antiga da
+ * organização. Duas coisas mudaram junto:
+ *
+ *   1. Este formulário lia `r.data.filter(...)` de uma rota que devolve
+ *      `{ data: { waba, templates } }`. O `select` do react-query LANÇAVA, a
+ *      query virava erro, e a tela renderizava "Nenhum modelo aprovado nesta
+ *      conta. Crie e aprove o modelo na Meta…" — mandando o operador arrumar uma
+ *      conta que estava certa. O modo de modelo do disparo por fluxo estava
+ *      morto, e o sintoma acusava o inocente.
+ *   2. A rota aceita `?canal_id=`, então uma organização com duas contas
+ *      oficiais passa a ver os modelos da conexão que escolheu.
  */
 export function WhatsappBulkSendForm({ config, aoMudarConfig }: PropsDoFormulario) {
   const t = useT();
@@ -58,22 +54,10 @@ export function WhatsappBulkSendForm({ config, aoMudarConfig }: PropsDoFormulari
   const modo = conexao?.modo ?? (config.modo as string | undefined) ?? "freeform";
   const exigeModelo = modo === "template";
 
-  const { data: modelos, isLoading: carregandoModelos } = useQuery({
-    queryKey: ["modelos-aprovados"],
-    queryFn: async () => apiClient.get<{ data: ModeloAprovado[] }>("/api/v1/channels/templates"),
-    select: (r) => r.data.filter((m) => m.status === "APPROVED"),
-    enabled: exigeModelo,
-  });
-
-  const modeloEscolhido =
-    (modelos ?? []).find(
-      (m) => m.name === config.modelo_nome && m.language === config.modelo_idioma,
-    ) ?? null;
 
   const audiencia = String(config.audiencia ?? "tags");
   const tags = Array.isArray(config.tags) ? (config.tags as string[]) : [];
   const contatos = Array.isArray(config.contatos) ? (config.contatos as string[]) : [];
-  const valores = (config.modelo_valores ?? {}) as Record<string, string>;
 
   return (
     <div className="flex flex-col gap-4">
@@ -124,61 +108,7 @@ export function WhatsappBulkSendForm({ config, aoMudarConfig }: PropsDoFormulari
           </Campo>
         )}
 
-        {exigeModelo && (
-          <Campo rotulo={t("Modelo aprovado")}>
-            {carregandoModelos ? (
-              <p className="text-xs text-muted-foreground">{t("Carregando os modelos…")}</p>
-            ) : (modelos ?? []).length === 0 ? (
-              <p className="text-xs text-muted-foreground" data-testid="sem-modelo">
-                {t(
-                  "Nenhum modelo aprovado nesta conta. Crie e aprove o modelo na Meta, sincronize em Conexões › Modelos, e volte.",
-                )}
-              </p>
-            ) : (
-              <Select
-                value={
-                  config.modelo_nome === undefined || config.modelo_nome === ""
-                    ? ""
-                    : `${String(config.modelo_nome)}|${String(config.modelo_idioma)}`
-                }
-                onValueChange={(v) => {
-                  const [nome, idioma] = v.split("|");
-                  // Trocar de modelo zera os valores: as variáveis de um não são
-                  // as do outro, e aproveitá-las mandaria o texto errado nas
-                  // lacunas certas — o pior tipo de mensagem enviada.
-                  mudar({ modelo_nome: nome, modelo_idioma: idioma, modelo_valores: {} });
-                }}
-              >
-                <SelectTrigger data-testid="campo-modelo">
-                  <SelectValue placeholder={t("Escolha o modelo")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(modelos ?? []).map((m) => (
-                    <SelectItem key={`${m.name}|${m.language}`} value={`${m.name}|${m.language}`}>
-                      {m.name} ({m.language})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            <Dica
-              texto={t(
-                "Fora da janela de 24 horas, este número só entrega modelo aprovado — é regra da Meta, não do produto.",
-              )}
-            />
-          </Campo>
-        )}
-
-        {modeloEscolhido !== null &&
-          modeloEscolhido.slots.map((slot) => (
-            <Campo key={slot.key} rotulo={t("Valor de {k}").replace("{k}", slot.key)}>
-              <CampoComVariavel
-                valor={valores[slot.key] ?? ""}
-                aoMudar={(v) => mudar({ modelo_valores: { ...valores, [slot.key]: v } })}
-                testid={`campo-valor-${slot.key}`}
-              />
-            </Campo>
-          ))}
+        {exigeModelo && <SeletorDeModelo canalId={canalId} config={config} mudar={mudar} />}
       </Secao>
 
       <Secao titulo={t("Para quem")}>

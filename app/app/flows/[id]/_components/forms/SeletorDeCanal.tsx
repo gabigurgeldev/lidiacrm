@@ -33,6 +33,14 @@ export interface ConexaoParaEnvio {
   telefone: string | null;
   conectada: boolean;
   modo: "freeform" | "template";
+  /**
+   * De onde vêm as definições aprovadas DESTA conexão — rótulo NEUTRO.
+   *
+   * `null` = esta conexão não trabalha com definições (número por QR, por
+   * exemplo). A tela monta a URL com este valor e nunca vê o nome do canal:
+   * `scripts/lint-channels.ts` varre `app/` e reprova quem nomear um provider.
+   */
+  fonte_de_modelos: "oficial" | "parceiro" | null;
   piso_ms: number;
   cobra_por_mensagem: boolean;
   teto_de_hoje: number | null;

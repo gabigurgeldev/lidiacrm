@@ -49,6 +49,7 @@ import type {
 } from "../types";
 
 import { corpoCloudApi } from "../cloud-api/corpo";
+import { componentsPorChave } from "../cloud-api/template-por-chaves";
 import { resolveEnvioStevo, resolveStevoCreds, stevoBaseUrlOficial } from "../stevo/credentials";
 import { corpoDeEnvioStevo, idDaRespostaStevo } from "../stevo/envelope";
 import { lerInstanciaStevo } from "../stevo/instancias";
@@ -103,6 +104,75 @@ async function enviarPeloGateway(
       res.statusText;
     const codigo = daMeta?.code !== undefined ? ` (meta ${daMeta.code})` : "";
     throw new Error(`stevo_send_failed: ${res.status} ${detalhe}${codigo}`.trim());
+  }
+
+  return { externalId: json?.messages?.[0]?.id ?? null };
+}
+
+/**
+ * Envio de DEFINIÇÃO APROVADA pelo gateway da API Oficial.
+ *
+ * ─── O defeito que isto fecha, e ele não é de envio ─────────────────────────
+ *
+ * Sem `sendTemplate` no adapter, `app/api/v1/messages/_handler.ts` cai no
+ * caminho antigo (`sendTemplateForSession`), que lê `META_PHONE_NUMBER_ID` e
+ * `META_SYSTEM_USER_TOKEN` do AMBIENTE. Numa instalação com esta conexão e a
+ * plataforma direta configuradas, o modelo escolhido nesta conexão saía pelo
+ * NÚMERO da outra — não é falha de envio, é a mensagem certa saindo pelo número
+ * errado, para o cliente certo. E sai, então ninguém percebe.
+ *
+ * É exatamente o que `lib/channels/types.ts` descreve como já fechado para o
+ * outro canal intermediado e estava aberto aqui.
+ *
+ * ─── O corpo ────────────────────────────────────────────────────────────────
+ *
+ * Mesmo endpoint do texto (`/v1/messages`) e mesma omissão de
+ * `messaging_product` — o gateway o acrescenta. `components` vem de
+ * `componentsPorChave`, e não de `buildComponents`, porque o espelho local
+ * pode estar vazio para esta conexão; o cabeçalho daquele arquivo diz o que a
+ * reconstrução cobre e o que ela recusa a adivinhar.
+ */
+async function enviarTemplatePeloGateway(
+  input: { to: string; name: string; language: string; values: Record<string, string> },
+  token: string,
+): Promise<{ externalId: string | null }> {
+  const components = componentsPorChave(input.values);
+  const res = await fetch(`${stevoBaseUrlOficial()}/v1/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      to: input.to,
+      type: "template",
+      template: {
+        name: input.name,
+        language: { code: input.language },
+        // Template sem parâmetro nenhum NÃO leva `components`: um array vazio é
+        // recusado pela Meta, e é o caso mais comum de modelo de reengajamento.
+        ...(components.length > 0 ? { components } : {}),
+      },
+    }),
+  });
+
+  const json = (await res.json().catch(() => null)) as {
+    messages?: { id?: string }[];
+    error?: string;
+    message?: string;
+    meta?: { error?: { code?: number; message?: string; error_data?: { details?: string } } };
+  } | null;
+
+  if (!res.ok) {
+    const daMeta = json?.meta?.error;
+    const detalhe =
+      daMeta?.error_data?.details ??
+      daMeta?.message ??
+      json?.message ??
+      json?.error ??
+      res.statusText;
+    const codigo = daMeta?.code !== undefined ? ` (meta ${daMeta.code})` : "";
+    throw new Error(`stevo_template_failed: ${res.status} ${detalhe}${codigo}`.trim());
   }
 
   return { externalId: json?.messages?.[0]?.id ?? null };
@@ -201,6 +271,44 @@ export const stevoAdapter: ChannelAdapter = {
   isConfigured(): boolean {
     // Ver o cabeçalho: `true` de propósito, e quem desiste é `send`.
     return true;
+  },
+
+  /**
+   * Manda uma DEFINIÇÃO APROVADA — o caminho de volta quando a janela fechou.
+   *
+   * Só a instância OFICIAL entrega: o número ligado por QR na mesma conta não
+   * tem WABA por trás, e portanto não tem definição nenhuma. O erro nomeia isso
+   * em vez de deixar a plataforma responder um código — quem escolheu o modelo
+   * no fluxo precisa saber que a conexão é que está errada, não o modelo.
+   */
+  async sendTemplate(input: ChannelTenantScope & {
+    sessionRef: string;
+    to: string;
+    name: string;
+    language: string;
+    values: Record<string, string>;
+  }): Promise<{ externalId: string | null }> {
+    const admin = createAdminClient();
+    const envio = await resolveEnvioStevo(admin, {
+      organizationId: input.organizationId,
+      instanceId: input.sessionRef,
+    });
+    if (!envio) {
+      throw new Error(
+        "stevo_not_configured: nenhuma credencial para esta instância (nem na sessão, nem no ambiente).",
+      );
+    }
+    if (envio.transporte !== "gateway") {
+      throw new Error(
+        "stevo_template_sem_gateway: esta conexão não tem token do gateway oficial gravado — " +
+          "modelo aprovado só sai por instância da API Oficial. Cole o token em Conexões, " +
+          "ou escolha uma conexão oficial para este envio.",
+      );
+    }
+    return enviarTemplatePeloGateway(
+      { to: input.to, name: input.name, language: input.language, values: input.values },
+      envio.token,
+    );
   },
 
   async send(envelope: OutboundEnvelope): Promise<{ externalId: string | null }> {

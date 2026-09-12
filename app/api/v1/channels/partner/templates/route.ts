@@ -22,6 +22,22 @@
  *
  * `channel_session_id` é o que permite responder "o que posso usar NESTA
  * conexão?". Sem ele, dois números do mesmo provider dividiriam a mesma lista.
+ *
+ * ─── `?canal_id=` — e por que ele não podia faltar ─────────────────────────
+ *
+ * Sem ele, a rota respondia SEMPRE pela conexão que `findPartnerSession` acha,
+ * que é presa a UM provider (`PARTNER_CHANNEL_PROVIDER`). Duas consequências,
+ * e as duas apareceram ao mesmo tempo quando os blocos de fluxo passaram a
+ * mandar por modelo: uma organização com duas conexões de parceiro via só a
+ * lista da primeira, e uma organização cujo canal com definições aprovadas não
+ * é aquele provider recebia 404 — "nenhuma conexão de parceiro ativa" — tendo
+ * modelos aprovados de sobra.
+ *
+ * Com `canal_id`, quem decide é a CONEXÃO que o operador escolheu, e o teto
+ * passa a ser o honesto: se o adapter daquela conexão não gerencia definições,
+ * a resposta é 501, e não uma lista de outra conta.
+ *
+ * Sem o parâmetro, o comportamento é o de antes — nenhum chamador atual quebra.
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
@@ -58,6 +74,7 @@ interface Contexto {
  */
 async function contexto(
   requestId: string,
+  canalId: string | null,
 ): Promise<{ ok: true; ctx: Contexto } | { ok: false; res: Response }> {
   const user = await loadAuthUser();
   if (!user) return { ok: false, res: fail("unauthenticated", "Faça login.", 401, { requestId }) };
@@ -65,12 +82,34 @@ async function contexto(
   if (!org) return { ok: false, res: fail("forbidden", "Sem organização ativa.", 403, { requestId }) };
 
   const admin = createAdminClient();
-  const sessao = await findPartnerSession(admin, org.orgId);
-  if (!sessao || sessao.archivedAt) {
-    return {
-      ok: false,
-      res: fail("not_found", "Nenhuma conexão de parceiro ativa.", 404, { requestId }),
-    };
+
+  // A conexão pedida, quando há uma. O `organization_id` do filtro vem do
+  // cookie validado e NUNCA do parâmetro: sem ele, um id copiado devolveria a
+  // lista de definições de outro tenant.
+  let sessionId: string | null = null;
+  if (canalId !== null) {
+    const { data } = await admin
+      .from("channel_sessions")
+      .select("id")
+      .eq("id", canalId)
+      .eq("organization_id", org.orgId)
+      .maybeSingle();
+    if (!data) {
+      return {
+        ok: false,
+        res: fail("not_found", "Conexão não encontrada nesta organização.", 404, { requestId }),
+      };
+    }
+    sessionId = data.id as string;
+  } else {
+    const sessao = await findPartnerSession(admin, org.orgId);
+    if (!sessao || sessao.archivedAt) {
+      return {
+        ok: false,
+        res: fail("not_found", "Nenhuma conexão de parceiro ativa.", 404, { requestId }),
+      };
+    }
+    sessionId = sessao.id;
   }
 
   const { data: linha } = await admin
@@ -79,7 +118,7 @@ async function contexto(
     // — e o `lint:channels` reprovou a primeira versão deste arquivo por isso,
     // que é a catraca funcionando.
     .select(`id, ${CHANNEL_SESSION_REF_COLUMNS}`)
-    .eq("id", sessao.id)
+    .eq("id", sessionId)
     .maybeSingle();
 
   const provider = ((linha?.provider as string) ?? DEFAULT_CHANNEL_PROVIDER) as ChannelProvider;
@@ -91,13 +130,19 @@ async function contexto(
     };
   }
 
-  return { ok: true, ctx: { orgId: org.orgId, sessionId: sessao.id, sessionRef, provider } };
+  return { ok: true, ctx: { orgId: org.orgId, sessionId, sessionRef, provider } };
+}
+
+/** O `canal_id` da query, quando vier. Validado como UUID pelo banco, não aqui. */
+function canalDaQuery(req: NextRequest): string | null {
+  const bruto = req.nextUrl.searchParams.get("canal_id");
+  return bruto === null || bruto.trim() === "" ? null : bruto.trim();
 }
 
 /** Lista o que está ESPELHADO. Rápido, e é o que a tela mostra. */
-export async function GET(): Promise<Response> {
+export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
-  const r = await contexto(requestId);
+  const r = await contexto(requestId, canalDaQuery(req));
   if (!r.ok) return r.res;
 
   const admin = createAdminClient();
@@ -138,7 +183,7 @@ export async function GET(): Promise<Response> {
  */
 export async function POST(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
-  const r = await contexto(requestId);
+  const r = await contexto(requestId, canalDaQuery(req));
   if (!r.ok) return r.res;
 
   const adapter = getAdapter(r.ctx.provider);

@@ -56,6 +56,27 @@ const RAMO_NAO_SAIU = "nao_saiu";
  */
 export const enviarAoClienteConfigSchema = z
   .strictObject({
+    /**
+     * TEXTO LIVRE ou DEFINIÇÃO APROVADA.
+     *
+     * Os nomes de campo são os MESMOS de `whatsapp.bulk_send` (`modo`,
+     * `modelo_nome`, `modelo_idioma`, `modelo_valores`) de propósito: os dois
+     * blocos respondem à mesma pergunta, e vocabulário bifurcado é o que faz um
+     * fluxo montado numa tela não abrir na outra.
+     *
+     * O modo é consequência da CONEXÃO, não uma segunda pergunta — a regra está
+     * em `lib/bulk-send/modo.ts` e a tela a aplica. Este campo existe porque o
+     * grafo publicado precisa carregar a decisão: a conexão pode mudar de
+     * modalidade depois, e a execução tem de falhar alto em vez de trocar o
+     * conteúdo em silêncio.
+     */
+    modo: z.enum(["freeform", "template"]).default("freeform"),
+    /** Nome exato aprovado na plataforma, quando o modo é `template`. */
+    modelo_nome: z.string().max(200).default(""),
+    /** `pt_BR` e `pt` são definições DISTINTAS — o idioma é parte do endereço. */
+    modelo_idioma: z.string().max(20).default(""),
+    /** Valor por slot (`1`, `2`, `header:1`). Passa por `render`, como o texto. */
+    modelo_valores: z.record(z.string(), z.string()).default({}),
     tipo: z.enum(TIPOS_DE_MENSAGEM_DO_FLUXO).default("texto"),
     /** Texto da mensagem, ou legenda da mídia. Aceita `{{lead.title}}` e afins. */
     texto: z.string().max(4000).default(""),
@@ -69,6 +90,28 @@ export const enviarAoClienteConfigSchema = z
     canal_id: z.string().uuid().nullable().default(null),
   })
   .superRefine((config, ctx) => {
+    if (config.modo === "template") {
+      if (config.modelo_nome === "" || config.modelo_idioma === "") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["modelo_nome"],
+          message: "Escolha o modelo aprovado e o idioma dele.",
+        });
+      }
+      // Cabeçalho de mídia em definição aprovada não é a mesma coisa que mandar
+      // uma imagem: o link vai DENTRO do parâmetro do cabeçalho, e a definição
+      // decide se ele é imagem, vídeo ou documento. Aceitar `tipo` aqui daria a
+      // impressão de que os dois se combinam, e o envio sairia sem a mídia.
+      if (config.tipo !== "texto") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["tipo"],
+          message: "Modelo aprovado não leva mídia avulsa — a definição já traz o que vai junto.",
+        });
+      }
+      return;
+    }
+
     if (config.tipo === "texto") {
       if (config.texto.trim() === "") {
         ctx.addIssue({
@@ -121,6 +164,20 @@ export const whatsappEnviarAoCliente: FlowNodeDefinition<EnviarAoClienteConfig> 
       // do lead (um contrato por cliente, por exemplo).
       ...(config.media_url === undefined ? {} : { mediaUrl: ctx.render(config.media_url) }),
       channelSessionId: config.canal_id,
+      ...(config.modo === "template"
+        ? {
+            modelo: {
+              nome: config.modelo_nome,
+              idioma: config.modelo_idioma,
+              // Os valores do modelo passam por `render` como o texto passa: é
+              // assim que o modelo leva o nome do cliente e o número do pedido
+              // que um bloco anterior calculou.
+              valores: Object.fromEntries(
+                Object.entries(config.modelo_valores).map(([k, v]) => [k, ctx.render(v)]),
+              ),
+            },
+          }
+        : {}),
     });
 
     if (desfecho.kind === "enviado") {

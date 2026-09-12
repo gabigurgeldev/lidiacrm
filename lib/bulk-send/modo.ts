@@ -27,11 +27,42 @@
  * (`scripts/lint-channels.ts` reprova o contrário). Um canal novo que exija
  * template passa a exigir template aqui sem ninguém editar este arquivo.
  */
-import { capabilitiesOf, type ChannelProvider } from "@/lib/channels/capabilities";
+import {
+  capabilitiesOf,
+  capabilitiesOfSession,
+  type ChannelProvider,
+} from "@/lib/channels/capabilities";
 
 export type ModoDeDisparo = "freeform" | "template";
 
-/** O único modo que este canal aceita para uma campanha. */
+/**
+ * A conexão, como o banco a guarda. `mode` é `channel_sessions.provider_mode`,
+ * nullable por desenho (migration 0206): `null` afirma "este provider tem
+ * modalidade única, pergunte a ele".
+ */
+export interface ConexaoParaModo {
+  provider: ChannelProvider;
+  mode?: string | null;
+}
+
+/**
+ * O único modo que esta CONEXÃO aceita para uma campanha.
+ *
+ * ⚠️ Recebe a conexão, e não o provider, desde que um provider passou a hospedar
+ * as duas modalidades. Com `capabilitiesOf(provider)` a linha que respondia era
+ * a conservadora de fallback — `requiresTemplates: true` —, e o resultado
+ * aparecia na tela: um número ligado por QR naquela conta era anunciado como
+ * "Só envia modelo aprovado", e o texto livre que ele aceita ficava barrado.
+ */
+export function modoPermitidoNaConexao(conexao: ConexaoParaModo): ModoDeDisparo {
+  return capabilitiesOfSession(conexao).requiresTemplates ? "template" : "freeform";
+}
+
+/**
+ * A mesma pergunta para quem só tem o provider em mãos — uma decisão sobre o
+ * canal em abstrato, antes de haver conexão escolhida. Prefira a de cima sempre
+ * que houver uma linha de `channel_sessions`.
+ */
 export function modoPermitido(provider: ChannelProvider): ModoDeDisparo {
   return capabilitiesOf(provider).requiresTemplates ? "template" : "freeform";
 }
@@ -40,8 +71,12 @@ export function modoPermitido(provider: ChannelProvider): ModoDeDisparo {
  * `null` = a combinação é válida. Caso contrário, a frase que a borda devolve e
  * a tela mostra — em pt-BR, dizendo o que fazer, não só o que está errado.
  */
-export function recusaDeModo(provider: ChannelProvider, modo: ModoDeDisparo): string | null {
-  const permitido = modoPermitido(provider);
+export function recusaDeModo(
+  conexao: ChannelProvider | ConexaoParaModo,
+  modo: ModoDeDisparo,
+): string | null {
+  const permitido =
+    typeof conexao === "string" ? modoPermitido(conexao) : modoPermitidoNaConexao(conexao);
   if (modo === permitido) return null;
 
   return permitido === "template"
