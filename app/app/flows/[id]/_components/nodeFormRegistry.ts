@@ -9,6 +9,7 @@ import { TriggerKeywordForm } from "./forms/TriggerKeywordForm";
 import { TriggerWebhookForm } from "./forms/TriggerWebhookForm";
 import { TriggerMessageReceivedForm } from "./forms/TriggerMessageReceivedForm";
 import { CrmAddTagForm } from "./forms/CrmAddTagForm";
+import { CrmRemoveTagForm } from "./forms/CrmRemoveTagForm";
 import { CrmAssignOwnerForm } from "./forms/CrmAssignOwnerForm";
 import { CrmOwnerRespondedForm } from "./forms/CrmOwnerRespondedForm";
 import { FlowCallForm } from "./forms/FlowCallForm";
@@ -74,6 +75,7 @@ export const FORMULARIO_DO_TIPO: Record<string, ComponentType<PropsDoFormulario>
   "logic.split": LogicSplitForm,
   "flow.call": FlowCallForm,
   "crm.add_tag": CrmAddTagForm,
+  "crm.remove_tag": CrmRemoveTagForm,
   "crm.assign_owner": CrmAssignOwnerForm,
   "crm.owner_responded": CrmOwnerRespondedForm,
   "routing.round_robin": RoutingRoundRobinForm,

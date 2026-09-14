@@ -29,7 +29,9 @@ import type {
   PortasDaExecucao,
 } from "./engine";
 import type { EncontroRow, FrenteNova, FrenteRow } from "./frentes";
+import { CAUSADO_POR_FLUXO } from "./trigger-matcher";
 import type {
+  AlvoDeMarcador,
   DesfechoDeEnvio,
   DesfechoDoDisparo,
   EsperaEmCurso,
@@ -503,6 +505,100 @@ async function carregarDono(
   return { id: userId, name: nome, notification_phone: a?.notification_phone ?? null };
 }
 
+// ─────────────────────────────── marcadores ──────────────────────────────────
+
+/**
+ * A tabela e o vocabulário de evento de cada alvo, num lugar só.
+ *
+ * `entity_kind` repete os nomes que `lib/automation/engine.ts` já usa
+ * (`crm_lead`, `contact`): quem escuta o barramento não deve precisar saber
+ * qual motor marcou.
+ */
+const ONDE_MORA_O_MARCADOR = {
+  lead: { tabela: "crm_leads", entidade: "crm_lead", prefixo: "lead" },
+  contato: { tabela: "contacts", entidade: "contact", prefixo: "contact" },
+} as const;
+
+async function lerMarcadores(
+  admin: SupabaseClient,
+  orgId: string,
+  alvo: AlvoDeMarcador,
+): Promise<string[]> {
+  const { data } = await admin
+    .from(ONDE_MORA_O_MARCADOR[alvo.kind].tabela)
+    .select("tags")
+    .eq("organization_id", orgId)
+    .eq("id", alvo.id)
+    .maybeSingle();
+  const tags = (data as { tags?: unknown } | null)?.tags;
+  return Array.isArray(tags) ? (tags as string[]) : [];
+}
+
+/**
+ * Lê-modifica-escreve porque o PostgREST não expõe `array_append`. A corrida
+ * possível (duas execuções marcando o mesmo alvo no mesmo instante) perde uma
+ * tag, e não corrompe nada; uma RPC nova para isto custaria mais uma
+ * `security definer` a revogar das duas origens.
+ */
+async function gravarMarcadores(
+  admin: SupabaseClient,
+  orgId: string,
+  alvo: AlvoDeMarcador,
+  tags: string[],
+  agora: Date,
+): Promise<void> {
+  const { error } = await admin
+    .from(ONDE_MORA_O_MARCADOR[alvo.kind].tabela)
+    .update({ tags, updated_at: agora.toISOString() })
+    .eq("organization_id", orgId)
+    .eq("id", alvo.id);
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * O evento da marcação — e o CARIMBO que fecha o laço.
+ *
+ * `metadata.caused_by_flow` não é enfeite: `trigger-matcher.ts` já LÊ essa
+ * chave para recusar armar um fluxo com um evento que o próprio motor causou, e
+ * até aqui ninguém a escrevia (nenhum bloco emitia evento). Sem o carimbo, um
+ * fluxo que marca dispara o fluxo que escuta marcação, que marca de novo — e o
+ * teto de passos só apareceria depois de encher a fila.
+ *
+ * Falha de emissão NÃO derruba a marcação: o marcador já está gravado, e
+ * lançar aqui faria o motor repetir o bloco e marcar de novo. O evento é aviso
+ * ao barramento, não a verdade — a verdade é a coluna.
+ */
+async function anunciarMarcacao(
+  admin: SupabaseClient,
+  orgId: string,
+  exec: FlowExecutionRow,
+  alvo: AlvoDeMarcador,
+  acao: "added" | "removed",
+  mudadas: string[],
+  finais: string[],
+): Promise<void> {
+  const onde = ONDE_MORA_O_MARCADOR[alvo.kind];
+  try {
+    await admin.rpc("emit_event", {
+      p_event_type: `${onde.prefixo}.tag_${acao}`,
+      p_entity_kind: onde.entidade,
+      p_entity_id: alvo.id,
+      p_payload:
+        acao === "added"
+          ? { added_tags: mudadas, tags: finais }
+          : { removed_tags: mudadas, tags: finais },
+      p_metadata: { [CAUSADO_POR_FLUXO]: exec.flow_id, execution_id: exec.id },
+      p_organization_id: orgId,
+    });
+  } catch (e) {
+    logger.warn("flow_engine.marcador_sem_evento", {
+      organization_id: orgId,
+      execution_id: exec.id,
+      erro: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
+
 // ───────────────────────────────── portas ────────────────────────────────────
 
 export function criarPortas(
@@ -537,27 +633,21 @@ export function criarPortas(
         if (error) throw new Error(error.message);
       },
 
-      async adicionarTag({ leadId, tag }) {
-        // Lê-modifica-escreve porque o PostgREST não expõe `array_append`. A
-        // corrida possível (duas execuções marcando o mesmo lead no mesmo
-        // instante) perde uma tag, e não corrompe nada; uma RPC nova para isto
-        // custaria mais uma `security definer` a revogar das duas origens.
-        const { data } = await admin
-          .from("crm_leads")
-          .select("tags")
-          .eq("organization_id", orgId)
-          .eq("id", leadId)
-          .maybeSingle();
-        const atuais = Array.isArray((data as { tags?: unknown } | null)?.tags)
-          ? ((data as { tags: string[] }).tags)
-          : [];
-        if (atuais.includes(tag)) return;
-        const { error } = await admin
-          .from("crm_leads")
-          .update({ tags: [...atuais, tag], updated_at: agora().toISOString() })
-          .eq("organization_id", orgId)
-          .eq("id", leadId);
-        if (error) throw new Error(error.message);
+      async marcar({ alvo, tag }) {
+        const atuais = await lerMarcadores(admin, orgId, alvo);
+        if (atuais.includes(tag)) return { jaTinha: true };
+        await gravarMarcadores(admin, orgId, alvo, [...atuais, tag], agora());
+        await anunciarMarcacao(admin, orgId, exec, alvo, "added", [tag], [...atuais, tag]);
+        return { jaTinha: false };
+      },
+
+      async desmarcar({ alvo, tag }) {
+        const atuais = await lerMarcadores(admin, orgId, alvo);
+        if (!atuais.includes(tag)) return { naoTinha: true };
+        const restantes = atuais.filter((t) => t !== tag);
+        await gravarMarcadores(admin, orgId, alvo, restantes, agora());
+        await anunciarMarcacao(admin, orgId, exec, alvo, "removed", [tag], restantes);
+        return { naoTinha: false };
       },
 
       async houveRespostaDoDono({ leadId, desde }) {

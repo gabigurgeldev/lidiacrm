@@ -111,6 +111,9 @@ export {
   Lock,
   Receipt,
   Tag,
+  // flow engine: desmarcar o cliente. Par visual do Tag — dois blocos com o
+  // MESMO ícone no quadro é o jeito mais rápido de ligar a linha no errado.
+  Eraser,
   Question,
   Keyboard,
   // followup flow builder (Task 6.2)

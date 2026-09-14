@@ -43,6 +43,11 @@ beforeEach(() => {
  * Dois caminhos, cada um marcando o lead com uma tag diferente. A tag é a
  * evidência OBSERVÁVEL de por onde a execução passou — mais honesta que ler o
  * `branch_id` de dentro, porque prova que o motor seguiu a aresta.
+ *
+ * Conta-se por `mundo.marcacoes` (o log de toda passagem) e não por
+ * `mundo.tags` (o conjunto de marcadores do lead): marcar duas vezes o mesmo
+ * marcador não duplica — no banco também não —, e é a CONTAGEM de passagens
+ * que este arquivo mede.
  */
 function grafoDeDivisao(modo: string): FlowGraph {
   return {
@@ -86,7 +91,7 @@ describe("dividir os caminhos — modo fila", () => {
     await maisUmaExecucao(grafo, 3);
     await maisUmaExecucao(grafo, 4);
 
-    expect(mundo.tags).toEqual(["veio-por-a", "veio-por-b", "veio-por-a", "veio-por-b"]);
+    expect(mundo.marcacoes).toEqual(["veio-por-a", "veio-por-b", "veio-por-a", "veio-por-b"]);
   });
 });
 
@@ -98,9 +103,9 @@ describe("dividir os caminhos — modo igualitário", () => {
     await maisUmaExecucao(grafo, 3);
     await maisUmaExecucao(grafo, 4);
 
-    const porA = mundo.tags.filter((t) => t === "veio-por-a").length;
-    const porB = mundo.tags.filter((t) => t === "veio-por-b").length;
-    expect(mundo.tags).toHaveLength(4);
+    const porA = mundo.marcacoes.filter((t) => t === "veio-por-a").length;
+    const porB = mundo.marcacoes.filter((t) => t === "veio-por-b").length;
+    expect(mundo.marcacoes).toHaveLength(4);
     expect(porA, "quatro leads deviam empatar 2 a 2").toBe(2);
     expect(porB).toBe(2);
   });
@@ -115,8 +120,8 @@ describe("dividir os caminhos — modo aleatório", () => {
     await maisUmaExecucao(grafo, 2);
     await maisUmaExecucao(grafo, 3);
 
-    expect(mundo.tags).toHaveLength(3);
-    for (const tag of mundo.tags) {
+    expect(mundo.marcacoes).toHaveLength(3);
+    for (const tag of mundo.marcacoes) {
       expect(["veio-por-a", "veio-por-b"]).toContain(tag);
     }
   });
@@ -138,7 +143,7 @@ describe("quando o banco não responde", () => {
 
     const exec = [...mundo.execucoes.values()][0]!;
     expect(exec.status).not.toBe("failed");
-    expect(mundo.tags).toEqual(["veio-por-a"]);
+    expect(mundo.marcacoes).toEqual(["veio-por-a"]);
   });
 });
 

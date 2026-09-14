@@ -46,6 +46,7 @@ export const CHAVES_DE_DIAGNOSTICO = [
   "aviso_na_fila_por",
   "disparo_recusado",
   "ia_erro",
+  "marcacao_recusada",
 ] as const;
 
 /** As frases que a tela mostra. Em português de operação, não de código. */
@@ -56,6 +57,7 @@ export const ROTULO_DO_DIAGNOSTICO: Record<string, string> = {
   aviso_na_fila_por: "O aviso ficou na fila do canal",
   disparo_recusado: "A campanha não foi criada",
   ia_erro: "A entrega ao agente falhou",
+  marcacao_recusada: "O marcador não foi aplicado",
 };
 
 export interface DiagnosticoDoPasso {

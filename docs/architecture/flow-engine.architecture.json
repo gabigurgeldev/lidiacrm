@@ -42,7 +42,7 @@
     { "id": "cron", "lane": "barramento", "col": 3, "type": "route", "label": "cron flow-engine-worker", "sublabel": "1×/min" },
 
     { "id": "claim", "lane": "motor", "col": 4, "type": "database", "label": "fn_claim_due_flow_executions", "sublabel": "rodízio por org, skip locked" },
-    { "id": "registry", "lane": "nos", "col": 4, "type": "lib", "label": "FlowNodeRegistry", "sublabel": "11 blocos, extensível" },
+    { "id": "registry", "lane": "nos", "col": 4, "type": "lib", "label": "FlowNodeRegistry", "sublabel": "todo bloco é uma definição registrada" },
 
     { "id": "tick", "lane": "motor", "col": 5, "type": "service", "label": "rodarTickDeFluxos", "sublabel": "caminha até esperar ou terminar" },
     { "id": "passos", "lane": "motor", "col": 5, "type": "table", "label": "flow_execution_events", "sublabel": "append-only, idempotente" },
@@ -51,10 +51,12 @@
     { "id": "no_rodizio", "lane": "nos", "col": 5, "type": "lib", "label": "routing.round_robin", "sublabel": "reusa selectRoundRobin" },
     { "id": "no_espera", "lane": "nos", "col": 5, "type": "lib", "label": "logic.wait", "sublabel": "espera persistida" },
     { "id": "no_aviso", "lane": "nos", "col": 5, "type": "lib", "label": "whatsapp.notify_user", "sublabel": "telefone do atendente" },
+    { "id": "no_marcador", "lane": "nos", "col": 5, "type": "lib", "label": "crm.add_tag · crm.remove_tag", "sublabel": "lead se houver, senão contato" },
 
     { "id": "elegiveis", "lane": "efeito", "col": 6, "type": "lib", "label": "loadEligibleAttendants", "sublabel": "disponível, horário, capacidade" },
     { "id": "envio", "lane": "efeito", "col": 6, "type": "service", "label": "sendMessageHandler", "sublabel": "os 10 gates do before_send" },
     { "id": "atribuicao", "lane": "efeito", "col": 6, "type": "table", "label": "crm_leads.owner_user_id", "sublabel": "o lead ganha dono" },
+    { "id": "marcadores", "lane": "efeito", "col": 6, "type": "table", "label": "crm_leads.tags · contacts.tags", "sublabel": "o marcador que o Decidir lê" },
     { "id": "avisos", "lane": "efeito", "col": 6, "type": "table", "label": "agent_inbox_items", "sublabel": "execução morta abre aviso" },
 
     { "id": "execucoes_tela", "lane": "tela", "col": 7, "type": "frontend", "label": "/app/flows/execucoes", "sublabel": "o que rodou e o que parou" }
@@ -89,6 +91,10 @@
     { "id": "e27", "from": "construtor", "to": "registry", "label": "paleta e saídas" },
     { "id": "e28", "from": "no_decide", "to": "tick", "label": "o ramo escolhido" },
     { "id": "e29", "from": "lista", "to": "construtor", "label": "abre para montar" },
-    { "id": "e30", "from": "lista", "to": "flows", "label": "PATCH name · DELETE (manager)" }
+    { "id": "e30", "from": "lista", "to": "flows", "label": "PATCH name · DELETE (manager)" },
+    { "id": "e31", "from": "registry", "to": "no_marcador", "label": "" },
+    { "id": "e32", "from": "no_marcador", "to": "marcadores", "label": "põe e tira o marcador" },
+    { "id": "e33", "from": "no_marcador", "to": "event_log", "label": "tag_added · tag_removed (caused_by_flow)" },
+    { "id": "e34", "from": "marcadores", "to": "no_decide", "label": "está marcado?" }
   ]
 }

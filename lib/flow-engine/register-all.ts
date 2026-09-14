@@ -14,11 +14,11 @@ import {
   whatsappNotifyUser,
 } from "./nodes/avisos";
 import {
-  crmAddTag,
   crmDonoRespondeu,
   routingRedistribute,
   routingRoundRobin,
 } from "./nodes/crm-e-roteamento";
+import { crmAddTag, crmRemoveTag } from "./nodes/marcadores";
 import { crmHandoffToAgent, routingFixedOrder, routingRandom } from "./nodes/distribuicao";
 import { logicSplit } from "./nodes/divisao-de-caminho";
 import { logicHorarioDeFuncionamento } from "./nodes/horario-de-funcionamento";
@@ -62,6 +62,7 @@ export function garantirNosRegistrados(): void {
   registrarNo(logicChoiceMenu);
   registrarNo(flowCall);
   registrarNo(crmAddTag);
+  registrarNo(crmRemoveTag);
   registrarNo(crmAssignOwner);
   registrarNo(crmDonoRespondeu);
   registrarNo(routingRoundRobin);

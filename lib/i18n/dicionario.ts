@@ -6671,9 +6671,41 @@ export const DICIONARIO: Traducoes = {
     { es: "Detiene el flujo un tiempo antes de continuar." },
   "Encerra o fluxo com um desfecho que aparece no relatório.":
     { es: "Cierra el flujo con un desenlace que aparece en el informe." },
-  "Marcar o lead": { es: "Etiquetar el lead" },
-  "Põe um marcador no lead, para achar e filtrar depois.":
-    { es: "Pone una etiqueta en el lead, para encontrarlo y filtrarlo después." },
+  "Marcar o cliente": { es: "Etiquetar al cliente" },
+  "Põe um marcador no cliente, para achar, filtrar e decidir depois.":
+    { es: "Pone una etiqueta en el cliente, para encontrarlo, filtrarlo y decidir después." },
+  "Desmarcar o cliente": { es: "Quitar la etiqueta del cliente" },
+  "Tira um marcador do cliente, para ele sair das listas que o usam.":
+    { es: "Quita una etiqueta del cliente, para que salga de las listas que la usan." },
+  "Depois de desmarcar": { es: "Después de quitar la etiqueta" },
+  "Não deu para marcar": { es: "No fue posible etiquetar" },
+  "Não deu para desmarcar": { es: "No fue posible quitar la etiqueta" },
+  "Marcador a tirar": { es: "Etiqueta a quitar" },
+  "Marca o lead quando o fluxo tem um; quando não tem — quem chegou pelo WhatsApp —, marca o contato. Aceita variável.":
+    {
+      es: "Etiqueta el lead cuando el flujo tiene uno; cuando no lo tiene — quien llegó por WhatsApp —, etiqueta el contacto. Acepta variable.",
+    },
+  "Tira o marcador de quem o tiver. Se o cliente não estiver marcado, o fluxo segue igual — não é erro.":
+    {
+      es: "Quita la etiqueta de quien la tenga. Si el cliente no está etiquetado, el flujo sigue igual — no es un error.",
+    },
+  "Já usados:": { es: "Ya usados:" },
+  "O marcador não foi aplicado": { es: "La etiqueta no fue aplicada" },
+  "Tira o marcador {tag}": { es: "Quita la etiqueta {tag}" },
+  // ─── Decidir: a pergunta pronta de marcador e as regras compostas ───
+  "Tem o marcador": { es: "Tiene la etiqueta" },
+  "Campo do cliente": { es: "Campo del cliente" },
+  "Está marcado com": { es: "Está etiquetado con" },
+  "NÃO está marcado com": { es: "NO está etiquetado con" },
+  "Combinar as regras com": { es: "Combinar las reglas con" },
+  "E (todas)": { es: "Y (todas)" },
+  "OU (qualquer uma)": { es: "O (cualquiera)" },
+  "Acrescentar regra": { es: "Agregar regla" },
+  "Falta escrever o marcador — em branco, esta condição nunca é verdade.":
+    { es: "Falta escribir la etiqueta — en blanco, esta condición nunca es verdadera." },
+  "Remover regra": { es: "Quitar regla" },
+  "Condição composta, montada fora desta tela. Remova e refaça para editar.":
+    { es: "Condición compuesta, armada fuera de esta pantalla. Quítala y rehazla para editarla." },
   "Definir o dono do lead": { es: "Definir el dueño del lead" },
   "Entrega o lead a uma pessoa específica.": { es: "Entrega el lead a una persona específica." },
   "O vendedor já falou com o lead?": { es: "¿El vendedor ya habló con el lead?" },

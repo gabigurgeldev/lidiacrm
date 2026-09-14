@@ -80,7 +80,7 @@ describe("bifurcar e reencontrar", () => {
     await rodarTickDeFluxos(mundo.montar(grafoComFork("todas")));
     await rodarTickDeFluxos(mundo.montar(grafoComFork("todas")));
 
-    expect(mundo.tags.sort()).toEqual(["direita", "esquerda"]);
+    expect(mundo.marcacoes.sort()).toEqual(["direita", "esquerda"]);
   });
 
   it("em modo TODAS, o merge só passa quando as duas frentes chegam", async () => {
@@ -190,7 +190,7 @@ describe("bifurcar e reencontrar", () => {
     await rodarTickDeFluxos(mundo.montar(grafo));
 
     // O ramo perdedor NÃO marcou o lead: ele foi cancelado antes de andar.
-    expect(mundo.tags).toEqual([]);
+    expect(mundo.marcacoes).toEqual([]);
   });
 
   it("dois ramos gravando a MESMA variável não se sobrescrevem", async () => {
@@ -231,10 +231,13 @@ describe("o laço", () => {
   }
 
   it("percorre a lista item a item e sai pelo fim", async () => {
+    // Conta-se por `marcacoes` (o log de toda passagem pelo bloco de marcar) e
+    // não por `tags` (o conjunto do lead): três voltas marcando o MESMO
+    // marcador deixam uma tag só — no banco também.
     mundo.globais = { itens: ["a", "b", "c"] };
     await rodarTickDeFluxos(mundo.montar(grafoComLaco(10)));
 
-    expect(mundo.tags).toEqual(["voltou", "voltou", "voltou"]);
+    expect(mundo.marcacoes).toEqual(["voltou", "voltou", "voltou"]);
     expect(mundo.execucoes.get("exec-1")!.status).toBe("completed");
   });
 
@@ -245,14 +248,14 @@ describe("o laço", () => {
     mundo.globais = { itens: ["a", "b", "c", "d", "e"] };
     await rodarTickDeFluxos(mundo.montar(grafoComLaco(2)));
 
-    expect(mundo.tags).toEqual(["voltou", "voltou"]);
+    expect(mundo.marcacoes).toEqual(["voltou", "voltou"]);
   });
 
   it("lista vazia sai direto pelo fim, sem rodar o corpo", async () => {
     mundo.globais = { itens: [] };
     await rodarTickDeFluxos(mundo.montar(grafoComLaco(10)));
 
-    expect(mundo.tags).toEqual([]);
+    expect(mundo.marcacoes).toEqual([]);
     expect(mundo.execucoes.get("exec-1")!.status).toBe("completed");
   });
 
@@ -261,7 +264,7 @@ describe("o laço", () => {
     mundo.globais = { itens: "Gabriel" };
     await rodarTickDeFluxos(mundo.montar(grafoComLaco(10)));
 
-    expect(mundo.tags).toEqual([]);
+    expect(mundo.marcacoes).toEqual([]);
   });
 });
 
@@ -298,7 +301,7 @@ describe("esperar um evento", () => {
     expect(frente.status).toBe("waiting");
     expect(frente.awaiting_event_type).toBe("message.received");
     expect(frente.wait_deadline).toBe(new Date(mundo.agora.getTime() + UMA_HORA).toISOString());
-    expect(mundo.tags).toEqual([]);
+    expect(mundo.marcacoes).toEqual([]);
   });
 
   it("vencido o prazo, sai pelo ramo do prazo — e NÃO dorme outro prazo", async () => {
@@ -311,7 +314,7 @@ describe("esperar um evento", () => {
     mundo.avancarPara(new Date(mundo.agora.getTime() + UMA_HORA + 1000));
     await rodarTickDeFluxos(mundo.montar(grafoComEspera()));
 
-    expect(mundo.tags).toEqual(["silencio"]);
+    expect(mundo.marcacoes).toEqual(["silencio"]);
     expect(mundo.execucoes.get("exec-1")!.status).toBe("completed");
   });
 
@@ -358,7 +361,7 @@ describe("chamar outro fluxo", () => {
     // parado para sempre, e nada no sistema jamais o coleta.
     expect(frente.wait_deadline).not.toBeNull();
     // E o pai NÃO seguiu adiante: quem chama espera.
-    expect(mundo.tags).toEqual([]);
+    expect(mundo.marcacoes).toEqual([]);
   });
 
   it("a espera é DAQUELA filha, não de qualquer sub-fluxo", async () => {

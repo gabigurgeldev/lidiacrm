@@ -293,6 +293,10 @@ export function resumoDoBloco(
       const tag = texto(config, "tag");
       return tag === null ? null : { chave: "Marca como {tag}", valores: { tag: encurtar(tag) } };
     }
+    case "crm.remove_tag": {
+      const tag = texto(config, "tag");
+      return tag === null ? null : { chave: "Tira o marcador {tag}", valores: { tag: encurtar(tag) } };
+    }
     case "crm.assign_owner": {
       const quem = texto(config, "user_id");
       return quem === null

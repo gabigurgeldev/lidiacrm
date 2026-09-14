@@ -2073,3 +2073,55 @@ rota de `/api/v1/flows` e exige `manager`) e o bloco "excluir fluxo" de
 `flow_executions` em `waiting` com versão publicada e ponteiro coerente não cabe
 na receita do job de e2e; a recusa está medida contra Postgres no invariante e
 lida na rota, mas **não** foi vista pela tela.
+
+## J27 — Marcar o cliente e decidir pelo marcador `[P1]` (2026-09-14)
+
+Relato do dono do produto, três sintomas, **duas raízes** — e as duas eram a
+mesma pergunta respondida de dois jeitos: *onde mora o marcador?*
+
+**Achado 1 — "o marcar tag não marca o lead e nem passa pra frente".** Era
+verdade, e no caminho mais usado do produto. `crm.add_tag` só sabia escrever em
+`crm_leads.tags`; sem lead ele respondia `{ kind: "dead", reason:
+"sem_lead_para_marcar" }` — não marcava, não avançava, e a execução sumia sem
+uma linha na trilha. E fluxo armado por mensagem **nunca tem lead**:
+`trigger-matcher.ts` só preenche `lead_id` quando o `entity_kind` do evento é de
+lead; para `message.received` vai só o `contact_id`. A automação ANTIGA
+(`lib/automation/actions/add-tag.ts`) já fazia o certo desde sempre — lead se
+houver, senão contato. O motor novo nasceu com metade da regra.
+
+**Achado 2 — "não consigo ter a lógica de marcado vs não marcado".** Duas
+armadilhas empilhadas, nenhuma com erro na tela:
+
+- o campo da regra é um caminho digitado à mão, então a pergunta certa exigia
+  saber que existe `contact.tags` **além** de `lead.tags` — e quem escrevesse só
+  o do lead teria "não" para todo cliente de WhatsApp;
+- "não tem o marcador" escrito como `not_contains` responde **falso** num fluxo
+  sem lead, porque campo ausente é falso para todo operador (`condicoes.ts`, a
+  regra de ausência). A pergunta negativa respondia "não" justamente para quem
+  não tinha. A forma correta é `negar` o grupo, e ela não estava ao alcance de
+  ninguém pela tela.
+
+**Achado 3 — o formulário do "Decidir" só aceitava UMA regra por saída.** Não
+havia botão de acrescentar nem de remover, e o `combinador` (E/OU) existia no
+schema sem lugar na tela. Uma pergunta de duas partes era impossível de
+escrever, embora o avaliador sempre a tenha aceitado. No mesmo arquivo, todo
+valor que parecesse número virava número — um marcador chamado `2024` deixava de
+casar com a string da coluna, em silêncio.
+
+**Achado 4 (de graça, ao emitir evento).** `CAUSADO_POR_FLUXO` existe em
+`trigger-matcher.ts` desde o começo, é LIDO no anti-loop, e **nunca foi escrito
+por ninguém** — porque nenhum bloco emitia evento. Marcar pelo fluxo passou a
+emitir `lead.tag_added` / `contact.tag_added` (e `tag_removed`), carimbados, e a
+proteção contra laço saiu do papel.
+
+Spec: `tests/e2e/fluxo-marcador-e-decisao.spec.ts` (em `SPECS_PARTE_2`).
+Unidade: `lib/flow-engine/nodes/marcadores.test.ts` (sobre o motor de verdade,
+porque metade da queixa era "não passa pra frente" — só o motor responde isso) e
+`lib/flow-engine/regra-de-marcador.test.ts` (a pergunta negativa sem lead).
+
+**NÃO MEDIDO, declarado:** a jornada ponta a ponta com WAHA — mensagem real
+chegando, cron drenando, marcador caindo em `contacts.tags` e o Decidir saindo
+pelo ramo certo — **não** foi executada nesta máquina: o e2e local não sobe aqui
+(sem CLI do Supabase no Windows), então a prova pela tela é a que o CI roda. O
+comportamento do motor está medido contra o motor com mundo falso, não contra
+Postgres.

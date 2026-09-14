@@ -6,14 +6,14 @@ import { CampoComVariavel } from "./CampoComVariavel";
 import { SugestoesDeMarcador } from "./marcador";
 import { Campo, Dica, Secao, type PropsDoFormulario } from "./shared";
 
-/** `crm.add_tag` — marca o lead, ou o contato quando o fluxo não tem lead. */
-export function CrmAddTagForm({ config, aoMudarConfig }: PropsDoFormulario) {
+/** `crm.remove_tag` — tira o marcador do lead, ou do contato quando não há lead. */
+export function CrmRemoveTagForm({ config, aoMudarConfig }: PropsDoFormulario) {
   const t = useT();
   const tag = String(config.tag ?? "");
 
   return (
     <Secao>
-      <Campo rotulo={t("Marcador")}>
+      <Campo rotulo={t("Marcador a tirar")}>
         <CampoComVariavel
           valor={tag}
           maxLength={40}
@@ -23,7 +23,7 @@ export function CrmAddTagForm({ config, aoMudarConfig }: PropsDoFormulario) {
         <SugestoesDeMarcador atual={tag} aoEscolher={(v) => aoMudarConfig({ ...config, tag: v })} />
         <Dica
           texto={t(
-            "Marca o lead quando o fluxo tem um; quando não tem — quem chegou pelo WhatsApp —, marca o contato. Aceita variável.",
+            "Tira o marcador de quem o tiver. Se o cliente não estiver marcado, o fluxo segue igual — não é erro.",
           )}
         />
       </Campo>

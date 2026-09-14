@@ -82,7 +82,8 @@ export function configExemploDoTipo(tipo: string): Record<string, unknown> {
       // chama o fluxo errado de alguém.
       return { fluxo_id: "00000000-0000-0000-0000-000000000000", entrada: {} };
     case "crm.add_tag":
-      // Não pode ser `""`: `addTagConfigSchema.tag` exige min(1). Um exemplo
+    case "crm.remove_tag":
+      // Não pode ser `""`: `marcadorConfigSchema.tag` exige min(1). Um exemplo
       // vazio passava despercebido no clique manual porque `branches()` deste
       // tipo não lê `config` — mas a IA de geração embute o `configSchema`
       // real (`lib/flow-engine/ai/generation-schema.ts`), e um exemplo

@@ -54,6 +54,7 @@ describe("o registry decide o que existe", () => {
       "crm.assign_owner",
       "crm.handoff_to_agent",
       "crm.owner_responded",
+      "crm.remove_tag",
       "flow.call",
       "logic.await_event",
       "logic.business_hours",

@@ -39,7 +39,31 @@ export interface Mundo {
   passos: Array<{ execution_id: string; node_id: string | null; event_type: string; payload: Record<string, unknown>; idempotency_key: string }>;
   esperas: Map<string, { desde: Date; ate: Date }>;
   atribuicoes: Array<{ leadId: string; userId: string }>;
+  /** Os marcadores do LEAD. */
   tags: string[];
+  /** Os marcadores do CONTATO — outra lista, porque é outro alvo. É nela que o
+   *  marcador cai quando o fluxo não tem lead, que é o caso de quem chegou pelo
+   *  WhatsApp. */
+  tagsDoContato: string[];
+  /**
+   * Quando true, `carregarFatos` devolve `lead: null` — o mundo de um fluxo
+   * armado por mensagem. Sem este botão não havia como exercitar o caminho em
+   * que o bloco de marcar morria calado.
+   */
+  semLead: boolean;
+  /** Nem lead, nem contato — o mundo em que não há quem marcar. */
+  semContato: boolean;
+  /**
+   * TODA passagem pelo bloco de marcar, em ordem — inclusive a que não mudou
+   * nada por o marcador já estar lá.
+   *
+   * Existe porque `tags` virou um CONJUNTO de verdade (marcar duas vezes o mesmo
+   * marcador não duplica, como no banco), e vários testes usam a marcação como
+   * evidência de POR ONDE a execução passou: um laço que roda três voltas
+   * marcando "voltou" deixa uma tag só e três marcações. Contar pela coluna
+   * mediria o estado; contar aqui mede o caminho.
+   */
+  marcacoes: string[];
   /** `channelSessionId` entra porque a ESCOLHA da conexão é o que o bloco de aviso
    *  passou a poder fazer — um falso que a descartasse deixaria o campo novo sem
    *  vigia nenhum. */
@@ -133,6 +157,10 @@ export function mundoNovo(): Mundo {
     esperas: new Map(),
     atribuicoes: [],
     tags: [],
+    tagsDoContato: [],
+    semLead: false,
+    semContato: false,
+    marcacoes: [],
     enviados: [],
     disparosPedidos: [],
     cursoresDaFila: new Map(),
@@ -199,7 +227,7 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
       ),
     carregarGrafo: async () => grafo,
     carregarFatos: async (): Promise<FatosDaExecucao> => ({
-      lead: {
+      lead: mundo.semLead ? null : {
         id: LEAD,
         title: "Loja do Gabriel",
         status: "open",
@@ -214,16 +242,16 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
         score_band: null,
         created_at: "2026-08-30T11:59:00.000Z",
       },
-      contact: {
+      contact: mundo.semContato ? null : {
         id: "contato-1",
         name: "Gabriel",
         phone_number: "+559481004900",
         email: null,
-        tags: [],
+        tags: mundo.tagsDoContato,
         is_blocked: false,
       },
       assigned_user:
-        mundo.atribuicoes.length === 0
+        mundo.atribuicoes.length === 0 || mundo.semLead
           ? null
           : {
               id: mundo.atribuicoes.at(-1)!.userId,
@@ -380,8 +408,19 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
         mundo.atribuicoes.push({ leadId, userId });
       },
       removerDono: async () => {},
-      adicionarTag: async ({ tag }) => {
-        mundo.tags.push(tag);
+      marcar: async ({ alvo, tag }) => {
+        mundo.marcacoes.push(tag);
+        const onde = alvo.kind === "lead" ? mundo.tags : mundo.tagsDoContato;
+        if (onde.includes(tag)) return { jaTinha: true };
+        onde.push(tag);
+        return { jaTinha: false };
+      },
+      desmarcar: async ({ alvo, tag }) => {
+        const onde = alvo.kind === "lead" ? mundo.tags : mundo.tagsDoContato;
+        const i = onde.indexOf(tag);
+        if (i < 0) return { naoTinha: true };
+        onde.splice(i, 1);
+        return { naoTinha: false };
       },
       houveRespostaDoDono: async () => mundo.donoRespondeu,
       telefoneDoUsuario: async ({ userId }) => mundo.telefonesDaEquipe.get(userId) ?? null,

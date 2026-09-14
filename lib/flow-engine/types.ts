@@ -284,6 +284,12 @@ export interface PortaDeRoteamento {
   }): Promise<{ userId: string | null; avancou: number }>;
 }
 
+/**
+ * Quem leva o marcador. `lead` quando o fluxo tem um card do funil; `contato`
+ * quando não tem — e não ter é o caso NORMAL de quem chegou pelo WhatsApp.
+ */
+export type AlvoDeMarcador = { kind: "lead" | "contato"; id: string };
+
 export interface PortaDoCrm {
   atribuirDono(input: { leadId: string; userId: string }): Promise<void>;
 
@@ -299,7 +305,22 @@ export interface PortaDoCrm {
    */
   telefoneDoUsuario(input: { userId: string }): Promise<string | null>;
   removerDono(input: { leadId: string }): Promise<void>;
-  adicionarTag(input: { leadId: string; tag: string }): Promise<void>;
+  /**
+   * PÔR e TIRAR um marcador — de um lead OU de um contato.
+   *
+   * O alvo vem de fora porque nem todo fluxo tem lead: um armado por mensagem
+   * de WhatsApp nasce só com contato (`trigger-matcher.ts` só preenche
+   * `lead_id` quando o evento é de lead). Enquanto a porta só sabia escrever em
+   * `crm_leads`, o bloco de marcar respondia `dead` nesse caso — não marcava
+   * nada, não avançava, e matava a execução em silêncio no caminho mais comum
+   * do produto.
+   *
+   * Devolvem se havia EFEITO, e não `void`, porque duas coisas dependem disso:
+   * o evento no `event_log` só sai quando algo mudou, e a trilha da execução
+   * precisa poder dizer "já estava marcado".
+   */
+  marcar(input: { alvo: AlvoDeMarcador; tag: string }): Promise<{ jaTinha: boolean }>;
+  desmarcar(input: { alvo: AlvoDeMarcador; tag: string }): Promise<{ naoTinha: boolean }>;
   /**
    * Houve mensagem de saída do dono nesta conversa depois de `desde`? É como o
    * fluxo pergunta "o vendedor respondeu?" sem o nó saber o que é uma tabela.

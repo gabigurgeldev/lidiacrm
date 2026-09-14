@@ -14,37 +14,6 @@ import { selectRoundRobin } from "@/lib/routing/decide";
 
 import { ramoDeExcecao, ramoPadrao, type AtendenteElegivel, type FlowNodeDefinition, type NodeExecutionResult } from "../types";
 
-// ───────────────────────────── crm.add_tag ───────────────────────────────────
-
-export const addTagConfigSchema = z.strictObject({
-  tag: z.string().trim().min(1).max(40),
-});
-export type AddTagConfig = z.infer<typeof addTagConfigSchema>;
-
-export const crmAddTag: FlowNodeDefinition<AddTagConfig> = {
-  type: "crm.add_tag",
-  version: 1,
-  category: "crm",
-  rotulo: "Marcar o lead",
-  mutaCrm: true,
-  descricao: "Põe um marcador no lead, para achar e filtrar depois.",
-  configSchema: addTagConfigSchema,
-  branches: () => [ramoPadrao("Depois de marcar")],
-  execute: async (ctx, config): Promise<NodeExecutionResult> => {
-    const lead = ctx.fatos.lead;
-    if (lead === null) {
-      // `dead` e não `fail`: repetir não vai fazer o lead aparecer. Um fluxo
-      // armado por evento de lead cuja execução chegou aqui sem lead está
-      // apontando para uma linha apagada, e insistir só gasta tentativa.
-      return { kind: "dead", reason: "sem_lead_para_marcar" };
-    }
-    const tag = ctx.render(config.tag).trim();
-    if (tag === "") return { kind: "dead", reason: "marcador_vazio" };
-    await ctx.crm.adicionarTag({ leadId: lead.id, tag });
-    return { kind: "advance", branch_id: "else" };
-  },
-};
-
 // ─────────────────────────── routing.round_robin ─────────────────────────────
 
 /**
