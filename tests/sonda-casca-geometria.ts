@@ -55,9 +55,10 @@ const CASCA = `
   <div class="hidden md:block">
     <aside data-prova="barra" data-collapsed="false"
            class="app-sidebar casca-escura sticky top-0 z-30 flex h-screen shrink-0 flex-col">
-      <div class="flex h-14 shrink-0 items-center gap-2.5 border-b px-4">
+      <div class="nav-marca flex h-14 shrink-0 items-center gap-2.5 border-b px-4">
         <img src="/gestalt-crm-branco.png" alt="Gestalt CRM" data-prova="logo"
-             class="nav-logo h-8 w-auto object-contain">
+             class="nav-logo h-6 w-auto object-contain">
+        <span aria-hidden data-prova="simbolo" class="nav-marca-simbolo">G</span>
       </div>
       <nav class="nav-rolagem flex-1 space-y-1 overflow-y-auto p-2">
         <div class="nav-item flex h-10 items-center rounded-[10px] px-3 text-sm text-text-muted"><span class="nav-rotulo">Início</span></div>
@@ -132,6 +133,9 @@ async function main() {
         cabecalho: caixa('[data-prova="cabecalho"]'),
         painel: caixa('[data-prova="painel"]'),
         logo: caixa('[data-prova="logo"]'),
+        simbolo: caixa('[data-prova="simbolo"]'),
+        displayDoLogo: estilo('[data-prova="logo"]', "display"),
+        displayDoSimbolo: estilo('[data-prova="simbolo"]', "display"),
         fundoDaBarra: estilo('[data-prova="barra"]', "background-color"),
         fundoDoCabecalho: estilo('[data-prova="cabecalho"]', "background-color"),
         fundoDaMoldura: estilo('[data-prova="moldura"]', "background-color"),
@@ -183,11 +187,39 @@ async function main() {
         `barra ${m.fundoDaBarra} = moldura ${m.fundoDaMoldura}`,
       );
       ok(m.raio === `${RAIO}px`, `canto do painel = ${m.raio}`);
-      if (logo) {
-        ok(logo.h >= 20, `logo com ${Math.round(logo.h)}px de altura (era ~11px na arte crua)`);
+      /**
+       * A MARCA EM DUAS FORMAS, e qual delas aparece é decidido SÓ por CSS.
+       *
+       * Entre 768 e 1023 a barra tem 72px e o cookie continua dizendo
+       * "expandida" — o componente não sabe que está estreito. Antes, o `<img>`
+       * era recortado com `object-fit: cover` e sobrava uma tira de ~6px; agora
+       * ele some e entra o ladrilho da inicial. Esta é a única medida que
+       * distingue as duas coisas, porque as duas "funcionam" no DOM.
+       */
+      const estreita = largura <= 1023;
+      ok(
+        (m.displayDoLogo === "none") === estreita,
+        `em ${largura}px o wordmark está ${m.displayDoLogo} (estreita=${estreita})`,
+      );
+      ok(
+        (m.displayDoSimbolo !== "none") === estreita,
+        `em ${largura}px o ladrilho está ${m.displayDoSimbolo} (estreita=${estreita})`,
+      );
+
+      if (estreita && m.simbolo) {
         ok(
-          logo.w <= barra.w - 16,
-          `logo com ${Math.round(logo.w)}px cabe nos ${Math.round(barra.w)}px da barra`,
+          Math.round(m.simbolo.w) === 32 && Math.round(m.simbolo.h) === 32,
+          `ladrilho quadrado de ${Math.round(m.simbolo.w)}×${Math.round(m.simbolo.h)}px`,
+        );
+      }
+      if (logo && !estreita) {
+        ok(logo.h >= 20, `logo com ${Math.round(logo.h)}px de altura (era ~11px na arte crua)`);
+        // ⚠️ O teto encolheu junto com a altura: o wordmark rendia ~223px numa
+        // barra de 264 e era o elemento mais pesado da tela. Metade da barra é
+        // o limite acima do qual ele volta a dominar a navegação.
+        ok(
+          logo.w <= barra.w / 2,
+          `logo com ${Math.round(logo.w)}px ocupa menos que metade dos ${Math.round(barra.w)}px da barra`,
         );
       }
       console.log(`  ·     barra ${Math.round(barra.w)}px · texto da navegação ${m.textoDaBarra}`);

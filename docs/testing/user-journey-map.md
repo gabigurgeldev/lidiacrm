@@ -988,8 +988,10 @@ quando fechado, e que o grupo da tela em que se está NUNCA está fechado.
 | J22.8 | Sem estouro horizontal em nenhum dos cinco | `body.scrollWidth − documentElement.clientWidth == 0` | **PASS** nos cinco |
 | J22.9 | 430×932 e 390×844: gaveta desliza, fecha ao navegar | overlay com blur, `translateX`, `onNavigate` fecha | **NÃO MEDIDO NA TELA** — precisa de servidor |
 | J22.10 | Papéis: `agent` não vê o cabeçalho de um grupo vazio | grupo Canais some inteiro, título incluído | **PASS** (unit `sidebar-grupos`) |
-| J22.11 | Cabeçalho: breadcrumb, busca, ações, avatar | caminho vem do registro; ⌘K segue o mesmo | **NÃO MEDIDO NA TELA** — só sob unit (`breadcrumb-do-registro`) |
+| J22.11 | Cabeçalho: o que ele carrega, e o que NÃO carrega | sem caminho da página, sem seletor de idioma, sem avatar; a conta alcançável no rodapé da barra | **PASS no CI** (`navegacao.spec.ts`, "o cabeçalho não carrega caminho, idioma nem avatar") — a asserção é de AUSÊNCIA, com a conta no rodapé como guarda de vacuidade |
 | J22.12 | Teclado: ↑↓ percorrem, →← abrem e fecham o grupo | WCAG 2.1.1 | **PASS** (unit `sidebar-grupos`) |
+| J22.13 | Marca recolhida: ladrilho com a inicial, nunca a arte recortada | nas DUAS origens de estreiteza (cookie e `@media` do tablet) o wordmark some e o ladrilho aparece | **PASS** (unit `sidebar-nome-da-organizacao`, `marca-sem-divergencia-de-hidratacao`) · **falta na tela** — a alternância é de CSS e pede a bancada |
+| J22.14 | Busca acha registro, não só tela | 2+ letras trazem contato, conversa e lead em seções; Enter abre o registro | **PASS** (unit `command-palette`, 13 casos) · isolamento entre organizações em `tests/invariants/busca-global-nao-vaza-entre-organizacoes.test.ts` (roda no `invariants` do CI) · **falta na tela** |
 
 ### A bancada de CSS, e o que ela NÃO é
 

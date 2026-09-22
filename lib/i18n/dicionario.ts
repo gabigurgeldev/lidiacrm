@@ -403,6 +403,15 @@ export const DICIONARIO: Traducoes = {
   "Abrir navegação": { es: "Abrir navegación" },
   "Buscar telas": { es: "Buscar pantallas" },
   "Buscar telas do sistema…": { es: "Buscar pantallas del sistema…" },
+  "Buscar páginas, contatos, conversas…": {
+    es: "Buscar páginas, contactos, conversaciones…",
+  },
+  "Digite ao menos duas letras para buscar contatos, conversas e leads.": {
+    es: "Escribe al menos dos letras para buscar contactos, conversaciones y leads.",
+  },
+  Páginas: { es: "Páginas" },
+  "Procurando…": { es: "Buscando…" },
+  Resultados: { es: "Resultados" },
   Telas: { es: "Pantallas" },
   // O gatilho da busca no topo mostra RETICENCIA ASCII desde antes do i18n
   // (`Buscar...`). A chave e o byte que a tela ja mostrava: trocar por "…"

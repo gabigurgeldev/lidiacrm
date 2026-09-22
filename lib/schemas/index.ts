@@ -16,3 +16,4 @@ export * from "./messaging";
 export * from "./routing";
 export * from "./webhooks";
 export * from "./bulk-sends";
+export * from "./search";

@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Busca global (⌘K) — duas fontes, uma lista, um recorte",
+    "subtitle": "por que a navegação nunca depende da rede, e onde o isolamento entre organizações é decidido",
+    "output": "busca-global.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "tela", "label": "Onde a pessoa digita" },
+    { "id": "cliente", "label": "O que o navegador resolve sozinho" },
+    { "id": "borda", "label": "A borda — auth, Zod, organização ativa" },
+    { "id": "dados", "label": "As tabelas, sob RLS" },
+    { "id": "retorno", "label": "Laço de retorno — o que acontece quando erra" }
+  ],
+  "mainPath": ["busca", "paleta", "hook", "rota", "handler", "contacts"],
+  "nodes": [
+    {
+      "id": "busca",
+      "lane": "tela",
+      "col": 0,
+      "type": "component",
+      "label": "GlobalSearch",
+      "sublabel": "botão que PARECE campo · ⌘K · dois inputs disputariam o mesmo texto"
+    },
+    {
+      "id": "paleta",
+      "lane": "tela",
+      "col": 1,
+      "type": "component",
+      "label": "CommandPalette",
+      "sublabel": "funde as duas fontes numa lista PLANA — as setas andam sobre ela"
+    },
+    {
+      "id": "registry",
+      "lane": "cliente",
+      "col": 1,
+      "type": "module",
+      "label": "lib/navigation/registry.ts",
+      "sublabel": "searchable() · em memória · aparece no 1º caractere, sem rede"
+    },
+    {
+      "id": "hook",
+      "lane": "cliente",
+      "col": 2,
+      "type": "module",
+      "label": "useBuscaGlobal",
+      "sublabel": "debounce 250ms · enabled só com 2+ letras · staleTime 30s"
+    },
+    {
+      "id": "rota",
+      "lane": "borda",
+      "col": 3,
+      "type": "route",
+      "label": "GET /api/v1/search",
+      "sublabel": "getUser() · Zod (q 2-80, limit ≤10) · sem organização ativa ⇒ vazio"
+    },
+    {
+      "id": "handler",
+      "lane": "borda",
+      "col": 4,
+      "type": "module",
+      "label": "buscaGlobalHandler",
+      "sublabel": "allSettled — uma fonte que cai não derruba as outras"
+    },
+    {
+      "id": "contacts",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "contacts",
+      "sublabel": "display_name ANTES de name — quem entra pelo WhatsApp só tem o primeiro"
+    },
+    {
+      "id": "conversations",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "conversations",
+      "sublabel": "filtro no contato embutido (!inner) — o join é o ponto frágil"
+    },
+    {
+      "id": "leads",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "crm_leads",
+      "sublabel": "título e descrição · subtítulo é a ETAPA, que diz onde o negócio está"
+    },
+    {
+      "id": "messages",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "messages",
+      "sublabel": "FORA DE PROPÓSITO — índice trigram na tabela mais escrita do produto"
+    },
+    {
+      "id": "invariante",
+      "lane": "retorno",
+      "col": 4,
+      "type": "test",
+      "label": "busca-global-nao-vaza-entre-organizacoes",
+      "sublabel": "duas orgs, o MESMO termo nas duas — senão o verde é do ilike, não da RLS"
+    },
+    {
+      "id": "log",
+      "lane": "retorno",
+      "col": 3,
+      "type": "observability",
+      "label": "logger.warn/error + Sentry",
+      "sublabel": "resposta parcial é erro de sistema e resposta boa ao mesmo tempo"
+    },
+    {
+      "id": "toast",
+      "lane": "retorno",
+      "col": 2,
+      "type": "component",
+      "label": "a lista degrada, não some",
+      "sublabel": "busca que falha deixa as PÁGINAS na tela — elas nunca dependiam da rede"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "busca", "to": "paleta", "label": "⌘K ou clique abrem o diálogo" },
+    { "id": "e2", "from": "registry", "to": "paleta", "label": "páginas, sem rede" },
+    { "id": "e3", "from": "paleta", "to": "hook", "label": "o termo, atrasado em 250ms" },
+    { "id": "e4", "from": "hook", "to": "rota", "label": "só com 2+ letras" },
+    { "id": "e5", "from": "rota", "to": "handler", "label": "organization_id da sessão, NUNCA do corpo" },
+    { "id": "e6", "from": "handler", "to": "contacts", "label": "ilike em nome, e-mail, telefone" },
+    { "id": "e7", "from": "handler", "to": "conversations", "label": "pelo contato vinculado" },
+    { "id": "e8", "from": "handler", "to": "leads", "label": "ilike em título e descrição" },
+    { "id": "e9", "from": "handler", "to": "messages", "label": "NÃO alcança — declarado, não esquecido" },
+    { "id": "e10", "from": "contacts", "to": "invariante", "label": "RLS + filtro explícito, medidos" },
+    { "id": "e11", "from": "conversations", "to": "invariante", "label": "o join não é porta lateral" },
+    { "id": "e12", "from": "leads", "to": "invariante", "label": "nem pelo id colado de outra org" },
+    { "id": "e13", "from": "handler", "to": "log", "label": "fonte que falhou vira aviso estruturado" },
+    { "id": "e14", "from": "log", "to": "toast", "label": "a tela continua útil com o que sobrou" },
+    { "id": "e15", "from": "paleta", "to": "toast", "label": "páginas permanecem quando o banco recusa" }
+  ]
+}
