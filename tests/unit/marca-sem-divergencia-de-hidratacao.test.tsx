@@ -80,8 +80,12 @@ const org = {
   role: "admin",
 } as ActiveOrg;
 
+// `useUser` e `signOut` entraram porque a CONTA passou a morar no rodapé da
+// barra em toda rota (`components/shell/sidebar/ContaNaBarra.tsx`) — antes ela
+// vivia no cabeçalho, fora desta árvore.
 vi.mock("@/hooks/auth/AuthProvider", () => ({
-  useAuth: () => ({ user: usuario, activeOrg: org }),
+  useAuth: () => ({ user: usuario, activeOrg: org, signOut: vi.fn() }),
+  useUser: () => ({ ...usuario, full_name: "Pessoa de Teste" }),
 }));
 
 /** A marca GRAVADA PELA TELA: nome e logo no banco, nada no `.env`. */

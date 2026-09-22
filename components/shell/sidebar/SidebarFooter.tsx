@@ -3,6 +3,7 @@ import { useTransition } from "react";
 
 import { toggleSidebar } from "@/app/actions/shell/toggleSidebar";
 import { VersionFooter } from "@/components/shell/VersionFooter";
+import { ContaNaBarra } from "@/components/shell/sidebar/ContaNaBarra";
 import { SidebarItem } from "@/components/shell/sidebar/SidebarItem";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { HeaderActions } from "@/components/shell/header/HeaderActions";
@@ -14,18 +15,20 @@ import { GRUPO_NO_RODAPE, NAV_GROUPS } from "@/lib/navigation/registry";
 interface SidebarFooterProps {
   collapsed: boolean;
   /**
-   * O cabeçalho do app sumiu desta tela, e as ações de conta ficaram órfãs.
+   * O SINO — e só ele — depende de a tela ter cabeçalho.
    *
-   * Sino, idioma, tema e avatar moram na barra superior. No Inbox ela não é
-   * desenhada (ver `lib/navigation/casca.ts`), e sem esta prop os quatro
-   * simplesmente deixariam de existir na tela em que a pessoa passa o dia — o
-   * aviso de mensagem nova inclusive.
+   * ⚠️ ESTA PROP ENCOLHEU. Ela se chamava `mostrarAcoesDeConta` e carregava
+   * quatro peças (sino, idioma, tema, avatar) que moravam no cabeçalho e ficavam
+   * órfãs no Inbox, onde a casca não o desenha (`lib/navigation/casca.ts`).
+   * Hoje a CONTA mora aqui em toda rota e o idioma e o tema não existem mais
+   * como peça de casca, então o que sobra de condicional é o aviso.
    *
    * ⚠️ UM LUGAR DE CADA VEZ, nunca os dois: quem decide é a MESMA função que a
    * casca consulta para não desenhar o cabeçalho. Duas regras separadas não
-   * dariam erro — dariam o avatar duas vezes, ou nenhuma, em silêncio.
+   * dariam erro — dariam o sino duas vezes, ou nenhuma, em silêncio. Medido nas
+   * duas pontas por `tests/unit/casca-esconde-o-cabecalho.test.tsx`.
    */
-  mostrarAcoesDeConta?: boolean;
+  mostrarAvisos?: boolean;
   compacto: boolean;
   pathname: string;
   showCollapseControl: boolean;
@@ -53,7 +56,7 @@ export function SidebarFooter({
   pathname,
   showCollapseControl,
   onNavigate,
-  mostrarAcoesDeConta = false,
+  mostrarAvisos = false,
 }: SidebarFooterProps) {
   const t = useT();
   const [isPending, startTransition] = useTransition();
@@ -80,15 +83,24 @@ export function SidebarFooter({
   return (
     <div className="shrink-0 space-y-0.5 border-t p-2">
       {/*
-        ACIMA de Configurações, e não abaixo: o rodapé se lê de baixo para cima
-        em ordem de raridade — recolher a barra é o que menos se toca, e o sino é
-        o que mais. Estreita, `HeaderActions` já empilha sozinho (os botões são
-        `shrink-0` num flex), então não há caso especial de largura aqui.
+        A CONTA no topo do rodapé, e em TODA rota.
+        O rodapé se lê de baixo para cima em ordem de raridade — recolher a barra
+        é o que menos se toca —, mas a conta é a exceção deliberada: ela é o
+        único caminho de saída da conta no produto, e pôr a saída embaixo do
+        botão de recolher a esconderia atrás da coisa mais rara da tela.
       */}
-      {mostrarAcoesDeConta && (
+      <div className="mb-1 pb-1" data-testid="acoes-de-conta-na-barra">
+        <ContaNaBarra compacto={compacto} />
+      </div>
+      {/*
+        O SINO só quando esta tela não tem cabeçalho (hoje: o Inbox). Nas demais
+        ele mora na barra superior, e desenhá-lo aqui também daria dois sinos com
+        o mesmo contador.
+      */}
+      {mostrarAvisos && (
         <div
           className={cn("mb-1 flex items-center gap-0.5 pb-1", compacto && "flex-col")}
-          data-testid="acoes-de-conta-na-barra"
+          data-testid="avisos-na-barra"
         >
           <HeaderActions />
         </div>

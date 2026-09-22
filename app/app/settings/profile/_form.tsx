@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/select";
 import { updateProfile } from "@/app/actions/settings/updateProfile";
 import { useT } from "@/hooks/i18n/useT";
+import { useAplicarIdioma, useIdioma } from "@/lib/i18n/IdiomaProvider";
+import type { Idioma } from "@/lib/i18n/idiomas";
 import {
   profileSchema,
   SEM_PREFERENCIA_DE_IDIOMA,
@@ -46,6 +48,11 @@ export function ProfileForm({
   initialTimezone,
 }: Props) {
   const t = useT();
+  const aplicarIdioma = useAplicarIdioma();
+  // O idioma EM VIGOR — para onde a interface volta quando a escolha é "seguir
+  // o da empresa": a preferência pessoal é apagada, e quem passa a valer é a
+  // cadeia resolvida no servidor, que já é o que esta tela está mostrando.
+  const idiomaAtual = useIdioma();
   const [fullName, setFullName] = useState(initialFullName ?? "");
   const [locale, setLocale] = useState<Locale | typeof SEM_PREFERENCIA_DE_IDIOMA>(initialLocale);
   const [timezone, setTimezone] = useState(initialTimezone);
@@ -64,10 +71,41 @@ export function ProfileForm({
       toast.error(t("Dados inválidos."));
       return;
     }
+    const trocouDeIdioma = locale !== initialLocale;
     startTransition(async () => {
       const r = await updateProfile(parsed.data);
-      if (r.ok) toast.success(t("Perfil atualizado."));
-      else toast.error(`${t("Erro")}: ${r.error}`);
+      if (!r.ok) {
+        toast.error(`${t("Erro")}: ${r.error}`);
+        return;
+      }
+      toast.success(t("Perfil atualizado."));
+      if (!trocouDeIdioma) return;
+
+      // Pinta antes de recarregar: o `IdiomaProvider` guarda um estado local
+      // para o efeito aparecer no ato, e sem esta chamada ele ficaria com o
+      // idioma velho durante o tempo de ida e volta da recarga.
+      aplicarIdioma(locale === SEM_PREFERENCIA_DE_IDIOMA ? idiomaAtual : (locale as Idioma));
+
+      // ⚠️ RECARGA INTEIRA, e não `router.refresh()` — os dois foram MEDIDOS,
+      // e esta linha veio do `SeletorDeIdioma` do cabeçalho quando ele saiu.
+      //
+      // O problema: `revalidatePath` invalida o cache do SERVIDOR. O Router
+      // Cache do CLIENTE é outro, e guarda o layout de `/app` já renderizado —
+      // que é justamente quem monta o `IdiomaProvider`. Numa sonda Playwright,
+      // sem nada disto: logo após salvar a tela mostrava o idioma novo (o estado
+      // local pintando), ao NAVEGAR ela voltava ao antigo, e só um reload
+      // acertava. A troca parecia funcionar e se desfazia sozinha na primeira
+      // navegação — o pior desfecho possível.
+      //
+      // `router.refresh()` melhora e não resolve: medido na mesma sonda, a
+      // PRIMEIRA navegação depois ainda vinha no idioma antigo e só a SEGUNDA
+      // vinha certa. Ele é assíncrono, e quem salva e sai navegando ganha a
+      // corrida dele.
+      //
+      // ⚠️ Esta tela é HOJE o único lugar que troca o idioma da interface — o
+      // seletor do cabeçalho não existe mais. Tirar a recarga daqui devolve o
+      // defeito acima sem nenhum outro caminho para compensá-lo.
+      window.location.reload();
     });
   }
 

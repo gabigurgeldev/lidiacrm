@@ -1,5 +1,6 @@
 "use client";
 import { useAuth } from "@/hooks/auth/AuthProvider";
+import { letraDoIcone } from "@/lib/branding/icone";
 import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
 import {
   LOGO_PADRAO_DO_PRODUTO,
@@ -10,17 +11,32 @@ import { cn } from "@/lib/utils";
 /**
  * O topo da barra: a marca de quem hospeda, com o nome da organização por cima.
  *
- * ⚠️ ESTE É O ÚNICO PEDAÇO DA BARRA QUE AINDA DECIDE COMPACTO EM JAVASCRIPT, e
- * é de propósito. Todo o resto do sidebar esconde rótulo por CSS — o que permite
- * o tablet compactar sem tocar no cookie do laptop. Aqui não dá: com logo, a
- * barra desenha a IMAGEM NO LUGAR do nome, e recolhida troca a imagem pela
- * INICIAL. São três nós diferentes para três estados, não um nó que encolhe.
- * Fazê-lo por CSS exigiria os três no DOM ao mesmo tempo, e aí a barra passaria
- * a ter dois `<img>` e um nome invisível — quatro asserções de
- * `sidebar-nome-da-organizacao.test.tsx` medem exatamente a AUSÊNCIA disso.
+ * ── O SÍMBOLO mora no DOM sempre, e quem escolhe entre ele e o wordmark é o CSS
  *
- * Entre 768 e 1023 a barra é estreita sem que o cookie saiba: lá o logo é
- * limitado por `@media` a 40px de largura, e o nome some pela mesma regra.
+ * ⚠️ ISTO MUDOU. Antes, a decisão de compacto era de JAVASCRIPT aqui — era o
+ * único pedaço da barra assim — e o preço era um caso sem dono: entre 768 e
+ * 1023px a barra tem 72px e o cookie continua dizendo "expandida", então o
+ * `<img>` de uma arte ~6,9:1 era RECORTADO por `object-fit: cover` para caber.
+ * Recorte serve qualquer arte e não fica bom em nenhuma.
+ *
+ * Agora o wordmark e o símbolo são irmãos no DOM e as MESMAS regras de barra
+ * estreita que escondem `.nav-rotulo` escondem um ou outro (`app/globals.css`,
+ * bloco "O que some quando a barra é estreita"). O tablet ganha o símbolo
+ * inteiro em vez de uma tira de 6px, e não existe mais um terceiro caminho que
+ * só o CSS conhece.
+ *
+ * O que as quatro asserções de `sidebar-nome-da-organizacao.test.tsx` medem
+ * continua valendo, e é o que limita este arquivo: há **um** `<img>` (nunca
+ * dois) e, havendo logo, o NOME não é escrito em lugar nenhum — o cabeçalho tem
+ * 56px de altura para um dos dois. O símbolo não é nome nem imagem: é uma letra.
+ *
+ * ── A letra vem de `letraDoIcone`, a mesma do ícone da aba
+ *
+ * Não é `[...nome][0]`: aquele devolve o EMOJI quando a marca começa com um, e
+ * `letraDoIcone` devolve a primeira LETRA OU DÍGITO — a mesma regra que
+ * `app/icon.tsx` usa para desenhar o favicon. Assim a barra recolhida e a aba
+ * do navegador mostram o mesmo caractere, que é o que faz as duas parecerem a
+ * mesma marca. Marca só de emoji devolve `null` e o ladrilho fica só com a cor.
  *
  * O CONSUMIDOR do nome por organização. Sem ele, `settings.branding.app_name`
  * seria campo decorativo: medido, o nome da org não aparece em lugar nenhum da
@@ -61,53 +77,49 @@ export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
   const logo =
     logoConfigurado === LOGO_PADRAO_DO_PRODUTO ? LOGO_PADRAO_EM_FUNDO_ESCURO : logoConfigurado;
 
+  /**
+   * O ladrilho da marca — a mesma peça que `app/icon.tsx` desenha na aba.
+   *
+   * `aria-hidden` porque ele não acrescenta informação: quando há logo, o `alt`
+   * da imagem já diz o nome; quando não há, o `<span>` do nome está do lado.
+   * Um leitor de tela anunciando "G" antes do nome seria ruído.
+   */
+  const simbolo = (
+    <span aria-hidden className="nav-marca-simbolo">
+      {letraDoIcone(nome) ?? ""}
+    </span>
+  );
+
   return (
     <div
       className={cn(
-        "flex h-14 shrink-0 items-center gap-2.5 border-b px-4",
+        "nav-marca flex h-14 shrink-0 items-center gap-2.5 border-b px-4",
         collapsed && "justify-center px-0",
       )}
     >
-      {logo && !collapsed ? (
-        // <img> em vez de next/image de propósito: a URL vem de quem hospeda
-        // (banco ou .env), e next/image exige allowlist de domínios fechada em
-        // build — a imagem pré-buildada rejeitaria o domínio do self-hoster.
-        // Altura fixa e largura livre porque a arte enviada tem proporção
-        // desconhecida; forçar as duas distorceria o logo de quem configurou.
-        //
-        // O logo SUBSTITUI o nome, e não convive com ele: a arte que o
-        // revendedor envia quase sempre já traz o nome escrito, e o cabeçalho
-        // tem 56px de altura para um dos dois.
-        // `h-8` e não `h-7`: a arte do produto tem proporção ~6,9:1, então a
-        // altura é o que decide a largura. 32px dão ~223px, e a barra de 264px
-        // com `px-4` oferece 232px — 9px de respiro. A altura visível é a altura
-        // INTEIRA porque o arquivo é recortado na arte (ver
-        // `scripts/gerar-logo-gestalt.ts`); a arte crua tinha 58% de ar
-        // transparente e rendia 11px de logo dentro de 28px de caixa.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={logo} alt={nome} className="nav-logo h-8 w-auto object-contain" />
+      {logo ? (
+        <>
+          {/* <img> em vez de next/image de propósito: a URL vem de quem hospeda
+              (banco ou .env), e next/image exige allowlist de domínios fechada
+              em build — a imagem pré-buildada rejeitaria o domínio do
+              self-hoster. Altura fixa e largura livre porque a arte enviada tem
+              proporção desconhecida; forçar as duas distorceria o logo de quem
+              configurou.
+
+              O logo SUBSTITUI o nome, e não convive com ele: a arte que o
+              revendedor envia quase sempre já traz o nome escrito.
+
+              `h-6` (24px) e não `h-8`: com a proporção ~6,9:1 do produto, 32px
+              rendiam ~223px de largura dentro de uma barra de 264px, e a marca
+              virava a coisa mais pesada da tela. 24px dão ~166px e devolvem o
+              peso visual para a navegação, que é para onde se olha. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logo} alt={nome} className="nav-logo h-6 w-auto object-contain" />
+          {simbolo}
+        </>
       ) : (
         <>
-          {/* O SÍMBOLO — a inicial num quadrado, presente nos dois estados.
-              Ele existe para a barra estreita, onde é a única coisa que sobra
-              do topo; mantê-lo também na expandida é o que dá ao cabeçalho um
-              ponto de ancoragem em vez de uma linha de texto solta. */}
-          <span
-            aria-hidden
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-[13px] font-bold text-accent"
-            style={{
-              // Token, nunca hex: a accent é trocada em runtime pelo revendedor,
-              // e um verde literal aqui pintaria de verde a instalação vendida
-              // em azul. `color-mix` porque não existe token para "accent a 16%".
-              backgroundColor: "color-mix(in oklab, var(--color-accent) 16%, transparent)",
-            }}
-          >
-            {/* Spread e não `[0]`: nome começando com emoji ou acento composto
-                quebraria no meio do code point. Mesma regra de `resolveBranding`
-                — a inicial precisa acompanhar o nome que a barra mostra, senão
-                recolher o menu troca a marca. */}
-            {[...nome][0]?.toUpperCase() ?? brand.initial}
-          </span>
+          {simbolo}
           <span
             className={cn(
               "nav-marca-nome truncate text-[15px] font-semibold tracking-[-0.015em] text-text",

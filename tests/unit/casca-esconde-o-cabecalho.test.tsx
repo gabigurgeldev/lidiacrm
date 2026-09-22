@@ -1,13 +1,20 @@
 /**
- * O CABEÇALHO SOME NO INBOX — e as ações de conta não somem com ele.
+ * O CABEÇALHO SOME NO INBOX — e o sino não some com ele.
  *
  * ## A falha que este arquivo existe para impedir
  *
  * A decisão é lida em DOIS lugares: a casca (`AppShell`), que não desenha o
  * cabeçalho, e o rodapé da barra lateral, que adota o que ficou órfão. Se os
- * dois divergirem, não há erro — há o sino e o avatar DUAS vezes na tela, ou
- * NENHUMA. As duas falhas são mudas, e a segunda é a pior: o aviso de mensagem
- * nova desaparece justo na tela em que a pessoa passa o dia.
+ * dois divergirem, não há erro — há o sino DUAS vezes na tela, ou NENHUMA. As
+ * duas falhas são mudas, e a segunda é a pior: o aviso de mensagem nova
+ * desaparece justo na tela em que a pessoa passa o dia.
+ *
+ * ⚠️ O CONJUNTO CONDICIONAL ENCOLHEU. Eram quatro peças (sino, idioma, tema,
+ * avatar) e hoje é uma. O idioma virou campo em Configurações › Perfil, o tema
+ * deixou de existir, e a CONTA passou a morar no rodapé em toda rota — ela é o
+ * único caminho de saída da conta do produto, e condicioná-la a uma rota era
+ * apostar que a condição nunca erra. O caso "a conta está no rodapé em TODA
+ * rota", no fim do arquivo, é a rede dessa mudança.
  *
  * Por isso a regra é uma função só (`lib/navigation/casca.ts`) e por isso o
  * caso decisivo abaixo mede as duas pontas na MESMA árvore.
@@ -67,11 +74,14 @@ vi.mock("@/components/connections/ConnectionHealthDot", () => ({
 vi.mock("@/app/actions/shell/toggleSidebar", () => ({ toggleSidebar: vi.fn() }));
 
 /**
- * `HeaderActions` de mentira, e o `data-testid` é o que importa.
+ * `HeaderActions` (hoje: o sino) de mentira, e o `data-testid` é o que importa.
  *
- * O de verdade arrasta `ThemeProvider`, o react-query do sino e o menu de
- * perfil — três montagens que não têm nada a ver com ONDE ele aparece. O que
- * este arquivo mede é o lugar, e o lugar é observável pelo marcador.
+ * O de verdade arrasta o react-query do contador de avisos, que não tem nada a
+ * ver com ONDE ele aparece. O que este arquivo mede é o lugar, e o lugar é
+ * observável pelo marcador.
+ *
+ * ⚠️ `ContaNaBarra` NÃO é mockado de propósito: a pergunta "a saída da conta
+ * existe?" só vale se o componente de verdade estiver na árvore.
  */
 vi.mock("@/components/shell/header/HeaderActions", () => ({
   HeaderActions: () => <div data-testid="acoes-de-conta" />,
@@ -86,7 +96,16 @@ function montar(pathname: string) {
   );
 }
 
-const cabecalho = () => screen.queryByRole("navigation", { name: "Você está em" });
+/**
+ * ⚠️ ERA `queryByRole("navigation", { name: "Você está em" })` — o BREADCRUMB,
+ * que saiu do produto. Ele era uma sonda por acaso: media o cabeçalho pelo
+ * conteúdo mais frágil dele, e sumiu junto com uma decisão de desenho.
+ *
+ * `banner` é o papel do próprio `<header>`, e é o que este arquivo quer
+ * perguntar: a faixa está montada? Sobrevive a qualquer troca do que mora
+ * dentro dela.
+ */
+const cabecalho = () => screen.queryByRole("banner");
 
 afterEach(cleanup);
 
@@ -110,35 +129,65 @@ describe("a regra pura", () => {
 });
 
 describe("a casca", () => {
-  it("no Inbox o cabeçalho é marcado para sumir, e o rodapé adota as ações", () => {
+  it("no Inbox o cabeçalho é marcado para sumir, e o rodapé adota os avisos", () => {
     montar("/app/inbox");
     expect(screen.getByTestId("cabecalho-do-app")).toHaveAttribute("data-some-em-md", "true");
-    expect(screen.getByTestId("acoes-de-conta-na-barra")).toBeInTheDocument();
+    expect(screen.getByTestId("avisos-na-barra")).toBeInTheDocument();
     // E o cabeçalho segue MONTADO — é ele quem carrega o ☰ no celular.
     expect(cabecalho()).toBeInTheDocument();
   });
 
-  it("fora do Inbox o cabeçalho fica, e o rodapé não adota nada", () => {
+  it("fora do Inbox o cabeçalho fica, e o rodapé não adota os avisos", () => {
     montar("/app/kanban");
     expect(screen.getByTestId("cabecalho-do-app")).not.toHaveAttribute("data-some-em-md");
-    expect(screen.queryByTestId("acoes-de-conta-na-barra")).toBeNull();
+    expect(screen.queryByTestId("avisos-na-barra")).toBeNull();
     expect(cabecalho()).toBeInTheDocument();
   });
 
-  it("as duas pontas nunca discordam — é a coerência que evita o avatar em dobro", () => {
+  it("as duas pontas nunca discordam — é a coerência que evita o sino em dobro", () => {
     // A asserção que sozinha justifica o arquivo. Os dois casos acima passariam
     // com as pontas divergindo: um mede o cabeçalho, o outro mede o rodapé, e
     // nenhum dos dois pergunta se as duas decisões vieram da MESMA resposta.
     //
     // As duas combinações proibidas: cabeçalho marcado para sumir sem o rodapé
     // adotar (o sino desaparece do produto) e o rodapé adotando com o cabeçalho
-    // de pé (avatar duas vezes em qualquer tela larga).
+    // de pé (dois sinos com o mesmo contador em qualquer tela larga).
+    //
+    // ⚠️ ANTES ISTO MEDIA AS "AÇÕES DE CONTA", e o conjunto era outro: sino,
+    // idioma, tema e avatar. Hoje o idioma e o tema não existem como peça de
+    // casca e a CONTA não é mais condicional — ela mora no rodapé em toda rota
+    // (o caso abaixo). O que sobrou de condicional é o aviso, e é ele que este
+    // laço vigia.
     for (const rota of ["/app/inbox", "/app/inbox/abc", "/app/kanban", "/app/contacts"]) {
       cleanup();
       montar(rota);
       const some = screen.getByTestId("cabecalho-do-app").getAttribute("data-some-em-md") === "true";
-      const adotou = screen.queryByTestId("acoes-de-conta-na-barra") !== null;
+      const adotou = screen.queryByTestId("avisos-na-barra") !== null;
       expect(adotou, `${rota}: rodapé e cabeçalho discordaram`).toBe(some);
+    }
+  });
+
+  it("a conta está no rodapé em TODA rota — não só onde o cabeçalho some", () => {
+    // ⚠️ ESTE CASO É A REDE DE SEGURANÇA DE UMA REMOÇÃO.
+    //
+    // O menu do usuário saiu do cabeçalho, e ele é o único caminho de saída da
+    // conta no produto inteiro: `signOut()` tem um chamador só. Nenhuma spec de
+    // e2e exercita logout — medido —, então um dia em que a conta deixasse de
+    // ser renderizada no rodapé passaria com o CI verde e o produto sem saída.
+    //
+    // A contra-asserção importa tanto quanto: o rodapé NÃO pode ser o segundo
+    // lugar a desenhar a conta enquanto o cabeçalho ainda a tivesse.
+    for (const rota of ["/app/inbox", "/app/kanban", "/app/contacts", "/app/settings"]) {
+      cleanup();
+      montar(rota);
+      expect(
+        screen.getByTestId("acoes-de-conta-na-barra"),
+        `${rota}: sem conta no rodapé, não há como sair`,
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByRole("button", { name: "Menu do usuário" }),
+        `${rota}: a conta tem de existir UMA vez`,
+      ).toHaveLength(1);
     }
   });
 });

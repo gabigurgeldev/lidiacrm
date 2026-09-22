@@ -196,7 +196,11 @@ export function SidebarContent({
     <TooltipProvider delayDuration={300}>
       <SidebarBrand collapsed={collapsed} />
       <nav
-        className="nav-rolagem flex-1 space-y-1 overflow-y-auto p-2"
+        /* `space-y-1.5` (6px) e não `space-y-1`: com os grupos colados, o rótulo
+           de categoria ficava à mesma distância do item de cima e do de baixo, e
+           a barra lia como uma lista só. O acréscimo é de 8px no total (4 vãos),
+           medido contra a dobra de 1280×768 que `navegacao.spec.ts` guarda. */
+        className="nav-rolagem flex-1 space-y-1.5 overflow-y-auto p-2"
         aria-label={t("Navegação principal")}
         onKeyDown={aoTeclado}
       >
@@ -258,10 +262,14 @@ export function SidebarContent({
           A gaveta do celular monta o mesmo rodapé, e no celular o cabeçalho
           CONTINUA na tela mesmo no Inbox — é lá que mora o ☰ que abre esta
           própria gaveta. Sem esta condição, quem abrisse a gaveta no celular
-          veria sino, idioma, tema e avatar DUPLICADOS: uma vez no cabeçalho
-          atrás dela, outra dentro dela.
+          veria o sino DUPLICADO: uma vez no cabeçalho atrás dela, outra dentro
+          dela, com o mesmo contador.
+
+          A CONTA não passa por aqui: ela está no rodapé em toda rota e nas duas
+          variantes, porque no celular a gaveta é o único lugar em que ela cabe —
+          o cabeçalho não a tem mais.
         */
-        mostrarAcoesDeConta={variante === "barra" && cabecalhoEscondidoEm(pathname)}
+        mostrarAvisos={variante === "barra" && cabecalhoEscondidoEm(pathname)}
       />
     </TooltipProvider>
   );

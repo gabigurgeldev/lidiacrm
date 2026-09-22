@@ -103,9 +103,10 @@ export function useIdioma(): Idioma {
 /**
  * Pinta a interface no idioma novo AGORA, sem esperar o servidor.
  *
- * Quem chama é o seletor do topo, junto com a gravação. Se a gravação falhar,
- * o `useEffect` acima devolve o valor do servidor no próximo render — a tela
- * não fica mentindo que salvou.
+ * Quem chama é o formulário de Configurações › Perfil, junto com a gravação — e
+ * era o seletor do cabeçalho, que deixou de existir. Se a gravação falhar, o
+ * `useEffect` acima devolve o valor do servidor no próximo render: a tela não
+ * fica mentindo que salvou.
  */
 export function useAplicarIdioma(): (idioma: Idioma) => void {
   return useContext(Ctx).aplicar;

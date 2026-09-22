@@ -872,10 +872,24 @@
 }
 
 /* O que some quando a barra é estreita. Uma regra por origem de estreiteza —
-   a lista de seletores é a mesma, e é curta de propósito. */
+   a lista de seletores é a mesma, e é curta de propósito.
+
+   `.nav-logo` entrou nesta lista e trouxe o topo da barra para o mesmo
+   mecanismo do resto: o wordmark sai, o ladrilho da marca fica. Antes o topo
+   era o único lugar que decidia isso em JavaScript, e a faixa 768–1023 — onde
+   a barra tem 72px mas o cookie ainda diz "expandida" — caía num terceiro
+   caminho que RECORTAVA a arte com `object-fit: cover`. Ver o cabeçalho de
+   `components/shell/sidebar/SidebarBrand.tsx`. */
 .app-sidebar[data-collapsed="true"] .nav-rotulo,
-.app-sidebar[data-collapsed="true"] .nav-chevron {
+.app-sidebar[data-collapsed="true"] .nav-chevron,
+.app-sidebar[data-collapsed="true"] .nav-logo {
   display: none;
+}
+/* O ladrilho volta quando o wordmark sai. O `.nav-marca-nome` NÃO entra nesta
+   lista: recolhido ele é `sr-only` pelo componente, e `display: none` o tiraria
+   também do leitor de tela — quem não enxerga perderia o nome da marca. */
+.app-sidebar[data-collapsed="true"] .nav-logo + .nav-marca-simbolo {
+  display: flex;
 }
 .app-sidebar[data-collapsed="true"] .nav-item,
 .app-sidebar[data-collapsed="true"] .nav-secao-titulo {
@@ -892,8 +906,21 @@
 }
 @media (max-width: 1023px) {
   .app-sidebar .nav-rotulo,
-  .app-sidebar .nav-chevron {
+  .app-sidebar .nav-chevron,
+  .app-sidebar .nav-logo,
+  .app-sidebar .nav-marca-nome {
     display: none;
+  }
+  /* Aqui o nome SOME de verdade, e não vira `sr-only` como no recolhido: o
+     componente não sabe que esta faixa é estreita (a largura vem deste
+     `@media`), então não há como ele aplicar a classe. */
+  .app-sidebar .nav-logo + .nav-marca-simbolo {
+    display: flex;
+  }
+  .app-sidebar .nav-marca {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
   }
   .app-sidebar .nav-item,
   .app-sidebar .nav-secao-titulo {
@@ -921,16 +948,34 @@
   border-radius: var(--nav-raio);
   color: var(--color-text-muted);
   text-align: left;
+  /* ⚠️ ERAM 150ms literais — duração fora da tabela canônica, que
+     `docs/design-system/07-motion-language.md:138` proíbe em uma linha
+     ("durações fora dessa tabela são proibidas"). `--duration-fast` (120ms) é o
+     degrau de troca de cor por ponteiro. */
   transition:
-    background-color 150ms var(--ease-out),
-    color 150ms var(--ease-out);
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
 
+/* O TÍTULO DE GRUPO É UM RÓTULO DE CATEGORIA, não um irmão do item.
+   Antes os dois eram quase o mesmo desenho — 13px/600 contra 14px/500, ambos em
+   `--color-text-muted` — e a barra lia como uma lista de doze coisas iguais com
+   umas setinhas no meio. Agora o grupo é menor, mais claro e com a letra aberta;
+   o item é maior e mais forte. A hierarquia passa a estar na tipografia, não só
+   na seta e no filete. */
 .nav-secao-titulo {
   min-height: 36px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: -0.006em;
+  letter-spacing: 0.02em;
+  color: var(--color-text-subtle);
+}
+
+/* O ícone do grupo acompanha o rótulo: na cor de categoria, não na do item.
+   Sem isto, o desenho mais pesado da linha é o ícone de um título que deveria
+   ser a coisa mais discreta do bloco. */
+.nav-secao-titulo .nav-icone {
+  color: var(--color-text-subtle);
 }
 
 .nav-item {
@@ -944,6 +989,12 @@
 .nav-secao-titulo:hover {
   background-color: var(--color-surface-elevated);
   color: var(--color-text);
+}
+
+/* O ícone do grupo tem cor PRÓPRIA (a de categoria), e regra direta vence
+   herança — sem esta linha ele ficaria parado enquanto o rótulo do lado acende. */
+.nav-secao-titulo:hover .nav-icone {
+  color: var(--color-text-muted);
 }
 
 /* ESTADO ATIVO — um menu selecionado do macOS, não um bloco chapado.
@@ -971,6 +1022,18 @@
 
 .nav-item[data-ativo="true"] .nav-icone {
   color: var(--color-accent);
+}
+
+/* ---- A CONTA no rodapé --------------------------------------------------
+   É um `.nav-item` para nascer com a mesma altura, o mesmo raio e o mesmo hover
+   de "Configurações", que fica logo abaixo — mas carrega duas linhas (nome e
+   e-mail) em vez de uma, então precisa de mais altura e de padding vertical
+   próprio. Sem `min-height`, o rótulo de duas linhas estoura os 40px do item e
+   o rodapé fica com uma linha mais alta que as outras sem motivo aparente. */
+.nav-conta {
+  min-height: 48px;
+  padding-top: 6px;
+  padding-bottom: 6px;
 }
 
 /* ---- O corpo que recolhe ------------------------------------------------- */
@@ -1071,23 +1134,79 @@
 /* Campo de busca no estilo Spotlight. Foco com borda na accent e um anel de 3px
    a 18% — o `:focus-visible` global desenha outline em cima de qualquer coisa,
    então aqui a mudança é de BORDA, para os dois não brigarem. */
+/* A BUSCA fala a língua do campo das telas de acesso.
+   `--radius-ios` (14px) e não `--nav-raio` (10px): é o mesmo raio de
+   `.acesso-campo`, e é o que faz o único elemento do cabeçalho parecer
+   continuação da tela por onde se entrou. Os itens do menu ficam em 10px de
+   propósito — lá o raio é medido pela bancada de geometria.
+
+   40px de altura e não 38: 38 não é degrau de nada: nem do item da barra (40),
+   nem do campo de acesso (48). Alinhar com o item da barra faz a casca inteira
+   ter uma régua vertical só.
+
+   ⚠️ Durações: `--duration-fast`. Eram 150ms literais, fora da tabela canônica
+   de `docs/design-system/07-motion-language.md:138`. */
 .busca-global {
-  height: 38px;
-  border-radius: var(--nav-raio);
+  height: 40px;
+  border-radius: var(--radius-ios);
   background-color: var(--color-surface-elevated);
   border: 1px solid transparent;
   color: var(--color-text-muted);
   transition:
-    border-color 150ms var(--ease-out),
-    box-shadow 150ms var(--ease-out),
-    background-color 150ms var(--ease-out);
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
 }
 .busca-global:hover {
   border-color: var(--color-border);
+  color: var(--color-text);
+}
+/* A lupa acende na accent quando o campo recebe atenção — o mesmo gesto do
+   ícone de `.acesso-icone` no foco do campo de login, sem a rotação em
+   perspectiva (lá ela marca a entrada numa tela; aqui seria movimento numa
+   barra que fica parada o dia inteiro). */
+.busca-global:hover .busca-global-lupa,
+.busca-global:focus-visible .busca-global-lupa {
+  color: var(--color-accent);
 }
 .busca-global:focus-visible {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 18%, transparent);
+}
+
+/* ---- O SINO DE AVISOS ----------------------------------------------------
+   Mesma altura (40px) e mesma família de hover do item da barra e da busca —
+   uma régua vertical só para a casca inteira, que era o que faltava: o sino
+   media 44px (36 no `lg`) enquanto tudo ao redor media 40.
+
+   Os tokens são os do produto e não os aliases do shadcn. ⚠️ Não porque os
+   aliases pintassem errado — `.casca-escura` redefine os dois conjuntos, lado a
+   lado, algumas centenas de linhas acima — mas porque a casca inteira fala um
+   vocabulário só. Ver o cabeçalho de `components/shell/AlertsBell.tsx`. */
+.nav-sino {
+  border-radius: var(--nav-raio);
+  color: var(--color-text-muted);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+.nav-sino:hover {
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text);
+}
+
+/* O contador é o ÚNICO vermelho da faixa, e é sinal, não decoração: conta
+   demanda parada esperando alguém.
+
+   ⚠️ A frente é `--destructive-foreground` (branco em todos os escopos), NÃO
+   `--color-error-fg`. Este último é vermelho escuro (`#8f3224` no claro,
+   `#ea9585` na casca): ele existe para texto sobre `--color-error-bg`, a tinta
+   clara, e não sobre o vermelho cheio. Trocar um pelo outro dá vermelho sobre
+   vermelho — legível na cabeça de quem lê o nome do token, ilegível na tela. */
+.nav-sino-contador {
+  background-color: var(--color-error);
+  color: var(--destructive-foreground);
 }
 
 /* ---- Gaveta do celular --------------------------------------------------- */
@@ -1168,46 +1287,68 @@
    decisão dele é de JS, e está explicada no cabeçalho do componente), então
    aqui o nome sai e o logo é limitado à largura que sobra. Sem estas duas
    regras, um logo em faixa de 160px empurra a barra inteira. */
-/* 14rem = 224px. A barra tem 264px e `px-4` come 32, sobrando 232 — então a
-   altura (`h-8`) é quem decide a largura, e este teto só existe para a arte que
-   um revendedor envia em proporção extrema.
+/* 8.5rem = 136px. A altura (`h-6` = 24px) é quem decide a largura da arte do
+   produto (~6,9:1 → ~166px), e este teto entra para a arte que um revendedor
+   envia em proporção extrema — uma faixa larga empurraria a barra inteira.
 
-   ⚠️ ERA 10rem (160px), e isso era METADE da causa do "logo minúsculo": com a
-   proporção ~6,9:1 do produto, um teto de 160px força a altura para 23px e o
-   `h-8` nunca chega a valer. A outra metade era o ar transparente na própria
-   arte — ver `scripts/gerar-logo-gestalt.ts`. */
+   ⚠️ ERA 14rem (224px), com `h-8`. Junto davam ~223px de marca numa barra de
+   264px: o logo virava o elemento mais pesado da tela e a navegação, que é para
+   onde se olha, ficava em segundo plano. Antes disso era 10rem com `h-8`, e o
+   teto estrangulava a altura — o "logo minúsculo". Os três números andam
+   juntos: teto, altura e a proporção da arte (`scripts/gerar-logo-gestalt.ts`,
+   que recorta o ar transparente). Mexer em um sem olhar os outros devolve um
+   dos dois defeitos. */
 .nav-logo {
-  max-width: 14rem;
+  max-width: 8.5rem;
 }
 
-/* ---- Barra ESTREITA no TABLET (768–1023): o logo é RECORTADO --------------
-   Esta faixa é o único lugar em que o `<img>` do logo convive com uma barra de
-   72px. Quando quem usa RECOLHE a barra, `SidebarBrand` troca a imagem pela
-   inicial em JavaScript e nem chega a renderizar o `<img>`; aqui `collapsed`
-   continua `false` — a largura vem deste `@media`, e o componente não sabe.
+/* ---- O LADRILHO DA MARCA: a mesma peça que o ícone da aba -----------------
+   Um quadrado com a primeira letra do nome, na cor da instalação. É o que
+   sobra do topo quando a barra é estreita, pelas duas origens de estreiteza
+   (cookie e `@media`), e some quando o wordmark aparece.
 
-   ⚠️ O QUE ACONTECIA SEM ESTA REGRA: `max-width: 2.5rem` sobre uma arte ~6,9:1,
-   com o `object-contain` da classe do componente, encaixa a imagem inteira em
-   40px de largura e sobra uma tira de ~6px de altura. Ilegível. O defeito é
-   antigo e só ficou VISÍVEL agora, porque até então o produto não tinha logo
-   padrão e este ramo nunca renderizava nada.
+   Por que a letra e não o logo encolhido: a arte de quem hospeda tem proporção
+   desconhecida e quase sempre é uma faixa; espremê-la em 32px devolve uma tira
+   ilegível — o defeito que o recorte por `object-fit: cover` tentava remediar
+   e que esta peça torna desnecessário.
 
-   `cover` + `object-position: left` mostram o QUADRADO ESQUERDO da arte, que é
-   onde mora o símbolo ou a primeira letra em praticamente todo logo. É por isso
-   que o recorte é preferível a apontar um arquivo nosso aqui: numa instalação
-   que configurou a própria marca, um `content: url()` fixo mostraria a NOSSA
-   marca na barra estreita dela. O recorte serve qualquer arte. */
-@media (max-width: 1023px) {
-  .app-sidebar .nav-marca-nome {
-    display: none;
-  }
-  .app-sidebar .nav-logo {
-    width: 2rem;
-    max-width: 2rem;
-    object-fit: cover;
-    object-position: left center;
-  }
+   `var(--color-accent)` chapado, nunca `--color-accent-NNN`: regra descendente
+   de `.casca-escura` que cite um grau da rampa reprova
+   `tests/unit/branding-contraste.test.ts` (ver o comentário do escopo, acima).
+   A letra vem de `letraDoIcone` no componente, a mesma de `app/icon.tsx` — a
+   barra recolhida e a aba do navegador mostram o mesmo caractere. */
+.nav-marca-simbolo {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--nav-raio);
+  background-color: var(--color-accent);
+  color: var(--color-accent-fg);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
 }
+
+/* Com o wordmark na tela, o ladrilho sairia como uma segunda marca ao lado da
+   primeira. As regras de barra estreita, mais específicas, o trazem de volta. */
+.nav-logo + .nav-marca-simbolo {
+  display: none;
+}
+
+/* ⚠️ AQUI MORAVA O RECORTE DO TABLET, e ele foi apagado de propósito.
+   Entre 768 e 1023 a barra tem 72px e o cookie diz "expandida", então o `<img>`
+   era espremido com `object-fit: cover` + `object-position: left` para mostrar
+   o quadrado esquerdo da arte. Servia qualquer logo e não ficava bom em nenhum:
+   com a proporção ~6,9:1 do produto sobrava uma tira de ~6px.
+
+   O ladrilho da marca (`.nav-marca-simbolo`, acima) substitui isso nas duas
+   origens de estreiteza, e a alternância virou a MESMA regra que esconde
+   `.nav-rotulo`. Não reintroduza um recorte aqui sem ler
+   `components/shell/sidebar/SidebarBrand.tsx`. */
 
 /* ---- Barra de progresso INDETERMINADA (montagem do fluxo com IA) ----------
    O painel "Criar fluxo com IA" perdeu a fração de progresso quando a rota de

@@ -77,9 +77,11 @@ export function SidebarSection({
       data-nav-grupo={id}
       onClick={onToggle}
     >
-      <Icon size={18} className="nav-icone shrink-0" aria-hidden />
+      {/* Mesmo peso e tamanho do item filho — ver o cabeçalho de
+          `SidebarItem.tsx` para por que a coluna inteira usa um peso só. */}
+      <Icon size={20} weight="duotone" className="nav-icone shrink-0" aria-hidden />
       <span className="nav-rotulo truncate">{label}</span>
-      <CaretRight size={14} className="nav-chevron shrink-0" aria-hidden />
+      <CaretRight size={16} weight="bold" className="nav-chevron shrink-0" aria-hidden />
     </button>
   );
 

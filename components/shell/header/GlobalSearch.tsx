@@ -43,19 +43,22 @@ export function GlobalSearch() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label={t("Buscar")}
-        className="busca-global flex w-[38px] items-center justify-center md:hidden"
+        className="busca-global flex w-[40px] items-center justify-center md:hidden"
         data-testid="busca-global-compacta"
       >
-        <MagnifyingGlass size={18} aria-hidden />
+        <MagnifyingGlass size={20} weight="duotone" aria-hidden />
       </button>
       <button
         type="button"
         onClick={() => setOpen(true)}
         aria-keyshortcuts="Meta+K Control+K"
-        className="busca-global hidden w-full items-center gap-2 px-3 md:flex"
+        className="busca-global hidden w-full items-center gap-2.5 px-3.5 md:flex"
         data-testid="busca-global"
       >
-        <MagnifyingGlass size={16} className="shrink-0" aria-hidden />
+        {/* `duotone` 20, como o envelope e o cadeado dos campos de acesso — é o
+            mesmo pacote (Phosphor) que a casca já usava, no peso que o resto do
+            produto declara como padrão. */}
+        <MagnifyingGlass size={20} weight="duotone" className="busca-global-lupa shrink-0" aria-hidden />
         <span className="truncate text-[13px]">
           {t("Buscar no")} {marca.name}...
         </span>

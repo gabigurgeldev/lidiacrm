@@ -471,21 +471,32 @@ test.describe("navegação agrupada", () => {
     await expect(sidebar(page).getByRole("heading", { name: "Atendimento" })).toBeVisible();
   });
 
-  test("o cabeçalho diz onde se está, e o caminho vem do registro", async ({ page }) => {
+  /**
+   * ⚠️ ESTE CASO MEDE UMA AUSÊNCIA, e substituiu o que media o breadcrumb.
+   *
+   * O caminho da página ("Atendimento › Radar"), o seletor de idioma e o menu do
+   * usuário saíram do cabeçalho por decisão de quem é dono do produto. Uma
+   * remoção sem teste é uma remoção que volta sozinha no próximo redesenho, e
+   * nenhum gate reclamaria — por isso a ausência virou asserção.
+   *
+   * A guarda de vacuidade é a última asserção: se a casca inteira deixasse de
+   * renderizar, as três primeiras passariam por vazio. A conta no rodapé prova
+   * que há uma casca ali.
+   */
+  test("o cabeçalho não carrega caminho, idioma nem avatar — e a conta continua alcançável", async ({
+    page,
+  }) => {
     await loginAdmin(page);
 
-    const caminho = page.getByRole("navigation", { name: "Você está em" });
-    await expect(caminho).toContainText("Atendimento");
-    await expect(caminho).toContainText("Inbox");
+    const cabecalho = page.getByTestId("cabecalho-do-app");
+    await expect(page.getByRole("navigation", { name: "Você está em" })).toHaveCount(0);
+    await expect(cabecalho.getByTestId("seletor-de-idioma")).toHaveCount(0);
+    await expect(cabecalho.getByRole("button", { name: "Menu do usuário" })).toHaveCount(0);
 
-    await abrirGrupo(page, "CRM");
-    await sidebar(page).getByRole("link", { name: "Etapas do funil" }).click();
-    await page.waitForURL(/settings\/tenant\/pipelines/);
-    // A tela mora em CRM ainda que a URL passe por /app/settings — é o caso que
-    // um breadcrumb casando pelo primeiro prefixo erraria.
-    await expect(caminho).toContainText("CRM");
-    await expect(caminho).toContainText("Etapas do funil");
+    // A saída da conta é o que não podia sumir junto: ela desceu para o rodapé
+    // da barra, e é lá que tem de estar em toda rota (não só no Inbox, como era).
+    await expect(page.getByTestId("acoes-de-conta-na-barra")).toBeVisible();
 
-    await page.screenshot({ path: path.join(EVIDENCE, "nav-header-breadcrumb.png") });
+    await page.screenshot({ path: path.join(EVIDENCE, "nav-header-limpo.png") });
   });
 });

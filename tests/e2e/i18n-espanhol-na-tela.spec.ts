@@ -139,37 +139,50 @@ async function textosVisiveis(page: Page): Promise<string[]> {
 /**
  * Põe a interface no idioma pedido, clicando como uma pessoa clicaria.
  *
+ * ⚠️ O CAMINHO MUDOU: era o seletor "PT"/"ES" do cabeçalho, que saiu do produto
+ * por decisão de quem é dono dele. O idioma agora se troca em Configurações ›
+ * Perfil — o campo já existia lá, e foi para lá também a recarga da página que
+ * só o seletor fazia (`app/app/settings/profile/_form.tsx`).
+ *
  * Independente do estado inicial DE PROPÓSITO: o banco do e2e é compartilhado e
  * sobrevive entre execuções, então a preferência do `e2e-admin` é o que a
  * rodada anterior deixou. Uma spec que assume "começa em português" passa uma
  * vez e falha na seguinte por um motivo que não tem nada a ver com o produto.
  *
- * O botão mostra o código em vigor ("PT"/"ES"), então ele é a própria sonda.
+ * O próprio campo é a sonda: ele mostra o idioma em vigor.
  */
 async function porIdiomaEm(page: Page, codigo: "pt-BR" | "es"): Promise<void> {
-  const curto = codigo === "es" ? "ES" : "PT";
-  const botao = page.getByTestId("seletor-de-idioma");
-  if ((await botao.innerText()).trim() === curto) return;
+  const nome = codigo === "es" ? "Español" : "Português (BR)";
 
-  // Carimba o documento ATUAL. O seletor grava e recarrega a página (o porquê
-  // está no comentário dele), e a recarga cria um documento novo — o carimbo
-  // some. Esperar por isso é esperar exatamente a recarga, sem depender de um
-  // evento que pode ser emitido antes de o listener existir.
+  await page.goto("/app/settings/profile");
+  const campo = page.getByRole("combobox", { name: /Idioma|Idioma de la interfaz/i });
+  await expect(campo).toBeVisible({ timeout: PRAZO });
+  if ((await campo.innerText()).trim() === nome) return;
+
+  await campo.click();
+  await page.getByRole("option", { name: nome, exact: true }).click();
+
+  // Carimba o documento ATUAL. Salvar grava e recarrega a página (o porquê está
+  // no comentário do formulário), e a recarga cria um documento novo — o
+  // carimbo some. Esperar por isso é esperar exatamente a recarga, sem depender
+  // de um evento que pode ser emitido antes de o listener existir.
   //
   // Medir antes de a recarga terminar é medir o meio do caminho: a spec lia a
   // tela ainda no idioma antigo e acusava vazamento que não existia.
   await page.evaluate(() => {
     (window as unknown as { __antesDaTroca?: boolean }).__antesDaTroca = true;
   });
-  await botao.click();
-  await page.getByTestId(`idioma-${codigo}`).click();
+  await page.getByRole("button", { name: /Salvar|Guardar/i }).click();
   await page.waitForFunction(
     () => !(window as unknown as { __antesDaTroca?: boolean }).__antesDaTroca,
     undefined,
     { timeout: PRAZO },
   );
   await page.waitForLoadState("networkidle", { timeout: PRAZO });
-  await expect(botao, `o seletor não passou a mostrar ${curto} depois da troca`).toHaveText(curto);
+  await expect(
+    page.getByRole("combobox", { name: /Idioma|Idioma de la interfaz/i }),
+    `o campo não passou a mostrar ${nome} depois da troca`,
+  ).toHaveText(nome);
 }
 
 /**

@@ -31,8 +31,19 @@ const authRef: { user: Pick<AuthUser, "is_platform_admin">; activeOrg: ActiveOrg
   activeOrg: null,
 };
 
+// `useUser` entrou porque a CONTA passou a morar no rodapé da barra em toda
+// rota (`components/shell/sidebar/ContaNaBarra.tsx`) — antes ela vivia no
+// cabeçalho, fora desta árvore. `signOut` idem: o menu da conta o recebe do
+// mesmo provedor.
 vi.mock("@/hooks/auth/AuthProvider", () => ({
-  useAuth: () => authRef,
+  useAuth: () => ({ ...authRef, signOut: vi.fn() }),
+  useUser: () => ({
+    id: "u1",
+    email: "pessoa@empresa.test",
+    full_name: "Pessoa de Teste",
+    is_platform_admin: false,
+    organizations: [],
+  }),
   usePermission: () => false,
 }));
 vi.mock("next/navigation", () => ({

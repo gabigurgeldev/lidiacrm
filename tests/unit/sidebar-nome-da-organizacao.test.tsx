@@ -93,8 +93,17 @@ const org = {
 } as ActiveOrg;
 
 let contexto: { user: AuthUser; activeOrg: ActiveOrg | null } = { user: usuario, activeOrg: org };
+// `useUser` entrou porque a CONTA passou a morar no rodapé da barra em toda
+// rota (`components/shell/sidebar/ContaNaBarra.tsx`) — antes ela vivia no
+// cabeçalho, fora desta árvore.
+//
+// ⚠️ O e-mail do usuário de teste NÃO pode conter nem "Sistema do Revendedor"
+// nem "Loja da Ana": o rodapé escreve nome e e-mail na tela, e os casos abaixo
+// medem a AUSÊNCIA desses textos. Um e-mail descuidado passaria a ser um
+// segundo nó com o mesmo texto e o teste reprovaria por um motivo falso.
 vi.mock("@/hooks/auth/AuthProvider", () => ({
-  useAuth: () => contexto,
+  useAuth: () => ({ ...contexto, signOut: vi.fn() }),
+  useUser: () => ({ ...usuario, full_name: "Pessoa de Teste" }),
 }));
 
 describe("o nome da marca na barra lateral", () => {
