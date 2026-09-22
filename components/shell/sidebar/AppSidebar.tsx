@@ -301,7 +301,17 @@ export function AppSidebar({
         // A LARGURA saiu daqui para `.app-sidebar` no globals.css: ela agora tem
         // duas origens (o cookie e o `@media` do tablet), e uma classe do
         // Tailwind só sabe da primeira.
-        "app-sidebar sticky top-0 z-30 flex h-screen shrink-0 flex-col border-r bg-card",
+        //
+        // `casca-escura` é o ESCOPO DE TOKEN da moldura preta (globals.css) —
+        // dentro dele `--color-text`, `--color-border` e os aliases do shadcn
+        // já valem o escuro, então os filhos não precisam saber de nada.
+        //
+        // Sem `bg-card` e sem `border-r`, e os dois são deliberados: o fundo
+        // vem do `.casca-moldura` do `AppShell`, para que a barra e o cabeçalho
+        // sejam literalmente a MESMA superfície (é o que a curva do painel
+        // revela no canto); e a borda direita seria uma costura no meio dessa
+        // peça — a separação já é dada pelo preto encontrando o painel branco.
+        "app-sidebar casca-escura sticky top-0 z-30 flex h-screen shrink-0 flex-col",
       )}
     >
       <SidebarContent collapsed={collapsed} gruposAbertosSalvos={gruposAbertosSalvos} />

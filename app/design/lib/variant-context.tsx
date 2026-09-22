@@ -99,7 +99,10 @@ function applyToRoot(s: State) {
 
 export function VariantProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = React.useState<State>({
-    palette: "sage",
+    // A vitrine abre na paleta QUE O PRODUTO USA. Abrir na Sage mostraria uma
+    // paleta que o produto não tem mais, e quem comparasse as alternativas
+    // compararia todas contra a errada.
+    palette: "gestalt",
     typo: "bricolage-jakarta",
     density: "equilibrada",
     theme: "light",

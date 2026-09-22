@@ -5307,6 +5307,12 @@ export const DICIONARIO: Traducoes = {
   // ─── Auth: login, cadastro, recuperação de senha, MFA, códigos de recuperação ───
   "Entrar": { es: "Entrar" },
   "Criar conta": { es: "Crear cuenta" },
+  "Use o e-mail e a senha da sua conta para continuar.": {
+    es: "Usa el correo y la contraseña de tu cuenta para continuar.",
+  },
+  "Leva menos de um minuto. Você confirma pelo e-mail e já começa.": {
+    es: "Toma menos de un minuto. Confirmas por correo y ya empiezas.",
+  },
   "Senha": { es: "Contraseña" },
   "Confirmar senha": { es: "Confirmar contraseña" },
   "Código inválido. Tente novamente.": { es: "Código inválido. Intenta de nuevo." },

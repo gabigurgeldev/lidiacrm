@@ -110,6 +110,43 @@ export type MarcaResolvida = Branding & {
 const PADRAO = "padrao";
 
 /**
+ * O logo do PRODUTO — a camada de baixo da pilha de marca.
+ *
+ * ⚠️ SÃO DUAS ARTES, E A ESCOLHA ERRADA SOME COM METADE DO LOGO. A palavra
+ * "Gestalt" é quase preta (`#171717`); "CRM" é verde. Sobre fundo claro a
+ * versão normal se lê inteira e a branca vira só o "CRM" verde flutuando;
+ * sobre a moldura escura acontece o inverso. Medido na tela de login, que é
+ * branca: com a versão branca por padrão, o logo aparecia pela metade.
+ *
+ * Este é o padrão GERAL — login, e-mail, qualquer superfície clara. Quem vive
+ * sobre a moldura escura pede `LOGO_PADRAO_EM_FUNDO_ESCURO` explicitamente; só
+ * `SidebarBrand` faz isso hoje. Os dois arquivos saem de
+ * `scripts/gerar-logo-gestalt.ts`.
+ *
+ * ⚠️ Mora AQUI e não em `resolveBranding` (lib/branding.ts): aquela função
+ * promete `logoUrl: null` para entrada vazia, e isso é contrato testado —
+ * `SidebarBrand` depende dele para NÃO renderizar uma imagem quebrada quando
+ * não há logo. Esta camada responde outra pergunta: qual marca está em vigor.
+ *
+ * ⚠️ `lib/branding/contexto.tsx` declara o mesmo valor no padrão do provedor.
+ * Os dois precisam concordar: o servidor renderiza a partir daqui e um client
+ * component sem provedor cairia lá. Divergir troca `<img>` por `<span>` entre
+ * servidor e cliente, que é React #418 em toda tela — o defeito que o docblock
+ * de `SidebarBrand` descreve.
+ */
+export const LOGO_PADRAO_DO_PRODUTO = "/gestalt-crm.png";
+
+/**
+ * A mesma arte com o texto escuro trocado por branco — para a moldura escura.
+ *
+ * Vale SÓ para o logo do produto. Uma instalação que configurou a própria arte
+ * continua vendo exatamente o arquivo que enviou, aqui como em qualquer lugar:
+ * trocar o logo de quem hospeda por um nosso, ainda que só na barra, mostraria
+ * a NOSSA marca dentro do produto dela.
+ */
+export const LOGO_PADRAO_EM_FUNDO_ESCURO = "/gestalt-crm-branco.png";
+
+/**
  * Tira qualquer hex de um texto livre antes de ele virar `detalhe`.
  *
  * A mensagem de exceção é o que torna uma falha diagnosticável — descartá-la
@@ -320,6 +357,13 @@ export function resolverMarca(
   const nome = primeiroDefinido(camadas, (c) => c.nome);
   const logo = primeiroDefinido(camadas, (c) => c.logoUrl);
   const base = resolveBranding(nome?.valor, logo?.valor);
+  // O logo do PRODUTO entra aqui, no fundo implícito da pilha, e não em
+  // `resolveBranding`: aquela função responde "o que estas duas strings
+  // resolvem", e `logoUrl: null` para entrada vazia é contrato dela. Aqui a
+  // pergunta é outra — "qual a marca EM VIGOR" —, e a resposta, quando ninguém
+  // configurou nada, é a nossa. `origens.logoUrl` segue `"padrao"`, que é
+  // exatamente o que esta camada é.
+  const logoEmVigor = base.logoUrl ?? LOGO_PADRAO_DO_PRODUTO;
 
   const motivos: MotivoDaMarca[] = [];
   let cor: CorResolvida | null = null;
@@ -338,6 +382,7 @@ export function resolverMarca(
 
   return {
     ...base,
+    logoUrl: logoEmVigor,
     cor,
     origens: {
       nome: nome?.origem ?? PADRAO,

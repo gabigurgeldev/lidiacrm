@@ -64,10 +64,29 @@ test.describe("o ícone e o título carregam a marca da instalação", () => {
     expect(marcaNoTitulo.length).toBeGreaterThan(0);
 
     // Cruza DUAS resoluções independentes: o título vem de `generateMetadata`
-    // (que lê `platform_branding` no banco) e o texto sob o "Entrar" vem de
+    // (que lê `platform_branding` no banco) e a marca do ambiente vem de
     // `branding()` (que lê o `.env`). Divergirem é defeito de verdade — foi
     // por não cruzar isso que "trocar o nome pela tela e a aba não acompanhar"
     // passou despercebido antes.
-    await expect(page.getByText(marcaNoTitulo, { exact: true }).first()).toBeVisible();
+    //
+    // ⚠️ Isto JÁ FOI `getByText(marca).toBeVisible()`, quando o nome era escrito
+    // sob o "Entrar". O texto saiu da tela (o logo acima já diz a marca), mas o
+    // cruzamento não podia sair junto — então ele mudou de TRANSPORTE, não de
+    // assunto: `login/page.tsx` publica o mesmo valor, vindo do mesmo
+    // `branding()`, num atributo.
+    //
+    // NÃO troque por `getAttribute("alt")` do logo, por mais natural que
+    // pareça: o `alt` sai de `marcaDaSaida`, que é a MESMA pilha do título —
+    // esta asserção passaria a comparar o banco consigo mesmo e ficaria verde
+    // sem medir nada.
+    const marcaDoAmbiente = await page
+      .locator("[data-marca-do-ambiente]")
+      .first()
+      .getAttribute("data-marca-do-ambiente");
+    expect(
+      marcaDoAmbiente,
+      "nenhum [data-marca-do-ambiente] no /login — ver o comentário acima antes de o remover",
+    ).toBeTruthy();
+    expect(marcaDoAmbiente).toBe(marcaNoTitulo);
   });
 });

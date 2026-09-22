@@ -11,8 +11,14 @@ describe("resolveBranding", () => {
   it("cai no padrão quando não há marca configurada", () => {
     expect(resolveBranding(undefined, undefined)).toEqual({
       name: DEFAULT_APP_NAME,
+      // `null`, e não o logo do produto: esta função responde "o que estas duas
+      // strings resolvem". O logo padrão é decisão da camada de cima
+      // (`resolverMarca`), e é ESTE contrato que `SidebarBrand` usa para não
+      // renderizar uma imagem quebrada quando não há logo nenhum.
       logoUrl: null,
-      initial: "D",
+      // Derivada do nome, nunca redigitada: um literal aqui exigiria lembrar de
+      // trocar duas coisas ao renomear o produto.
+      initial: [...DEFAULT_APP_NAME][0]!.toUpperCase(),
     });
   });
 
@@ -118,8 +124,13 @@ describe("guarda de white-label (self-host)", () => {
     // `user`/`activeOrg`. As duas asserções são o par mínimo: o provedor existe
     // no layout raiz E ele envolve `children` (um provedor montado ao lado, sem
     // envolver a árvore, deixaria todo consumidor no padrão do produto).
+    //
+    // ⚠️ A segunda asserção casava `<MarcaDosClientComponents>\n<ThemeProvider>
+    // {children}`. O `<ThemeProvider>` sumiu com o modo escuro, e o que ele
+    // provava era o ENVOLVIMENTO — que `children` passa por dentro do provedor
+    // de marca, e não ao lado dele. A forma mudou; a garantia é a mesma.
     expect(layoutRaiz).toMatch(/<MarcaDaInstalacaoProvider\s+marca=\{/);
-    expect(layoutRaiz).toMatch(/<MarcaDosClientComponents>\s*\n\s*<ThemeProvider>\{children\}/);
+    expect(layoutRaiz).toMatch(/<MarcaDosClientComponents>\s*\{children\}\s*<\/MarcaDosClientComponents>/);
   });
 });
 
@@ -131,7 +142,7 @@ describe("nome do arquivo de códigos de recuperação", () => {
   it("deriva o prefixo da marca, sem acento e sem espaço", () => {
     expect(prefixoDoArquivo("Vendas Turbo")).toBe("vendas-turbo");
     expect(prefixoDoArquivo("Ótima Gestão")).toBe("otima-gestao");
-    expect(prefixoDoArquivo(DEFAULT_APP_NAME)).toBe("deskcommcrm");
+    expect(prefixoDoArquivo(DEFAULT_APP_NAME)).toBe("gestalt-crm");
   });
 
   it("não devolve hífen pendurado nem repetido", () => {
@@ -253,17 +264,12 @@ const MARCA_CONGELADA: Record<string, EntradaDeMarca> = {
   },
 
   // ─── INFRA — cookie/storage/contêiner. Renomear desloga ou perde estado. ───
-  "app/layout.tsx": {
-    categoria: "INFRA",
-    motivo:
-      "chave de localStorage do tema, lida no script anti-flash. Renomear faz todo mundo voltar ao tema claro no próximo acesso — e o par com lib/theme.tsx tem de mudar junto",
-    marcas: ["deskcomm-theme"],
-  },
-  "lib/theme.tsx": {
-    categoria: "INFRA",
-    motivo: "a mesma chave de localStorage do script do layout; as duas são um par só",
-    marcas: ["deskcomm-theme"],
-  },
+  //
+  // ⚠️ `app/layout.tsx` e `lib/theme.tsx` moravam aqui, os dois pela chave de
+  // localStorage `deskcomm-theme`. Saíram porque a chave deixou de existir: o
+  // produto passou a ter UM tema, o script anti-flash foi removido do layout e
+  // `lib/theme.tsx` foi apagado. Não havia nada a preservar — ninguém perde
+  // estado ao não ler uma preferência que não é mais oferecida.
   "lib/supabase/browser.ts": {
     categoria: "INFRA",
     motivo:
@@ -316,13 +322,11 @@ const MARCA_CONGELADA: Record<string, EntradaDeMarca> = {
     marcas: ["deskcommcrm", "deskcommcrm", "deskcommcrm"],
   },
 
-  // ─── PADRAO — a marca padrão precisa existir em algum lugar. ───
-  "lib/branding.ts": {
-    categoria: "PADRAO",
-    motivo:
-      "é a DEFINIÇÃO de DEFAULT_APP_NAME — o valor que aparece quando o operador não configurou marca nenhuma. Se esta linha sumir, some o padrão",
-    marcas: ["deskcommcrm"],
-  },
+  // ⚠️ `lib/branding.ts` morava aqui, na categoria PADRAO, porque era a
+  // DEFINIÇÃO de `DEFAULT_APP_NAME` e o valor era "DeskcommCRM". Saiu porque o
+  // produto passou a se chamar Gestalt CRM: o arquivo continua sendo a
+  // definição do padrão, mas o padrão não é mais uma marca que esta varredura
+  // procura. Nada a preservar — a lista guarda DÍVIDA, e esta foi paga.
 };
 
 /**

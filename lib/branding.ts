@@ -16,7 +16,7 @@
  * runtime em vez de lida do bundle.
  */
 
-export const DEFAULT_APP_NAME = "DeskcommCRM";
+export const DEFAULT_APP_NAME = "Gestalt CRM";
 
 export type Branding = {
   /** Nome exibido na interface e nos títulos de página. */

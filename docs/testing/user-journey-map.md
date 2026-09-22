@@ -2125,3 +2125,88 @@ pelo ramo certo — **não** foi executada nesta máquina: o e2e local não sobe
 (sem CLI do Supabase no Windows), então a prova pela tela é a que o CI roda. O
 comportamento do motor está medido contra o motor com mundo falso, não contra
 Postgres.
+
+---
+
+## J13 — A primeira tela: entrar e criar conta `[P0]`
+
+Contexto do código: as seis telas do grupo `app/(public)/` são uma **cena 3D em
+vidro ocupando a tela inteira** (`components/auth/CenaDeVidro.tsx`), com o
+formulário flutuando num **cartão de vidro** (`.ios-vidro`) no centro. Campos com
+ícone, rótulo flutuante, olho de revelar senha e medidor de força em
+`components/auth/CampoDeAcesso.tsx`.
+
+⚠️ **Esta tela mudou TRÊS vezes, e as três foram decisão de quem é dono do
+produto.** Preta com um modelo `.glb` (até 2026-09-19) → faixa verde com ondas
+SVG e o `three.js` apagado (2026-09-19) → cena de vidro em `three.js` de novo
+(2026-09-21). Quem ler uma versão antiga deste arquivo mede contra a régua
+errada. O que cada mudança trouxe e levou está nos fragmentos de `.changes/`.
+
+`[P0]` pelo motivo mais direto que existe: **é a primeira tela do produto, e é a
+única por onde se entra**. Um defeito aqui não degrada uma funcionalidade — ele
+tranca a porta.
+
+Sonda: `tests/sonda-telas-de-acesso.ts`.
+Contraste do vidro: `tests/unit/acesso-vidro-contraste.test.ts`.
+Specs: `tests/e2e/auth.spec.ts` (inclui `axe`), `tests/e2e/icone-da-marca.spec.ts`,
+`tests/e2e/marca-logo.spec.ts`.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J13.1 | A cena chega e roda | `<canvas>` com área depois da carga preguiçosa; `requestAnimationFrame` avança entre duas amostras | PASS — 1440×900, 12→13 quadros |
+| J13.2 | O cartão cabe em toda largura | cabe na viewport com respiro em 1440/1024/768/390; o fundo cobre a tela | PASS — 432px em 768, 358px em 390 |
+| J13.3 | O texto passa no piso de contraste **no pior caso de cena** | título e apoio ≥4,5:1 contra o cartão composto sobre PRETO | PASS — 12,62:1 e 5,31:1 sobre `rgb(219,219,219)` |
+| J13.4 | O rótulo sobe ao digitar | o `<label>` muda de caixa ao preencher o campo | PASS — sobe 13px, altura 21→16 |
+| J13.5 | O olho revela a senha | `type` vai de `password` para `text` | PASS |
+| J13.6 | O medidor só aparece com senha digitada | ausente com o campo vazio, presente e proporcional depois | PASS — 221px |
+| J13.7 | O nome da marca não está escrito na tela | o logo diz a marca; o `.env` continua observável em `data-marca-do-ambiente` | PASS |
+| J13.8 | `prefers-reduced-motion` NÃO monta a cena | zero `<canvas>` e **zero** `requestAnimationFrame` na página | PASS — 0 e 0 |
+| J13.9 | O vidro é vidro | alfa ≥0,8 e `backdrop-filter` diferente de `none` | PASS — alfa 0,86, `blur(16px)` |
+| J13.10 | O ícone do campo reage ao foco | a matriz de `transform` muda ao focar | PASS — `matrix` → `matrix3d` |
+| J13.11 | Sem WebGL a tela continua utilizável | a cena se declara ausente, o fundo CSS fica, o formulário aceita digitação | PASS — `data-estado="sem-webgl"` |
+| J13.12 | Entrar de verdade, com banco | credencial válida leva ao `/app` | **NÃO EXECUTADO** aqui — só o job `e2e` do CI |
+
+**Bug de produto achado ao executar (2026-09-15), e que segue valendo.** `GET
+/gestalt-3d.glb` respondia **307 para `/login`**: o `matcher` de `proxy.ts`
+dispensa o proxy por uma **allowlist de extensões**, não por "tem ponto no nome".
+O arquivo caía no gate de autenticação, com o servidor saudável e **nada nos
+logs**. O `.glb` saiu do produto, e a cena atual é procedural — não baixa um byte
+de asset, justamente para não poder cair nessa armadilha. **O achado continua
+valendo para o próximo arquivo servido de `public/`.**
+
+**Bug de produto achado em 2026-09-21: TODO o vidro do produto estava morto em
+produção.** A sonda reprovou "o cartão desfoca o que passa atrás (none)", e a
+causa não era do login. `app/globals.css` declarava `backdrop-filter` **antes** de
+`-webkit-backdrop-filter`; o minificador de CSS deduplica mantendo a ÚLTIMA
+declaração, então só a prefixada sobrevivia no build — e **o Chrome 151 não
+suporta mais `-webkit-backdrop-filter`** (`CSS.supports(...)` devolve `false`,
+medido). Resultado: `.ios-vidro`, `.app-header` e `.nav-drawer-overlay` sem
+desfoque nenhum em produção, silenciosamente, incluindo o redesenho iOS das
+Conexões. Conserto: inverter a ordem das declarações (prefixada primeiro, padrão
+por último) nos cinco pares do arquivo. Vigiado por J13.9.
+
+⚠️ **Descartado por medição:** declarar `browserslist` no `package.json` NÃO
+resolve — foi testado com `safari >= 16.4` e com `safari >= 18`, e o build
+continuou emitindo só a prefixada. O minificador do Next não lê aquela chave.
+Quem quiser reabrir o assunto começa daí, não do zero.
+
+**Achado de desempenho (2026-09-21).** A primeira versão da cena usava
+`dispersion: 2.4` com sete corpos. Dispersão faz o `three` renderizar o passe de
+transmissão **uma vez por canal de cor**: a página caiu a poucos quadros por
+segundo e até a transição do rótulo do formulário parou de rodar — a sonda
+reprovou por *timeout*, não por desenho errado. Em vigor: cinco corpos,
+`dispersion: 0.6` e `transmissionResolutionScale = 0.5`.
+
+**NÃO MEDIDO, declarado:** taxa de quadros em máquina real. O Chromium da sonda
+usa SwiftShader (GPU por software) — ele prova que o código roda e que a cena
+para quando deve, não que a máquina do cliente aguenta 60fps.
+
+**NÃO MEDIDO, declarado:** `/login/mfa`, `/login/recovery` e `/login/reset`
+herdam este layout mas exigem sessão parcial ou token; não foram abertas nesta
+máquina (o e2e local não sobe aqui — sem CLI do Supabase no Windows). A prova
+delas é a do CI.
+
+**NÃO MEDIDO, declarado:** o `axe` de `tests/e2e/auth.spec.ts` roda o ruleset
+completo em `/login` e é o gate que pegaria contraste insuficiente sobre o vidro.
+Ele não roda nesta máquina; a prova é a do CI. O cálculo de J13.3 é o que
+sustenta a expectativa até lá.

@@ -28,14 +28,32 @@ export default async function LoginPage({
   const t = (texto: string) => traduzir(texto, idioma);
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-1.5 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Entrar")}</h1>
-        <p className="text-sm text-muted-foreground">{branding().name}</p>
+    // ⚠️ `data-marca-do-ambiente` NÃO é decoração e não pode ser removido sem
+    // ler `tests/e2e/icone-da-marca.spec.ts`.
+    //
+    // O nome da marca era escrito em texto logo abaixo do "Entrar", e saiu a
+    // pedido de quem é dono do produto: o logo acima já o diz. Mas aquele texto
+    // carregava um contrato invisível — ele vinha de `branding()` (que lê o
+    // `.env`) enquanto o título da aba vem de `generateMetadata` (que lê
+    // `platform_branding` no banco), e a spec comparava os dois justamente para
+    // pegar o caso de "trocaram o nome pela tela e a aba não acompanhou".
+    //
+    // Este atributo é o mesmo valor, pelo mesmo caminho, sem ocupar pixel. Ler
+    // o `alt` do logo no lugar PARECE equivalente e não é: aquele sai de
+    // `marcaDaSaida`, a mesma pilha do título — a spec passaria a comparar o
+    // banco consigo mesmo e ficaria verde medindo nada.
+    <div className="space-y-6" data-marca-do-ambiente={branding().name}>
+      <div className="space-y-2 text-center">
+        <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] text-text">
+          {t("Entrar")}
+        </h1>
+        <p className="text-sm text-text-muted">
+          {t("Use o e-mail e a senha da sua conta para continuar.")}
+        </p>
       </div>
       {reset === "success" && (
         <div
-          className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm"
+          className="acesso-erro rounded-[10px] border border-accent/30 bg-accent-soft px-3.5 py-2.5 text-sm text-text"
           role="status"
         >
           {t("Senha redefinida com sucesso. Entre com a nova senha.")}
@@ -43,7 +61,7 @@ export default async function LoginPage({
       )}
       {error === "link_invalido" && (
         <div
-          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          className="acesso-erro rounded-[10px] border border-error/30 bg-error-bg px-3.5 py-2.5 text-sm text-error"
           role="alert"
         >
           {t("Link inválido ou expirado. Peça um novo em Recuperar senha ou refaça o cadastro.")}
@@ -56,7 +74,7 @@ export default async function LoginPage({
       */}
       {error === "convite_invalido" && (
         <div
-          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          className="acesso-erro rounded-[10px] border border-error/30 bg-error-bg px-3.5 py-2.5 text-sm text-error"
           role="alert"
         >
           {t(
@@ -66,7 +84,7 @@ export default async function LoginPage({
       )}
       {error === "template_padrao" && (
         <div
-          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          className="acesso-erro rounded-[10px] border border-error/30 bg-error-bg px-3.5 py-2.5 text-sm text-error"
           role="alert"
         >
           {t(
@@ -78,7 +96,7 @@ export default async function LoginPage({
       )}
       {error === "provisionamento" && (
         <div
-          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          className="acesso-erro rounded-[10px] border border-error/30 bg-error-bg px-3.5 py-2.5 text-sm text-error"
           role="alert"
         >
           {t(
@@ -87,20 +105,20 @@ export default async function LoginPage({
         </div>
       )}
       <LoginForm next={next} />
-      <div className="space-y-2 text-center text-sm">
+      <div className="space-y-3 text-sm">
         <p>
           <Link
             href="/login/forgot"
-            className="text-muted-foreground underline underline-offset-4 hover:text-foreground"
+            className="text-text-muted underline-offset-4 transition-colors duration-fast ease-out hover:text-text hover:underline"
           >
             {t("Esqueci minha senha")}
           </Link>
         </p>
-        <p className="text-muted-foreground">
+        <p className="border-t border-border pt-3 text-text-muted">
           {t("Não tem conta?")}{" "}
           <Link
             href="/signup"
-            className="font-medium text-foreground underline underline-offset-4"
+            className="font-semibold text-text underline underline-offset-4 decoration-border-strong transition-colors duration-fast ease-out hover:decoration-text"
           >
             {t("Criar conta")}
           </Link>

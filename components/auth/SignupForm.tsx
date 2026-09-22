@@ -1,6 +1,7 @@
 "use client";
 
 import { useForm, type Resolver } from "react-hook-form";
+import { BuildingOfficeIcon, EnvelopeSimpleIcon, LockSimpleIcon, ShieldCheckIcon } from "@phosphor-icons/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTransition, useState } from "react";
 
@@ -12,8 +13,7 @@ import {
   type SignupComConviteInput,
 } from "@/lib/auth/schemas";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { CampoDeAcesso, ForcaDaSenha } from "@/components/auth/CampoDeAcesso";
 import { signUp } from "@/app/actions/auth/signUp";
 
 /**
@@ -36,6 +36,7 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<SignupInput>({
     // O formulário tem UM tipo e DOIS contratos: no modo convite o campo de
@@ -52,6 +53,11 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
       password_confirm: "",
     },
   });
+
+  // O medidor de força precisa do valor a cada tecla, e `watch` de UM campo só
+  // re-renderiza por esse campo. `watch()` sem argumento assinaria o formulário
+  // inteiro e faria o nome da empresa redesenhar a barra de senha.
+  const senha = watch("password") ?? "";
 
   const onSubmit = (values: SignupInput) => {
     setServerError(null);
@@ -79,12 +85,12 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
   if (sentTo) {
     return (
       <div
-        className="space-y-2 rounded-md border bg-muted/40 px-4 py-6 text-center"
+        className="acesso-erro space-y-2 rounded-[12px] border border-border bg-surface-elevated px-4 py-6 text-center"
         role="status"
       >
-        <p className="text-sm font-medium">{t("Confirme seu e-mail")}</p>
-        <p className="text-sm text-muted-foreground">
-          {t("Enviamos um link de confirmação para")} <strong>{sentTo}</strong>.{" "}
+        <p className="text-sm font-medium text-text">{t("Confirme seu e-mail")}</p>
+        <p className="text-sm text-text-muted">
+          {t("Enviamos um link de confirmação para")} <strong className="text-text">{sentTo}</strong>.{" "}
           {t("Abra o e-mail e clique no link para ativar sua conta.")}
         </p>
       </div>
@@ -93,75 +99,64 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
 
   return (
     <form method="post" onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-      {!convite && (
-      <div className="space-y-1.5">
-        <Label htmlFor="org_name">{t("Nome da empresa")}</Label>
-        <Input
-          id="org_name"
-          type="text"
-          autoComplete="organization"
-          autoFocus
-          aria-invalid={errors.org_name ? true : undefined}
-          {...register("org_name")}
-        />
-        {errors.org_name && (
-          <p className="text-xs text-destructive">{t(errors.org_name.message ?? "")}</p>
+      <div className="acesso-cascata space-y-4">
+        {!convite && (
+          <CampoDeAcesso
+            id="org_name"
+            rotulo={t("Nome da empresa")}
+            type="text"
+            autoComplete="organization"
+            icone={<BuildingOfficeIcon size={20} weight="duotone" />}
+            autoFocus
+            erro={errors.org_name ? t(errors.org_name.message ?? "") : undefined}
+            {...register("org_name")}
+          />
         )}
-      </div>
-      )}
-      <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
-        <Input
+        <CampoDeAcesso
           id="email"
+          rotulo="Email"
           type="email"
           autoComplete="email"
+          icone={<EnvelopeSimpleIcon size={20} weight="duotone" />}
           // O convite vale para UM endereço. Deixar editável convidaria a
           // trocar e receber "email_divergente" depois de preencher tudo.
           readOnly={Boolean(convite)}
-          aria-invalid={errors.email ? true : undefined}
+          erro={errors.email ? t(errors.email.message ?? "") : undefined}
           {...register("email")}
         />
-        {errors.email && (
-          <p className="text-xs text-destructive">{t(errors.email.message ?? "")}</p>
-        )}
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="password">{t("Senha")}</Label>
-        <Input
+        <CampoDeAcesso
           id="password"
+          rotulo={t("Senha")}
           type="password"
           autoComplete="new-password"
-          aria-invalid={errors.password ? true : undefined}
+          icone={<LockSimpleIcon size={20} weight="duotone" />}
+          revelavel
+          acessorio={senha.length > 0 ? <ForcaDaSenha senha={senha} /> : undefined}
+          erro={errors.password ? t(errors.password.message ?? "") : undefined}
           {...register("password")}
         />
-        {errors.password && (
-          <p className="text-xs text-destructive">{t(errors.password.message ?? "")}</p>
-        )}
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="password_confirm">{t("Confirmar senha")}</Label>
-        <Input
+        <CampoDeAcesso
           id="password_confirm"
+          rotulo={t("Confirmar senha")}
           type="password"
           autoComplete="new-password"
-          aria-invalid={errors.password_confirm ? true : undefined}
+          icone={<ShieldCheckIcon size={20} weight="duotone" />}
+          revelavel
+          erro={errors.password_confirm ? t(errors.password_confirm.message ?? "") : undefined}
           {...register("password_confirm")}
         />
-        {errors.password_confirm && (
-          <p className="text-xs text-destructive">{t(errors.password_confirm.message ?? "")}</p>
+        {serverError && (
+          <div
+            className="acesso-erro rounded-[10px] border border-error/30 bg-error-bg px-3.5 py-2.5 text-sm text-error"
+            role="alert"
+          >
+            {serverError}
+          </div>
         )}
+        <Button type="submit" size="lg" className="h-[3.25rem] w-full rounded-[14px] text-[15px] font-semibold shadow-md" disabled={isPending}>
+          {isPending ? t("Criando conta...") : t("Criar conta")}
+        </Button>
       </div>
-      {serverError && (
-        <div
-          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-          role="alert"
-        >
-          {serverError}
-        </div>
-      )}
-      <Button type="submit" className="w-full" disabled={isPending}>
-        {isPending ? t("Criando conta...") : t("Criar conta")}
-      </Button>
     </form>
   );
 }

@@ -125,6 +125,23 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     // Run on all paths except static assets / Next internals.
+    //
+    // ⚠️ A lista de extensões é uma ALLOWLIST, não uma heurística de "tem
+    // ponto". Um arquivo estático cuja extensão não esteja escrita aqui passa
+    // pelo proxy, não casa `PUBLIC_PATHS` e responde **307 para /login** — com
+    // o arquivo publicado e o servidor saudável. É silencioso: um `<img>` some,
+    // uma fonte cai para a de sistema, e nada nos logs diz que houve um
+    // redirecionamento.
+    //
+    // Foi medido assim uma vez: o modelo 3D das telas de acesso (`.glb`, uma
+    // extensão que não estava nesta lista) respondia 307 e a tela de login caía
+    // para o pôster estático em TODA instalação, sem uma linha de log. O modelo
+    // saiu — as nuvens da faixa da marca são SVG INLINE, e por isso não têm
+    // extensão nenhuma para acrescentar aqui.
+    //
+    // ⚠️ A lição fica de pé para a próxima: asset novo com extensão fora desta
+    // lista some em silêncio. Quem servir um `.woff2`, um `.mp4` ou um `.json`
+    // de `public/` acrescenta a extensão AQUI e prova com um GET de 200.
     "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js)$).*)",
   ],
 };

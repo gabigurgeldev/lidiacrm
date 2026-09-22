@@ -111,3 +111,10 @@ evidence/.sonda-score-residuo.json
 
 # QA em VPS: guarda segredo TOTP da conta de teste (repo e publico)
 .qa-vps/
+
+# Arte de ORIGEM dos assets (modelo 3D cru, PNG da logo antes do recorte).
+# São dezenas de MB que os scripts de `scripts/` consomem para produzir as
+# versões pequenas que ficam em `public/` — e `public/` inteiro entra na imagem
+# Docker de todo self-hoster (`Dockerfile:79`). A origem fica no disco de quem
+# trabalha; só a saída comprimida é commitada e distribuída.
+assets-fonte/

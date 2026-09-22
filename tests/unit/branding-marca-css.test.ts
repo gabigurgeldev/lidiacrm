@@ -336,18 +336,26 @@ describe("guardas de mecanismo", () => {
     expect(forasteiros).toEqual([]);
   });
 
-  it("o layout injeta o bloco no <head>, antes do script de tema", () => {
+  it("o layout injeta o bloco como o PRIMEIRO nó do <head>", () => {
     // Zero flash depende disso: o bloco é HTML no primeiro byte. Se ele descer
     // para o <body> ou virar efeito de cliente, a tela pinta a cor do produto e
     // troca depois — que é exatamente o que o self-hoster reporta como "piscou".
+    //
+    // ⚠️ A ÂNCORA MUDOU e a garantia não. Este caso comparava a posição do bloco
+    // com a do `THEME_INIT_SCRIPT`, que sumiu junto com o modo escuro — e uma
+    // âncora que não existe devolve -1, o que faria `toBeLessThan` reprovar para
+    // sempre ou, pior, passar por acidente se a comparação fosse ao contrário.
+    // A âncora agora é o VIZINHO que restou no `<head>`: o bloco tem de vir
+    // antes dele e antes do fim do `<head>`.
     const layout = fs.readFileSync(path.join(RAIZ, "app/layout.tsx"), "utf8");
     const head = layout.indexOf("<head>");
     const estilo = layout.indexOf("<EstiloDaMarca />");
-    const tema = layout.indexOf("THEME_INIT_SCRIPT }}");
+    const vizinho = layout.indexOf("<MarcaNoNavegador />");
     expect(head).toBeGreaterThan(-1);
+    expect(vizinho, "o vizinho de âncora sumiu do <head>").toBeGreaterThan(-1);
     expect(estilo).toBeGreaterThan(head);
     expect(estilo).toBeLessThan(layout.indexOf("</head>"));
-    expect(estilo).toBeLessThan(tema);
+    expect(estilo).toBeLessThan(vizinho);
   });
 
   it("o layout de /app envolve a árvore inteira no marcador do escopo", () => {

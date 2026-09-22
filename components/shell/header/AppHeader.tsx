@@ -28,7 +28,12 @@ export function AppHeader({
   gruposAbertosSalvos?: NavGroupId[] | null;
 }) {
   return (
-    <header className="app-header sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 px-3 md:gap-4 md:px-6">
+    /*
+      `casca-escura` é o escopo de token da moldura preta — a mesma classe da
+      barra lateral, e é o que faz as duas serem uma peça só em vez de duas
+      peças da mesma cor. Ver o bloco no `globals.css`.
+    */
+    <header className="app-header casca-escura sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 px-3 md:gap-4 md:px-6">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <MobileSidebar gruposAbertosSalvos={gruposAbertosSalvos} />
         <Breadcrumb />

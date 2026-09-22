@@ -44,14 +44,25 @@
 import { createContext, useContext, type ReactNode } from "react";
 
 import { resolveBranding, type Branding } from "@/lib/branding";
+import { LOGO_PADRAO_DO_PRODUTO } from "@/lib/branding/resolve";
 
 /**
  * O padrão do produto — o que aparece quando ninguém configurou marca nenhuma.
  * Sai do MESMO resolvedor que as camadas usam, e não de um literal redigitado:
  * duas definições do padrão divergiriam na primeira vez que alguém mexesse em
  * uma delas.
+ *
+ * O `logoUrl` vem de `LOGO_PADRAO_DO_PRODUTO`, a MESMA constante que
+ * `resolverMarca` usa no servidor, e não de um segundo caminho: `resolveBranding`
+ * devolve `null` para entrada vazia (contrato dela), e o logo do produto é
+ * decisão da camada de cima. Se estes dois valores divergissem, o servidor
+ * renderizaria `<img>` e um client component sem provedor hidrataria `<span>` —
+ * troca de TIPO de elemento, que é React #418 em toda tela.
  */
-const PADRAO_DO_PRODUTO: Branding = resolveBranding(undefined, undefined);
+const PADRAO_DO_PRODUTO: Branding = {
+  ...resolveBranding(undefined, undefined),
+  logoUrl: LOGO_PADRAO_DO_PRODUTO,
+};
 
 const MarcaDaInstalacao = createContext<Branding>(PADRAO_DO_PRODUTO);
 

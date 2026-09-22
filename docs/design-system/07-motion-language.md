@@ -80,6 +80,41 @@ Loader visual: linear-gradient atravessa o elemento da direita pra esquerda, inf
 
 Duração 1.6s (não 1s — fica frenético; não 2s — fica lento).
 
+### 5. Rótulo flutuante (campo de formulário)
+
+O rótulo começa dentro do campo e sobe quando ele ganha foco **ou** conteúdo.
+Comunica uma coisa, e cabe numa frase: *o campo saiu de vazio para preenchido*.
+
+```css
+.acesso-campo > input:focus ~ label,
+.acesso-campo > input:not(:placeholder-shown) ~ label {
+  transform: translateY(-0.82rem) scale(0.76);
+}
+```
+
+Duas propriedades, não mais: `transform` (translate + scale ainda são UMA) e
+`color`. 200ms `ease-out`.
+
+**Depende de `placeholder=" "` no input** — um espaço, não vazio. É o que faz
+`:placeholder-shown` significar "sem conteúdo" sem um byte de JavaScript. Sem
+ele o rótulo nunca sobe e fica por cima do texto digitado.
+
+⚠️ **Campo com `autoFocus` já nasce com o rótulo levantado**, porque `:focus`
+casa antes de qualquer digitação. Está certo — mas uma medição que compare
+"antes e depois de preencher" num campo autofocado lê o estado flutuado nas duas
+pontas e reprova o comportamento correto. Meça num campo que não recebe foco
+automático (custou uma rodada de sonda das telas de acesso).
+
+### 6. Medidor que acompanha a digitação
+
+Barra que cresce enquanto se digita (força da senha). Anima só `width`, 200ms.
+
+⚠️ **Ele DESCREVE, não decide.** A regra que barra o envio vive no schema Zod;
+um medidor que prometesse mais do que o servidor exige inventaria uma política
+que nenhuma camada aplica. E vai `aria-hidden`: quem usa leitor de tela já
+recebe a mensagem de erro do campo, e narrar "força 2 de 4" a cada tecla é ruído
+sobre a informação boa.
+
 ---
 
 ## Curvas canônicas
@@ -130,6 +165,73 @@ Sempre respeitar. Em vez de remover toda animação, **simplificar pra fade-only
 
 Skeleton shimmer pode manter (não causa motion sickness).
 
+**Simplificar não é apagar.** No rótulo flutuante, suprimir o `transform` sob
+`reduce` deixaria o rótulo por cima do texto digitado — trocaria enjoo por um
+campo ilegível. O que sai é o PERCURSO (`transition: none`), não a posição final.
+A pergunta certa é "o que esta animação informa, e como entrego isso parado?".
+
+**Movimento contínuo precisa PARAR de verdade, não só ficar imperceptível.** Uma
+rotação 3D sob `reduce` desenha um quadro e encerra o `requestAnimationFrame` —
+`animation-duration: 0.01ms` do bloco acima não alcança laço em JavaScript, e um
+canvas girando numa aba de fundo queima bateria sem que ninguém veja um quadro.
+Vale o mesmo para aba escondida (`visibilitychange`) e elemento fora do viewport
+(`IntersectionObserver`).
+
+---
+
+## Movimento ambiente
+
+Categoria à parte, criada quando as telas de acesso ganharam fundo animado —
+primeiro ondas em SVG, hoje uma cena de vidro em WebGL. **Ela não flexibiliza nada do que está acima** — existe porque
+aquilo é outra coisa, e tratar as duas pela mesma régua fazia a tabela de
+durações proibir o que ela nunca teve a intenção de governar.
+
+A diferença é de natureza: **UI responde, ambiente não.** Uma transição de 200ms
+é a resposta da interface a alguma coisa que aconteceu — um clique, um foco, uma
+rota. Movimento ambiente não responde a nada e não informa nada; é textura. Um
+laço de 30 segundos que respondesse a um clique seria uma interface quebrada, e
+uma textura de 200ms seria um piscar.
+
+Para uma animação entrar nesta categoria, as seis linhas valem juntas:
+
+1. **É `aria-hidden` e não carrega informação.** Remover o movimento não tira
+   nada de ninguém — a tela continua dizendo a mesma coisa parada.
+2. **Não responde a nada.** Nem a ação, nem a estado, nem a carregamento. Não
+   entra em botão, campo, lista, modal nem indicador de progresso.
+3. **Uma propriedade animada por camada, e ela é `transform`.** Vale a mesma
+   razão de sempre: `transform` compõe fora do layout.
+4. **Período ≥ 8 segundos.** É o que garante que ninguém leia aquilo como
+   resposta da interface. Abaixo disso, é UI e volta para a tabela de cima.
+5. **Sob `prefers-reduced-motion: reduce`, para inteiro.** Aqui não se aplica o
+   "simplificar, não apagar": movimento contínuo não tem posição final a
+   preservar, e a seção acima já exige que ele pare de verdade.
+6. **Só em superfície decorativa declarada.** Se você precisa argumentar que o
+   elemento é decorativo, ele não é.
+
+**Onde isto vive hoje:** a cena de vidro das telas de acesso
+(`components/auth/CenaDeVidro.tsx`), montada por `CascaDaCena`. Caso novo não
+entra por semelhança — responde às seis linhas ou vira UI.
+
+### ⚠️ Quando o movimento é WebGL, `animation: none` NÃO desliga nada
+
+CSS não alcança laço em JavaScript. Um `@media (prefers-reduced-motion: reduce)`
+com `animation: none` não toca um `requestAnimationFrame`, e a cena continuaria
+girando para quem pediu para ela parar.
+
+**A regra 5, em canvas, é montagem: o componente não é montado.** `CascaDaCena`
+consulta `matchMedia("(prefers-reduced-motion: reduce)")` em JavaScript e, se a
+preferência estiver ligada, nem faz o import dinâmico do `three`. Não é "menos
+quadros" — é zero.
+
+Quem vigia é `tests/sonda-telas-de-acesso.ts`: ele instala um contador de
+`requestAnimationFrame` **antes** do primeiro quadro da página e afirma que ele
+fica em **zero** sob `reduce`. Qualquer laço que escape reprova ali, inclusive um
+que alguém ache que "é leve".
+
+O mesmo vale para os outros dois desligamentos que a seção acima exige: aba
+escondida (`visibilitychange`) e elemento fora do viewport
+(`IntersectionObserver`) precisam **cancelar o `rAF`**, não baixar a taxa.
+
 ---
 
 ## Anti-patterns
@@ -137,6 +239,13 @@ Skeleton shimmer pode manter (não causa motion sickness).
 ❌ **Spring com bounce alto.** `cubic-bezier(0.68, -0.55, 0.27, 1.55)` ou similar. Faz o elemento "pular". Reservar bounce sutil (`1.56`) pra raros casos.
 
 ❌ **Parallax decorativo.** Hero scroll com 3 layers se movendo em velocidades diferentes. Não combina com soft-tech.
+
+> ⚠️ O que este item proíbe é o vínculo com o SCROLL — a página que se desmonta
+> em camadas enquanto se rola. A cena de vidro das telas de acesso reage ao
+> PONTEIRO e ao foco de campo, e **não** é este caso: ela não lê posição de
+> scroll, e o deslocamento é amortecido, nunca 1:1 com a mão. Responde às seis
+> linhas de **Movimento ambiente** acima. Se alguém ligar camada decorativa a
+> scroll, volta a cair aqui.
 
 ❌ **Fade-in sem transform companheiro.** Vira flicker em monitor de baixa taxa.
 

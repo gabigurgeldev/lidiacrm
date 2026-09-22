@@ -38,20 +38,25 @@ export default async function SignupPage({
   const t = (texto: string) => traduzir(texto, idioma);
 
   return (
-    <div className="space-y-6">
-      <div className="space-y-1.5 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Criar conta")}</h1>
-        <p className="text-sm text-muted-foreground">
+    // Mesmo contrato de `login/page.tsx`: o nome da marca saiu da tela, e este
+    // atributo é o que mantém a resolução do `.env` observável para a spec que
+    // a cruza com o título da aba. Ver o comentário longo lá.
+    <div className="space-y-6" data-marca-do-ambiente={branding().name}>
+      <div className="space-y-2 text-center">
+        <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] text-text">
+          {t("Criar conta")}
+        </h1>
+        <p className="text-sm text-text-muted">
           {convite
             ? t("Crie sua senha para entrar na empresa que te convidou")
-            : `${t("Comece a usar o")} ${branding().name} ${t("em minutos")}`}
+            : t("Leva menos de um minuto. Você confirma pelo e-mail e já começa.")}
         </p>
       </div>
 
       {conviteExpirado && (
         <p
           role="alert"
-          className="rounded-md border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm dark:border-amber-500/30 dark:bg-amber-950/20"
+          className="acesso-erro rounded-[10px] border border-warning/30 bg-warning-bg px-3.5 py-2.5 text-sm text-warning"
         >
           {t(
             "Esse convite expirou ou não é mais válido. Peça um novo a quem te convidou — criar uma conta agora abriria uma empresa nova, e não é isso que você quer.",
@@ -61,9 +66,12 @@ export default async function SignupPage({
 
       <SignupForm convite={convite} />
 
-      <p className="text-center text-sm text-muted-foreground">
+      <p className="border-t border-border pt-3 text-sm text-text-muted">
         {t("Já tem conta?")}{" "}
-        <Link href="/login" className="font-medium text-foreground underline underline-offset-4">
+        <Link
+          href="/login"
+          className="font-semibold text-text underline underline-offset-4 decoration-border-strong transition-colors duration-fast ease-out hover:decoration-text"
+        >
           {t("Entrar")}
         </Link>
       </p>

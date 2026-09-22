@@ -24,14 +24,30 @@ const RAIZ = process.cwd();
 const CSS = fs.readFileSync(path.join(RAIZ, "app/globals.css"), "utf8");
 
 /**
+ * A semente da rampa do produto — o ÚNICO hex livre da paleta.
+ *
+ * Os outros dez stops são função determinística deste (ESCADA_L × CURVA_C, em
+ * `lib/branding/rampa.ts`), e é isso que a catraca abaixo prova. Trocar a cor
+ * do produto é trocar esta linha e o `globals.css`; qualquer outra combinação
+ * reprova aqui.
+ *
+ * ⚠️ NÃO é o verde da logo (#19b02e). Aquele dá 2,88:1 sobre branco e reprova
+ * o piso de componente (3,0), que é o anel de foco — e no matiz 144° o gamut
+ * sRGB não comporta rampa vívida cuja parada 600 passe. O verde vivo da marca
+ * vive no arquivo da logo e dentro da moldura escura; a accent das páginas
+ * claras é a parada escura do mesmo matiz.
+ */
+const SEMENTE_DO_PRODUTO = "#13731b";
+
+/**
  * Os stops esperados saem do CSS, NÃO de uma cópia colada aqui.
  *
  * Copiar à mão criaria uma segunda fonte da verdade que envelhece em silêncio: quem
  * mexesse na paleta do design system veria este teste verde contra a paleta de ontem, e
- * a catraca deixaria de calibrar contra a régua. Lendo do arquivo, mudar a Sage quebra
+ * a catraca deixaria de calibrar contra a régua. Lendo do arquivo, mudar a paleta quebra
  * este teste — que é exatamente o aviso que se quer.
  */
-function stopsSageDoCss(): string[] {
+function stopsDoProdutoNoCss(): string[] {
   const raiz = CSS.slice(CSS.indexOf(":root"), CSS.indexOf('[data-theme="dark"]'));
   return GRAUS.map((g) => {
     const m = new RegExp(`--color-accent-${g}:\\s*(#[0-9a-f]{6})`, "i").exec(raiz);
@@ -86,18 +102,18 @@ describe("conversões de cor", () => {
 });
 
 describe("rampaDeSemente — catraca de calibração contra o design system", () => {
-  const esperados = stopsSageDoCss();
+  const esperados = stopsDoProdutoNoCss();
 
   it("lê 11 stops distintos do globals.css (guarda de vacuidade)", () => {
     // Sem isto, um regex quebrado devolveria lista vazia e a comparação abaixo passaria
     // por não ter o que comparar — instrumento morto tem cara de teste verde.
     expect(esperados).toHaveLength(11);
     expect(new Set(esperados).size).toBe(11);
-    expect(esperados[K]).toBe("#506d48");
+    expect(esperados[K]).toBe(SEMENTE_DO_PRODUTO);
   });
 
-  it("reproduz os 11 stops Sage a partir de #506d48 com Δ ≤ 2/255 por canal", () => {
-    const derivada = rampaDeSemente("#506d48");
+  it(`reproduz os 11 stops do produto a partir de ${SEMENTE_DO_PRODUTO} com Δ ≤ 2/255 por canal`, () => {
+    const derivada = rampaDeSemente(SEMENTE_DO_PRODUTO);
     const distancias = esperados.map((esperado, i) => distanciaPorCanal(esperado, derivada[i]!));
     expect(
       Math.max(...distancias),

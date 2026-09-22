@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_APP_NAME } from "@/lib/branding";
 import { derivarMarca } from "@/lib/branding/contraste";
 import { REGUA_DO_PRODUTO } from "@/lib/branding/regua-do-produto";
 import {
+  LOGO_PADRAO_DO_PRODUTO,
   camadaDoAmbiente,
   resolverMarca,
   type CamadaDeMarca,
@@ -221,7 +223,13 @@ describe("precedência POR CAMPO", () => {
 
   it("sem nenhuma camada, tudo é o padrão do produto", () => {
     const marca = resolverMarca([], REGUA);
-    expect(marca.name).toBe("DeskcommCRM");
+    // Do módulo, não um literal: o nome do produto pode mudar, e um teste que o
+    // recopia mede a marca de ontem.
+    expect(marca.name).toBe(DEFAULT_APP_NAME);
+    // O logo do produto entra NESTA camada — é o fundo implícito da pilha. A
+    // origem continua "padrao", que é o ponto: ter um logo padrão não é o mesmo
+    // que alguém ter configurado um.
+    expect(marca.logoUrl).toBe(LOGO_PADRAO_DO_PRODUTO);
     expect(marca.cor).toBeNull();
     expect(marca.origens).toEqual({ nome: "padrao", logoUrl: "padrao", cor: "padrao" });
     expect(marca.motivos).toEqual([]);

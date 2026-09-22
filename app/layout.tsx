@@ -20,7 +20,6 @@ import {
 } from "@/lib/branding/resolve";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
-import { ThemeProvider } from "@/lib/theme";
 import { Providers } from "./providers";
 import { PublicEnvScript } from "./public-env-script";
 import "./globals.css";
@@ -134,10 +133,6 @@ export async function generateMetadata(): Promise<Metadata> {
 export const viewport: Viewport = {
   themeColor: coresDaBarraDoNavegador(REGUA_DO_PRODUTO),
 };
-
-// Inline FOUC-prevention. Conteúdo é string literal estática (zero input do usuário),
-// portanto seguro. Lê localStorage + prefers-color-scheme antes do primeiro paint.
-const THEME_INIT_SCRIPT = `(function(){try{var s=localStorage.getItem('deskcomm-theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;var r=(s==='dark'||s==='light')?s:((s==='system'||!s)&&d?'dark':'light');document.documentElement.setAttribute('data-theme',r);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
 
 /**
  * Motivos já registrados neste processo. `EstiloDaMarca` roda em TODA
@@ -292,6 +287,22 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
+    /*
+      `data-theme="light"` é FIXO, e não o valor inicial de um alternador.
+      O Gestalt CRM tem UM tema: páginas claras, com a barra lateral e o
+      cabeçalho escuros por DESENHO (o escopo `.casca-escura` do globals.css),
+      não por preferência de quem usa.
+
+      ⚠️ Havia aqui um `THEME_INIT_SCRIPT` inline que lia `localStorage` e
+      `prefers-color-scheme` antes do primeiro paint. Ele existia para evitar
+      flash entre dois temas; sem o segundo tema, ele só podia ESCURECER uma
+      interface que não tem versão escura — o `.casca-escura` pinta a moldura
+      sozinho, e o resto do produto não tem par escuro desenhado.
+
+      O bloco CSS `[data-theme="dark"]` continua vivo no `globals.css`: ele é
+      lido por quatro testes de marca e é renderizado pela vitrine da agenda,
+      que alterna o tema para provar a paleta nos dois lados.
+    */
     <html
       lang="pt-BR"
       data-theme="light"
@@ -299,18 +310,15 @@ export default function RootLayout({
       className={`${inter.variable} ${plexMono.variable}`}
     >
       <head>
-        {/* Primeiro de tudo: a cor da instalação, antes do CSS e do script de tema. */}
+        {/* Primeiro de tudo: a cor da instalação, antes do CSS. */}
         <EstiloDaMarca />
         {/* Config pública do Supabase + marca resolvida, em runtime (imagem
             genérica self-host). */}
         <MarcaNoNavegador />
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-screen bg-bg font-sans text-text antialiased">
         <Providers>
-          <MarcaDosClientComponents>
-            <ThemeProvider>{children}</ThemeProvider>
-          </MarcaDosClientComponents>
+          <MarcaDosClientComponents>{children}</MarcaDosClientComponents>
           <Toaster
             position="top-right"
             richColors

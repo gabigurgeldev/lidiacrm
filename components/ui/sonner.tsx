@@ -1,16 +1,22 @@
 "use client"
 
-import { useTheme } from "next-themes"
 import { Toaster as Sonner } from "sonner"
 
 type ToasterProps = React.ComponentProps<typeof Sonner>
 
+/**
+ * ⚠️ Este componente NÃO é o toaster em uso. `app/layout.tsx` importa `Toaster`
+ * direto de `"sonner"`; este arquivo existe porque o Design System 06 pede que
+ * o componente shadcn esteja presente, e nada no repo o importa.
+ *
+ * O tema é `"light"` fixo. Ele lia `useTheme()` de `next-themes` — uma segunda
+ * maquinaria de tema que este produto nunca teve, e que só não quebrava porque
+ * ninguém montava o componente. O Gestalt CRM tem um tema só.
+ */
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
-
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme="light"
       className="toaster group"
       toastOptions={{
         classNames: {

@@ -50,7 +50,11 @@ export function MobileSidebar({
         // desfoque — ver o bloco `.nav-drawer` em `app/globals.css`. Sem elas o
         // painel simplesmente aparece, que é como todos os Sheets deste produto
         // se comportam desde que `tailwindcss-animate` não foi instalado.
-        className="nav-drawer flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-0 border-r p-0 sm:max-w-xs"
+        // `casca-escura` pelo mesmo motivo da barra do desktop: a gaveta É a
+        // navegação, e sem o escopo ela abriria branca sobre um produto cuja
+        // navegação é preta — a mesma lista com duas caras conforme a largura
+        // da tela. `bg-card` resolve dentro do escopo, então basta a classe.
+        className="nav-drawer casca-escura flex w-72 max-w-[calc(100vw-2rem)] flex-col gap-0 border-r p-0 sm:max-w-xs"
         overlayClassName="nav-drawer-overlay"
       >
         <SheetTitle className="sr-only">{t("Navegação principal")}</SheetTitle>

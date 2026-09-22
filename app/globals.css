@@ -3,70 +3,90 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────────────────
-   DeskcommCRM — Design System tokens (Sage palette · density Aerada)
-   Source of truth: /app/design/lib/tokens.ts (PALETTES.sage)
+   Gestalt CRM — Design System tokens (paleta Gestalt · density Aerada)
+   Espelhado em /app/design/lib/tokens.ts (PALETTES.gestalt), que é a VITRINE.
+   A fonte da verdade é ESTE arquivo: `extrairRegua` lê daqui.
    Light + dark drawn separately (NOT inverted).
+
+   ⚠️ A RAMPA ACCENT NÃO É ESCOLHIDA A OLHO. Os 11 stops são a saída literal
+   de `rampaDeSemente("#13731b")` (lib/branding/rampa.ts), e
+   `tests/unit/branding-rampa.test.ts` exige que o CSS os reproduza com
+   Δ ≤ 2/255 por canal. Só a SEMENTE é livre; os outros dez são função dela.
+   Editar um stop à mão reprova lá, e a mensagem de falha imprime a rampa
+   correta.
+
+   POR QUE A SEMENTE NÃO É O VERDE DA LOGO (#19b02e): ele dá 2,88:1 sobre
+   branco — reprova o piso de texto (4,5) E o de componente (3,0), que é o
+   anel de foco. No matiz 144° o gamut sRGB não comporta nenhuma rampa vívida
+   cuja parada 600 passe. O verde vivo da marca vive em DOIS lugares: no
+   arquivo da logo e dentro da moldura preta (`.casca-escura`), onde ele dá
+   ~6,9:1. Aqui a accent é a parada escura do mesmo matiz (143,7°).
    ───────────────────────────────────────────────────────────────────────── */
 
 :root {
   /* Surfaces (light) */
-  --color-bg: #faf9f6;
+  --color-bg: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-elevated: #f5f3ee;
-  --color-overlay: rgba(28, 26, 22, 0.42);
+  --color-surface-elevated: #f1f3f5;
+  --color-overlay: rgba(12, 14, 16, 0.42);
 
   /* Text (light) */
-  --color-text: #1c1a16;
-  --color-text-muted: #5d594f;
-  --color-text-subtle: #7d786c;
+  --color-text: #161a1f;
+  --color-text-muted: #4d5763;
+  --color-text-subtle: #64707e;
 
   /* Borders (light) */
-  --color-border: #e7e3da;
-  --color-border-strong: #d2cdbf;
+  --color-border: #e3e8ee;
+  --color-border-strong: #cbd3dc;
 
-  /* Accent — Sage (11 stops) */
-  --color-accent-50:  #f3f6f1;
-  --color-accent-100: #e4ebe0;
-  --color-accent-200: #c8d6c1;
-  --color-accent-300: #a4ba9a;
-  --color-accent-400: #82a077;
-  --color-accent-500: #67885d;
-  --color-accent-600: #506d48;
-  --color-accent-700: #41573b;
-  --color-accent-800: #374731;
-  --color-accent-900: #2f3c2b;
-  --color-accent-950: #171f15;
+  /* Accent — Gestalt (11 stops, semente #13731b no grau 600) */
+  --color-accent-50:  #eff8ee;
+  --color-accent-100: #daefd9;
+  --color-accent-200: #b4ddb2;
+  --color-accent-300: #82c381;
+  --color-accent-400: #51aa51;
+  --color-accent-500: #29912e;
+  --color-accent-600: #13731b;
+  --color-accent-700: #195c1c;
+  --color-accent-800: #1a4b1b;
+  --color-accent-900: #1a401b;
+  --color-accent-950: #0c220c;
   --color-accent: var(--color-accent-600);
   --color-accent-fg: #ffffff;
   --color-accent-soft: var(--color-accent-100);
   --color-accent-hover: var(--color-accent-700);
 
-  /* Neutrals — greige (11 stops, light) */
-  --color-neutral-50:  #faf9f6;
-  --color-neutral-100: #f3f1ec;
-  --color-neutral-200: #e7e3da;
-  --color-neutral-300: #d2cdbf;
-  --color-neutral-400: #a9a395;
-  --color-neutral-500: #7d786c;
-  --color-neutral-600: #5d594f;
-  --color-neutral-700: #46433b;
-  --color-neutral-800: #2e2c26;
-  --color-neutral-900: #1c1a16;
-  --color-neutral-950: #0e0d0a;
+  /* Neutrals — prata (11 stops, light) */
+  --color-neutral-50:  #f8fafc;
+  --color-neutral-100: #f1f4f8;
+  --color-neutral-200: #e3e8ee;
+  --color-neutral-300: #cbd3dc;
+  --color-neutral-400: #9aa5b1;
+  --color-neutral-500: #6b7785;
+  --color-neutral-600: #4d5763;
+  --color-neutral-700: #3a424c;
+  --color-neutral-800: #262c33;
+  --color-neutral-900: #161a1f;
+  --color-neutral-950: #0b0e11;
 
-  /* States (light) */
-  --color-success: #5a8a5f;
-  --color-success-bg: rgba(90, 138, 95, 0.12);
-  --color-success-fg: #41673f;
-  --color-warning: #b07a2b;
-  --color-warning-bg: rgba(176, 122, 43, 0.12);
-  --color-warning-fg: #875a1a;
-  --color-error: #a94a3c;
-  --color-error-bg: rgba(169, 74, 60, 0.12);
-  --color-error-fg: #8a3a2e;
-  --color-info: #4a7a93;
-  --color-info-bg: rgba(74, 122, 147, 0.12);
-  --color-info-fg: #355d72;
+  /* States (light)
+     ⚠️ `--color-success` NÃO é mais um verde vizinho da accent. Com a accent
+     verde, um success verde colide sob dicromacia — e o mecanismo de
+     `reconciliarSemanticas` (lib/branding/contraste.ts) passa a gastar o
+     orçamento de rotação para separar os dois. O verde-azulado abaixo já
+     nasce longe. */
+  --color-success: #1f7a4d;
+  --color-success-bg: rgba(31, 122, 77, 0.12);
+  --color-success-fg: #17603c;
+  --color-warning: #a2661c;
+  --color-warning-bg: rgba(162, 102, 28, 0.12);
+  --color-warning-fg: #7f4f13;
+  --color-error: #b4402f;
+  --color-error-bg: rgba(180, 64, 47, 0.12);
+  --color-error-fg: #8f3224;
+  --color-info: #2f6f9e;
+  --color-info-bg: rgba(47, 111, 158, 0.12);
+  --color-info-fg: #24567a;
 
   /* Spacing (4-base) */
   --space-0: 0px;
@@ -97,6 +117,18 @@
      resto dos cards se alguém mexer lá, e o agrupamento perde a identidade. */
   --radius-ios: 14px;
   --radius-ios-sm: 10px;
+  /* ---- Moldura em L (barra lateral + cabeçalho) ------------------------
+   * `--casca-fundo` é a cor da MOLDURA, e é literal de propósito: ela é a
+   * superfície da região, não um papel da accent — derivá-la da rampa faria
+   * a moldura mudar de cor quando a instalação trocasse a cor da marca, que
+   * é justamente o que não pode acontecer com o preto da casca.
+   *
+   * ⚠️ Nome sem sufixo `-soft` nem `-fg`: esses dois têm significado em
+   * `extrairRegua` (lib/branding/contraste.ts) e um token novo terminando
+   * assim seria lido como papel da accent.
+   */
+  --casca-fundo: #0c0e10;
+  --casca-raio: 18px;
   /* Vidro MODERADO. A opacidade é piso de doutrina, não gosto: abaixo de 80% o
      conteúdo de trás atravessa e vira ruído sobre texto. Derivado por
      `color-mix` no ponto de uso, então segue o tema sem precisar de espelho nos
@@ -105,11 +137,11 @@
   --vidro-blur: 16px;
 
   /* Shadows — desaturated, neutral-based */
-  --shadow-xs: 0 1px 2px 0 rgba(20, 18, 14, 0.04);
-  --shadow-sm: 0 1px 2px 0 rgba(20, 18, 14, 0.05), 0 1px 1px 0 rgba(20, 18, 14, 0.03);
-  --shadow-md: 0 4px 12px -2px rgba(20, 18, 14, 0.06), 0 2px 4px -1px rgba(20, 18, 14, 0.04);
-  --shadow-lg: 0 12px 32px -6px rgba(20, 18, 14, 0.10), 0 4px 12px -2px rgba(20, 18, 14, 0.06);
-  --shadow-xl: 0 24px 48px -12px rgba(20, 18, 14, 0.16), 0 8px 16px -4px rgba(20, 18, 14, 0.08);
+  --shadow-xs: 0 1px 2px 0 rgba(11, 14, 17, 0.04);
+  --shadow-sm: 0 1px 2px 0 rgba(11, 14, 17, 0.05), 0 1px 1px 0 rgba(11, 14, 17, 0.03);
+  --shadow-md: 0 4px 12px -2px rgba(11, 14, 17, 0.06), 0 2px 4px -1px rgba(11, 14, 17, 0.04);
+  --shadow-lg: 0 12px 32px -6px rgba(11, 14, 17, 0.10), 0 4px 12px -2px rgba(11, 14, 17, 0.06);
+  --shadow-xl: 0 24px 48px -12px rgba(11, 14, 17, 0.16), 0 8px 16px -4px rgba(11, 14, 17, 0.08);
 
   /* Density — Aerada */
   --density-row: 56px;
@@ -240,47 +272,47 @@
    (lib/branding/css.ts), que só ganha consumidor com a tela de marca.
    ───────────────────────────────────────────────────────────────────────── */
 [data-theme="light"] {
-  --color-bg: #faf9f6;
+  --color-bg: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-elevated: #f5f3ee;
-  --color-overlay: rgba(28, 26, 22, 0.42);
-  --color-text: #1c1a16;
-  --color-text-muted: #5d594f;
-  --color-text-subtle: #7d786c;
-  --color-border: #e7e3da;
-  --color-border-strong: #d2cdbf;
+  --color-surface-elevated: #f1f3f5;
+  --color-overlay: rgba(12, 14, 16, 0.42);
+  --color-text: #161a1f;
+  --color-text-muted: #4d5763;
+  --color-text-subtle: #64707e;
+  --color-border: #e3e8ee;
+  --color-border-strong: #cbd3dc;
   --color-accent: var(--color-accent-600);
   --color-accent-fg: #ffffff;
   --color-accent-soft: var(--color-accent-100);
   --color-accent-hover: var(--color-accent-700);
-  --color-neutral-50: #faf9f6;
-  --color-neutral-100: #f3f1ec;
-  --color-neutral-200: #e7e3da;
-  --color-neutral-300: #d2cdbf;
-  --color-neutral-400: #a9a395;
-  --color-neutral-500: #7d786c;
-  --color-neutral-600: #5d594f;
-  --color-neutral-700: #46433b;
-  --color-neutral-800: #2e2c26;
-  --color-neutral-900: #1c1a16;
-  --color-neutral-950: #0e0d0a;
-  --color-success: #5a8a5f;
-  --color-success-bg: rgba(90, 138, 95, 0.12);
-  --color-success-fg: #41673f;
-  --color-warning: #b07a2b;
-  --color-warning-bg: rgba(176, 122, 43, 0.12);
-  --color-warning-fg: #875a1a;
-  --color-error: #a94a3c;
-  --color-error-bg: rgba(169, 74, 60, 0.12);
-  --color-error-fg: #8a3a2e;
-  --color-info: #4a7a93;
-  --color-info-bg: rgba(74, 122, 147, 0.12);
-  --color-info-fg: #355d72;
-  --shadow-xs: 0 1px 2px 0 rgba(20, 18, 14, 0.04);
-  --shadow-sm: 0 1px 2px 0 rgba(20, 18, 14, 0.05), 0 1px 1px 0 rgba(20, 18, 14, 0.03);
-  --shadow-md: 0 4px 12px -2px rgba(20, 18, 14, 0.06), 0 2px 4px -1px rgba(20, 18, 14, 0.04);
-  --shadow-lg: 0 12px 32px -6px rgba(20, 18, 14, 0.10), 0 4px 12px -2px rgba(20, 18, 14, 0.06);
-  --shadow-xl: 0 24px 48px -12px rgba(20, 18, 14, 0.16), 0 8px 16px -4px rgba(20, 18, 14, 0.08);
+  --color-neutral-50: #f8fafc;
+  --color-neutral-100: #f1f4f8;
+  --color-neutral-200: #e3e8ee;
+  --color-neutral-300: #cbd3dc;
+  --color-neutral-400: #9aa5b1;
+  --color-neutral-500: #6b7785;
+  --color-neutral-600: #4d5763;
+  --color-neutral-700: #3a424c;
+  --color-neutral-800: #262c33;
+  --color-neutral-900: #161a1f;
+  --color-neutral-950: #0b0e11;
+  --color-success: #1f7a4d;
+  --color-success-bg: rgba(31, 122, 77, 0.12);
+  --color-success-fg: #17603c;
+  --color-warning: #a2661c;
+  --color-warning-bg: rgba(162, 102, 28, 0.12);
+  --color-warning-fg: #7f4f13;
+  --color-error: #b4402f;
+  --color-error-bg: rgba(180, 64, 47, 0.12);
+  --color-error-fg: #8f3224;
+  --color-info: #2f6f9e;
+  --color-info-bg: rgba(47, 111, 158, 0.12);
+  --color-info-fg: #24567a;
+  --shadow-xs: 0 1px 2px 0 rgba(11, 14, 17, 0.04);
+  --shadow-sm: 0 1px 2px 0 rgba(11, 14, 17, 0.05), 0 1px 1px 0 rgba(11, 14, 17, 0.03);
+  --shadow-md: 0 4px 12px -2px rgba(11, 14, 17, 0.06), 0 2px 4px -1px rgba(11, 14, 17, 0.04);
+  --shadow-lg: 0 12px 32px -6px rgba(11, 14, 17, 0.10), 0 4px 12px -2px rgba(11, 14, 17, 0.06);
+  --shadow-xl: 0 24px 48px -12px rgba(11, 14, 17, 0.16), 0 8px 16px -4px rgba(11, 14, 17, 0.08);
   --background: var(--color-bg);
   --foreground: var(--color-text);
   --card: var(--color-surface);
@@ -318,63 +350,63 @@
 
 [data-theme="dark"] {
   /* Surfaces (dark — drawn) */
-  --color-bg: #161510;
-  --color-surface: #1d1c17;
-  --color-surface-elevated: #272620;
+  --color-bg: #0c0e10;
+  --color-surface: #131619;
+  --color-surface-elevated: #1b1f23;
   --color-overlay: rgba(0, 0, 0, 0.55);
 
   /* Text (dark) */
-  --color-text: #f5f4ef;
-  --color-text-muted: #8e8b7f;
-  --color-text-subtle: #605e54;
+  --color-text: #f2f5f8;
+  --color-text-muted: #8b95a1;
+  --color-text-subtle: #5d6672;
 
   /* Borders (dark) */
-  --color-border: #33312a;
-  --color-border-strong: #444239;
+  --color-border: #252a31;
+  --color-border-strong: #3a424c;
 
   /* Accent stays same hex stops; default shifts up for dark contrast */
-  --color-accent-50:  #f3f6f1;
-  --color-accent-100: #e4ebe0;
-  --color-accent-200: #c8d6c1;
-  --color-accent-300: #a4ba9a;
-  --color-accent-400: #82a077;
-  --color-accent-500: #67885d;
-  --color-accent-600: #506d48;
-  --color-accent-700: #41573b;
-  --color-accent-800: #374731;
-  --color-accent-900: #2f3c2b;
-  --color-accent-950: #171f15;
+  --color-accent-50:  #eff8ee;
+  --color-accent-100: #daefd9;
+  --color-accent-200: #b4ddb2;
+  --color-accent-300: #82c381;
+  --color-accent-400: #51aa51;
+  --color-accent-500: #29912e;
+  --color-accent-600: #13731b;
+  --color-accent-700: #195c1c;
+  --color-accent-800: #1a4b1b;
+  --color-accent-900: #1a401b;
+  --color-accent-950: #0c220c;
   --color-accent: var(--color-accent-400);
-  --color-accent-fg: #161510;
-  --color-accent-soft: rgba(130, 160, 119, 0.16);
+  --color-accent-fg: #0c0e10;
+  --color-accent-soft: rgba(81, 170, 81, 0.16);
   --color-accent-hover: var(--color-accent-300);
 
-  /* Neutrals — greige (11 stops, dark) */
-  --color-neutral-50:  #f5f4ef;
-  --color-neutral-100: #e6e4dc;
-  --color-neutral-200: #bbb8ac;
-  --color-neutral-300: #8e8b7f;
-  --color-neutral-400: #605e54;
-  --color-neutral-500: #444239;
-  --color-neutral-600: #33312a;
-  --color-neutral-700: #272620;
-  --color-neutral-800: #1d1c17;
-  --color-neutral-900: #161510;
-  --color-neutral-950: #0c0b08;
+  /* Neutrals — prata (11 stops, dark) */
+  --color-neutral-50:  #f2f5f8;
+  --color-neutral-100: #e2e7ec;
+  --color-neutral-200: #b9c2cb;
+  --color-neutral-300: #8b95a1;
+  --color-neutral-400: #5d6672;
+  --color-neutral-500: #424a54;
+  --color-neutral-600: #313840;
+  --color-neutral-700: #252a31;
+  --color-neutral-800: #1a1e23;
+  --color-neutral-900: #121518;
+  --color-neutral-950: #090b0d;
 
-  /* States (dark) */
-  --color-success: #82a077;
-  --color-success-bg: rgba(130, 160, 119, 0.18);
-  --color-success-fg: #a4ba9a;
-  --color-warning: #d09455;
-  --color-warning-bg: rgba(208, 148, 85, 0.18);
-  --color-warning-fg: #e0ad77;
-  --color-error: #c87263;
-  --color-error-bg: rgba(200, 114, 99, 0.18);
-  --color-error-fg: #d99182;
-  --color-info: #7da9bf;
-  --color-info-bg: rgba(125, 169, 191, 0.18);
-  --color-info-fg: #9bbfd2;
+  /* States (dark) — ver a nota do bloco claro: success longe da accent verde */
+  --color-success: #4fbd80;
+  --color-success-bg: rgba(79, 189, 128, 0.18);
+  --color-success-fg: #7ed2a3;
+  --color-warning: #d79a49;
+  --color-warning-bg: rgba(215, 154, 73, 0.18);
+  --color-warning-fg: #e5b674;
+  --color-error: #e0715e;
+  --color-error-bg: rgba(224, 113, 94, 0.18);
+  --color-error-fg: #ea9585;
+  --color-info: #6fb3e0;
+  --color-info-bg: rgba(111, 179, 224, 0.18);
+  --color-info-fg: #97c9e9;
 
   /* Shadows — heavier in dark */
   --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.30);
@@ -414,6 +446,118 @@
   --agenda-pessoa-6: #6c97e7;
   --agenda-pessoa-7: #be9ef6;
   --agenda-pessoa-8: #cc77b1;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   CASCA ESCURA — a moldura em L (barra lateral + cabeçalho) é UMA peça preta.
+
+   O produto tem UM tema, claro. Isto não é um segundo tema: é o escopo de
+   token de uma REGIÃO que é escura por desenho, dentro de uma página clara.
+
+   ⚠️ 1 — `--color-bg` É OBRIGATÓRIO AQUI, E É A PRIMEIRA LINHA DE PROPÓSITO.
+   `extrairRegua` (lib/branding/contraste.ts:398-401) varre TODA regra deste
+   arquivo para descobrir os papéis da accent. Como este seletor não contém
+   `[data-theme="dark"]`, ele cai no balde do tema CLARO — e a linha
+   `--color-bg` é exatamente o que faz a extração PULAR o bloco. Sem ela, cada
+   `var(--color-accent-NNN)` daqui vira um papel novo, e a contagem de papéis
+   e de pares de `branding-contraste.test.ts` reprova. Parece removível
+   justamente porque o valor é herdável; não é.
+
+   Pela MESMA razão, nenhuma regra descendente (`.casca-escura .nav-item`, …)
+   pode citar `var(--color-accent-NNN)` direto: ela não declara `--color-bg` e
+   entraria na conta. Lá dentro use só `var(--color-accent)`.
+
+   ⚠️ 2 — NÃO É `data-theme="dark"` NUM `<aside>`, e o motivo é de MECANISMO,
+   não de estilo. `lib/branding/css.ts` emite `:root:root[data-theme="dark"]`,
+   e `:root` é o `<html>`. Num `<aside>` essa regra nunca casaria, e o escopo
+   por organização (`[data-theme="dark"] body:has(…)`) também não — o aside é
+   descendente do body, não ancestral. A cor configurada pela instalação
+   simplesmente não chegaria à casca.
+
+   ⚠️ 3 — NENHUM HEX DE ACCENT AQUI. Só `var(--color-accent-NNN)`: o bloco
+   injetado em runtime sobrescreve as paradas no `<html>`, e é a HERANÇA que
+   traz a cor de quem hospeda até esta região. Um `#51aa51` literal congelaria
+   a nossa marca na instalação vendida em azul.
+
+   ⚠️ 4 — OS ALIASES shadcn SÃO OBRIGATÓRIOS, não redundância. Uma custom
+   property com `var()` é substituída NO ELEMENTO EM QUE É DECLARADA:
+   `--card: var(--color-surface)` declarado no `:root` é herdado JÁ RESOLVIDO
+   como `#ffffff`, e redeclarar `--color-surface` aqui não o atualiza. É a
+   mesma obrigação de linguagem que faz `[data-theme="light"]` espelhar 59
+   props, e o conjunto certo é o mesmo: o que o escuro sobrescreve, menos as
+   11 paradas da rampa. `branding-tema-claro-escopavel.test.ts` cobra isso.
+   ═════════════════════════════════════════════════════════════════════════ */
+.casca-escura {
+  --color-bg: #0c0e10;
+  --color-surface: #131619;
+  --color-surface-elevated: #1b1f23;
+  --color-overlay: rgba(0, 0, 0, 0.55);
+  --color-text: #f2f5f8;
+  --color-text-muted: #8b95a1;
+  --color-text-subtle: #5d6672;
+  --color-border: #252a31;
+  --color-border-strong: #3a424c;
+  --color-accent: var(--color-accent-400);
+  --color-accent-fg: #0c0e10;
+  --color-accent-soft: rgba(81, 170, 81, 0.16);
+  --color-accent-hover: var(--color-accent-300);
+  --color-neutral-50: #f2f5f8;
+  --color-neutral-100: #e2e7ec;
+  --color-neutral-200: #b9c2cb;
+  --color-neutral-300: #8b95a1;
+  --color-neutral-400: #5d6672;
+  --color-neutral-500: #424a54;
+  --color-neutral-600: #313840;
+  --color-neutral-700: #252a31;
+  --color-neutral-800: #1a1e23;
+  --color-neutral-900: #121518;
+  --color-neutral-950: #090b0d;
+  --color-success: #4fbd80;
+  --color-success-bg: rgba(79, 189, 128, 0.18);
+  --color-success-fg: #7ed2a3;
+  --color-warning: #d79a49;
+  --color-warning-bg: rgba(215, 154, 73, 0.18);
+  --color-warning-fg: #e5b674;
+  --color-error: #e0715e;
+  --color-error-bg: rgba(224, 113, 94, 0.18);
+  --color-error-fg: #ea9585;
+  --color-info: #6fb3e0;
+  --color-info-bg: rgba(111, 179, 224, 0.18);
+  --color-info-fg: #97c9e9;
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.30);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.40), 0 1px 1px 0 rgba(0, 0, 0, 0.20);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.45), 0 2px 4px -1px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 12px 32px -6px rgba(0, 0, 0, 0.55), 0 4px 12px -2px rgba(0, 0, 0, 0.40);
+  --shadow-xl: 0 24px 48px -12px rgba(0, 0, 0, 0.65), 0 8px 16px -4px rgba(0, 0, 0, 0.50);
+  --background: var(--color-bg);
+  --foreground: var(--color-text);
+  --card: var(--color-surface);
+  --card-foreground: var(--color-text);
+  --popover: var(--color-surface);
+  --popover-foreground: var(--color-text);
+  --primary: var(--color-accent);
+  --primary-foreground: var(--color-accent-fg);
+  --secondary: var(--color-surface-elevated);
+  --secondary-foreground: var(--color-text);
+  --muted: var(--color-surface-elevated);
+  --muted-foreground: var(--color-text-muted);
+  --accent-foreground: var(--color-accent-fg);
+  --destructive: var(--color-error);
+  --destructive-foreground: #ffffff;
+  --border: var(--color-border);
+  --input: var(--color-border);
+  --ring: var(--color-accent-400);
+  --agenda-pessoa-1: #f89080;
+  --agenda-pessoa-2: #ca8931;
+  --agenda-pessoa-3: #d1bf55;
+  --agenda-pessoa-4: #0cafa8;
+  --agenda-pessoa-5: #4ccffb;
+  --agenda-pessoa-6: #6c97e7;
+  --agenda-pessoa-7: #be9ef6;
+  --agenda-pessoa-8: #cc77b1;
+  /* Faz o navegador desenhar barra de rolagem e controles nativos em escuro
+     dentro da moldura. Sem isto, a rolagem da navegação vem clara sobre preto. */
+  color-scheme: dark;
 }
 
 @layer base {
@@ -896,9 +1040,32 @@
    empresarial — o que passa por trás não pode competir com o que se lê. */
 .app-header {
   background-color: color-mix(in oklab, var(--color-bg) 82%, transparent);
-  backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--color-border);
+}
+
+/* O fundo da MOLDURA em L. Mora no contêiner externo da casca — ver o
+   comentário em `app/app/_components/AppShell.tsx`. */
+.casca-moldura {
+  background-color: var(--casca-fundo);
+}
+
+/* Dentro da moldura o cabeçalho é peça SÓLIDA, não vidro — e as duas
+   revogações abaixo são por mecanismo, não por gosto:
+
+   · o vidro existia para o conteúdo que passa por baixo ao rolar. Aqui o
+     cabeçalho e o `<main>` são IRMÃOS numa coluna flex: nada passa por trás,
+     então o `blur` custa uma camada de composição para desfocar o nada.
+
+   · a borda inferior seria uma costura no meio de uma peça que precisa ser
+     contínua — é exatamente a junção que o desenho quer fazer sumir. Quem
+     separa o cabeçalho do conteúdo é o painel branco que começa logo abaixo. */
+.app-header.casca-escura {
+  background-color: var(--casca-fundo);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-bottom-color: transparent;
 }
 
 /* Campo de busca no estilo Spotlight. Foco com borda na accent e um anel de 3px
@@ -936,8 +1103,8 @@
 }
 .nav-drawer-overlay[data-state="open"] {
   animation: nav-fade-entra 220ms var(--ease-out);
-  backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
 }
 .nav-drawer-overlay[data-state="closed"] {
   animation: nav-fade-sai 180ms var(--ease-out);
@@ -1001,21 +1168,45 @@
    decisão dele é de JS, e está explicada no cabeçalho do componente), então
    aqui o nome sai e o logo é limitado à largura que sobra. Sem estas duas
    regras, um logo em faixa de 160px empurra a barra inteira. */
+/* 14rem = 224px. A barra tem 264px e `px-4` come 32, sobrando 232 — então a
+   altura (`h-8`) é quem decide a largura, e este teto só existe para a arte que
+   um revendedor envia em proporção extrema.
+
+   ⚠️ ERA 10rem (160px), e isso era METADE da causa do "logo minúsculo": com a
+   proporção ~6,9:1 do produto, um teto de 160px força a altura para 23px e o
+   `h-8` nunca chega a valer. A outra metade era o ar transparente na própria
+   arte — ver `scripts/gerar-logo-gestalt.ts`. */
 .nav-logo {
-  max-width: 10rem;
+  max-width: 14rem;
 }
 
+/* ---- Barra ESTREITA no TABLET (768–1023): o logo é RECORTADO --------------
+   Esta faixa é o único lugar em que o `<img>` do logo convive com uma barra de
+   72px. Quando quem usa RECOLHE a barra, `SidebarBrand` troca a imagem pela
+   inicial em JavaScript e nem chega a renderizar o `<img>`; aqui `collapsed`
+   continua `false` — a largura vem deste `@media`, e o componente não sabe.
+
+   ⚠️ O QUE ACONTECIA SEM ESTA REGRA: `max-width: 2.5rem` sobre uma arte ~6,9:1,
+   com o `object-contain` da classe do componente, encaixa a imagem inteira em
+   40px de largura e sobra uma tira de ~6px de altura. Ilegível. O defeito é
+   antigo e só ficou VISÍVEL agora, porque até então o produto não tinha logo
+   padrão e este ramo nunca renderizava nada.
+
+   `cover` + `object-position: left` mostram o QUADRADO ESQUERDO da arte, que é
+   onde mora o símbolo ou a primeira letra em praticamente todo logo. É por isso
+   que o recorte é preferível a apontar um arquivo nosso aqui: numa instalação
+   que configurou a própria marca, um `content: url()` fixo mostraria a NOSSA
+   marca na barra estreita dela. O recorte serve qualquer arte. */
 @media (max-width: 1023px) {
   .app-sidebar .nav-marca-nome {
     display: none;
   }
   .app-sidebar .nav-logo {
-    max-width: 2.5rem;
+    width: 2rem;
+    max-width: 2rem;
+    object-fit: cover;
+    object-position: left center;
   }
-}
-
-.app-sidebar[data-collapsed="true"] .nav-logo {
-  max-width: 2.5rem;
 }
 
 /* ---- Barra de progresso INDETERMINADA (montagem do fluxo com IA) ----------
@@ -1157,8 +1348,8 @@
    porque nem todo agrupamento quer vidro, e vidro sobre vidro empasta. */
 .ios-vidro {
   background-color: color-mix(in oklab, var(--color-surface) var(--vidro-opacidade), transparent);
-  backdrop-filter: blur(var(--vidro-blur));
   -webkit-backdrop-filter: blur(var(--vidro-blur));
+  backdrop-filter: blur(var(--vidro-blur));
 }
 
 /* Quem pede menos transparência recebe superfície opaca — não é preferência
@@ -1166,8 +1357,8 @@
 @media (prefers-reduced-transparency: reduce) {
   .ios-vidro {
     background-color: var(--color-surface);
-    backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 
@@ -1427,4 +1618,270 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TELAS DE ACESSO — login, cadastro, recuperação, MFA
+
+   ⚠️ NENHUMA regra daqui para baixo pode citar `var(--color-accent-NNN)` com
+   número. `extrairRegua` (lib/branding/contraste.ts:398) varre TODA regra deste
+   arquivo e só pula a que tem seletor `:root` ou que declara `--color-bg`; uma
+   referência numerada vira "papel" novo e reprova `branding-contraste.test.ts`
+   com um erro que não menciona login em lugar nenhum. `var(--color-accent)` sem
+   número não casa a regex e é o que deve ser usado — é a mesma restrição que os
+   descendentes de `.casca-escura` seguem.
+
+   O que PODE ser escrito aqui, então: `var(--color-accent)` e
+   `var(--color-accent-fg)` sem número, `color-mix(in oklab, …)` e
+   `currentColor`. Medido na fonte: `lerFonte` (contraste.ts:273-296) devolve
+   `null` para `color-mix(…)` e para `var(--color-accent)` sem número, e só
+   devolve `grau` para a referência numerada.
+
+   Toda duração de UI aqui sai da tabela de
+   `docs/design-system/07-motion-language.md` (120 / 200 / 320 / 420ms). Números
+   fora dela são proibidos lá, não por gosto. A ÚNICA exceção é o movimento
+   ambiente — a categoria declarada no mesmo doc —, e hoje ele mora inteiro na
+   cena WebGL, não em CSS. Não há aqui uma duração fora da tabela, e não deve
+   passar a haver.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── O fundo e a cena ────────────────────────────────────────────────────────
+
+   Duas camadas empilhadas atrás de tudo, e as duas ficam de pé sozinhas.
+
+   `.acesso-fundo-css` é desenhado SEMPRE. Ele é o fundo da tela quando não há
+   WebGL, quando alguém pediu menos movimento, e no intervalo até o `three`
+   chegar — e continua atrás do vidro quando a cena está viva. Tratá-lo como
+   plano B faria a tela piscar de um fundo para outro no instante do carregamento.
+
+   `.acesso-cena` é onde o `<canvas>` é pendurado. Ela pode simplesmente não
+   existir, e nada na tela depende dela.
+
+   ⚠️ `var(--color-accent)` SEM número, sempre. `extrairRegua`
+   (lib/branding/contraste.ts:398) varre este arquivo inteiro e uma referência
+   numerada vira "papel" novo, reprovando `branding-contraste.test.ts` com um
+   erro que não menciona login em lugar nenhum. */
+.acesso-fundo-css {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-color: color-mix(in oklab, var(--color-accent) 88%, #000000);
+  background-image:
+    radial-gradient(52% 44% at 18% 16%, color-mix(in oklab, var(--color-accent) 78%, #ffffff) 0%, transparent 62%),
+    radial-gradient(46% 40% at 84% 22%, color-mix(in oklab, var(--color-accent) 92%, #ffffff) 0%, transparent 58%),
+    radial-gradient(60% 55% at 62% 96%, color-mix(in oklab, var(--color-accent) 70%, #000000) 0%, transparent 70%);
+}
+
+.acesso-cena {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+.acesso-cena > canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── O cartão de vidro ───────────────────────────────────────────────────────
+
+   Vidro de CHASSI: existe uma vez por tela. É a parte do anti-pattern 5 que
+   sobreviveu à revogação de 2026-09-01, e ela sobreviveu porque era verdade —
+   `backdrop-filter` em superfície que se repete por linha multiplica o custo
+   pelo número de linhas.
+
+   ⚠️ A opacidade vem de `--vidro-opacidade` (86%), e ela é PISO DE CONTRASTE,
+   não gosto. O cartão é branco a 86% de alfa, então o fundo composto fica
+   sempre entre `rgb(219,219,219)` (cena preta atrás) e branco puro — e o texto
+   passa nos dois extremos, o que o torna seguro sobre QUALQUER cena, inclusive
+   uma que se mexe. Quem medir isso é `tests/unit/acesso-vidro-contraste.test.ts`,
+   que reprova se a opacidade descer.
+
+   Baixar esse número é a mudança que parece cosmética e derruba a legibilidade
+   da única tela por onde se entra. */
+.acesso-cartao {
+  position: relative;
+  z-index: 1;
+  border-radius: 22px;
+  border: 1px solid color-mix(in oklab, #ffffff 55%, transparent);
+  box-shadow: var(--shadow-xl);
+}
+
+/* O brilho de aresta: uma linha clara no topo, que é o que faz o olho ler a
+   peça como vidro com espessura em vez de retângulo translúcido. É
+   `background-image` (não `background`) para não entrar na conta de papéis da
+   régua junto com a cor do texto. */
+.acesso-cartao::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in oklab, #ffffff 70%, transparent) 0%,
+    transparent 38%
+  );
+  opacity: 0.5;
+}
+
+/* ── O ícone do campo ────────────────────────────────────────────────────────
+   Gira em perspectiva quando o campo ganha foco. É SVG com transform 3D, não
+   WebGL: um contexto por campo disputaria o teto de ~16 por aba para desenhar
+   um envelope de 18px, e o vidro de verdade já está na cena. */
+.acesso-icone {
+  transform-style: preserve-3d;
+  transition:
+    transform var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+.acesso-campo:focus-within .acesso-icone {
+  transform: perspective(220px) rotateY(24deg) translateZ(6px);
+  color: var(--color-accent);
+}
+
+/* A coluna do formulário entra deslizando. Fade SEMPRE com transform
+   companheiro: fade puro pisca em monitor de baixa taxa. */
+@keyframes acesso-entra {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.acesso-entra {
+  animation: acesso-entra var(--duration-slow) var(--ease-out) both;
+}
+
+/* Os campos entram em cascata de 50ms. A doutrina autoriza stagger UMA vez, no
+   primeiro carregamento — é este o caso, e não se repete em nenhuma revalidação
+   porque nada aqui remonta a lista. */
+.acesso-cascata > * {
+  animation: acesso-entra var(--duration-slow) var(--ease-out) both;
+}
+.acesso-cascata > *:nth-child(1) {
+  animation-delay: 60ms;
+}
+.acesso-cascata > *:nth-child(2) {
+  animation-delay: 110ms;
+}
+.acesso-cascata > *:nth-child(3) {
+  animation-delay: 160ms;
+}
+.acesso-cascata > *:nth-child(4) {
+  animation-delay: 210ms;
+}
+.acesso-cascata > *:nth-child(5) {
+  animation-delay: 260ms;
+}
+.acesso-cascata > *:nth-child(6) {
+  animation-delay: 310ms;
+}
+
+/* ── O rótulo flutuante ──────────────────────────────────────────────────────
+
+   O rótulo começa dentro do campo e sobe quando ele ganha foco ou conteúdo.
+   Comunica uma coisa só, e dá para dizer numa frase: o campo saiu de vazio para
+   preenchido — que é o primeiro teste que a doutrina de movimento exige de
+   qualquer animação.
+
+   Depende de `placeholder=" "` no input (um espaço, não vazio): `:placeholder-
+   shown` é o que detecta "sem conteúdo" sem um único byte de JavaScript, e sem
+   ele o rótulo ficaria por cima do texto digitado. Os formulários que usam esta
+   classe passam esse placeholder de propósito — não é resíduo.
+
+   Duas propriedades animadas, não mais: `transform` (um translate e um scale
+   ainda são UMA propriedade) e `color`. */
+.acesso-campo {
+  position: relative;
+}
+.acesso-campo > label {
+  position: absolute;
+  left: 1rem;
+  top: 1.2rem;
+  transform-origin: left top;
+  pointer-events: none;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  transition:
+    transform var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+/* O campo tem ícone: o rótulo começa DEPOIS dele. A regra é do container e não
+   do label solto porque o mesmo componente serve campos com e sem ícone. */
+.acesso-campo[data-com-icone="sim"] > label {
+  left: 3rem;
+}
+.acesso-campo > input:focus ~ label,
+.acesso-campo > input:not(:placeholder-shown) ~ label {
+  transform: translateY(-0.82rem) scale(0.76);
+}
+.acesso-campo > input:focus ~ label {
+  color: var(--color-accent);
+}
+/* Campo inválido tinge o rótulo junto com a borda: quem usa leitor de tela tem
+   o `role="alert"`, e quem enxerga precisa do par cor+posição, não só da borda. */
+.acesso-campo > input[aria-invalid="true"] ~ label {
+  color: var(--color-error);
+}
+
+/* ── Medidor de força da senha ───────────────────────────────────────────────
+   Uma barra que cresce enquanto se digita. Anima só `width`, e a largura vem do
+   componente — o CSS não sabe nem opina sobre a regra de força. */
+.acesso-forca {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background-color: var(--color-border);
+}
+.acesso-forca > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background-color: var(--color-accent);
+  transition: width var(--duration-base) var(--ease-out);
+}
+
+/* ── Mensagem de erro ────────────────────────────────────────────────────────
+   Entra com fade + deslocamento curto. 4px e não 8px: a distância percorrida é
+   pequena, e a doutrina pede duração proporcional à distância. */
+@keyframes acesso-erro-entra {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.acesso-erro {
+  animation: acesso-erro-entra var(--duration-base) var(--ease-out) both;
+}
+
+/* `prefers-reduced-motion` não desliga a informação, desliga o DESLOCAMENTO:
+   o rótulo ainda sai da frente do texto (senão o campo fica ilegível), a barra
+   de força ainda muda de largura, e o que some é o percurso animado. Suprimir o
+   `transform` do rótulo aqui seria trocar enjoo por um campo inutilizável.
+
+   A CENA 3D é o caso oposto e não aparece aqui de propósito: ela não é
+   desligada por CSS, ela **não chega a existir**. `CascaDaCena` consulta a
+   mesma preferência em JavaScript e nem baixa o `three`. Desligar um laço de
+   `requestAnimationFrame` com `animation: none` não funcionaria — CSS não
+   alcança laço em JavaScript, e é exatamente o que o doc 07 avisa. */
+@media (prefers-reduced-motion: reduce) {
+  .acesso-entra,
+  .acesso-cascata > *,
+  .acesso-erro {
+    animation: none;
+  }
+  .acesso-campo > label,
+  .acesso-forca > span,
+  .acesso-icone {
+    transition: none;
+  }
 }

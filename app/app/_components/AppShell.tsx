@@ -48,7 +48,15 @@ export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, children }: Ap
       `dvh` e não `vh`: no celular a `vh` ignora a barra do navegador — o mesmo
       corte, só que mudando conforme se rola.
     */
-    <div className="flex h-dvh w-full overflow-hidden bg-background">
+    /*
+      `casca-moldura` pinta o FUNDO DA MOLDURA — a peça preta em L formada
+      pela barra lateral e pelo cabeçalho. Ele fica no contêiner externo, e
+      não nas duas peças, porque é ele quem aparece no canto onde as duas se
+      encontram: o `<main>` arredonda o próprio canto superior-esquerdo, e o
+      que se vê através da curva é este fundo. Pintar só a barra e só o
+      cabeçalho deixaria um quadradinho da cor da página dentro da curva.
+    */
+    <div className="casca-moldura flex h-dvh w-full overflow-hidden">
       <div className="hidden md:block">
         <Sidebar collapsed={sidebarCollapsed} gruposAbertosSalvos={gruposAbertosSalvos} />
       </div>
@@ -98,7 +106,18 @@ export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, children }: Ap
         </div>
         <main
           className={cn(
-            "min-h-0 flex-1 overflow-auto",
+            "min-h-0 flex-1 overflow-auto bg-surface",
+            /*
+              O PAINEL ENCAIXADO. O canto arredondado é só no superior-esquerdo
+              porque é o único que encosta na junção da moldura — os outros três
+              vão até a borda da tela, e arredondá-los deixaria o conteúdo
+              flutuando como um cartão em vez de encaixado numa moldura.
+
+              `md:` porque abaixo de 768 a barra lateral é `hidden` e não há
+              moldura à esquerda para conectar: a curva ficaria mordendo o
+              conteúdo sem nada do outro lado que a explicasse.
+            */
+            "md:rounded-tl-[var(--casca-raio)]",
             // A tela que dispensa o cabeçalho é de borda a borda. Margem aqui
             // deixaria a conversa flutuando numa moldura, que é o oposto de
             // parecer um aplicativo de mensagens.

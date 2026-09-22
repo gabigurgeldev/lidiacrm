@@ -1,6 +1,10 @@
 "use client";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
+import {
+  LOGO_PADRAO_DO_PRODUTO,
+  LOGO_PADRAO_EM_FUNDO_ESCURO,
+} from "@/lib/branding/resolve";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,7 +44,22 @@ export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
    * com `??` um `""` vindo de cima apagaria o logo do revendedor em vez de
    * descer para ele — que é o contrário do que a precedência por campo promete.
    */
-  const logo = activeOrg?.marca?.logoUrl || brand.logoUrl;
+  const logoConfigurado = activeOrg?.marca?.logoUrl || brand.logoUrl;
+
+  /**
+   * A barra é ESCURA, e o logo do produto tem uma arte própria para isso.
+   *
+   * ⚠️ Medido na tela: a palavra "Gestalt" é quase preta. Sobre a moldura preta
+   * ela some e sobra um "CRM" verde solto — e a arte branca tem o defeito
+   * espelhado na tela de login, que é clara. Uma arte não serve as duas
+   * superfícies, então quem sabe em qual delas está é quem escolhe.
+   *
+   * A troca vale SÓ para o logo do produto. Se a instalação configurou a
+   * própria arte, ela aparece como foi enviada — mostrar a nossa versão branca
+   * no lugar seria pôr a NOSSA marca dentro do produto de quem hospeda.
+   */
+  const logo =
+    logoConfigurado === LOGO_PADRAO_DO_PRODUTO ? LOGO_PADRAO_EM_FUNDO_ESCURO : logoConfigurado;
 
   return (
     <div
@@ -59,8 +78,14 @@ export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
         // O logo SUBSTITUI o nome, e não convive com ele: a arte que o
         // revendedor envia quase sempre já traz o nome escrito, e o cabeçalho
         // tem 56px de altura para um dos dois.
+        // `h-8` e não `h-7`: a arte do produto tem proporção ~6,9:1, então a
+        // altura é o que decide a largura. 32px dão ~223px, e a barra de 264px
+        // com `px-4` oferece 232px — 9px de respiro. A altura visível é a altura
+        // INTEIRA porque o arquivo é recortado na arte (ver
+        // `scripts/gerar-logo-gestalt.ts`); a arte crua tinha 58% de ar
+        // transparente e rendia 11px de logo dentro de 28px de caixa.
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={logo} alt={nome} className="nav-logo h-7 w-auto object-contain" />
+        <img src={logo} alt={nome} className="nav-logo h-8 w-auto object-contain" />
       ) : (
         <>
           {/* O SÍMBOLO — a inicial num quadrado, presente nos dois estados.

@@ -18,7 +18,6 @@ import { EmptyAgenda } from "@/components/empty";
 import { Button } from "@/components/ui/button";
 import { CalendarPlus, CaretLeft, CaretRight } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
-import { useTheme } from "@/lib/theme";
 
 const VISOES: Array<{ id: VisaoDaAgenda; rotulo: string }> = [
   { id: "dia", rotulo: "Dia" },
@@ -48,11 +47,41 @@ function Secao({
   );
 }
 
+/**
+ * O alternador de tema DESTA VITRINE — e o último lugar do produto que troca
+ * `data-theme`.
+ *
+ * ⚠️ ERA `useTheme()` do `lib/theme.tsx`, que sumiu junto com o modo escuro do
+ * produto: o Gestalt CRM tem UM tema, claro, com a casca preta por desenho e
+ * não por preferência. O que sobrou aqui é o que a PROVA precisa — a spec
+ * `tests/e2e/agenda-kit-visual.spec.ts` troca o tema e remede as cores, porque
+ * uma paleta só está certa quando está certa nos dois.
+ *
+ * Continua escrevendo no `<html>`, e não num wrapper desta página, por duas
+ * razões: a spec lê `document.documentElement.getAttribute("data-theme")`, e
+ * `branding-marca-css.test.ts` afirma — com o CSS de marca dependendo disso —
+ * que `[data-theme="dark"]` só é escrito no `<html>`. Um wrapper tornaria as
+ * duas coisas falsas de uma vez.
+ *
+ * Sem `localStorage` e sem `prefers-color-scheme`: isto não é preferência de
+ * ninguém, é um botão de bancada. Por isso o efeito de limpeza — sair da
+ * vitrine devolve o documento ao claro, senão o escuro vazaria para o produto
+ * na navegação seguinte.
+ */
+function useTemaDaVitrine(): [("light" | "dark"), () => void] {
+  const [tema, setTema] = React.useState<"light" | "dark">("light");
+  React.useEffect(() => {
+    document.documentElement.setAttribute("data-theme", tema);
+    return () => document.documentElement.setAttribute("data-theme", "light");
+  }, [tema]);
+  return [tema, () => setTema((t) => (t === "dark" ? "light" : "dark"))];
+}
+
 export function VitrineDaAgenda() {
   const localeDaData = useLocaleDeData();
   const [visao, setVisao] = React.useState<VisaoDaAgenda>("semana");
   const [isolada, setIsolada] = React.useState<string | null>(null);
-  const { theme, setTheme } = useTheme();
+  const [theme, alternarTema] = useTemaDaVitrine();
 
   const visiveis = React.useMemo(
     () => (isolada === null ? AGENDAMENTOS : AGENDAMENTOS.filter((c) => c.responsavelId === isolada)),
@@ -76,7 +105,7 @@ export function VitrineDaAgenda() {
             variant="outline"
             size="sm"
             data-testid="alternar-tema"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            onClick={alternarTema}
           >
             Tema: {theme === "dark" ? "escuro" : "claro"}
           </Button>

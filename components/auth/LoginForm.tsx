@@ -1,6 +1,7 @@
 "use client";
 
 import { useForm } from "react-hook-form";
+import { EnvelopeSimpleIcon, LockSimpleIcon } from "@phosphor-icons/react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTransition, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -8,8 +9,7 @@ import { useRouter } from "next/navigation";
 import { useT } from "@/hooks/i18n/useT";
 import { loginSchema, type LoginInput } from "@/lib/auth/schemas";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { CampoDeAcesso } from "@/components/auth/CampoDeAcesso";
 import { signInWithPassword } from "@/app/actions/auth/signInWithPassword";
 
 export function LoginForm({ next }: { next?: string }) {
@@ -59,44 +59,42 @@ export function LoginForm({ next }: { next?: string }) {
 
   return (
     <form method="post" onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-      <div className="space-y-1.5">
-        <Label htmlFor="email">Email</Label>
-        <Input
+      {/* `acesso-cascata` escalona a entrada dos filhos em 50ms. Vale para os
+          filhos DIRETOS, então o botão e o erro entram na conta junto com os
+          campos — que é o desejado: a cascata percorre o formulário inteiro. */}
+      <div className="acesso-cascata space-y-4">
+        <CampoDeAcesso
           id="email"
+          rotulo="Email"
           type="email"
           autoComplete="email"
+          icone={<EnvelopeSimpleIcon size={20} weight="duotone" />}
           autoFocus
-          aria-invalid={errors.email ? true : undefined}
+          erro={errors.email ? t(errors.email.message ?? "") : undefined}
           {...register("email")}
         />
-        {errors.email && (
-          <p className="text-xs text-destructive">{t(errors.email.message ?? "")}</p>
-        )}
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="password">{t("Senha")}</Label>
-        <Input
+        <CampoDeAcesso
           id="password"
+          rotulo={t("Senha")}
           type="password"
           autoComplete="current-password"
-          aria-invalid={errors.password ? true : undefined}
+          icone={<LockSimpleIcon size={20} weight="duotone" />}
+          revelavel
+          erro={errors.password ? t(errors.password.message ?? "") : undefined}
           {...register("password")}
         />
-        {errors.password && (
-          <p className="text-xs text-destructive">{t(errors.password.message ?? "")}</p>
+        {serverError && (
+          <div
+            className="acesso-erro rounded-[10px] border border-error/30 bg-error-bg px-3.5 py-2.5 text-sm text-error"
+            role="alert"
+          >
+            {serverError}
+          </div>
         )}
+        <Button type="submit" size="lg" className="h-[3.25rem] w-full rounded-[14px] text-[15px] font-semibold shadow-md" disabled={isPending}>
+          {isPending ? t("Entrando...") : t("Entrar")}
+        </Button>
       </div>
-      {serverError && (
-        <div
-          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-          role="alert"
-        >
-          {serverError}
-        </div>
-      )}
-      <Button type="submit" className="w-full" disabled={isPending}>
-        {isPending ? t("Entrando...") : t("Entrar")}
-      </Button>
     </form>
   );
 }

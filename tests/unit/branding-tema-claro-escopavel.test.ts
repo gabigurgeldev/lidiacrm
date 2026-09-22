@@ -91,6 +91,75 @@ describe("tema claro escopável em subárvore", () => {
   });
 });
 
+/**
+ * A moldura em L — barra lateral + cabeçalho — é uma REGIÃO escura dentro de uma
+ * página clara, e o escopo dela (`.casca-escura`) tem três invariantes que, se
+ * quebrados, falham SEM SINTOMA VISÍVEL no lugar do erro. Daí este bloco.
+ */
+describe("casca escura — o escopo de token da moldura em L", () => {
+  it("existe e declara `--color-bg` como PRIMEIRA linha", () => {
+    const casca = blocoDe(".casca-escura");
+    expect(casca.size).toBeGreaterThan(0);
+
+    // ⚠️ ESTA É A LINHA QUE IMPEDE O BLOCO DE ENVENENAR A RÉGUA.
+    // `extrairRegua` (lib/branding/contraste.ts) varre TODA regra do arquivo
+    // atrás de papéis da accent. Como `.casca-escura` não contém
+    // `[data-theme="dark"]` no seletor, ela cai no balde do tema CLARO — e o
+    // único critério que faz a extração PULAR uma regra é ela declarar
+    // `--color-bg`. Sem esta linha, cada `var(--color-accent-NNN)` do bloco
+    // vira um papel novo, e a contagem de 6 papéis / 18 pares de
+    // `branding-contraste.test.ts` reprova com uma mensagem que não aponta
+    // para cá.
+    expect(casca.has("--color-bg"), "`--color-bg` sumiu de `.casca-escura`").toBe(true);
+    expect([...casca.keys()][0], "`--color-bg` deixou de ser a primeira declaração").toBe(
+      "--color-bg",
+    );
+  });
+
+  it("cobre EXATAMENTE o que o tema escuro sobrescreve, menos a rampa", () => {
+    const casca = blocoDe(".casca-escura");
+    const escuro = blocoDe('[data-theme="dark"]');
+    // Mesma obrigação de linguagem do espelho claro, acima: uma custom property
+    // com `var()` é substituída NO ELEMENTO em que é declarada, então
+    // `--card: var(--color-surface)` declarado no `:root` desce até aqui JÁ
+    // RESOLVIDO como branco. Redeclarar `--color-surface` não o atualiza — quem
+    // atualiza é redeclarar `--card` também. Um alias esquecido aqui aparece
+    // como um cartão BRANCO dentro da barra preta, e só nele.
+    const esperado = [...escuro.keys()].filter((k) => !RAMPA.has(k)).sort();
+    expect([...casca.keys()].sort()).toEqual(esperado);
+    for (const k of casca.keys()) expect(RAMPA.has(k), k).toBe(false);
+  });
+
+  it("não congela NENHUM hex de accent — a cor de quem hospeda tem de chegar", () => {
+    const casca = blocoDe(".casca-escura");
+    for (const [prop, valor] of casca) {
+      if (!prop.startsWith("--color-accent")) continue;
+      // `--color-accent-fg` é literal por natureza: é a FRENTE que se lê sobre a
+      // accent, e ela é preto ou branco, nunca um grau da rampa.
+      if (prop === "--color-accent-fg") continue;
+      // Os demais precisam apontar para a rampa, porque é o bloco injetado em
+      // runtime (`:root:root`, no <html>) que troca as paradas. Um hex literal
+      // aqui congelaria a NOSSA marca na instalação vendida em azul — e o
+      // sintoma seria a barra lateral verde num produto inteiro azul.
+      expect(valor, `${prop} precisa referenciar a rampa, não um hex`).toMatch(
+        /var\(--color-accent-\d+\)|rgba\(/,
+      );
+    }
+  });
+
+  it("não usa `data-theme=\"dark\"` — que num <aside> não casaria nada", () => {
+    // POR QUE O ESCOPO É UMA CLASSE E NÃO O ATRIBUTO DE TEMA: `lib/branding/
+    // css.ts` emite `:root:root[data-theme="dark"]`, e `:root` é o <html>. Um
+    // `<aside data-theme="dark">` jamais casaria essa regra, e o escopo por
+    // organização (`[data-theme="dark"] body:has(…)`) tampouco — o aside é
+    // DESCENDENTE do body, não ancestral. A cor configurada pela instalação
+    // simplesmente não chegaria à moldura, e o gate ficaria verde.
+    const casca = CSS.slice(CSS.indexOf(".casca-escura {"));
+    const fim = casca.indexOf("\n}");
+    expect(casca.slice(0, fim)).not.toContain("data-theme");
+  });
+});
+
 describe("indicador de foco no modo de alto contraste", () => {
   it("existe um rider de forced-colors que devolve o outline", () => {
     // WCAG 2.4.7, nível A. Medido: 0 ocorrências de `forced-colors` no repo, e

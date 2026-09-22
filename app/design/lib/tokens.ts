@@ -1,8 +1,10 @@
-// Design tokens for DeskcommCRM showcase.
-// "Soft-tech / calmo" — neutros desaturados (greige/warm-gray), accent não-saturado.
+// Design tokens for the Gestalt CRM showcase.
+// A paleta EM PRODUÇÃO é `PALETTES.gestalt`; as outras cinco são alternativas
+// que a vitrine permite comparar lado a lado. Quem manda de verdade é o
+// `app/globals.css` — é de lá que `extrairRegua` lê a régua de contraste.
 // 5-Constraint Rule applied: Shape, Color (exact hex), Typography, Motion, Layout.
 
-export type PaletteId = "sage" | "clay" | "mist" | "plum" | "olive";
+export type PaletteId = "gestalt" | "sage" | "clay" | "mist" | "plum" | "olive";
 export type TypoId = "bricolage-jakarta" | "fraunces-manrope" | "atkinson" | "source-plex";
 export type DensityId = "aerada" | "equilibrada" | "compacta";
 export type ThemeId = "light" | "dark";
@@ -38,6 +40,47 @@ export type PaletteDef = {
 // ─── Palettes ──────────────────────────────────────────────────────────────
 
 export const PALETTES: Record<PaletteId, PaletteDef> = {
+  /**
+   * A paleta QUE O PRODUTO USA — as demais são alternativas do showcase.
+   *
+   * Os 11 stops do accent são a saída literal de `rampaDeSemente("#13731b")`,
+   * não uma escolha a olho: `tests/unit/branding-rampa.test.ts` exige que o
+   * `globals.css` os reproduza a partir da semente com Δ ≤ 2/255 por canal.
+   * Editar um stop aqui sem editar lá (ou vice-versa) é divergência silenciosa
+   * — e quem manda é o `globals.css`, que é de onde `extrairRegua` lê.
+   *
+   * O verde da LOGO é outro: `#19b02e`. Ele dá 2,88:1 sobre branco e reprova
+   * até o piso de componente, então não pode ser accent de página clara. Ele
+   * aparece no arquivo da logo e dentro da moldura escura, onde dá ~6,9:1.
+   */
+  gestalt: {
+    id: "gestalt",
+    name: "Gestalt",
+    description: "Verde da marca, ancorado no grau escuro. Neutros prata, frios.",
+    accent: {
+      50: "#eff8ee", 100: "#daefd9", 200: "#b4ddb2", 300: "#82c381",
+      400: "#51aa51", 500: "#29912e", 600: "#13731b", 700: "#195c1c",
+      800: "#1a4b1b", 900: "#1a401b", 950: "#0c220c",
+    },
+    neutralLight: {
+      50: "#f8fafc", 100: "#f1f4f8", 200: "#e3e8ee", 300: "#cbd3dc",
+      400: "#9aa5b1", 500: "#6b7785", 600: "#4d5763", 700: "#3a424c",
+      800: "#262c33", 900: "#161a1f", 950: "#0b0e11",
+    },
+    neutralDark: {
+      50: "#f2f5f8", 100: "#e2e7ec", 200: "#b9c2cb", 300: "#8b95a1",
+      400: "#5d6672", 500: "#424a54", 600: "#313840", 700: "#252a31",
+      800: "#1a1e23", 900: "#121518", 950: "#090b0d",
+    },
+    states: {
+      light: { success: "#1f7a4d", warning: "#a2661c", error: "#b4402f", info: "#2f6f9e" },
+      dark:  { success: "#4fbd80", warning: "#d79a49", error: "#e0715e", info: "#6fb3e0" },
+    },
+    surfaces: {
+      light: { bg: "#ffffff", surface: "#ffffff", surfaceElevated: "#f1f3f5", text: "#161a1f", textMuted: "#4d5763", border: "#e3e8ee" },
+      dark:  { bg: "#0c0e10", surface: "#131619", surfaceElevated: "#1b1f23", text: "#f2f5f8", textMuted: "#8b95a1", border: "#252a31" },
+    },
+  },
   sage: {
     id: "sage",
     name: "Sage",
