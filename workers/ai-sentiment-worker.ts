@@ -134,7 +134,7 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
       return { skipped: true, reason: "resposta_seca" };
     }
 
-    // ── Load active agent to read sentiment_threshold config ──────────────
+    // ── O agente no ar: PORTA, e não só fonte do limiar ───────────────────
     //
     // Mesma régua da tela e do ai-response-worker (`lib/ai/agents/no-ar.ts`).
     // Antes era `.eq("is_active", true)` sozinho, e pausar um `mcp_agent` não
@@ -150,7 +150,32 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
 
     const agent = (candidatos ?? []).find(agenteAtende) ?? null;
 
-    const agentConfig = (agent?.config as Record<string, unknown> | null) ?? {};
+    // ⚠️ SEM AGENTE NO AR, ESTE WORKER NÃO CLASSIFICA NADA — e esta guarda é o
+    // conserto de um defeito que chegou ao cliente final.
+    //
+    // O bloco acima existia só para LER `sentiment_threshold`, e `agent` nulo
+    // caía no default (0.3) e seguia em frente. Parecia inofensivo: medir o
+    // humor não fala com ninguém. Mas a nota abaixo do limiar emite
+    // `ai.sentiment_alert`, que vira handoff, que silencia o bot com
+    // `bot_silenced_until = infinity` e MANDA UMA MENSAGEM ao cliente dizendo
+    // que a conversa entrou na fila de atendimento.
+    //
+    // Resultado, medido no banco de produção em 2026-09-23: dos handoffs por
+    // `low_sentiment`, 23 de 24 aconteceram em organizações que não têm UMA
+    // LINHA em `ai_agents`. Contas que nunca ligaram IA tiveram os próprios
+    // clientes avisados, pela IA, de que entraram numa fila — e o atendimento
+    // automático daquelas conversas foi silenciado para sempre por um
+    // subsistema que o dono da conta não sabia que existia.
+    //
+    // A regra é a do produto inteiro, não uma exceção deste arquivo: quem não
+    // ligou a IA não recebe efeito da IA. Sem agente no ar não há a quem
+    // entregar a conversa, não há orçamento para gastar com classificação, e
+    // não há promessa que o sistema possa cumprir.
+    if (!agent) {
+      return { skipped: true, reason: "sem_agente_no_ar" };
+    }
+
+    const agentConfig = (agent.config as Record<string, unknown> | null) ?? {};
     const threshold =
       typeof agentConfig["sentiment_threshold"] === "number"
         ? agentConfig["sentiment_threshold"]
