@@ -25,7 +25,7 @@
  * concluir que o produto está quebrado.
  */
 
-import { resolveBranding, type Branding } from "@/lib/branding";
+import { DEFAULT_APP_NAME, resolveBranding, type Branding } from "@/lib/branding";
 
 import {
   derivarMarca,
@@ -166,6 +166,49 @@ export const LOGO_PADRAO_EM_FUNDO_ESCURO = "/gestalt-crm-branco.png";
  * imagem de todo self-hoster.
  */
 export const SIMBOLO_PADRAO_DO_PRODUTO = "/gestalt-crm-simbolo.png";
+
+/**
+ * A marca em vigor é a DO PRODUTO — ninguém a rebatizou.
+ *
+ * É a condição que libera `SIMBOLO_PADRAO_DO_PRODUTO`, e ela mora aqui porque
+ * tem DOIS chamadores em superfícies diferentes (a barra lateral e o ícone da
+ * aba). Escrita em cada um, o dia em que um deles ganhasse um caso a mais
+ * daria uma instalação com o disco na aba e o ladrilho na barra — a divergência
+ * que o próprio `SidebarBrand` existe para não ter.
+ *
+ * ⚠️ A COMPARAÇÃO DE NOME É NORMALIZADA, e isso não é frouxidão. O nome vem de
+ * um campo de texto que o operador digita em `/admin/marca`, e a instalação de
+ * referência do produto tem lá `"GESTALT CRM"` — caixa alta, porque foi assim
+ * que foi digitado. Comparando byte a byte, a instalação do PRÓPRIO produto
+ * seria classificada como marca de terceiro e perderia o símbolo, que é
+ * exatamente o contrário do que a condição quer dizer.
+ *
+ * O que ela NÃO faz é afrouxar para "parece com": acento, espaço interno e
+ * caixa são ruído de digitação do MESMO nome; "Vendas Turbo" continua sendo
+ * outra marca, e quem a configurou segue com o ladrilho da inicial dele.
+ *
+ * O logo entra pela igualdade simples: ele não é digitado, é escolhido — ou é
+ * o caminho do nosso arquivo, ou é uma URL que alguém colou.
+ */
+export function marcaEhDoProduto(marca: {
+  nome: string;
+  logoUrl: string | null | undefined;
+}): boolean {
+  return (
+    normalizarNomeDeMarca(marca.nome) === normalizarNomeDeMarca(DEFAULT_APP_NAME) &&
+    (!marca.logoUrl || marca.logoUrl === LOGO_PADRAO_DO_PRODUTO)
+  );
+}
+
+/** Minúsculas, sem acento, com o espaço interno colapsado. */
+function normalizarNomeDeMarca(nome: string): string {
+  return nome
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/gu, " ")
+    .trim();
+}
 
 /**
  * Tira qualquer hex de um texto livre antes de ele virar `detalhe`.

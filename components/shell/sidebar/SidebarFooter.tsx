@@ -99,7 +99,14 @@ export function SidebarFooter({
         frase que ouvia, porque ela sempre veio do `aria-label` e nunca do
         `<span>`.
       */
-      className="nav-recolher"
+      /*
+        ⚠️ `ml-auto` E NÃO `justify-between` no contêiner. Os dois alinham o
+        botão à direita quando há versão ao lado — mas `VersionFooter` devolve
+        `null` numa instalação que ainda não publicou versão nenhuma, e com um
+        filho só o `justify-between` o joga para a ESQUERDA. Visto na captura de
+        1440px: o botão nascia debaixo do avatar em vez do canto.
+      */
+      className="nav-recolher ml-auto"
       aria-label={rotuloDoBotao}
       data-nav-focavel=""
     >
@@ -149,8 +156,10 @@ export function SidebarFooter({
       <div
         className={cn(
           "flex items-center gap-1 pt-0.5",
-          // Estreita, a versão sai (não cabe em 72px) e sobra o botão, centrado.
-          compacto ? "justify-center" : "justify-between",
+          // Estreita, a versão sai (não cabe em 72px) e sobra o botão, centrado
+          // — aqui `justify-center` vence o `ml-auto` do botão porque não há
+          // espaço livre para a margem automática consumir.
+          compacto && "justify-center",
         )}
       >
         <VersionFooter compacto={compacto} onNavigate={onNavigate} />

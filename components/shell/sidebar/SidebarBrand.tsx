@@ -1,11 +1,11 @@
 "use client";
 import { useAuth } from "@/hooks/auth/AuthProvider";
-import { DEFAULT_APP_NAME } from "@/lib/branding";
 import { letraDoIcone } from "@/lib/branding/icone";
 import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
 import {
   LOGO_PADRAO_DO_PRODUTO,
   LOGO_PADRAO_EM_FUNDO_ESCURO,
+  marcaEhDoProduto,
   SIMBOLO_PADRAO_DO_PRODUTO,
 } from "@/lib/branding/resolve";
 import { cn } from "@/lib/utils";
@@ -103,17 +103,18 @@ export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
    * Um leitor de tela anunciando "G" antes do nome seria ruído.
    */
   /**
-   * NADA FOI CONFIGURADO — nem nome, nem logo. É a instalação do produto.
+   * NINGUÉM REBATIZOU O SISTEMA — é a instalação do produto.
    *
-   * ⚠️ A pergunta é essa, e não "o logo em vigor é o nosso?". Um revendedor
-   * pode ter posto só o NOME, sem logo, e nesse caso o logo em vigor ainda é o
+   * ⚠️ A pergunta inclui o NOME, e não só "o logo em vigor é o nosso?". Um
+   * revendedor pode ter posto só o nome, e nesse caso o logo que vale ainda é o
    * nosso — mas a marca em vigor é a dele, e mostrar o disco "GC" seria pôr a
    * NOSSA marca dentro do produto dele. A imagem Docker é uma só para todas as
    * marcas; é sempre este o modo de falha que uma condição de marca previne.
+   *
+   * A regra mora em `lib/branding/resolve.ts` porque o ícone da aba faz a mesma
+   * pergunta — e uma cópia divergente daria aba e barra com marcas diferentes.
    */
-  const marcaEhDoProduto =
-    nome === DEFAULT_APP_NAME &&
-    (!logoConfigurado || logoConfigurado === LOGO_PADRAO_DO_PRODUTO);
+  const ehDoProduto = marcaEhDoProduto({ nome, logoUrl: logoConfigurado });
 
   /**
    * O que sobra do topo quando a barra é estreita.
@@ -135,7 +136,7 @@ export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
    * `alt` da imagem já diz o nome; não havendo, o `<span>` do nome está do
    * lado. Um leitor de tela anunciando "G" antes do nome seria ruído.
    */
-  const simbolo = marcaEhDoProduto ? (
+  const simbolo = ehDoProduto ? (
     /* `<img>` cru e não `next/image`, pelo mesmo motivo do wordmark abaixo: a
        imagem é pré-buildada e o otimizador exige allowlist fechada em build. */
     /* eslint-disable-next-line @next/next/no-img-element */

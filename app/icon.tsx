@@ -3,9 +3,8 @@ import path from "node:path";
 
 import { ImageResponse } from "next/og";
 
-import { DEFAULT_APP_NAME } from "@/lib/branding";
 import { letraDoIcone } from "@/lib/branding/icone";
-import { LOGO_PADRAO_DO_PRODUTO, SIMBOLO_PADRAO_DO_PRODUTO } from "@/lib/branding/resolve";
+import { marcaEhDoProduto, SIMBOLO_PADRAO_DO_PRODUTO } from "@/lib/branding/resolve";
 import { marcaDaSaida } from "@/lib/branding/saida";
 import { logger } from "@/lib/logger";
 
@@ -89,22 +88,14 @@ export const contentType = "image/png";
 /** O mesmo `cache-control` para os dois caminhos — ver o comentário embaixo. */
 const CACHE = "public, max-age=60, stale-while-revalidate=600";
 
-/**
- * NADA FOI CONFIGURADO — nem nome, nem logo. Mesma pergunta que
- * `SidebarBrand` faz, e pelo mesmo motivo: marca configurada, ainda que só o
- * nome, é marca de outra pessoa, e a aba dela não leva o nosso disco.
- */
-function ehMarcaDoProduto(marca: { nome: string; logoUrl: string | null }): boolean {
-  return (
-    marca.nome === DEFAULT_APP_NAME &&
-    (!marca.logoUrl || marca.logoUrl === LOGO_PADRAO_DO_PRODUTO)
-  );
-}
-
 export default async function Icon() {
   const marca = await marcaDaSaida(null);
 
-  if (ehMarcaDoProduto(marca)) {
+  // A MESMA pergunta que a barra lateral faz, da mesma função: marca
+  // configurada — ainda que só o nome — é marca de outra pessoa, e a aba dela
+  // não leva o nosso disco. Duas cópias da regra dariam aba e barra com marcas
+  // diferentes na mesma instalação.
+  if (marcaEhDoProduto(marca)) {
     try {
       const bytes = await readFile(
         // `process.cwd()` + `public/`: é onde o `Dockerfile` põe a pasta na

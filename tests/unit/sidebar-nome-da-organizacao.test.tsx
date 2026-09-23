@@ -262,6 +262,23 @@ describe("o símbolo da barra recolhida", () => {
     expect(simbolo?.getAttribute("src")).toBe(SIMBOLO_PADRAO_DO_PRODUTO);
   });
 
+  it("o nome do produto em CAIXA ALTA continua sendo o produto", () => {
+    // ⚠️ CASO MEDIDO NUMA INSTALAÇÃO REAL, e ele é o motivo de a comparação ser
+    // normalizada. `platform_branding.app_name` é um campo que o operador
+    // DIGITA em /admin/marca, e a instalação de referência do produto tem lá
+    // "GESTALT CRM". Comparando byte a byte, ela seria classificada como marca
+    // de terceiro e perderia o símbolo — o produto se tratando como revendedor
+    // de si mesmo. Foi assim que o defeito apareceu: `/icon` devolveu 1038
+    // bytes (o ladrilho desenhado) em vez dos bytes do disco.
+    marcaDaInstalacao = { name: "GESTALT CRM", logoUrl: null, initial: "G" };
+    contexto = { user: usuario, activeOrg: { ...org, marca: undefined } };
+    renderSidebar({ collapsed: true });
+
+    const simbolo = document.querySelector(".nav-marca-simbolo");
+    expect(simbolo?.tagName).toBe("IMG");
+    expect(simbolo?.getAttribute("src")).toBe(SIMBOLO_PADRAO_DO_PRODUTO);
+  });
+
   it("revendedor com logo próprio: volta a ser o ladrilho da inicial DELE", () => {
     marcaDaInstalacao = {
       name: "Sistema do Revendedor",
