@@ -1074,6 +1074,78 @@
   padding-bottom: 6px;
 }
 
+/* ---- A FAIXA BAIXA do rodapé: versão e o botão de recolher ----------------
+   As duas coisas mais raras da barra, numa linha de 28px. O botão era um
+   `.nav-item` de largura cheia com a palavra "Recolher": 40px de coluna, do
+   mesmo tamanho de "Inbox", para uma ação que se usa uma vez por semana.
+
+   O alvo continua com 28px de lado — acima do piso de 24px de alvo de ponteiro
+   — e o nome acessível não mudou de lugar: ele sempre veio do `aria-label`. */
+.nav-recolher {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--color-text-subtle);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.nav-recolher:hover {
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text);
+}
+
+/* O aviso de versão nova ocupa a faixa inteira quando existe: ele é acionável,
+   e o número solto do lado não é. */
+.nav-versao-aviso {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--color-text);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.nav-versao-aviso:hover {
+  background-color: var(--color-surface-elevated);
+}
+
+/* O ponto que pulsa. `--color-accent` chapado, nunca um grau da rampa: regra
+   descendente de `.casca-escura` que cite `--color-accent-NNN` reprova
+   `tests/unit/branding-contraste.test.ts`. */
+.nav-versao-pulso {
+  position: relative;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background-color: var(--color-accent);
+}
+
+.nav-versao-pulso::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background-color: var(--color-accent);
+  opacity: 0.6;
+  animation: nav-versao-pulsa 1.6s var(--ease-out) infinite;
+}
+
+@keyframes nav-versao-pulsa {
+  0%   { transform: scale(1);    opacity: 0.6; }
+  75%  { transform: scale(2.2);  opacity: 0; }
+  100% { transform: scale(2.2);  opacity: 0; }
+}
+
 /* ---- O corpo que recolhe ------------------------------------------------- */
 
 /* `height` medido, e NÃO `grid-template-rows: 0fr → 1fr`.
@@ -1310,6 +1382,8 @@
   .nav-item,
   .nav-secao-titulo,
   .nav-chevron,
+  .nav-recolher,
+  .nav-versao-aviso,
   .busca-global {
     transition: none;
   }
@@ -1320,8 +1394,15 @@
   .nav-drawer[data-state="closed"],
   .nav-drawer-overlay[data-state="open"],
   .nav-drawer-overlay[data-state="closed"],
-  .nav-popover[data-state="open"] {
+  .nav-popover[data-state="open"],
+  .nav-versao-pulso::after {
     animation: none;
+  }
+  /* Sem o pulso, o halo ficaria congelado em cima do ponto e dobraria o
+     tamanho dele. O DESTINO aqui é o ponto sozinho — o aviso continua na tela,
+     só não pulsa. */
+  .nav-versao-pulso::after {
+    display: none;
   }
 }
 

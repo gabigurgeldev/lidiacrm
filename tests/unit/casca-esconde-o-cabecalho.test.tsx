@@ -86,6 +86,15 @@ vi.mock("@/app/actions/shell/toggleSidebar", () => ({ toggleSidebar: vi.fn() }))
 vi.mock("@/components/shell/header/HeaderActions", () => ({
   HeaderActions: () => <div data-testid="acoes-de-conta" />,
 }));
+/* ⚠️ O SINO É MOCKADO DIRETO, e não mais pelo `HeaderActions` que o embrulhava.
+   O rodapé passou a importar `AlertsBell` para desenhá-lo como LINHA de largura
+   cheia (`variante="linha"`), e o mock do wrapper deixou de interceptar: o sino
+   real subiu na árvore e pediu um `QueryClientProvider` que nenhum destes
+   testes monta. O sintoma foi "No QueryClient set" em 16 casos que não têm nada
+   a ver com aviso. */
+vi.mock("@/components/shell/AlertsBell", () => ({
+  AlertsBell: () => <div data-testid="acoes-de-conta" />,
+}));
 
 function montar(pathname: string) {
   rota = pathname;
