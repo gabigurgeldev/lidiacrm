@@ -55,7 +55,7 @@ const CASCA = `
   <div class="hidden md:block">
     <aside data-prova="barra" data-collapsed="false"
            class="app-sidebar casca-escura sticky top-0 z-30 flex h-screen shrink-0 flex-col">
-      <div class="nav-marca flex h-14 shrink-0 items-center gap-2.5 border-b px-4">
+      <div class="nav-marca flex h-14 shrink-0 items-center gap-2.5 px-4">
         <img src="/gestalt-crm-branco.png" alt="Gestalt CRM" data-prova="logo"
              class="nav-logo h-6 w-auto object-contain">
         <span aria-hidden data-prova="simbolo" class="nav-marca-simbolo">G</span>

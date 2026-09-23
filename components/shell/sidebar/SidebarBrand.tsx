@@ -48,6 +48,15 @@ import { cn } from "@/lib/utils";
  * no servidor lê `process.env` — fontes que divergiram quando o layout raiz
  * passou a injetar a marca do BANCO, e a divergência era React #418 em toda
  * tela: o servidor desenhava o `<span>` e o cliente desenhava o `<img>`.
+ *
+ * ── SEM BORDA EMBAIXO, e isso é decisão de desenho, não esquecimento
+ *
+ * O `border-b` daqui desenhava um risco de ponta a ponta entre a marca e o
+ * primeiro grupo. Ele não separava nada: a barra inteira é UMA superfície
+ * (o `.casca-moldura` do `AppShell` pinta barra e cabeçalho juntos), e o que
+ * delimita o topo já é a altura de 56px mais o respiro do `<nav>`. Numa
+ * coluna que também tinha o filete de aninhamento dos grupos, era o segundo
+ * risco decorativo da mesma tela — os dois saíram na mesma onda.
  */
 export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
   const brand = useMarcaDaInstalacao();
@@ -93,7 +102,7 @@ export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
   return (
     <div
       className={cn(
-        "nav-marca flex h-14 shrink-0 items-center gap-2.5 border-b px-4",
+        "nav-marca flex h-14 shrink-0 items-center gap-2.5 px-4",
         collapsed && "justify-center px-0",
       )}
     >
