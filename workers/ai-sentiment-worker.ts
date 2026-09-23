@@ -22,6 +22,7 @@ import { DEFAULT_CLASSIFIER_MODEL, isAiGatewayConfigured } from "@/lib/ai/gatewa
 import { resolverModeloDoPonto } from "@/lib/ai/gateway-binding";
 import { logInvocation } from "@/lib/ai/log-invocation";
 import { SENTIMENT_SYSTEM_PROMPT } from "@/lib/ai/prompts/sentiment";
+import { ehRespostaSeca } from "@/lib/ai/sentiment/resposta-seca";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -115,6 +116,22 @@ export async function processSentiment(event: EventRow): Promise<SentimentResult
     const body = (message.body ?? "").trim();
     if (!body) {
       return { skipped: true, reason: "empty_body" };
+    }
+
+    // ── Guard: resposta de sim/não não é evidência de humor ───────────────
+    //
+    // ⚠️ ESTA GUARDA FECHA UM DEFEITO MEDIDO EM PRODUÇÃO: "Não", "não" e
+    // "Vou não" foram pontuados 0.15 pelo classificador, abaixo do limiar de
+    // 0.3, e escalaram a conversa para humano — o que HOJE manda uma mensagem
+    // ao cliente dizendo que ele entrou na fila de atendimento. Ele tinha
+    // apenas respondido "não" a uma pergunta.
+    //
+    // Pular aqui em vez de corrigir só o prompt é deliberado: o prompt depende
+    // do modelo obedecer, e esta classe de mensagem não tem juízo a ser feito.
+    // O porquê inteiro, com a tabela do que foi medido, está em
+    // `lib/ai/sentiment/resposta-seca.ts`.
+    if (ehRespostaSeca(body)) {
+      return { skipped: true, reason: "resposta_seca" };
     }
 
     // ── Load active agent to read sentiment_threshold config ──────────────
