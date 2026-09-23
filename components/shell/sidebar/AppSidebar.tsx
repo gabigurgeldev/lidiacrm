@@ -196,11 +196,15 @@ export function SidebarContent({
     <TooltipProvider delayDuration={300}>
       <SidebarBrand collapsed={collapsed} />
       <nav
-        /* `space-y-1.5` (6px) e não `space-y-1`: com os grupos colados, o rótulo
-           de categoria ficava à mesma distância do item de cima e do de baixo, e
-           a barra lia como uma lista só. O acréscimo é de 8px no total (4 vãos),
-           medido contra a dobra de 1280×768 que `navegacao.spec.ts` guarda. */
-        className="nav-rolagem flex-1 space-y-1.5 overflow-y-auto p-2"
+        /* ⚠️ ERA `space-y-1.5`, e o respiro entre grupos passou a ter UM dono.
+           Aquele valor existia porque, com os grupos colados, o rótulo de
+           categoria ficava à mesma distância do item de cima e do de baixo — e
+           a barra lia como uma lista só. Hoje quem separa grupo de grupo é o
+           `margin-top` de `.nav-secao-titulo`, que é também quem substituiu o
+           filete vertical. Manter os dois somaria duas medidas para a mesma
+           coisa, e no dia em que discordassem ninguém saberia qual mexer.
+           A dobra de 1280×768 que `navegacao.spec.ts` guarda continua medida. */
+        className="nav-rolagem flex-1 space-y-0.5 overflow-y-auto p-2"
         aria-label={t("Navegação principal")}
         onKeyDown={aoTeclado}
       >

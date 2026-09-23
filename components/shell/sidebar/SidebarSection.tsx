@@ -77,16 +77,34 @@ export function SidebarSection({
       data-nav-grupo={id}
       onClick={onToggle}
     >
-      {/* Mesmo peso e tamanho do item filho — ver o cabeçalho de
+      {/* ⚠️ `nav-secao-icone` É O QUE O CSS ESCONDE quando a barra é LARGA, e a
+          classe existe para alcançar SÓ este ícone — `nav-icone` está também em
+          todo item filho.
+
+          Larga, havia dois eixos de ícone na mesma coluna (o do grupo e, 35px
+          à direita, o dos filhos) com um filete vertical entre eles. Agora o
+          título é só rótulo de seção e os filhos ocupam o eixo único.
+
+          Estreita, ele VOLTA: com o rótulo em `display: none`, é a única coisa
+          que identifica o grupo numa barra de 72px. Quem decide é o CSS, nunca
+          o JavaScript — mesmo mecanismo do ladrilho da marca, e pelo mesmo
+          motivo (`components/shell/sidebar/SidebarBrand.tsx`).
+
+          Mesmo peso e tamanho do item filho — ver o cabeçalho de
           `SidebarItem.tsx` para por que a coluna inteira usa um peso só. */}
-      <Icon size={20} weight="duotone" className="nav-icone shrink-0" aria-hidden />
+      <Icon
+        size={20}
+        weight="duotone"
+        className="nav-icone nav-secao-icone shrink-0"
+        aria-hidden
+      />
       <span className="nav-rotulo truncate">{label}</span>
       <CaretRight size={16} weight="bold" className="nav-chevron shrink-0" aria-hidden />
     </button>
   );
 
   return (
-    <div className="space-y-0.5">
+    <div className="nav-grupo space-y-0.5">
       <h2 className="m-0">
         {compacto ? (
           <Tooltip delayDuration={300}>

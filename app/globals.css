@@ -897,12 +897,17 @@
   padding-left: 0;
   padding-right: 0;
 }
-/* Estreita, a barra não tem coluna de filhos: o filete de aninhamento vira
-   um risco solto no meio do nada. */
-.app-sidebar[data-collapsed="true"] .nav-grupo-corpo {
-  border-left-color: transparent;
-  margin-left: 0;
-  padding-left: 0;
+/* O ÍCONE DO GRUPO volta, e o título volta a ser alvo de toque.
+   Larga, o ícone está em `display: none` e o título é só um rótulo de 28px
+   (ver "Item e cabeçalho de grupo", abaixo). Aqui o rótulo sumiu, então o
+   ícone é a ÚNICA coisa que identifica o grupo — e uma faixa de 28px sem
+   texto é alvo pequeno demais para o dedo. */
+.app-sidebar[data-collapsed="true"] .nav-secao-titulo .nav-secao-icone {
+  display: block;
+}
+.app-sidebar[data-collapsed="true"] .nav-secao-titulo {
+  min-height: var(--nav-item-altura);
+  margin-top: 8px;
 }
 @media (max-width: 1023px) {
   .app-sidebar .nav-rotulo,
@@ -928,10 +933,16 @@
     padding-left: 0;
     padding-right: 0;
   }
-  .app-sidebar .nav-grupo-corpo {
-    border-left-color: transparent;
-    margin-left: 0;
-    padding-left: 0;
+  /* ⚠️ O seletor cita `.nav-secao-titulo` para ganhar a regra que esconde o
+     ícone — `.app-sidebar .nav-secao-icone` teria a MESMA especificidade dela
+     e perderia por vir antes no arquivo. Um empate resolvido por ordem é o
+     tipo de coisa que quebra quando alguém reordena blocos. */
+  .app-sidebar .nav-secao-titulo .nav-secao-icone {
+    display: block;
+  }
+  .app-sidebar .nav-secao-titulo {
+    min-height: var(--nav-item-altura);
+    margin-top: 8px;
   }
 }
 
@@ -957,23 +968,50 @@
     color var(--duration-fast) var(--ease-out);
 }
 
-/* O TÍTULO DE GRUPO É UM RÓTULO DE CATEGORIA, não um irmão do item.
+/* O TÍTULO DE GRUPO É UM RÓTULO DE SEÇÃO, não um irmão do item.
    Antes os dois eram quase o mesmo desenho — 13px/600 contra 14px/500, ambos em
    `--color-text-muted` — e a barra lia como uma lista de doze coisas iguais com
-   umas setinhas no meio. Agora o grupo é menor, mais claro e com a letra aberta;
-   o item é maior e mais forte. A hierarquia passa a estar na tipografia, não só
-   na seta e no filete. */
+   umas setinhas no meio. Depois o grupo encolheu para 12px; agora ele deixa de
+   ser uma LINHA e vira um rótulo: 11px, caixa alta, letra aberta, 28px de
+   altura. A hierarquia inteira mora na tipografia e no respiro.
+
+   ⚠️ O `margin-top` é o que substitui o filete vertical. Ele era o que dizia
+   "estas páginas são deste grupo", e o preço era um risco decorativo por grupo
+   dentro de uma coluna que já tinha outro embaixo da logo. Agrupamento por
+   espaço em branco é a mesma informação sem tinta nenhuma — e continua
+   funcionando com o grupo fechado, que é onde o filete não existia. */
 .nav-secao-titulo {
-  min-height: 36px;
-  font-size: 12px;
+  min-height: 28px;
+  margin-top: 18px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--color-text-subtle);
 }
 
-/* O ícone do grupo acompanha o rótulo: na cor de categoria, não na do item.
-   Sem isto, o desenho mais pesado da linha é o ícone de um título que deveria
-   ser a coisa mais discreta do bloco. */
+/* O primeiro grupo encosta no topo da área que rola: o respiro de cima existe
+   para SEPARAR grupos, e antes do primeiro não há nada de que separar.
+
+   O seletor começa em `.app-sidebar` para empatar com as duas regras de barra
+   estreita (que também valem 0,3,0) e vencer por vir depois delas. Sem isso o
+   primeiro grupo ganharia o respiro de volta justamente no recolhido. */
+.app-sidebar .nav-grupo:first-child .nav-secao-titulo {
+  margin-top: 0;
+}
+
+/* ⚠️ O ÍCONE DO GRUPO SÓ APARECE COM A BARRA ESTREITA.
+   Largo, ele era o segundo eixo de ícones da coluna: o do grupo em x≈40 e o dos
+   filhos em x≈75, com o filete entre os dois. Escondê-lo põe TODO ícone da
+   barra num eixo só, que é o que faz a coluna ler como uma lista organizada em
+   vez de uma árvore. As duas regras de barra estreita, acima, o devolvem — é lá
+   que ele deixa de ser redundante e passa a ser a única identificação do grupo.
+
+   A cor fica declarada porque a regra de estreita não a repete: ele acompanha o
+   rótulo, na cor de categoria, e não a do item. */
+.nav-secao-titulo .nav-secao-icone {
+  display: none;
+}
 .nav-secao-titulo .nav-icone {
   color: var(--color-text-subtle);
 }
@@ -1047,9 +1085,15 @@
   height: 0;
   opacity: 0;
   overflow: hidden;
-  margin-left: 19px;
-  padding-left: 8px;
-  border-left: 1px solid var(--color-border);
+  /* ⚠️ AQUI MORAVAM `margin-left: 19px`, `padding-left: 8px` e um
+     `border-left: 1px solid var(--color-border)` — o filete de aninhamento.
+
+     Ele saiu por pedido de quem é dono do produto, e o desenho que o substitui
+     está no bloco do título de grupo: rótulo em caixa alta com respiro em cima.
+     O recuo saiu JUNTO com o filete de propósito. Recuo sem risco deixaria os
+     ícones dos filhos desalinhados de tudo o mais na coluna (rodapé e
+     Configurações incluídos), que é o defeito que o filete existia para
+     disfarçar. Sem ele, a barra inteira tem um eixo de ícone só. */
   /* `visibility` é o que tira os itens fechados do leitor de tela E do Tab —
      `overflow: hidden` esconde só do olho. O atraso de 180ms mantém o conteúdo
      visível durante o fechamento; na abertura ele volta sem atraso nenhum. */
