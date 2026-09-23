@@ -110,9 +110,16 @@ export function ContaNaBarra({ compacto }: { compacto: boolean }) {
             <span className="truncate text-[13px] font-semibold leading-tight text-text">
               {user.full_name ?? user.email}
             </span>
-            <span className="truncate text-[11px] font-normal leading-tight text-text-subtle">
-              {user.email}
-            </span>
+            {/* ⚠️ A segunda linha só existe quando há NOME. Sem `full_name` — o
+                caso de quem nunca abriu Configurações › Perfil, que é a maioria
+                numa instalação nova — a primeira linha JÁ é o e-mail, e repeti-lo
+                embaixo dava o mesmo endereço duas vezes, um em cima do outro.
+                Visto na captura de 1440px da sonda. */}
+            {user.full_name && (
+              <span className="truncate text-[11px] font-normal leading-tight text-text-subtle">
+                {user.email}
+              </span>
+            )}
           </span>
         </button>
       </DropdownMenuTrigger>
