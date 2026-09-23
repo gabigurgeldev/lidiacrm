@@ -1,10 +1,12 @@
 "use client";
 import { useAuth } from "@/hooks/auth/AuthProvider";
+import { DEFAULT_APP_NAME } from "@/lib/branding";
 import { letraDoIcone } from "@/lib/branding/icone";
 import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
 import {
   LOGO_PADRAO_DO_PRODUTO,
   LOGO_PADRAO_EM_FUNDO_ESCURO,
+  SIMBOLO_PADRAO_DO_PRODUTO,
 } from "@/lib/branding/resolve";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +31,13 @@ import { cn } from "@/lib/utils";
  * continua valendo, e é o que limita este arquivo: há **um** `<img>` (nunca
  * dois) e, havendo logo, o NOME não é escrito em lugar nenhum — o cabeçalho tem
  * 56px de altura para um dos dois. O símbolo não é nome nem imagem: é uma letra.
+ *
+ * ── Recolhida, a marca do PRODUTO é o símbolo; a de um revendedor é a letra
+ *
+ * Sem marca configurada, o ladrilho é o disco "GC"
+ * (`SIMBOLO_PADRAO_DO_PRODUTO`) — a barra estreita mostra a MARCA, não um
+ * caractere que a representa. A condição inteira está no `marcaEhDoProduto`,
+ * abaixo, e existe porque a imagem Docker é uma só para todas as marcas.
  *
  * ── A letra vem de `letraDoIcone`, a mesma do ícone da aba
  *
@@ -93,7 +102,50 @@ export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
    * da imagem já diz o nome; quando não há, o `<span>` do nome está do lado.
    * Um leitor de tela anunciando "G" antes do nome seria ruído.
    */
-  const simbolo = (
+  /**
+   * NADA FOI CONFIGURADO — nem nome, nem logo. É a instalação do produto.
+   *
+   * ⚠️ A pergunta é essa, e não "o logo em vigor é o nosso?". Um revendedor
+   * pode ter posto só o NOME, sem logo, e nesse caso o logo em vigor ainda é o
+   * nosso — mas a marca em vigor é a dele, e mostrar o disco "GC" seria pôr a
+   * NOSSA marca dentro do produto dele. A imagem Docker é uma só para todas as
+   * marcas; é sempre este o modo de falha que uma condição de marca previne.
+   */
+  const marcaEhDoProduto =
+    nome === DEFAULT_APP_NAME &&
+    (!logoConfigurado || logoConfigurado === LOGO_PADRAO_DO_PRODUTO);
+
+  /**
+   * O que sobra do topo quando a barra é estreita.
+   *
+   * Sendo o produto, é o SÍMBOLO: o disco "GC", a mesma marca que a arte larga
+   * carrega à esquerda da palavra — a barra recolhida passa a mostrar a marca,
+   * e não uma letra que a representa. Sendo uma marca configurada, é o ladrilho
+   * com a inicial dela, porque a arte que um revendedor envia tem proporção
+   * desconhecida e quase sempre é uma faixa: espremê-la em 32px devolve uma
+   * tira ilegível. A letra vem de `letraDoIcone`, a mesma de `app/icon.tsx`.
+   *
+   * ⚠️ OS DOIS CARREGAM A CLASSE `nav-marca-simbolo`, e isso é deliberado: é
+   * ela que as regras de barra estreita alternam contra `.nav-logo`. Um nome de
+   * classe novo obrigaria a duplicar quatro seletores no globals.css, e no dia
+   * em que alguém atualizasse só um deles a barra ficaria sem marca nenhuma no
+   * recolhido, em silêncio.
+   *
+   * `aria-hidden` nos dois porque não acrescentam informação: havendo logo, o
+   * `alt` da imagem já diz o nome; não havendo, o `<span>` do nome está do
+   * lado. Um leitor de tela anunciando "G" antes do nome seria ruído.
+   */
+  const simbolo = marcaEhDoProduto ? (
+    /* `<img>` cru e não `next/image`, pelo mesmo motivo do wordmark abaixo: a
+       imagem é pré-buildada e o otimizador exige allowlist fechada em build. */
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={SIMBOLO_PADRAO_DO_PRODUTO}
+      alt=""
+      aria-hidden
+      className="nav-marca-simbolo nav-marca-simbolo-arte"
+    />
+  ) : (
     <span aria-hidden className="nav-marca-simbolo">
       {letraDoIcone(nome) ?? ""}
     </span>

@@ -147,6 +147,27 @@ export const LOGO_PADRAO_DO_PRODUTO = "/gestalt-crm.png";
 export const LOGO_PADRAO_EM_FUNDO_ESCURO = "/gestalt-crm-branco.png";
 
 /**
+ * O SÍMBOLO do produto — o disco "GC", sem a palavra ao lado.
+ *
+ * Serve os dois lugares onde não há largura para um wordmark de 6,9:1: o topo
+ * da barra RECOLHIDA (72px) e o ícone da aba. Em ambos, ele substitui o
+ * ladrilho com a inicial.
+ *
+ * ⚠️ SÓ VALE QUANDO NADA FOI CONFIGURADO, e essa condição é o arquivo inteiro.
+ * A imagem Docker é UMA para todas as marcas: servir isto a quem definiu nome
+ * ou logo próprio poria a NOSSA marca dentro do produto de quem hospeda — o
+ * mesmo modo de falha que `LOGO_PADRAO_EM_FUNDO_ESCURO`, logo acima, evita ao
+ * valer só para o logo do produto. Quem configurou continua com o ladrilho da
+ * inicial DELE, derivado por `letraDoIcone` do nome DELE.
+ *
+ * Gerado por `scripts/gerar-simbolo-gestalt.ts` a partir da arte em
+ * `assets-fonte/logo/` — 128x128, ~18 KB, recortado e reamostrado. A arte crua
+ * tem 1254² e meio megabyte, e `Dockerfile` copia `public/` inteiro para a
+ * imagem de todo self-hoster.
+ */
+export const SIMBOLO_PADRAO_DO_PRODUTO = "/gestalt-crm-simbolo.png";
+
+/**
  * Tira qualquer hex de um texto livre antes de ele virar `detalhe`.
  *
  * A mensagem de exceção é o que torna uma falha diagnosticável — descartá-la

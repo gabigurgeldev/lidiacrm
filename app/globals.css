@@ -1458,8 +1458,26 @@
   letter-spacing: -0.01em;
 }
 
+/* ---- A variante ARTE do mesmo ladrilho -----------------------------------
+   Quando a instalação não configurou marca nenhuma, o que aparece ali é o
+   SÍMBOLO do produto (o disco "GC"), e não uma letra — ver `SidebarBrand`.
+   Ele reaproveita a classe acima para herdar a caixa de 32px e, sobretudo,
+   para continuar sendo alcançado pelas regras de barra estreita; o que muda é
+   só o que uma arte precisa que um ladrilho de cor não precisa.
+
+   O fundo volta a ser transparente: o `--color-accent` da regra base pintaria
+   um quadrado colorido atrás de um disco que já tem fundo próprio. */
+.nav-marca-simbolo-arte {
+  background-color: transparent;
+  object-fit: contain;
+}
+
 /* Com o wordmark na tela, o ladrilho sairia como uma segunda marca ao lado da
-   primeira. As regras de barra estreita, mais específicas, o trazem de volta. */
+   primeira. As regras de barra estreita, mais específicas, o trazem de volta.
+
+   ⚠️ O seletor casa pelo IRMÃO, não pelo tipo de nó: desde que o símbolo pode
+   ser um `<img>`, o topo tem dois `<img>` quando a marca é a do produto, e
+   `.nav-marca img` alcançaria os dois. */
 .nav-logo + .nav-marca-simbolo {
   display: none;
 }

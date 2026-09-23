@@ -3,8 +3,12 @@ import { render, screen } from "@testing-library/react";
 
 import { Sidebar } from "@/components/shell/Sidebar";
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
-import type { Branding } from "@/lib/branding";
+import { DEFAULT_APP_NAME, type Branding } from "@/lib/branding";
 import { MarcaDaInstalacaoProvider } from "@/lib/branding/contexto";
+import {
+  LOGO_PADRAO_DO_PRODUTO,
+  SIMBOLO_PADRAO_DO_PRODUTO,
+} from "@/lib/branding/resolve";
 
 /**
  * O CONSUMIDOR do nome por organização — provado por comportamento, não por
@@ -215,5 +219,93 @@ describe("o logo na barra lateral", () => {
 
     expect(screen.queryByRole("img")).toBeNull();
     expect(screen.getByText("Sistema do Revendedor")).toBeTruthy();
+  });
+});
+
+/**
+ * O SÍMBOLO RECOLHIDO — e a fronteira que separa a nossa marca da de quem
+ * hospeda.
+ *
+ * POR QUE ESTE BLOCO EXISTE: a barra estreita mostrava uma LETRA (o ladrilho
+ * com a inicial da marca), e o dono do produto pediu o símbolo do CRM ali. A
+ * peça é a mesma nos dois casos e a diferença é uma condição — que é
+ * exatamente o tipo de coisa que passa a valer sempre num "conserto" futuro.
+ *
+ * ⚠️ O MODO DE FALHA QUE ESTES CASOS GUARDAM É O WHITE-LABEL, não o desenho.
+ * A imagem Docker é UMA para todas as marcas (`docs/doctrine/packaging.md`):
+ * um símbolo servido incondicionalmente poria o disco "GC" na barra de todo
+ * revendedor, e o defeito seria invisível aqui, no CI e na Vercel — só
+ * apareceria na VPS de quem a feature de marca existe para servir. É o mesmo
+ * modo de falha que `lib/branding.ts` documenta para `NEXT_PUBLIC_*`.
+ *
+ * `collapsed: true` em todos: expandida, o wordmark ocupa o topo e o CSS
+ * esconde o ladrilho — os dois nós existem no DOM e quem escolhe é a folha de
+ * estilo, que não roda aqui. O que estes casos medem é QUAL DOS DOIS o
+ * componente montou.
+ */
+describe("o símbolo da barra recolhida", () => {
+  afterEach(() => {
+    marcaDaInstalacao = { name: "Sistema do Revendedor", logoUrl: null, initial: "S" };
+  });
+
+  it("instalação de fábrica: desenha o símbolo do produto, não uma letra", () => {
+    marcaDaInstalacao = {
+      name: DEFAULT_APP_NAME,
+      logoUrl: LOGO_PADRAO_DO_PRODUTO,
+      initial: "G",
+    };
+    contexto = { user: usuario, activeOrg: { ...org, marca: undefined } };
+    renderSidebar({ collapsed: true });
+
+    const simbolo = document.querySelector(".nav-marca-simbolo");
+    expect(simbolo?.tagName).toBe("IMG");
+    expect(simbolo?.getAttribute("src")).toBe(SIMBOLO_PADRAO_DO_PRODUTO);
+  });
+
+  it("revendedor com logo próprio: volta a ser o ladrilho da inicial DELE", () => {
+    marcaDaInstalacao = {
+      name: "Sistema do Revendedor",
+      logoUrl: "https://cdn.exemplo.test/revendedor.png",
+      initial: "S",
+    };
+    contexto = { user: usuario, activeOrg: { ...org, marca: undefined } };
+    renderSidebar({ collapsed: true });
+
+    const simbolo = document.querySelector(".nav-marca-simbolo");
+    expect(simbolo?.tagName).toBe("SPAN");
+    expect(simbolo?.textContent).toBe("S");
+  });
+
+  it("revendedor que configurou SÓ O NOME também não recebe o nosso símbolo", () => {
+    // O caso que separa "a marca é nossa?" de "o logo em vigor é o nosso?".
+    // Sem nome próprio configurado, o logo que vale ainda é o do produto — uma
+    // condição escrita só sobre o logo deixaria o disco "GC" na barra de quem
+    // rebatizou o sistema, que é o vazamento de marca mais fácil de não ver.
+    marcaDaInstalacao = { name: "Vendas Turbo", logoUrl: null, initial: "V" };
+    contexto = { user: usuario, activeOrg: { ...org, marca: undefined } };
+    renderSidebar({ collapsed: true });
+
+    const simbolo = document.querySelector(".nav-marca-simbolo");
+    expect(simbolo?.tagName).toBe("SPAN");
+    expect(simbolo?.textContent).toBe("V");
+  });
+
+  it("organização com marca própria dentro de uma instalação de fábrica: a letra dela", () => {
+    // A camada de cima da pilha. A instalação é a nossa, mas quem está na tela
+    // é a marca da organização — e o topo da barra já mostra o nome DELA.
+    marcaDaInstalacao = {
+      name: DEFAULT_APP_NAME,
+      logoUrl: LOGO_PADRAO_DO_PRODUTO,
+      initial: "G",
+    };
+    contexto = {
+      user: usuario,
+      activeOrg: { ...org, marca: { nome: "Loja da Ana", logoUrl: null } },
+    };
+    renderSidebar({ collapsed: true });
+
+    const simbolo = document.querySelector(".nav-marca-simbolo");
+    expect(simbolo?.tagName).toBe("SPAN");
+    expect(simbolo?.textContent).toBe("L");
   });
 });

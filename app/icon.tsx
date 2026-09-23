@@ -1,7 +1,13 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+
 import { ImageResponse } from "next/og";
 
+import { DEFAULT_APP_NAME } from "@/lib/branding";
 import { letraDoIcone } from "@/lib/branding/icone";
+import { LOGO_PADRAO_DO_PRODUTO, SIMBOLO_PADRAO_DO_PRODUTO } from "@/lib/branding/resolve";
 import { marcaDaSaida } from "@/lib/branding/saida";
+import { logger } from "@/lib/logger";
 
 /**
  * O ícone da aba, DESENHADO em runtime com a marca da instalação.
@@ -22,6 +28,23 @@ import { marcaDaSaida } from "@/lib/branding/saida";
  * todo revendedor, que é o mesmo modo de falha que `lib/branding.ts:12-16`
  * documenta para `NEXT_PUBLIC_*`: verde em dev, verde no CI, verde na Vercel, e
  * errado exatamente na VPS de quem a feature existe para servir.
+ *
+ * ─── Sem marca configurada, a aba mostra o SÍMBOLO do produto ───────────────
+ *
+ * O disco "GC" (`public/gestalt-crm-simbolo.png`), servido como está — os
+ * mesmos bytes que a barra recolhida desenha, então aba e barra mostram a mesma
+ * coisa em vez de duas representações da mesma marca.
+ *
+ * ⚠️ ISTO NÃO REABRE O PARÁGRAFO ABAIXO. O que ele proíbe é buscar o
+ * `logo_url`, que é `text` livre digitado pelo operador; o que se lê aqui é um
+ * arquivo NOSSO, de dentro da própria imagem, com caminho constante. Não há
+ * rede, não há entrada de usuário no caminho, e a leitura só acontece quando
+ * ninguém configurou marca nenhuma — havendo qualquer marca, o desenho abaixo
+ * continua sendo o único caminho.
+ *
+ * E a leitura de disco pode falhar (imagem montada estranho, arquivo removido
+ * por engano). Falhando, ela cai no ladrilho desenhado em vez de devolver 500:
+ * o ícone da aba não é lugar de derrubar página.
  *
  * ─── Cor + inicial, NUNCA o `logo_url` ──────────────────────────────────────
  *
@@ -63,8 +86,45 @@ export const dynamic = "force-dynamic";
 export const size = { width: 64, height: 64 };
 export const contentType = "image/png";
 
+/** O mesmo `cache-control` para os dois caminhos — ver o comentário embaixo. */
+const CACHE = "public, max-age=60, stale-while-revalidate=600";
+
+/**
+ * NADA FOI CONFIGURADO — nem nome, nem logo. Mesma pergunta que
+ * `SidebarBrand` faz, e pelo mesmo motivo: marca configurada, ainda que só o
+ * nome, é marca de outra pessoa, e a aba dela não leva o nosso disco.
+ */
+function ehMarcaDoProduto(marca: { nome: string; logoUrl: string | null }): boolean {
+  return (
+    marca.nome === DEFAULT_APP_NAME &&
+    (!marca.logoUrl || marca.logoUrl === LOGO_PADRAO_DO_PRODUTO)
+  );
+}
+
 export default async function Icon() {
   const marca = await marcaDaSaida(null);
+
+  if (ehMarcaDoProduto(marca)) {
+    try {
+      const bytes = await readFile(
+        // `process.cwd()` + `public/`: é onde o `Dockerfile` põe a pasta na
+        // imagem final, e onde ela está em dev. O nome do arquivo vem da MESMA
+        // constante que a barra usa no `src` — duas cópias da string dariam um
+        // 404 silencioso num dos dois lugares no dia em que a arte mudasse.
+        path.join(process.cwd(), "public", SIMBOLO_PADRAO_DO_PRODUTO.replace(/^\//, "")),
+      );
+      return new Response(new Uint8Array(bytes), {
+        headers: { "content-type": contentType, "cache-control": CACHE },
+      });
+    } catch (erro) {
+      // Sem `throw`: a alternativa a um ícone é uma aba sem ícone, não um 500
+      // em toda página. O desenho abaixo é um fallback completo e correto.
+      logger.warn("ícone da aba: não deu para ler o símbolo do produto; vale o ladrilho", {
+        detalhe: erro instanceof Error ? erro.message : String(erro),
+      });
+    }
+  }
+
   const letra = letraDoIcone(marca.nome);
 
   return new ImageResponse(
@@ -96,7 +156,10 @@ export default async function Icon() {
         // cor em `/admin/marca` vê a aba acompanhar dentro de um minuto. Um
         // `immutable` de um ano tornaria a tela de marca uma promessa que o
         // ícone não cumpre; `no-store` faria o satori rodar a cada navegação.
-        "cache-control": "public, max-age=60, stale-while-revalidate=600",
+        //
+        // O caminho do símbolo usa o MESMO valor: o operador que configura a
+        // marca própria vê a aba trocar de disco para ladrilho no mesmo minuto.
+        "cache-control": CACHE,
       },
     },
   );
