@@ -245,6 +245,13 @@ const schema = z.object({
   RESEND_FROM_EMAIL: z.string().optional().default(""),
 
   /**
+   * Segredo que o Back Office de afiliados da Gestalt usa para assinar as
+   * chamadas às rotas `/backoffice/*` (criar/suspender/reativar tenant,
+   * conciliação). Vazio = integração desligada: as rotas respondem 503.
+   */
+  BACKOFFICE_OUTBOUND_SECRET: z.string().optional().default(""),
+
+  /**
    * E-mail de suporte que a instalação mostra ao CLIENTE FINAL (tela de conta
    * suspensa, tela de cobrança).
    *

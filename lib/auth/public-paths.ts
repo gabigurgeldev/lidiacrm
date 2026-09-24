@@ -15,6 +15,9 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/api\/v1\/health$/,
   /^\/api\/v1\/webhooks\//,
   /^\/api\/v1\/cron\//,
+  // Back Office de afiliados → CRM. Sem sessão: a auth é HMAC do corpo com
+  // BACKOFFICE_OUTBOUND_SECRET, conferida dentro de cada rota (lib/backoffice/rota.ts).
+  /^\/backoffice\//,
   // Heartbeat do agente do host (bearer INTERNAL_SECRET/INTERNAL_CRON_SECRET,
   // checado dentro da própria rota) — sem cookie de sessão, igual /cron/.
   /^\/api\/v1\/system\/agent$/,
