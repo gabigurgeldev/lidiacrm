@@ -13,13 +13,14 @@ import { type NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   pacingKnobsUpdateSchema,
   knobsView,
   effectiveKnobs,
   windowIsValid,
-  WARMUP_PULADO,
+  colunasDeKnobs,
   type ChannelKnobsRow,
 } from "@/lib/ai/pacing-knobs";
 
@@ -81,16 +82,10 @@ export async function PUT(req: NextRequest): Promise<Response> {
       details: parsed.error.flatten(),
     });
   }
-  const { channel_session_id, daily_message_limit, skip_warmup, ...camposDiretos } = parsed.data;
-  // `skip_warmup` é pergunta da TELA; a coluna guarda a forma que o motor lê.
-  // A tradução mora aqui, num lugar só: a tela não deveria precisar conhecer o
-  // formato dos degraus para dizer "este número já está aquecido".
-  const knobFields = {
-    ...camposDiretos,
-    ...(skip_warmup !== undefined
-      ? { warmup_daily_caps: skip_warmup ? [...WARMUP_PULADO] : null }
-      : {}),
-  };
+  const { channel_session_id, daily_message_limit, ...pedido } = parsed.data;
+  // A tradução tela → colunas mora num lugar só (`colunasDeKnobs`): o degrau de
+  // "já aquecido" e a data em branco, que não pode chegar ao upsert como `null`.
+  const knobFields = colunasDeKnobs(pedido);
 
   const admin = createAdminClient();
   const { data: session } = await admin
@@ -150,6 +145,13 @@ export async function PUT(req: NextRequest): Promise<Response> {
       { onConflict: "organization_id,channel_session_id" },
     );
     if (upErr) {
+      // O motivo do banco fica no log: a tela dizia só "falha", e a causa (uma
+      // constraint) só apareceu lendo o schema.
+      logger.error("[ai/pacing] upsert de channel_knobs falhou", {
+        detail: upErr.message,
+        code: upErr.code,
+        requestId,
+      });
       return fail("internal_error", "Falha ao salvar os knobs.", 500, { requestId });
     }
   }

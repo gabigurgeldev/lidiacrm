@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { KNOB_BOUNDS, PACING_DEFAULTS } from "@/lib/agent-engine/pacing/defaults";
 import {
+  colunasDeKnobs,
   effectiveKnobs,
   pacingKnobsUpdateSchema,
   windowIsValid,
@@ -112,5 +113,28 @@ describe("pacing-knobs — validação com KNOB_BOUNDS (números nunca nascem aq
     expect(view.bounds.intervalMaxMs).toBe(KNOB_BOUNDS.intervalMaxMs);
     expect(view.bounds.daily_limit.min).toBe(1);
     expect(view.overrides).toBeNull();
+  });
+});
+
+describe("colunasDeKnobs — o pedido da tela vira as colunas do upsert", () => {
+  it("⭐ data em branco NÃO vai ao upsert — a coluna é not null e o painel inteiro falhava", () => {
+    // A tela manda `null` sempre que o número ainda não tem linha de knobs. Com
+    // o `null` no upsert, nenhum campo do painel salvava.
+    const colunas = colunasDeKnobs({ number_activated_at: null, throttle_ms: 1200 });
+    expect(colunas).not.toHaveProperty("number_activated_at");
+    expect(colunas.throttle_ms).toBe(1200);
+  });
+
+  it("data informada é gravada", () => {
+    const iso = "2026-01-10T12:00:00.000Z";
+    expect(colunasDeKnobs({ number_activated_at: iso }).number_activated_at).toBe(iso);
+  });
+
+  it("'já aquecido' vira o degrau único sem teto, e desmarcar volta ao padrão", () => {
+    expect(colunasDeKnobs({ skip_warmup: true }).warmup_daily_caps).toEqual([
+      { minAgeDays: 0, cap: null },
+    ]);
+    expect(colunasDeKnobs({ skip_warmup: false }).warmup_daily_caps).toBeNull();
+    expect(colunasDeKnobs({})).not.toHaveProperty("warmup_daily_caps");
   });
 });

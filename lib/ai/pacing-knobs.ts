@@ -115,6 +115,36 @@ export function effectiveKnobs(row: ChannelKnobsRow | null): PacingKnobs {
 /** Forma gravada em `warmup_daily_caps` quando o dono declara o número já aquecido. */
 export const WARMUP_PULADO = [{ minAgeDays: 0, cap: null }] as const;
 
+/**
+ * O pedido da TELA → as colunas de `channel_knobs` que o upsert grava.
+ *
+ * ─── `number_activated_at: null` NÃO vira coluna ───────────────────────────
+ *
+ * A coluna é `not null default now()`, e a tela manda `null` quando a data fica
+ * em branco — que é o estado de TODO número sem linha de knobs ainda. Repassado
+ * ao upsert, o `null` violava a constraint e o painel inteiro respondia "Falha ao
+ * salvar os knobs": nenhum campo salvava enquanto a data não fosse preenchida.
+ *
+ * Em branco quer dizer "não informei". Omitida, a coluna nasce com o default
+ * (`now()`: número tratado como recém-criado, que é o que a tela promete) e, numa
+ * linha que já existe, mantém a data que estava — apagar o campo não rejuvenesce
+ * um número que o dono já tinha declarado antigo.
+ *
+ * `skip_warmup` é pergunta da tela; a coluna guarda a forma que o motor lê.
+ */
+export function colunasDeKnobs(
+  entrada: Omit<PacingKnobsUpdate, "channel_session_id" | "daily_message_limit">,
+): Partial<ChannelKnobsRow> {
+  const { skip_warmup, number_activated_at, ...diretos } = entrada;
+  return {
+    ...diretos,
+    ...(number_activated_at != null ? { number_activated_at } : {}),
+    ...(skip_warmup !== undefined
+      ? { warmup_daily_caps: skip_warmup ? [...WARMUP_PULADO] : null }
+      : {}),
+  };
+}
+
 /** A configuração de warm-up desta conexão é a de "já aquecido"? */
 export function warmupEstaPulado(row: ChannelKnobsRow | null): boolean {
   const caps = parseWarmupCaps(row?.warmup_daily_caps);
