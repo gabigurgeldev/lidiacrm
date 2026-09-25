@@ -49,7 +49,8 @@ import type {
 } from "../types";
 
 import { corpoCloudApi } from "../cloud-api/corpo";
-import { componentsPorChave } from "../cloud-api/template-por-chaves";
+import type { MetaSendComponent } from "../meta/build-components";
+import { componentesDoModelo } from "../stevo/componentes-do-modelo";
 import { resolveEnvioStevo, resolveStevoCreds, stevoBaseUrlOficial } from "../stevo/credentials";
 import { corpoDeEnvioStevo, idDaRespostaStevo } from "../stevo/envelope";
 import { lerInstanciaStevo } from "../stevo/instancias";
@@ -128,16 +129,16 @@ async function enviarPeloGateway(
  * ─── O corpo ────────────────────────────────────────────────────────────────
  *
  * Mesmo endpoint do texto (`/v1/messages`) e mesma omissão de
- * `messaging_product` — o gateway o acrescenta. `components` vem de
- * `componentsPorChave`, e não de `buildComponents`, porque o espelho local
- * pode estar vazio para esta conexão; o cabeçalho daquele arquivo diz o que a
- * reconstrução cobre e o que ela recusa a adivinhar.
+ * `messaging_product` — o gateway o acrescenta. `components` chega pronto de
+ * `componentesDoModelo`, que monta pelo CONTRATO da definição (e por isso manda
+ * imagem de cabeçalho como imagem) e só cai na reconstrução por chaves quando
+ * a definição não é achável nem no espelho nem na plataforma.
  */
 async function enviarTemplatePeloGateway(
-  input: { to: string; name: string; language: string; values: Record<string, string> },
+  input: { to: string; name: string; language: string; components: MetaSendComponent[] },
   token: string,
 ): Promise<{ externalId: string | null }> {
-  const components = componentsPorChave(input.values);
+  const { components } = input;
   const res = await fetch(`${stevoBaseUrlOficial()}/v1/messages`, {
     method: "POST",
     headers: {
@@ -315,8 +316,41 @@ export const stevoAdapter: ChannelAdapter = {
           "ou escolha uma conexão oficial para este envio.",
       );
     }
+    const components = await componentesDoModelo(
+      {
+        chave: `${input.organizationId}|${input.sessionRef}|${input.name}|${input.language}`,
+        // O espelho grava a conta desta conexão em `waba_id` (rota de modelos
+        // do parceiro) — é por ela que a definição DESTA conexão é achada.
+        lerEspelho: async () => {
+          const { data } = await admin
+            .from("meta_templates")
+            .select("name, language, parameter_format, components")
+            .eq("organization_id", input.organizationId)
+            .eq("waba_id", input.sessionRef)
+            .eq("name", input.name)
+            .eq("language", input.language)
+            .maybeSingle();
+          if (!data) return null;
+          const linha = data as {
+            name: string;
+            language: string;
+            parameter_format: string | null;
+            components: unknown[] | null;
+          };
+          return {
+            name: linha.name,
+            language: linha.language,
+            parameterFormat: linha.parameter_format,
+            components: linha.components ?? [],
+          };
+        },
+        listarNaPlataforma: () =>
+          stevoTemplateOps.list({ organizationId: input.organizationId, sessionRef: input.sessionRef }),
+      },
+      { name: input.name, language: input.language, values: input.values },
+    );
     return enviarTemplatePeloGateway(
-      { to: input.to, name: input.name, language: input.language, values: input.values },
+      { to: input.to, name: input.name, language: input.language, components },
       envio.token,
     );
   },

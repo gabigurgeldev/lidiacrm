@@ -433,8 +433,24 @@ describe("subir a imagem e ver a prévia", () => {
     // Tornar o bucket público resolveria o cabeçalho e exporia o histórico de
     // mídia de todos os clientes, que mora no mesmo lugar.
     const fonte = readFileSync("app/api/v1/channels/partner/templates/media/route.ts", "utf8");
-    expect(fonte).toMatch(/createSignedUrl\(caminho, VALIDADE_SEGUNDOS\)/);
-    expect(fonte).toMatch(/7 \* 24 \* 60 \* 60/);
+    expect(fonte).toMatch(
+      /createSignedUrl\(caminho, paraDisparo \? VALIDADE_DISPARO_SEGUNDOS : VALIDADE_SEGUNDOS\)/,
+    );
+    expect(fonte).toMatch(/VALIDADE_SEGUNDOS = 7 \* 24 \* 60 \* 60/);
+  });
+
+  it("⭐ a imagem de um DISPARO vive a campanha inteira, não sete dias", () => {
+    // Cada mensagem manda o mesmo link e a Meta baixa a cada envio. Com sete
+    // dias, um disparo em aquecimento perdia a imagem no meio e o fim da
+    // campanha era recusado.
+    const fonte = readFileSync("app/api/v1/channels/partner/templates/media/route.ts", "utf8");
+    expect(fonte).toMatch(/VALIDADE_DISPARO_SEGUNDOS = 30 \* 24 \* 60 \* 60/);
+    expect(fonte).toMatch(/form\?\.get\("uso"\) === "disparo"/);
+    const dialogo = readFileSync("app/app/disparos/_components/NovoDisparoDialog.tsx", "utf8");
+    expect(dialogo).toMatch(/fd\.append\("uso", "disparo"\)/);
+    expect(dialogo, "a lacuna de imagem voltou a ser campo de texto").toMatch(
+      /l\.expects === "image" \?/,
+    );
   });
 
   it("e recusa formato e tamanho ANTES de subir", () => {

@@ -18,6 +18,14 @@
  * plataforma copia o arquivo para o armazenamento dela e devolve um
  * identificador próprio; o nosso não precisa sobreviver ao envio.
  *
+ * ─── E quando a imagem vai num DISPARO (`uso=disparo`) ─────────────────────
+ *
+ * Aí o link NÃO é usado uma vez só: cada mensagem da campanha manda o mesmo
+ * link, e a Meta baixa a imagem a cada envio. Um disparo em aquecimento, ou
+ * agendado, atravessa dias — com sete, a imagem morreria no meio da campanha e
+ * as últimas mensagens seriam recusadas. Trinta dias cobrem o teto de uma
+ * campanha e continuam sendo um link que expira.
+ *
  * Tornar o bucket público seria a alternativa fácil e está errada: ele guarda
  * também a mídia das conversas, e abrir o bucket inteiro para resolver o
  * cabeçalho de um modelo exporia o histórico de todos os clientes.
@@ -34,6 +42,8 @@ export const dynamic = "force-dynamic";
 
 /** A revisão leva até 24h; a margem tem de caber num feriado. */
 const VALIDADE_SEGUNDOS = 7 * 24 * 60 * 60;
+/** Um disparo reenvia o link a cada mensagem, por dias — ver o cabeçalho. */
+const VALIDADE_DISPARO_SEGUNDOS = 30 * 24 * 60 * 60;
 
 /**
  * Só imagem, e só os formatos que a plataforma aceita no cabeçalho.
@@ -72,8 +82,9 @@ export async function POST(req: NextRequest): Promise<Response> {
     return fail("payload_too_large", "A imagem precisa ter até 5 MB.", 413, { requestId });
   }
 
+  const paraDisparo = form?.get("uso") === "disparo";
   const ext = mime === "image/png" ? "png" : "jpg";
-  const caminho = `${org.orgId}/templates/${randomUUID()}.${ext}`;
+  const caminho = `${org.orgId}/${paraDisparo ? "disparos" : "templates"}/${randomUUID()}.${ext}`;
   const admin = createAdminClient();
 
   const { error: erroUp } = await admin.storage
@@ -86,7 +97,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const { data: assinada, error: erroUrl } = await admin.storage
     .from("whatsapp-media")
-    .createSignedUrl(caminho, VALIDADE_SEGUNDOS);
+    .createSignedUrl(caminho, paraDisparo ? VALIDADE_DISPARO_SEGUNDOS : VALIDADE_SEGUNDOS);
   if (erroUrl || !assinada?.signedUrl) {
     logger.error("[partner/templates/media] assinatura falhou", {
       detail: erroUrl?.message ?? "sem url",

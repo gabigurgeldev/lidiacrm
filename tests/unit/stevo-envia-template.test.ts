@@ -22,7 +22,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const decifrar = vi.fn(async () => "token-do-gateway");
 const consulta = { data: null as unknown, error: null as unknown };
 
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
+/** O que o espelho (`meta_templates`) tem para esta conexão. `null` = vazio. */
+const espelho = { data: null as unknown };
+/** O que a plataforma devolve em `GET /v1/templates`. */
+let naPlataforma: unknown[] = [];
+/** A resposta do `POST /v1/messages`. */
+let respostaDoEnvio: () => unknown;
+
+vi.mock("@/lib/supabase/admin", () => {
+  const cadeia: Record<string, unknown> = {};
+  cadeia.select = () => cadeia;
+  cadeia.eq = () => cadeia;
+  cadeia.maybeSingle = async () => ({ data: espelho.data, error: null });
+  return { createAdminClient: () => ({ from: () => cadeia }) };
+});
 vi.mock("@/lib/channels/stevo/credentials", async (original) => {
   const real = (await original()) as Record<string, unknown>;
   return {
@@ -34,17 +47,36 @@ vi.mock("@/lib/channels/stevo/credentials", async (original) => {
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
-beforeEach(() => {
+beforeEach(async () => {
   decifrar.mockClear();
   consulta.data = { transporte: "gateway", token: "token-do-gateway" };
-  fetchMock = vi.fn(async () => ({
+  espelho.data = null;
+  naPlataforma = [];
+  respostaDoEnvio = () => ({
     ok: true,
     status: 200,
     statusText: "OK",
     json: async () => ({ messages: [{ id: "wamid.ABC" }] }),
-  }));
+  });
+  (await import("@/lib/channels/stevo/componentes-do-modelo")).__limparCacheDeDefinicoes();
+  fetchMock = vi.fn(async (url: string) =>
+    String(url).includes("/v1/templates")
+      ? { ok: true, status: 200, statusText: "OK", json: async () => ({ data: naPlataforma }) }
+      : respostaDoEnvio(),
+  );
   vi.stubGlobal("fetch", fetchMock);
 });
+
+/** A chamada de ENVIO — a busca da definição na plataforma pode vir antes dela. */
+function envio(): [string, { body: string; headers: Record<string, string> }] {
+  const chamada = fetchMock.mock.calls.find(([u]) => String(u).endsWith("/v1/messages"));
+  expect(chamada, "o envio não foi feito").toBeDefined();
+  return chamada as [string, { body: string; headers: Record<string, string> }];
+}
+
+function listagens(): number {
+  return fetchMock.mock.calls.filter(([u]) => String(u).includes("/v1/templates")).length;
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -69,7 +101,7 @@ describe("modelo aprovado pela conexão intermediada", () => {
     const a = await adapter();
     const r = await a.sendTemplate!(PEDIDO);
 
-    const [url, init] = fetchMock.mock.calls[0]!;
+    const [url, init] = envio();
     expect(url).toBe("https://gateway.exemplo/v1/messages");
     expect(url).not.toContain("graph.facebook.com");
     expect((init as { headers: Record<string, string> }).headers.Authorization).toBe(
@@ -87,7 +119,7 @@ describe("modelo aprovado pela conexão intermediada", () => {
       values: { "1": "um", "2": "dois", "10": "dez" },
     });
 
-    const corpo = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+    const corpo = JSON.parse(envio()[1].body);
     expect(corpo.template.components[0].parameters.map((p: { text: string }) => p.text)).toEqual([
       "um",
       "dois",
@@ -99,7 +131,7 @@ describe("modelo aprovado pela conexão intermediada", () => {
     const a = await adapter();
     await a.sendTemplate!({ ...PEDIDO, values: {} });
 
-    const corpo = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+    const corpo = JSON.parse(envio()[1].body);
     expect(corpo.template.components).toBeUndefined();
     expect(corpo.template.name).toBe("confirmacao_pedido");
     expect(corpo.template.language).toEqual({ code: "pt_BR" });
@@ -115,7 +147,7 @@ describe("modelo aprovado pela conexão intermediada", () => {
       values: { "1": "corpo", "header:1": "cabeca", "card0:1": "carrossel" },
     });
 
-    const corpo = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+    const corpo = JSON.parse(envio()[1].body);
     expect(corpo.template.components.map((c: { type: string }) => c.type)).toEqual([
       "header",
       "body",
@@ -131,7 +163,7 @@ describe("modelo aprovado pela conexão intermediada", () => {
     const a = await adapter();
     await a.sendTemplate!({ ...PEDIDO, values: { "1": "Ana", "2": "   " } });
 
-    const corpo = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+    const corpo = JSON.parse(envio()[1].body);
     expect(corpo.template.components[0].parameters).toHaveLength(1);
   });
 
@@ -139,7 +171,7 @@ describe("modelo aprovado pela conexão intermediada", () => {
     const a = await adapter();
     await a.sendTemplate!(PEDIDO);
 
-    const corpo = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+    const corpo = JSON.parse(envio()[1].body);
     expect(corpo.messaging_product).toBeUndefined();
   });
 
@@ -155,7 +187,7 @@ describe("modelo aprovado pela conexão intermediada", () => {
   });
 
   it("erro da plataforma sobe com o código dela, que é o que diz a AÇÃO", async () => {
-    fetchMock.mockResolvedValueOnce({
+    respostaDoEnvio = () => ({
       ok: false,
       status: 400,
       statusText: "Bad Request",
@@ -164,5 +196,65 @@ describe("modelo aprovado pela conexão intermediada", () => {
     const a = await adapter();
 
     await expect(a.sendTemplate!(PEDIDO)).rejects.toThrow(/132000/u);
+  });
+});
+
+describe("o payload pelo CONTRATO da definição", () => {
+  const COM_IMAGEM = {
+    name: "confirmacao_pedido",
+    language: "pt_BR",
+    components: [
+      { type: "HEADER", format: "IMAGE" },
+      { type: "BODY", text: "Oi {{1}}, seu pedido saiu." },
+    ],
+  };
+
+  it("⭐ imagem no cabeçalho sai como IMAGEM — como texto a Meta recusa toda mensagem", async () => {
+    naPlataforma = [COM_IMAGEM];
+    const a = await adapter();
+    await a.sendTemplate!({
+      ...PEDIDO,
+      values: { "header:1": "https://arquivos.exemplo/banner.jpg", "1": "Ana" },
+    });
+
+    const corpo = JSON.parse(envio()[1].body);
+    expect(corpo.template.components[0]).toEqual({
+      type: "header",
+      parameters: [{ type: "image", image: { link: "https://arquivos.exemplo/banner.jpg" } }],
+    });
+    expect(corpo.template.components[1].parameters).toEqual([{ type: "text", text: "Ana" }]);
+  });
+
+  it("o espelho responde primeiro, sem ir à plataforma", async () => {
+    espelho.data = { ...COM_IMAGEM, parameter_format: null };
+    const a = await adapter();
+    await a.sendTemplate!({
+      ...PEDIDO,
+      values: { "header:1": "https://arquivos.exemplo/banner.jpg", "1": "Ana" },
+    });
+
+    expect(listagens()).toBe(0);
+    expect(JSON.parse(envio()[1].body).template.components[0].parameters[0].type).toBe("image");
+  });
+
+  it("⭐ um disparo não lista a plataforma a cada destinatário", async () => {
+    naPlataforma = [COM_IMAGEM];
+    const a = await adapter();
+    const valores = { "header:1": "https://arquivos.exemplo/banner.jpg", "1": "Ana" };
+    await a.sendTemplate!({ ...PEDIDO, values: valores });
+    await a.sendTemplate!({ ...PEDIDO, to: "5511911112222", values: valores });
+    await a.sendTemplate!({ ...PEDIDO, to: "5511933334444", values: valores });
+
+    expect(listagens()).toBe(1);
+  });
+
+  it("lacuna sem valor falha AQUI, com o nome dela, em vez de um 132000", async () => {
+    naPlataforma = [COM_IMAGEM];
+    const a = await adapter();
+
+    await expect(a.sendTemplate!({ ...PEDIDO, values: { "1": "Ana" } })).rejects.toThrow(
+      /cabeçalho/u,
+    );
+    expect(fetchMock.mock.calls.some(([u]) => String(u).endsWith("/v1/messages"))).toBe(false);
   });
 });

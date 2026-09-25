@@ -6813,6 +6813,9 @@ export const DICIONARIO: Traducoes = {
   "Todos os contatos recebem os mesmos valores.":
     { es: "Todos los contactos reciben los mismos valores." },
   "Pelo modelo {m}.": { es: "Con la plantilla {m}." },
+  "JPG ou PNG, até 5 MB": { es: "JPG o PNG, hasta 5 MB" },
+  "Não consegui subir a imagem.": { es: "No pude subir la imagen." },
+  "Link público do arquivo (https://…)": { es: "Enlace público del archivo (https://…)" },
   "Modelos da conexão": { es: "Plantillas de la conexión" },
 
   // Passo 3 — o ritmo

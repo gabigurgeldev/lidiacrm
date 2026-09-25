@@ -109,6 +109,37 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
   /** `nome|idioma` do modelo escolhido — o par é a identidade da definição. */
   const [modeloChave, setModeloChave] = React.useState("");
   const [valores, setValores] = React.useState<Record<string, string>>({});
+  /** A lacuna cuja imagem está subindo agora — trava o botão só dela. */
+  const [subindoImagem, setSubindoImagem] = React.useState<string | null>(null);
+
+  /**
+   * Sobe a imagem do cabeçalho e guarda o LINK como valor da lacuna.
+   *
+   * Pedir "cole o link público da imagem" era pedir o que o operador não tem. A
+   * rota é a mesma da criação de modelos; `uso=disparo` pede um link que dure a
+   * campanha inteira, porque cada mensagem manda o mesmo link e a Meta baixa a
+   * imagem a cada envio.
+   */
+  async function subirImagem(chave: string, arquivo: File) {
+    setSubindoImagem(chave);
+    try {
+      const fd = new FormData();
+      fd.append("file", arquivo);
+      fd.append("uso", "disparo");
+      const r = await fetch("/api/v1/channels/partner/templates/media", { method: "POST", body: fd });
+      const j = (await r.json().catch(() => ({}))) as {
+        data?: { url?: string };
+        error?: { message?: string };
+      };
+      if (!r.ok || !j.data?.url) {
+        toast.error(t(j.error?.message ?? "Não consegui subir a imagem."));
+        return;
+      }
+      setValores((v) => ({ ...v, [chave]: j.data!.url! }));
+    } finally {
+      setSubindoImagem(null);
+    }
+  }
 
   const { data: conexoes } = useQuery({
     queryKey: ["bulk-send-conexoes"],
@@ -145,7 +176,9 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
   const faltaValor = lacunas.some((l) => !(valores[l.key] ?? "").trim());
   const podeSeguirDoPasso2 =
     conexao !== null &&
-    (conexao.modo === "freeform" ? corpo.trim() !== "" : modelo !== null && !faltaValor);
+    (conexao.modo === "freeform"
+      ? corpo.trim() !== ""
+      : modelo !== null && !faltaValor && subindoImagem === null);
 
   /**
    * O intervalo que vale — nunca abaixo do piso da conexão.
@@ -204,6 +237,7 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
     setAgendarPara("");
     setModeloChave("");
     setValores({});
+    setSubindoImagem(null);
     aoFechar();
   }
 
@@ -356,19 +390,65 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
 
                 {/* Um campo por lacuna do modelo. O valor é o MESMO para todos os
                     destinatários — o disparo não troca por contato. */}
-                {lacunas.map((l) => (
-                  <div key={l.key} className="flex flex-col gap-1">
-                    <Label htmlFor={`valor-${l.key}`}>
-                      {t("Valor de {k}").replace("{k}", `{{${l.key}}}`)}{" "}
-                      <span className="text-xs font-normal text-muted-foreground">({l.onde})</span>
-                    </Label>
-                    <Input
-                      id={`valor-${l.key}`}
-                      value={valores[l.key] ?? ""}
-                      onChange={(e) => setValores({ ...valores, [l.key]: e.target.value })}
-                    />
-                  </div>
-                ))}
+                {lacunas.map((l) =>
+                  l.expects === "image" ? (
+                    // IMAGEM, não texto: o cabeçalho de mídia pede o arquivo, e o
+                    // envio o manda como imagem. Um campo de texto aqui convidava a
+                    // digitar uma frase, que a Meta recusa em toda mensagem.
+                    <div key={l.key} className="flex flex-col gap-2">
+                      <Label htmlFor={`valor-${l.key}`}>
+                        {t("Imagem do cabeçalho")}{" "}
+                        <span className="text-xs font-normal text-muted-foreground">
+                          ({t("JPG ou PNG, até 5 MB")})
+                        </span>
+                      </Label>
+                      <div className="flex items-center gap-3">
+                        {valores[l.key] && (
+                          // eslint-disable-next-line @next/next/no-img-element -- link assinado do storage, fora do otimizador
+                          <img
+                            src={valores[l.key]}
+                            alt={t("Imagem do cabeçalho")}
+                            className="size-16 rounded-md border object-cover"
+                          />
+                        )}
+                        <label className="cursor-pointer rounded-md border border-dashed border-input px-3 py-2 text-sm text-muted-foreground hover:bg-muted">
+                          {subindoImagem === l.key
+                            ? t("Subindo…")
+                            : valores[l.key]
+                              ? t("Trocar imagem")
+                              : t("Subir imagem (JPG/PNG)")}
+                          <input
+                            id={`valor-${l.key}`}
+                            type="file"
+                            accept="image/jpeg,image/png"
+                            className="hidden"
+                            disabled={subindoImagem !== null}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              e.target.value = "";
+                              if (f) void subirImagem(l.key, f);
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={l.key} className="flex flex-col gap-1">
+                      <Label htmlFor={`valor-${l.key}`}>
+                        {t("Valor de {k}").replace("{k}", `{{${l.key}}}`)}{" "}
+                        <span className="text-xs font-normal text-muted-foreground">({l.onde})</span>
+                      </Label>
+                      <Input
+                        id={`valor-${l.key}`}
+                        value={valores[l.key] ?? ""}
+                        onChange={(e) => setValores({ ...valores, [l.key]: e.target.value })}
+                        placeholder={
+                          l.expects === "text" ? undefined : t("Link público do arquivo (https://…)")
+                        }
+                      />
+                    </div>
+                  ),
+                )}
                 {lacunas.length > 0 && (
                   <p className="text-xs text-muted-foreground">
                     {t("Todos os contatos recebem os mesmos valores.")}
