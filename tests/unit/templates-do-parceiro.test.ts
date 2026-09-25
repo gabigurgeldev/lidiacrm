@@ -163,6 +163,59 @@ describe("os elos que somem sem barulho", () => {
   });
 });
 
+describe("a conexão importada por chave de conta — o Sincronizar que sempre falhava", () => {
+  it("⭐ sem canal_id, a rota acha a conexão pela FONTE, não só pelo parceiro fixo", () => {
+    // `findPartnerSession` procura UM provider. A instância oficial importada por
+    // chave de conta é de outro, e a rota respondia 404 "nenhuma conexão de
+    // parceiro ativa" com o token gravado — o Sincronizar falhava sempre.
+    const fonte = readFileSync("app/api/v1/channels/partner/templates/route.ts", "utf8");
+    expect(fonte).toMatch(/primeiraConexaoComDefinicoes\(admin, org\.orgId\)/);
+    expect(fonte).toMatch(/fonteDeTemplates\(l\.provider, l\.provider_mode\) === "parceiro"/);
+  });
+
+  it("a tela de modelos diz DE QUAL conexão fala e manda o canal_id", () => {
+    const fonte = readFileSync("components/connections/TemplatesParceiroClient.tsx", "utf8");
+    expect(fonte).toMatch(/partner\/templates\$\{daConexao\}/);
+    expect(fonte).toMatch(/queryKey: \["partner-templates", canalId\]/);
+    expect(fonte, "a tela está nomeando provider").not.toMatch(/"zernio"|"stevo"|"meta_cloud"/);
+  });
+
+  it("a rota devolve as LACUNAS na chave que o envio confere", () => {
+    // Sem `slots`, a tela de disparo não sabe quais valores pedir; com a `key`
+    // crua, uma lacuna de cabeçalho colidiria com a `{{1}}` do corpo.
+    const fonte = readFileSync("app/api/v1/channels/partner/templates/route.ts", "utf8");
+    expect(fonte).toMatch(/key: slotKey\(s\.address, s\.key\)/);
+  });
+});
+
+describe("disparar por modelo", () => {
+  const dialogo = () => readFileSync("app/app/disparos/_components/NovoDisparoDialog.tsx", "utf8");
+
+  it("⭐ o disparo por número oficial ESCOLHE o modelo — não manda para outra tela", () => {
+    // O aviso antigo mandava "escolher em Conexões e voltar", e nada em Conexões
+    // dispara: o operador ficava sem caminho.
+    const fonte = dialogo();
+    expect(fonte).not.toMatch(/o disparo por modelo ainda é feito por lá/);
+    expect(fonte).toMatch(/template_name: modelo\?\.name/);
+    expect(fonte).toMatch(/template_values: valores/);
+  });
+
+  it("a lista é da CONEXÃO escolhida, e trocar de conexão zera o modelo", () => {
+    const fonte = dialogo();
+    expect(fonte).toMatch(/queryKey: \["modelos-da-conexao", fonte, conexaoId\]/);
+    expect(fonte).toMatch(/\?canal_id=\$\{conexaoId\}/);
+    expect(fonte).toMatch(/setConexaoId\(c\.id\);\s*\/\/[^\n]*\n\s*setModeloChave\(""\)/);
+  });
+
+  it("não segue sem modelo nem com lacuna em branco", () => {
+    // Antes o botão Continuar ficava liberado no modo modelo, e dava para criar
+    // um disparo sem nada a enviar.
+    const fonte = dialogo();
+    expect(fonte).toMatch(/modelo !== null && !faltaValor/);
+    expect(fonte).toMatch(/disabled=\{!podeSeguirDoPasso2\}/);
+  });
+});
+
 describe("o conteúdo da definição, e o campo que causava as recusas", () => {
   it("lê corpo, cabeçalho, rodapé e botões do payload cru", () => {
     const c = lerConteudo([

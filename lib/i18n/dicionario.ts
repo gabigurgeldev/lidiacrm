@@ -6808,8 +6808,12 @@ export const DICIONARIO: Traducoes = {
   "Este canal cobra por mensagem enviada.": { es: "Este canal cobra por mensaje enviado." },
   "Escreva a mensagem que todos vão receber.":
     { es: "Escribí el mensaje que todos van a recibir." },
-  "Este número só entrega modelo aprovado. Escolha o modelo em Conexões › Modelos e volte — o disparo por modelo ainda é feito por lá.":
-    { es: "Este número solo entrega plantilla aprobada. Elegí la plantilla en Conexiones › Plantillas y volvé — el envío por plantilla todavía se hace desde ahí." },
+  "Nenhum modelo aprovado nesta conexão. Crie ou sincronize em Conexões › Provedor parceiro › Modelos do parceiro e volte aqui.":
+    { es: "Ninguna plantilla aprobada en esta conexión. Creá o sincronizá en Conexiones › Proveedor asociado › Plantillas del asociado y volvé acá." },
+  "Todos os contatos recebem os mesmos valores.":
+    { es: "Todos los contactos reciben los mismos valores." },
+  "Pelo modelo {m}.": { es: "Con la plantilla {m}." },
+  "Modelos da conexão": { es: "Plantillas de la conexión" },
 
   // Passo 3 — o ritmo
   "Tempo entre uma mensagem e outra": { es: "Tiempo entre un mensaje y otro" },

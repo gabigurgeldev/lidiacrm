@@ -47,8 +47,16 @@ interface TemplateParceiro {
   status: string;
   category: string | null;
   rejectedReason: string | null;
-  syncedAt: string;
+  /** `null` quando a lista veio direto da plataforma, sem passar pelo espelho. */
+  syncedAt: string | null;
   components: unknown[];
+}
+
+/** Do que esta tela precisa de `/api/v1/bulk-sends/conexoes`. */
+interface ConexaoComDefinicoes {
+  id: string;
+  rotulo: string;
+  fonte_de_modelos: "oficial" | "parceiro" | null;
 }
 
 const COR_DO_ESTADO: Record<string, string> = {
@@ -75,6 +83,30 @@ export function TemplatesParceiroClient() {
   const [botoes, setBotoes] = useState<BotaoDaDefinicao[]>([]);
   const [subindo, setSubindo] = useState(false);
   const [aberto, setAberto] = useState<string | null>(null);
+  const [canalEscolhido, setCanalEscolhido] = useState<string | null>(null);
+
+  // ─── DE QUAL conexão são os modelos ────────────────────────────────────────
+  //
+  // Sem a conexão na chamada, a rota respondia pela de UM provider só, e quem
+  // conectou a instância oficial por chave de conta recebia 404 no Sincronizar
+  // com o token já gravado. Definições são aprovadas POR CONTA: a tela diz de
+  // qual conexão está falando e manda o `canal_id`.
+  //
+  // A lista vem da rota do disparo porque ela já decide `fonte_de_modelos` pela
+  // CONEXÃO (provider + modalidade) — a tela não pode nomear provider. Ela exige
+  // papel de gestor; para quem não o tem a lista falha, e a chamada segue sem
+  // `canal_id`, que a rota resolve sozinha pela primeira conexão que serve.
+  const { data: conexoes } = useQuery({
+    queryKey: ["bulk-send-conexoes"],
+    queryFn: async () =>
+      apiClient.get<{ data: ConexaoComDefinicoes[] }>("/api/v1/bulk-sends/conexoes"),
+    select: (r) => r.data.filter((c) => c.fonte_de_modelos === "parceiro"),
+    retry: false,
+  });
+  const candidatas = conexoes ?? [];
+  const canalId =
+    candidatas.find((c) => c.id === canalEscolhido)?.id ?? candidatas[0]?.id ?? null;
+  const daConexao = canalId === null ? "" : `?canal_id=${canalId}`;
 
   // Quantas amostras a revisão vai exigir. Recalculado enquanto se digita: o
   // operador vê o campo aparecer no instante em que escreve `{{1}}`, e não
@@ -82,17 +114,19 @@ export function TemplatesParceiroClient() {
   const nVariaveis = contarVariaveis(corpo);
 
   const lista = useQuery({
-    queryKey: ["partner-templates"],
+    // A conexão entra na chave: servir do cache a lista da conexão anterior
+    // mostraria modelos de outra conta.
+    queryKey: ["partner-templates", canalId],
     queryFn: async () =>
       apiClient.get<{ data: { templates: TemplateParceiro[] } }>(
-        "/api/v1/channels/partner/templates",
+        `/api/v1/channels/partner/templates${daConexao}`,
       ),
   });
 
   const acao = useMutation({
     mutationFn: async (corpoReq: Record<string, unknown>) =>
       apiClient.post<{ data: { sincronizadas: number; total: number } }>(
-        "/api/v1/channels/partner/templates",
+        `/api/v1/channels/partner/templates${daConexao}`,
         corpoReq,
       ),
     onSuccess: (r) => {
@@ -100,6 +134,7 @@ export function TemplatesParceiroClient() {
       // Invalida também o seletor do inbox: sem isto o operador sincroniza aqui,
       // volta à conversa e o seletor segue dizendo que não há nenhuma.
       qc.invalidateQueries({ queryKey: ["channel-templates"] });
+      qc.invalidateQueries({ queryKey: ["modelos-da-conexao"] });
       toast.success(`${r.data.sincronizadas} ${t("de")} ${r.data.total} ${t("sincronizada(s).")}`);
       setCriando(false);
       setNome("");
@@ -113,6 +148,28 @@ export function TemplatesParceiroClient() {
 
   return (
     <div className="flex flex-col gap-4">
+      {candidatas.length > 1 && (
+        <label className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted-foreground">{t("Modelos da conexão")}</span>
+          <select
+            value={canalId ?? ""}
+            onChange={(e) => setCanalEscolhido(e.target.value)}
+            aria-label={t("Modelos da conexão")}
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+          >
+            {candidatas.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.rotulo}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {candidatas.length === 1 && (
+        <p className="text-sm text-muted-foreground">
+          {t("Modelos da conexão")} <strong className="text-foreground">{candidatas[0]!.rotulo}</strong>
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
           {t(
@@ -515,9 +572,11 @@ export function TemplatesParceiroClient() {
                         ))}
                       </div>
                     )}
-                    <p className="text-[10px] text-muted-foreground">
-                      {t("Sincronizado em")} {new Date(tpl.syncedAt).toLocaleString(tagDoIdioma)}
-                    </p>
+                    {tpl.syncedAt && (
+                      <p className="text-[10px] text-muted-foreground">
+                        {t("Sincronizado em")} {new Date(tpl.syncedAt).toLocaleString(tagDoIdioma)}
+                      </p>
+                    )}
                   </div>
                 )}
               </li>

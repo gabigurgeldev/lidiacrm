@@ -21,6 +21,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useImportarLista, type RecorteDaPlanilha } from "@/hooks/bulk-send/useImportarLista";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
+import { lerConteudo } from "@/lib/channels/template-conteudo";
 import { Warning } from "@/lib/ui/icons";
 
 /**
@@ -59,7 +60,27 @@ interface Conexao {
   teto_de_hoje: number | null;
   em_aquecimento: boolean;
   janela: { inicio: number; fim: number; fuso: string };
+  /** De onde vêm os modelos aprovados DESTA conexão. Rótulo neutro, nunca o canal. */
+  fonte_de_modelos: "oficial" | "parceiro" | null;
 }
+
+/** O que as duas rotas de modelos devolvem, do que o disparo precisa. */
+interface ModeloAprovado {
+  name: string;
+  language: string;
+  status: string;
+  components?: unknown[];
+  slots?: Array<{ key: string; expects: string; onde: string }>;
+}
+
+/**
+ * A rota de cada fonte. Mesmo mapa de `SeletorDeModelo` (bloco de fluxo): a
+ * tela recebe o rótulo neutro e monta a URL, sem saber qual é o canal.
+ */
+const ROTA_DA_FONTE: Record<"oficial" | "parceiro", string> = {
+  oficial: "/api/v1/channels/templates",
+  parceiro: "/api/v1/channels/partner/templates",
+};
 
 /** Vem do hook que fala com a rota — uma definição só, do lado de quem a lê. */
 type Recorte = RecorteDaPlanilha;
@@ -85,6 +106,9 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
   const [agendarPara, setAgendarPara] = React.useState("");
   const [recorte, setRecorte] = React.useState<Recorte | null>(null);
   const [arquivo, setArquivo] = React.useState<File | null>(null);
+  /** `nome|idioma` do modelo escolhido — o par é a identidade da definição. */
+  const [modeloChave, setModeloChave] = React.useState("");
+  const [valores, setValores] = React.useState<Record<string, string>>({});
 
   const { data: conexoes } = useQuery({
     queryKey: ["bulk-send-conexoes"],
@@ -95,6 +119,33 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
 
   const conexao = (conexoes ?? []).find((c) => c.id === conexaoId) ?? null;
   const pisoSegundos = conexao ? Math.ceil(conexao.piso_ms / 1000) : 1;
+
+  // ─── Os modelos aprovados DESTA conexão ─────────────────────────────────────
+  //
+  // Antes, o disparo por um número oficial parava aqui com um aviso mandando o
+  // operador "escolher o modelo em Conexões e voltar" — e não havia volta: nada
+  // em Conexões dispara. O motor sempre soube enviar por modelo; faltava a tela
+  // deixar escolher. A lista é por conexão porque a definição é aprovada POR
+  // CONTA, e oferecer o modelo de outra conta é um envio que a plataforma recusa.
+  const fonte = conexao?.modo === "template" ? conexao.fonte_de_modelos : null;
+  const { data: modelos, isLoading: carregandoModelos } = useQuery({
+    queryKey: ["modelos-da-conexao", fonte, conexaoId],
+    enabled: aberto && fonte !== null && conexaoId !== null,
+    queryFn: async () =>
+      apiClient.get<{ data: { templates?: ModeloAprovado[] } }>(
+        `${ROTA_DA_FONTE[fonte!]}?canal_id=${conexaoId}`,
+      ),
+    select: (r) => (r.data.templates ?? []).filter((m) => m.status?.toUpperCase() === "APPROVED"),
+    staleTime: 30_000,
+  });
+  const modelo =
+    (modelos ?? []).find((m) => `${m.name}|${m.language}` === modeloChave) ?? null;
+  const lacunas = modelo?.slots ?? [];
+  const conteudoDoModelo = modelo ? lerConteudo(modelo.components) : null;
+  const faltaValor = lacunas.some((l) => !(valores[l.key] ?? "").trim());
+  const podeSeguirDoPasso2 =
+    conexao !== null &&
+    (conexao.modo === "freeform" ? corpo.trim() !== "" : modelo !== null && !faltaValor);
 
   /**
    * O intervalo que vale — nunca abaixo do piso da conexão.
@@ -121,7 +172,15 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
         name: nome,
         channel_session_id: conexaoId,
         mode: conexao?.modo ?? "freeform",
-        body: corpo,
+        // Só o conteúdo do modo escolhido: um `body` vazio num disparo por
+        // modelo reprova a validação (texto mínimo de 1 caractere).
+        ...(conexao?.modo === "template"
+          ? {
+              template_name: modelo?.name,
+              template_language: modelo?.language,
+              template_values: valores,
+            }
+          : { body: corpo }),
         interval_ms: intervaloValido * 1000,
         scheduled_for: agendarPara ? new Date(agendarPara).toISOString() : undefined,
         audiencia: { kind: "file", contact_ids: recorte?.contact_ids ?? [] },
@@ -143,6 +202,8 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
     setRecorte(null);
     setArquivo(null);
     setAgendarPara("");
+    setModeloChave("");
+    setValores({});
     aoFechar();
   }
 
@@ -201,7 +262,12 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
                   <button
                     key={c.id}
                     type="button"
-                    onClick={() => setConexaoId(c.id)}
+                    onClick={() => {
+                      setConexaoId(c.id);
+                      // Modelo é por conta: o da conexão anterior não existe nesta.
+                      setModeloChave("");
+                      setValores({});
+                    }}
                     className={`rounded-md border p-3 text-left text-sm transition-colors ${
                       conexaoId === c.id ? "border-primary bg-muted/50" : "hover:bg-muted/30"
                     }`}
@@ -248,10 +314,65 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
             )}
 
             {conexao?.modo === "template" && (
-              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/40">
-                <Warning className="mr-2 inline size-4" />
-                {t(
-                  "Este número só entrega modelo aprovado. Escolha o modelo em Conexões › Modelos e volte — o disparo por modelo ainda é feito por lá.",
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="modelo">{t("Modelo aprovado")}</Label>
+                  {carregandoModelos ? (
+                    <p className="text-sm text-muted-foreground">{t("Carregando os modelos…")}</p>
+                  ) : (modelos ?? []).length === 0 ? (
+                    <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/40">
+                      <Warning className="mr-2 inline size-4" />
+                      {t(
+                        "Nenhum modelo aprovado nesta conexão. Crie ou sincronize em Conexões › Provedor parceiro › Modelos do parceiro e volte aqui.",
+                      )}
+                    </div>
+                  ) : (
+                    <select
+                      id="modelo"
+                      value={modeloChave}
+                      onChange={(e) => {
+                        setModeloChave(e.target.value);
+                        // Trocar de modelo ZERA os valores: as lacunas de um não
+                        // são as do outro, e o texto sairia certo no lugar errado.
+                        setValores({});
+                      }}
+                      className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                    >
+                      <option value="">{t("Escolha o modelo")}</option>
+                      {(modelos ?? []).map((m) => (
+                        <option key={`${m.name}|${m.language}`} value={`${m.name}|${m.language}`}>
+                          {m.name} ({m.language})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {conteudoDoModelo?.body && (
+                  <p className="whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-sm">
+                    {conteudoDoModelo.body}
+                  </p>
+                )}
+
+                {/* Um campo por lacuna do modelo. O valor é o MESMO para todos os
+                    destinatários — o disparo não troca por contato. */}
+                {lacunas.map((l) => (
+                  <div key={l.key} className="flex flex-col gap-1">
+                    <Label htmlFor={`valor-${l.key}`}>
+                      {t("Valor de {k}").replace("{k}", `{{${l.key}}}`)}{" "}
+                      <span className="text-xs font-normal text-muted-foreground">({l.onde})</span>
+                    </Label>
+                    <Input
+                      id={`valor-${l.key}`}
+                      value={valores[l.key] ?? ""}
+                      onChange={(e) => setValores({ ...valores, [l.key]: e.target.value })}
+                    />
+                  </div>
+                ))}
+                {lacunas.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {t("Todos os contatos recebem os mesmos valores.")}
+                  </p>
                 )}
               </div>
             )}
@@ -316,6 +437,11 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
                 .replace("{n}", String(recorte.vao_receber))
                 .replace("{c}", conexao.rotulo)}
             </p>
+            {modelo && (
+              <p className="text-sm">
+                {t("Pelo modelo {m}.").replace("{m}", `${modelo.name} (${modelo.language})`)}
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">
               {t("Uma mensagem a cada {s} segundos — pelo menos {m} minutos até a última.")
                 .replace("{s}", String(intervaloValido))
@@ -367,7 +493,7 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
           )}
           {passo === 2 && (
             <Button
-              disabled={!conexao || (conexao.modo === "freeform" && !corpo.trim())}
+              disabled={!podeSeguirDoPasso2}
               onClick={() => setPasso(3)}
             >
               {t("Continuar")}

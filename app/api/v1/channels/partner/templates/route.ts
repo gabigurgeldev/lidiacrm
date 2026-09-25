@@ -53,7 +53,11 @@ import {
   type ChannelProvider,
   type ChannelSessionRef,
 } from "@/lib/channels";
+import { ARCHIVED_AT } from "@/lib/channels/archived";
 import { findPartnerSession } from "@/lib/channels/connect";
+import { slotKey } from "@/lib/channels/meta/build-components";
+import { deriveTemplateContract, describeAddress } from "@/lib/channels/meta/template-contract";
+import { fonteDeTemplates } from "@/lib/channels/templates-fonte";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -103,13 +107,16 @@ async function contexto(
     sessionId = data.id as string;
   } else {
     const sessao = await findPartnerSession(admin, org.orgId);
-    if (!sessao || sessao.archivedAt) {
+    sessionId =
+      sessao && !sessao.archivedAt
+        ? sessao.id
+        : await primeiraConexaoComDefinicoes(admin, org.orgId);
+    if (!sessionId) {
       return {
         ok: false,
         res: fail("not_found", "Nenhuma conexão de parceiro ativa.", 404, { requestId }),
       };
     }
-    sessionId = sessao.id;
   }
 
   const { data: linha } = await admin
@@ -133,6 +140,62 @@ async function contexto(
   return { ok: true, ctx: { orgId: org.orgId, sessionId, sessionRef, provider } };
 }
 
+/**
+ * Sem `canal_id` e sem conexão do parceiro fixo, a primeira conexão ATIVA cujas
+ * definições são servidas por esta rota.
+ *
+ * `findPartnerSession` procura UM provider só. Uma organização cujo canal
+ * intermediado é outro — instância oficial importada por chave de conta —
+ * recebia 404 "nenhuma conexão de parceiro ativa" com o token gravado e modelos
+ * aprovados de sobra, e o botão Sincronizar falhava sempre. Quem decide se a
+ * conexão serve é `fonteDeTemplates`, pela conexão (provider + modalidade), e
+ * não um nome de provider escrito aqui.
+ */
+async function primeiraConexaoComDefinicoes(
+  admin: ReturnType<typeof createAdminClient>,
+  orgId: string,
+): Promise<string | null> {
+  const { data, error } = await admin
+    .from("channel_sessions")
+    .select(`id, provider, provider_mode, ${ARCHIVED_AT}`)
+    .eq("organization_id", orgId)
+    .is(ARCHIVED_AT, null)
+    .order("created_at", { ascending: true });
+  if (error) return null;
+  const linhas = (data ?? []) as unknown as Array<{
+    id: string;
+    provider: string;
+    provider_mode: string | null;
+  }>;
+  return linhas.find((l) => fonteDeTemplates(l.provider, l.provider_mode) === "parceiro")?.id ?? null;
+}
+
+/**
+ * Os valores que a definição pede, na chave que o envio confere.
+ *
+ * `slotKey`, e não a `key` crua: é a mesma chave de `conferirDefinicao` e do
+ * montador do payload. Uma lacuna de cabeçalho chaveada só por `1` colidiria com
+ * a `{{1}}` do corpo — a tela mostraria um campo onde existem dois.
+ */
+function slotsDaDefinicao(t: {
+  name: string;
+  language: string;
+  parameterFormat?: string | null;
+  components: unknown[];
+}): Array<{ key: string; expects: string; onde: string }> {
+  const contrato = deriveTemplateContract({
+    name: t.name,
+    language: t.language,
+    parameter_format: t.parameterFormat ?? undefined,
+    components: t.components as never,
+  });
+  return contrato.slots.map((s) => ({
+    key: slotKey(s.address, s.key),
+    expects: s.expects,
+    onde: describeAddress(s.address),
+  }));
+}
+
 /** O `canal_id` da query, quando vier. Validado como UUID pelo banco, não aqui. */
 function canalDaQuery(req: NextRequest): string | null {
   const bruto = req.nextUrl.searchParams.get("canal_id");
@@ -148,7 +211,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("meta_templates")
-    .select("name, language, status, category, rejected_reason, components, synced_at")
+    .select("name, language, status, category, rejected_reason, components, parameter_format, synced_at")
     .eq("organization_id", r.ctx.orgId)
     .eq("channel_session_id", r.ctx.sessionId)
     .order("status")
@@ -193,6 +256,12 @@ export async function GET(req: NextRequest): Promise<Response> {
               // data de agora mentiria dizendo que sincronizamos.
               syncedAt: null,
               components: t.components ?? [],
+              slots: slotsDaDefinicao({
+                name: t.name,
+                language: t.language,
+                parameterFormat: t.parameterFormat,
+                components: t.components ?? [],
+              }),
             })),
           },
           { requestId },
@@ -219,6 +288,12 @@ export async function GET(req: NextRequest): Promise<Response> {
         // o operador a abrir a plataforma para saber o que a definição diz —
         // e é o texto que ele precisa para escolher qual mandar.
         components: (t.components as unknown[]) ?? [],
+        slots: slotsDaDefinicao({
+          name: t.name as string,
+          language: t.language as string,
+          parameterFormat: t.parameter_format as string | null,
+          components: (t.components as unknown[]) ?? [],
+        }),
       })),
     },
     { requestId },
