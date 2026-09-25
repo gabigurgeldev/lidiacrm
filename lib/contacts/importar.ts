@@ -29,6 +29,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { phoneLookupVariants } from "@/lib/channels/phone-variants";
 import { encryptCpfSql, hashCpf } from "@/lib/contacts/cpf";
 import { CSV_MAX_DATA_ROWS, mapHeader, mapLinha, parseCsv } from "@/lib/contacts/csv";
+import { comConcorrencia, emLotes, LOTE_DE_FILTRO } from "@/lib/lotes";
+
+/**
+ * Quantos contatos são criados ao mesmo tempo. Sequencial, uma planilha de
+ * milhares de linhas passava minutos em ida e volta; sem limite, abriria
+ * milhares de conexões contra o banco da VPS.
+ */
+const CRIACOES_SIMULTANEAS = 8;
 import { logger } from "@/lib/logger";
 import { contactCreateSchema, isValidCpf } from "@/lib/schemas";
 
@@ -81,6 +89,12 @@ export function recusaDeFormato(nome: string, tipo: string): string | null {
 /** Recusa de conteúdo. `null` = as linhas de dados estão prontas. */
 export function prepararLinhas(
   texto: string,
+  /**
+   * Teto de linhas. `null` = sem teto — é o caso do disparo em massa, cuja
+   * planilha não tem limite de destinatários. A importação da tela de Contatos
+   * segue com o padrão.
+   */
+  maxLinhas: number | null = CSV_MAX_DATA_ROWS,
 ):
   | { erro: string; detalhe?: Record<string, unknown> }
   | { erro: null; indices: Record<string, number>; dataRows: string[][] } {
@@ -94,8 +108,8 @@ export function prepararLinhas(
   }
 
   const dataRows = rows.slice(1);
-  if (dataRows.length > CSV_MAX_DATA_ROWS) {
-    return { erro: `Máximo de ${CSV_MAX_DATA_ROWS} linhas por importação — divida a planilha.` };
+  if (maxLinhas !== null && dataRows.length > maxLinhas) {
+    return { erro: `Máximo de ${maxLinhas} linhas por importação — divida a planilha.` };
   }
   return { erro: null, indices: mapeado.indices, dataRows };
 }
@@ -135,6 +149,10 @@ export async function importarLinhas(
       errors.push({ linha, motivo: `CPF inválido: "${contato.cpf}"` });
       continue;
     }
+    // A chave é o telefone JÁ NORMALIZADO (`normalizaTelefone` soma o nono
+    // dígito), então "11 99999-8888" e "11 9999-8888" caem aqui como a mesma
+    // pessoa. Isso importa mais agora que as linhas são criadas em paralelo: um
+    // repetido que passasse daqui nasceria como segundo contato na corrida.
     const chave = contato.phone_number ?? `email:${(contato.email as string).toLowerCase()}`;
     if (vistosNoArquivo.has(chave)) {
       repeatedInFile += 1;
@@ -181,116 +199,126 @@ export async function importarLinhas(
 
   const existentes = new Map<string, string>();
   if (phones.length > 0) {
+    // Em LOTES: o `.in()` vira URL, e uma planilha grande a estouraria.
     const lookup = [...new Set(phones.flatMap((p) => phoneLookupVariants(p)))];
-    const { data } = await supabase
-      .from("contacts")
-      .select("id, phone_number")
-      .eq("organization_id", orgId)
-      .not("phone_number", "is", null)
-      .in("phone_number", lookup);
-    for (const r of data ?? []) {
-      const row = r as { id: string; phone_number: string };
-      for (const v of phoneLookupVariants(row.phone_number)) existentes.set(`tel:${v}`, row.id);
+    for (const lote of emLotes(lookup, LOTE_DE_FILTRO)) {
+      const { data } = await supabase
+        .from("contacts")
+        .select("id, phone_number")
+        .eq("organization_id", orgId)
+        .not("phone_number", "is", null)
+        .in("phone_number", lote);
+      for (const r of data ?? []) {
+        const row = r as { id: string; phone_number: string };
+        for (const v of phoneLookupVariants(row.phone_number)) existentes.set(`tel:${v}`, row.id);
+      }
     }
   }
   if (emails.length > 0) {
-    const { data } = await supabase
-      .from("contacts")
-      .select("id, email_normalized")
-      .eq("organization_id", orgId)
-      .in(
-        "email_normalized",
-        emails.map((e) => e.toLowerCase()),
-      );
-    for (const r of data ?? []) {
-      const row = r as { id: string; email_normalized: string };
-      existentes.set(`email:${row.email_normalized}`, row.id);
+    for (const lote of emLotes(emails.map((e) => e.toLowerCase()), LOTE_DE_FILTRO)) {
+      const { data } = await supabase
+        .from("contacts")
+        .select("id, email_normalized")
+        .eq("organization_id", orgId)
+        .in("email_normalized", lote);
+      for (const r of data ?? []) {
+        const row = r as { id: string; email_normalized: string };
+        existentes.set(`email:${row.email_normalized}`, row.id);
+      }
     }
   }
 
   // ─── Insert linha a linha com desfecho individual ───────────────────────────
-  const contatos: ContatoDaPlanilha[] = [];
+  //
+  // Cada linha continua com o próprio desfecho (um 23505 não derruba as outras),
+  // mas várias correm ao mesmo tempo. A ordem de `contatos` é a da planilha: o
+  // resultado de cada linha cai no índice dela, e as vazias são descartadas.
   let imported = 0;
   let skippedDuplicates = 0;
 
-  for (const { linha, contato } of candidatos) {
-    const phone = contato.phone_number as string | undefined;
-    const email = contato.email as string | undefined;
+  const porLinha = await comConcorrencia(
+    candidatos,
+    CRIACOES_SIMULTANEAS,
+    async ({ linha, contato }): Promise<ContatoDaPlanilha | null> => {
+      const phone = contato.phone_number as string | undefined;
+      const email = contato.email as string | undefined;
 
-    const jaExiste =
-      (phone && phoneLookupVariants(phone).map((v) => existentes.get(`tel:${v}`)).find(Boolean)) ||
-      (email ? existentes.get(`email:${email.toLowerCase()}`) : undefined);
+      const jaExiste =
+        (phone && phoneLookupVariants(phone).map((v) => existentes.get(`tel:${v}`)).find(Boolean)) ||
+        (email ? existentes.get(`email:${email.toLowerCase()}`) : undefined);
 
-    if (jaExiste) {
-      skippedDuplicates += 1;
-      contatos.push({ id: jaExiste, linha, criado: false });
-      continue;
-    }
-
-    const insertRow: Record<string, unknown> = {
-      organization_id: orgId,
-      created_by_user_id: userId,
-      name: contato.name ?? null,
-      display_name: contato.display_name ?? null,
-      email: contato.email ?? null,
-      phone_number: contato.phone_number ?? null,
-      birthdate: contato.birthdate ?? null,
-      tags: contato.tags ?? [],
-      source: SOURCE_IMPORT_CSV,
-      source_metadata: {},
-      consent: {},
-    };
-    if (contato.cpf) {
-      insertRow.cpf_hash = hashCpf(contato.cpf as string);
-      // LGPD: além do hash (dedupe), grava a versão cifrada — igual ao create
-      // unitário, senão o contato importado nasce sem CPF recuperável.
-      const enc = await encryptCpfSql(supabase, contato.cpf as string);
-      if (enc) insertRow.cpf_encrypted = enc;
-    }
-
-    const { data: criado, error: insErr } = await supabase
-      .from("contacts")
-      .insert(insertRow)
-      .select("id, display_name, phone_number")
-      .single();
-
-    if (insErr) {
-      // Conflito de corrida com os índices únicos = duplicado, não erro. Aqui a
-      // linha perde o ID (o insert não devolve o vencedor da corrida) e por isso
-      // NÃO entra em `contatos`: é raro, e incluir um id adivinhado seria pior.
-      if (insErr.code === "23505") {
+      if (jaExiste) {
         skippedDuplicates += 1;
-        continue;
+        return { id: jaExiste, linha, criado: false };
       }
-      errors.push({ linha, motivo: insErr.message });
-      continue;
-    }
 
-    const novo = criado as { id: string };
-    imported += 1;
-    contatos.push({ id: novo.id, linha, criado: true });
-    if (phone) existentes.set(`tel:${phone}`, novo.id);
-    if (email) existentes.set(`email:${email.toLowerCase()}`, novo.id);
-
-    // Mesmo evento do create unitário — quem consome `contact.created`
-    // (workers, métricas) trata importado e manual igual.
-    const { error: evErr } = await supabase.rpc("emit_event", {
-      p_event_type: "contact.created",
-      p_entity_kind: "contact",
-      p_entity_id: novo.id,
-      p_payload: {
+      const insertRow: Record<string, unknown> = {
+        organization_id: orgId,
+        created_by_user_id: userId,
+        name: contato.name ?? null,
+        display_name: contato.display_name ?? null,
+        email: contato.email ?? null,
+        phone_number: contato.phone_number ?? null,
+        birthdate: contato.birthdate ?? null,
+        tags: contato.tags ?? [],
         source: SOURCE_IMPORT_CSV,
-        has_email: !!contato.email,
-        has_phone: !!contato.phone_number,
-        has_cpf: !!contato.cpf,
-      },
-      p_metadata: { request_id: requestId, actor_type: "user" },
-      p_organization_id: orgId,
-    });
-    if (evErr) {
-      logger.error("[contacts.importar] emit_event falhou", { causa: evErr.message, requestId });
-    }
-  }
+        source_metadata: {},
+        consent: {},
+      };
+      if (contato.cpf) {
+        insertRow.cpf_hash = hashCpf(contato.cpf as string);
+        // LGPD: além do hash (dedupe), grava a versão cifrada — igual ao create
+        // unitário, senão o contato importado nasce sem CPF recuperável.
+        const enc = await encryptCpfSql(supabase, contato.cpf as string);
+        if (enc) insertRow.cpf_encrypted = enc;
+      }
+
+      const { data: criado, error: insErr } = await supabase
+        .from("contacts")
+        .insert(insertRow)
+        .select("id, display_name, phone_number")
+        .single();
+
+      if (insErr) {
+        // Conflito de corrida com os índices únicos = duplicado, não erro. Aqui a
+        // linha perde o ID (o insert não devolve o vencedor da corrida) e por isso
+        // NÃO entra em `contatos`: é raro, e incluir um id adivinhado seria pior.
+        if (insErr.code === "23505") {
+          skippedDuplicates += 1;
+          return null;
+        }
+        errors.push({ linha, motivo: insErr.message });
+        return null;
+      }
+
+      const novo = criado as { id: string };
+      imported += 1;
+
+      // Mesmo evento do create unitário — quem consome `contact.created`
+      // (workers, métricas) trata importado e manual igual.
+      const { error: evErr } = await supabase.rpc("emit_event", {
+        p_event_type: "contact.created",
+        p_entity_kind: "contact",
+        p_entity_id: novo.id,
+        p_payload: {
+          source: SOURCE_IMPORT_CSV,
+          has_email: !!contato.email,
+          has_phone: !!contato.phone_number,
+          has_cpf: !!contato.cpf,
+        },
+        p_metadata: { request_id: requestId, actor_type: "user" },
+        p_organization_id: orgId,
+      });
+      if (evErr) {
+        logger.error("[contacts.importar] emit_event falhou", { causa: evErr.message, requestId });
+      }
+      return { id: novo.id, linha, criado: true };
+    },
+  );
+  const contatos = porLinha.filter((c): c is ContatoDaPlanilha => c !== null);
+  // Erros chegam fora de ordem quando as linhas correm juntas; a tela os lista
+  // pela linha da planilha.
+  errors.sort((a, b) => a.linha - b.linha);
 
   return {
     resumo: {

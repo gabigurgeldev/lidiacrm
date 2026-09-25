@@ -115,8 +115,6 @@ export async function POST(req: NextRequest): Promise<Response> {
             repetidos: recusa.recorte.repetidos,
           },
         });
-      case "lista_grande_demais":
-        return fail("validation_failed", recusa.mensagem, 422, { requestId });
       case "falha_ao_gravar":
         return fail("internal_error", recusa.mensagem, 500, { requestId });
     }

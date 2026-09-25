@@ -29,9 +29,9 @@ import { recusaDeModo } from "@/lib/bulk-send/modo";
 import {
   montarRecortePorIds,
   montarRecortePorTags,
-  MAX_DESTINATARIOS,
   type Recorte,
 } from "@/lib/bulk-send/montagem";
+import { emLotes, LOTE_DE_INSERT } from "@/lib/lotes";
 import {
   ARCHIVED_AT,
   consultaTolerante,
@@ -60,7 +60,6 @@ export type RecusaDeDisparo =
   | { codigo: "modo_incompativel"; mensagem: string }
   | { codigo: "modelo_invalido"; mensagem: string }
   | { codigo: "sem_destinatario"; mensagem: string; recorte: Recorte }
-  | { codigo: "lista_grande_demais"; mensagem: string; recorte: Recorte }
   | { codigo: "falha_ao_gravar"; mensagem: string };
 
 export type ResultadoDeCriacao =
@@ -205,17 +204,6 @@ export async function criarDisparo(
       },
     };
   }
-  if (recorte.vaoReceber > MAX_DESTINATARIOS) {
-    return {
-      ok: false,
-      recusa: {
-        codigo: "lista_grande_demais",
-        mensagem: `Máximo de ${MAX_DESTINATARIOS} destinatários por disparo — divida a lista.`,
-        recorte,
-      },
-    };
-  }
-
   // ─── Cria o disparo e a lista ──────────────────────────────────────────────
   const { data: criado, error: erroDisparo } = await supabase
     .from("bulk_sends")
@@ -253,15 +241,25 @@ export async function criarDisparo(
   }
   const disparoId = (criado as { id: string }).id;
 
-  const { error: erroLinhas } = await supabase.from("bulk_send_recipients").insert(
-    recorte.linhas.map((l) => ({
-      organization_id: orgId,
-      bulk_send_id: disparoId,
-      contact_id: l.contact_id,
-      status: l.status,
-      skip_reason: l.skip_reason,
-    })),
-  );
+  // Em LOTES: sem teto de destinatários, a lista inteira numa ida só seria um
+  // corpo de requisição sem limite. Um lote que falha desfaz o disparo inteiro
+  // logo abaixo — as linhas já gravadas somem junto pelo cascade.
+  let erroLinhas: { message: string } | null = null;
+  for (const lote of emLotes(recorte.linhas, LOTE_DE_INSERT)) {
+    const { error } = await supabase.from("bulk_send_recipients").insert(
+      lote.map((l) => ({
+        organization_id: orgId,
+        bulk_send_id: disparoId,
+        contact_id: l.contact_id,
+        status: l.status,
+        skip_reason: l.skip_reason,
+      })),
+    );
+    if (error) {
+      erroLinhas = error;
+      break;
+    }
+  }
   if (erroLinhas) {
     // O disparo sem lista é lixo que confunde a tela; apagar aqui é seguro
     // porque ele nasceu nesta chamada e ninguém mais o viu.

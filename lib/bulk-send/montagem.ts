@@ -33,9 +33,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { checarContato, type ContatoDoContexto } from "@/lib/automation/guarda-do-contato";
 import { phoneLookupVariants } from "@/lib/channels/phone-variants";
 import type { MotivoDoPulo } from "@/lib/bulk-send/frases";
+import { emLotes, LOTE_DE_FILTRO, PAGINA_DE_LEITURA } from "@/lib/lotes";
 
-/** Teto de uma campanha. O mesmo do CSV: uma lista maior se divide em duas. */
-export const MAX_DESTINATARIOS = 500;
+// ─── Sem teto de destinatários ──────────────────────────────────────────────
+//
+// Havia um `MAX_DESTINATARIOS = 500`, e o motivo real dele era de TRANSPORTE,
+// não de produto: um `.in()` com milhares de ids estoura a URL, e a leitura do
+// PostgREST corta em 1.000 linhas. Com as consultas em lotes e paginadas, o que
+// limita uma campanha é o que deve limitá-la — o ritmo e o teto diário do
+// número, que o motor aplica —, e não o tamanho da planilha.
 
 /** As colunas que as guardas leem. Nem uma a mais — é PII. */
 const COLUNAS = "id, phone_number, is_blocked, is_anonymized, is_merged_into, consent";
@@ -73,14 +79,18 @@ export async function montarRecortePorIds(
   const pedidos = [...new Set(contactIds)];
   if (pedidos.length === 0) return recorteVazio(0);
 
-  const { data, error } = await supabase
-    .from("contacts")
-    .select(COLUNAS)
-    .eq("organization_id", organizationId)
-    .in("id", pedidos);
-  if (error) throw new Error(error.message);
+  const contatos: ContatoDoContexto[] = [];
+  for (const lote of emLotes(pedidos, LOTE_DE_FILTRO)) {
+    const { data, error } = await supabase
+      .from("contacts")
+      .select(COLUNAS)
+      .eq("organization_id", organizationId)
+      .in("id", lote);
+    if (error) throw new Error(error.message);
+    contatos.push(...((data ?? []) as unknown as ContatoDoContexto[]));
+  }
 
-  return recortarContatos((data ?? []) as unknown as ContatoDoContexto[], pedidos.length);
+  return recortarContatos(contatos, pedidos.length);
 }
 
 /**
@@ -94,18 +104,25 @@ export async function montarRecortePorTags(
 ): Promise<Recorte> {
   if (tags.length === 0) return recorteVazio(0);
 
-  const { data, error } = await supabase
-    .from("contacts")
-    .select(COLUNAS)
-    .eq("organization_id", organizationId)
-    // `overlaps` = tem QUALQUER uma das etiquetas. É o índice GIN de `tags`.
-    .overlaps("tags", tags)
-    // Teto com folga: o recorte pode encolher muito depois das guardas, e
-    // cortar antes delas faria o operador ver "500" quando 300 são elegíveis.
-    .limit(MAX_DESTINATARIOS * 2);
-  if (error) throw new Error(error.message);
+  // PAGINADO: o PostgREST devolve no máximo 1.000 linhas por pedido, em
+  // silêncio — uma etiqueta com 3.000 contatos virava campanha de 1.000 sem
+  // ninguém saber. Ordenado por id para as páginas não se sobreporem.
+  const contatos: ContatoDoContexto[] = [];
+  for (let desde = 0; ; desde += PAGINA_DE_LEITURA) {
+    const { data, error } = await supabase
+      .from("contacts")
+      .select(COLUNAS)
+      .eq("organization_id", organizationId)
+      // `overlaps` = tem QUALQUER uma das etiquetas. É o índice GIN de `tags`.
+      .overlaps("tags", tags)
+      .order("id", { ascending: true })
+      .range(desde, desde + PAGINA_DE_LEITURA - 1);
+    if (error) throw new Error(error.message);
+    const pagina = (data ?? []) as unknown as ContatoDoContexto[];
+    contatos.push(...pagina);
+    if (pagina.length < PAGINA_DE_LEITURA) break;
+  }
 
-  const contatos = (data ?? []) as unknown as ContatoDoContexto[];
   return recortarContatos(contatos, contatos.length);
 }
 

@@ -12,13 +12,14 @@
 import { z } from "zod";
 
 import { KNOB_BOUNDS } from "@/lib/agent-engine/pacing/defaults";
-import { MAX_DESTINATARIOS } from "@/lib/bulk-send/montagem";
 
 /** De onde sai a lista. Discriminada: cada caminho pede campos diferentes. */
 export const audienciaSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("contacts"),
-    contact_ids: z.array(z.string().uuid()).min(1).max(MAX_DESTINATARIOS),
+    // Sem `.max()`: o teto de 500 era do transporte, e as consultas agora vão em
+    // lotes (`lib/lotes.ts`). O limite de uma campanha é o ritmo do número.
+    contact_ids: z.array(z.string().uuid()).min(1),
   }),
   z.object({
     kind: z.literal("tags"),
@@ -28,7 +29,7 @@ export const audienciaSchema = z.discriminatedUnion("kind", [
   // a tela poder mandar os ids resolvidos de volta na confirmação.
   z.object({
     kind: z.literal("file"),
-    contact_ids: z.array(z.string().uuid()).min(1).max(MAX_DESTINATARIOS),
+    contact_ids: z.array(z.string().uuid()).min(1),
   }),
 ]);
 

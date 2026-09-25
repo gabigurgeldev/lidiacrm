@@ -25,7 +25,7 @@ import { type NextRequest } from "next/server";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
-import { montarRecortePorIds, MAX_DESTINATARIOS } from "@/lib/bulk-send/montagem";
+import { montarRecortePorIds } from "@/lib/bulk-send/montagem";
 import { CSV_MAX_BYTES } from "@/lib/contacts/csv";
 import { importarLinhas, prepararLinhas, recusaDeFormato } from "@/lib/contacts/importar";
 import { createClient } from "@/lib/supabase/server";
@@ -64,7 +64,9 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   }
 
-  const preparado = prepararLinhas(await file.text());
+  // Sem teto de linhas: a planilha do disparo não tem limite de destinatários
+  // (as consultas vão em lotes). O que a limita é o tamanho do arquivo, acima.
+  const preparado = prepararLinhas(await file.text(), null);
   if (preparado.erro !== null) {
     return fail("validation_failed", preparado.erro, 422, {
       requestId,
@@ -89,15 +91,6 @@ export async function POST(req: NextRequest): Promise<Response> {
       { requestId, details: { errors: resumo.errors } },
     );
   }
-  if (contatos.length > MAX_DESTINATARIOS) {
-    return fail(
-      "validation_failed",
-      `Máximo de ${MAX_DESTINATARIOS} destinatários por disparo — divida a planilha.`,
-      422,
-      { requestId },
-    );
-  }
-
   // O recorte, aqui e não só na criação: é o que a tela mostra ANTES de a pessoa
   // escolher a conexão. Ver "19 pediram para parar" no passo 1 pode mudar a
   // campanha inteira; ver no passo 4 já é tarde para escolher outra lista.
