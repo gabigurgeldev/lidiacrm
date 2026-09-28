@@ -80,6 +80,28 @@ export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
    */
   const logoConfigurado = activeOrg?.marca?.logoUrl || brand.logoUrl;
 
+  return <MarcaDaBarra nome={nome} logoConfigurado={logoConfigurado} collapsed={collapsed} />;
+}
+
+/**
+ * O topo da barra, sem saber de onde veio a marca.
+ *
+ * Separado de `SidebarBrand` porque o painel da PLATAFORMA (`/admin`) desenha
+ * a mesma peça e não tem `AuthProvider` nem organização ativa: lá a marca é
+ * só a da instalação. Duas cópias do mesmo JSX divergiriam na primeira regra
+ * de marca que mudasse — e regra de marca é a que vaza a nossa para dentro do
+ * produto de quem revende.
+ */
+export function MarcaDaBarra({
+  nome,
+  logoConfigurado,
+  collapsed,
+}: {
+  nome: string;
+  logoConfigurado: string | null | undefined;
+  collapsed: boolean;
+}) {
+
   /**
    * A barra é ESCURA, e o logo do produto tem uma arte própria para isso.
    *

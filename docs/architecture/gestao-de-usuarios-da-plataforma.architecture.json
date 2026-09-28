@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Gestão de usuários da plataforma — porta, ações, relatório",
+    "subtitle": "como quem administra a instalação cria, edita, suspende e remove contas, e por que o painel não consegue se trancar para fora",
+    "output": "gestao-de-usuarios-da-plataforma.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "tela", "label": "Onde a pessoa clica" },
+    { "id": "borda", "label": "A borda — gate de platform admin, Zod" },
+    { "id": "regra", "label": "Regras puras (sem I/O)" },
+    { "id": "dados", "label": "Auth e tabelas" },
+    { "id": "retorno", "label": "Laço de retorno — o que acontece quando erra" }
+  ],
+  "mainPath": ["porta", "lista", "acoes", "rotas", "travas", "gotrue"],
+  "nodes": [
+    { "id": "porta", "lane": "tela", "col": 0, "type": "component", "label": "PORTA_DO_ADMIN", "sublabel": "rodapé da barra · menu da conta · ⌘K — só com is_platform_admin" },
+    { "id": "lista", "lane": "tela", "col": 1, "type": "component", "label": "/admin/users", "sublabel": "filtros org · papel · situação; Novo usuário; Exportar CSV" },
+    { "id": "acoes", "lane": "tela", "col": 2, "type": "component", "label": "AcoesDeUsuario", "sublabel": "editar · suspender/reativar · remover da org · excluir (e-mail digitado)" },
+    { "id": "relatorio", "lane": "tela", "col": 3, "type": "component", "label": "/admin/users/relatorios", "sublabel": "totais, papéis, top orgs, série diária, inativos" },
+    { "id": "proxy", "lane": "borda", "col": 0, "type": "route", "label": "proxy.ts + requirePlatformAdmin", "sublabel": "fn_is_platform_admin · platform_admins sem revoked_at · MFA pela política" },
+    { "id": "rotas", "lane": "borda", "col": 2, "type": "route", "label": "/api/v1/admin/users/**", "sublabel": "PATCH/DELETE [id] · suspend · reactivate · memberships/[orgId] — alvo SEMPRE do path" },
+    { "id": "rotaRel", "lane": "borda", "col": 3, "type": "route", "label": "report · export", "sublabel": "export audita; CSV com prefixo contra injeção de fórmula" },
+    { "id": "travas", "lane": "regra", "col": 2, "type": "module", "label": "lib/admin/gestao-usuarios.ts", "sublabel": "própria conta · último platform admin · último admin da org" },
+    { "id": "contas", "lane": "regra", "col": 3, "type": "module", "label": "lib/admin/relatorio-usuarios.ts", "sublabel": "montarRelatorio · linhasDeExport · paraCsv" },
+    { "id": "diretorio", "lane": "regra", "col": 4, "type": "module", "label": "lib/admin/diretorio-auth.ts", "sublabel": "listUsers paginado com teto; falha alto em vez de listar pela metade" },
+    { "id": "gotrue", "lane": "dados", "col": 2, "type": "service", "label": "Supabase Auth", "sublabel": "ban_duration · app_metadata.suspensao · soft delete (FKs de histórico intactas)" },
+    { "id": "vinculos", "lane": "dados", "col": 3, "type": "table", "label": "user_organizations", "sublabel": "papel e revoked_at — remover da org não toca na conta" },
+    { "id": "padmins", "lane": "dados", "col": 1, "type": "table", "label": "platform_admins", "sublabel": "contagem que sustenta a trava do último admin" },
+    { "id": "audit", "lane": "retorno", "col": 2, "type": "table", "label": "api_audit_log", "sublabel": "platform_admin.user_* — sem e-mail cru, só hash" },
+    { "id": "toast", "lane": "retorno", "col": 1, "type": "component", "label": "409 com details.motivo → toast", "sublabel": "a ação recusada não escreve nada; a query é invalidada e a tela volta ao estado real" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "porta", "to": "proxy", "label": "o botão é conveniência; quem barra é a borda" },
+    { "id": "e2", "from": "proxy", "to": "padmins", "label": "linha ativa em platform_admins" },
+    { "id": "e3", "from": "porta", "to": "lista", "label": "/admin/dashboard → Usuários" },
+    { "id": "e4", "from": "lista", "to": "acoes", "label": "menu por linha (um vínculo)" },
+    { "id": "e5", "from": "acoes", "to": "rotas", "label": "mutação com Zod" },
+    { "id": "e6", "from": "rotas", "to": "travas", "label": "pergunta ANTES de escrever" },
+    { "id": "e7", "from": "travas", "to": "padmins", "label": "último platform admin?" },
+    { "id": "e8", "from": "travas", "to": "vinculos", "label": "último admin da org?" },
+    { "id": "e9", "from": "rotas", "to": "gotrue", "label": "ban · update · soft delete" },
+    { "id": "e10", "from": "rotas", "to": "vinculos", "label": "papel · revoked_at" },
+    { "id": "e11", "from": "rotas", "to": "audit", "label": "uma linha por mutação" },
+    { "id": "e12", "from": "travas", "to": "toast", "label": "recusa = 409, nada escrito" },
+    { "id": "e13", "from": "lista", "to": "relatorio", "label": "botão Relatórios" },
+    { "id": "e14", "from": "relatorio", "to": "rotaRel", "label": "período 7/30/90" },
+    { "id": "e15", "from": "rotaRel", "to": "diretorio", "label": "diretório inteiro" },
+    { "id": "e16", "from": "rotaRel", "to": "contas", "label": "conta pura, testada sem Supabase" },
+    { "id": "e17", "from": "diretorio", "to": "gotrue", "label": "listUsers página a página" },
+    { "id": "e18", "from": "contas", "to": "vinculos", "label": "lê em páginas (max_rows corta calado)" },
+    { "id": "e19", "from": "rotaRel", "to": "audit", "label": "report_viewed · users_exported" },
+    { "id": "e20", "from": "diretorio", "to": "toast", "label": "Auth fora do ar = 503, nunca lista vazia" }
+  ]
+}

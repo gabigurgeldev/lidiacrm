@@ -466,6 +466,22 @@ export const AUDIT_ACTIONS = [
   // o "Salvar rascunho" de sempre, que já audita como `flow.updated`.
   "flow.ai_generated",
   "flow.ai_generation_failed",
+  // ── Gestão de usuários pelo painel da plataforma ───────────────────────
+  // Cada uma atravessa a fronteira de organização (o painel age sobre qualquer
+  // uma), e por isso tem código próprio em vez de reusar `member.*`: quem lê a
+  // trilha da plataforma precisa achá-las sem cruzar com a do tenant.
+  "platform_admin.user_updated",
+  "platform_admin.user_role_changed",
+  "platform_admin.user_removed_from_org",
+  "platform_admin.user_suspended",
+  "platform_admin.user_reactivated",
+  // Soft delete do GoTrue: a linha fica (as FKs de histórico continuam
+  // apontando para ela), o e-mail é anonimizado e ninguém mais entra.
+  "platform_admin.user_deleted",
+  "platform_admin.users_report_viewed",
+  // Export é leitura, mas leitura EM MASSA de dado pessoal que sai da
+  // instalação num arquivo — é a que a LGPD pergunta "quem baixou?".
+  "platform_admin.users_exported",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

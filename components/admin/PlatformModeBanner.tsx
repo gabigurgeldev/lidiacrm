@@ -1,12 +1,17 @@
 "use client";
-import Link from "next/link";
 import { Buildings } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
 
 /**
- * Sticky top banner that signals the user is operating in cross-tenant
- * Platform mode. Persistent visual cue to prevent accidental destructive
- * actions when the operator forgets which surface they're in.
+ * O aviso de que a tela opera ATRAVÉS das organizações — cada leitura aqui
+ * enxerga dados de todos os tenants, e cada mutação sai auditada como
+ * `acting_as_platform_admin`. Ele nunca some: é o que impede alguém de achar
+ * que está na própria organização.
+ *
+ * Mora no cabeçalho escuro do painel (`AdminShell`), com os tokens de AVISO
+ * (`--color-warning-*`) e não com âmbar fixo: o âmbar de antes era uma faixa
+ * clara presa em cima da moldura escura, a única peça do painel que não
+ * respeitava o tema.
  */
 export function PlatformModeBanner() {
   const t = useT();
@@ -14,19 +19,16 @@ export function PlatformModeBanner() {
     <div
       role="region"
       aria-label={t("Modo Plataforma")}
-      className="sticky top-0 z-40 flex h-10 w-full items-center justify-between border-b border-amber-300 bg-amber-100 px-4 text-amber-900"
+      className="inline-flex min-w-0 items-center gap-2 rounded-full px-3 py-1 text-xs"
+      style={{
+        background: "var(--color-warning-bg)",
+        color: "var(--color-warning)",
+        boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--color-warning) 35%, transparent)",
+      }}
     >
-      <div className="flex items-center gap-2 text-sm">
-        <Buildings size={18} weight="fill" aria-hidden />
-        <span className="font-semibold tracking-tight">{t("MODO PLATAFORMA")}</span>
-        <span className="hidden text-amber-800/80 sm:inline">{t("— operação cross-tenant")}</span>
-      </div>
-      <Link
-        href="/app"
-        className="rounded-md px-2 py-1 text-xs font-medium underline-offset-2 hover:underline"
-      >
-        {t("Sair pra app pessoal")}
-      </Link>
+      <Buildings size={14} weight="duotone" aria-hidden className="shrink-0" />
+      <span className="font-semibold tracking-tight">{t("MODO PLATAFORMA")}</span>
+      <span className="hidden truncate opacity-80 md:inline">{t("— operação cross-tenant")}</span>
     </div>
   );
 }

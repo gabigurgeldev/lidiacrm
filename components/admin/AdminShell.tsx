@@ -6,7 +6,8 @@ import { AdminSidebar } from "./AdminSidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { List } from "@/lib/ui/icons";
+import Link from "next/link";
+import { ArrowLeft, List } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
 
 interface AdminShellProps {
@@ -67,41 +68,66 @@ export function AdminShell({ userEmail, children }: AdminShellProps) {
     setMobileNavOpen(false);
   }
 
+  /*
+    A MESMA MOLDURA DO APP (`app/app/_components/AppShell.tsx`): barra lateral
+    e cabeçalho escuros formando um L (`casca-moldura` + `casca-escura`), e o
+    conteúdo num painel claro encaixado, com o canto superior-esquerdo
+    arredondado. Quem alterna entre `/app` e `/admin` reconhece o lugar em vez
+    de cair num produto com cara de outro.
+
+    `h-dvh` + `overflow-hidden` na casca e `min-h-0`/`min-w-0` na coluna: o
+    `<main>` é "o que sobrou" e rola sozinho — ver o comentário de lá para a
+    classe de defeito que isso evita.
+  */
   return (
     <TooltipProvider>
-      <div className="flex min-h-screen w-full flex-col bg-background">
-        <PlatformModeBanner />
-        <div className="flex flex-1">
-          <AdminSidebar userEmail={userEmail} />
-          <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-            <SheetContent side="left" className="w-72 max-w-[85vw] gap-0 p-0 lg:hidden">
-              <SheetTitle className="sr-only">{t("Menu de navegação")}</SheetTitle>
-              <AdminSidebar userEmail={userEmail} variant="mobile" />
-            </SheetContent>
-          </Sheet>
-          <div className="flex min-w-0 flex-1 flex-col">
-            {/* Sem TopBar própria no admin (era só sidebar + main): esta barra
-                existe só pra carregar o hambúrguer abaixo de `lg`, onde a
-                sidebar fixa não está mais no DOM. */}
-            <header className="flex h-12 items-center gap-2 border-b bg-background px-3 lg:hidden">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="shrink-0"
-                onClick={() => setMobileNavOpen(true)}
-                aria-label={t("Abrir menu de navegação")}
-              >
-                <List size={20} aria-hidden />
-              </Button>
-              <span className="text-sm font-semibold tracking-tight">{t("Admin Plataforma")}</span>
-            </header>
-            {/* `overflow-x-hidden` como rede de segurança — mesmo motivo do
-                `AppShell` (ver comentário lá): se algo estourar a largura, a
-                PÁGINA não rola de lado; quem precisa de scroll horizontal é
-                o componente específico, contido nele mesmo. */}
-            <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">{children}</main>
-          </div>
+      <div className="casca-moldura flex h-dvh w-full overflow-hidden">
+        <AdminSidebar userEmail={userEmail} />
+        <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+          <SheetContent
+            side="left"
+            className="nav-drawer casca-escura flex w-72 max-w-[85vw] flex-col gap-0 border-r p-0 lg:hidden"
+          >
+            <SheetTitle className="sr-only">{t("Menu de navegação")}</SheetTitle>
+            <AdminSidebar
+              userEmail={userEmail}
+              variant="mobile"
+              onNavigate={() => setMobileNavOpen(false)}
+            />
+          </SheetContent>
+        </Sheet>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <header className="app-header casca-escura flex h-14 shrink-0 items-center gap-2 px-3 md:gap-4 md:px-6">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="shrink-0 text-text lg:hidden"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label={t("Abrir menu de navegação")}
+            >
+              <List size={20} aria-hidden />
+            </Button>
+            <span className="truncate text-sm font-semibold tracking-tight text-text lg:hidden">
+              {t("Admin da plataforma")}
+            </span>
+            <PlatformModeBanner />
+            <Link
+              href="/app"
+              className="ml-auto hidden shrink-0 items-center gap-1.5 rounded-[var(--nav-raio,10px)] px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:bg-[var(--color-surface-elevated)] hover:text-text sm:inline-flex"
+            >
+              <ArrowLeft size={14} aria-hidden />
+              {t("Voltar ao app")}
+            </Link>
+          </header>
+          {/* `overflow-x-hidden` como rede de segurança — mesmo motivo do
+              `AppShell`: se algo estourar a largura, a PÁGINA não rola de lado;
+              quem precisa de scroll horizontal é o componente, contido nele. */}
+          <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-surface lg:rounded-tl-[var(--casca-raio)]">
+            <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+              {children}
+            </div>
+          </main>
         </div>
       </div>
     </TooltipProvider>

@@ -7,10 +7,12 @@ import { VersionFooter } from "@/components/shell/VersionFooter";
 import { ContaNaBarra } from "@/components/shell/sidebar/ContaNaBarra";
 import { SidebarItem } from "@/components/shell/sidebar/SidebarItem";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useUser } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
 import { cn } from "@/lib/utils";
 import { CaretDoubleLeft, CaretDoubleRight, Gear } from "@/lib/ui/icons";
 import { GRUPO_NO_RODAPE, NAV_GROUPS } from "@/lib/navigation/registry";
+import { mostraPortaDoAdmin, PORTA_DO_ADMIN } from "@/lib/navigation/porta-do-admin";
 
 interface SidebarFooterProps {
   collapsed: boolean;
@@ -84,6 +86,7 @@ export function SidebarFooter({
   const t = useT();
   const [isPending, startTransition] = useTransition();
   const rodape = NAV_GROUPS.find((g) => g.id === GRUPO_NO_RODAPE)?.hub;
+  const user = useUser();
 
   const rotuloDoBotao = collapsed ? t("Expandir sidebar") : t("Recolher sidebar");
   const botao = (
@@ -143,6 +146,24 @@ export function SidebarFooter({
           compacto={compacto}
           onNavigate={onNavigate}
         />
+      )}
+      {/*
+        A porta para o painel da PLATAFORMA — só para quem administra a
+        instalação. Mora no rodapé fixo, ao lado de Configurações, e não na área
+        que rola: é destino de quem não acha algo, igual a Configurações, e
+        antes dela só se chegava ao /admin digitando a URL.
+      */}
+      {mostraPortaDoAdmin(user) && (
+        <div data-testid="porta-do-admin">
+          <SidebarItem
+            href={PORTA_DO_ADMIN.href}
+            label={t(PORTA_DO_ADMIN.label)}
+            icon={PORTA_DO_ADMIN.icon}
+            ativo={false}
+            compacto={compacto}
+            onNavigate={onNavigate}
+          />
+        </div>
       )}
       {/*
         A CONTA, em TODA rota, entre o fio e a faixa baixa.

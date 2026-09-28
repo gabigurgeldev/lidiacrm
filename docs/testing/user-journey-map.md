@@ -2130,6 +2130,47 @@ Postgres.
 
 ---
 
+## J28 — Quem administra a instalação gerencia as contas pelo painel `[P0]` (2026-09-28)
+
+Pedido do dono do produto: o painel `/admin` listava usuários e não fazia nada
+com eles, não tinha relatório, e **não havia porta do app até ele** — só se
+chegava digitando a URL. Três buracos, o mesmo formato de falha: a capacidade
+não existia na tela, e quem instala numa VPS não tem outro caminho que não SQL.
+
+**O que muda no risco:** a gestão de contas é a única ação do produto capaz de
+trancar a instalação para fora dela mesma. Por isso as três travas (própria
+conta, último platform admin, último admin da organização) são regra pura com
+teste, e a recusa é 409 que não escreve nada.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J28.1 | Platform admin no app | vê "Admin da plataforma" no rodapé da barra, no menu da conta e no ⌘K | **PASS** (unit RTL `porta-do-admin-no-app`) |
+| J28.2 | Admin de ORGANIZAÇÃO, não de plataforma | não vê a porta | **PASS** (unit RTL) |
+| J28.3 | Toda rota nova sem platform admin | 403, nada escrito no Auth nem no banco | **PASS** (unit `admin-gestao-de-usuarios-rotas`) |
+| J28.4 | Suspender a própria conta | 409 `propria_conta`, Auth intocado | **PASS** (unit) |
+| J28.5 | Suspender/excluir o último platform admin | 409 `ultimo_admin` | **PASS** (unit, e sabotado: desligar a trava deixa 6 casos vermelhos) |
+| J28.6 | Rebaixar/remover o último admin de uma organização | 409 `ultimo_admin` | **PASS** (unit) |
+| J28.7 | Excluir o único admin de uma org | 409 com a lista das organizações presas; nenhum vínculo revogado | **PASS** (unit) |
+| J28.8 | Excluir com e-mail que não confere | 422, nada apagado | **PASS** (unit) |
+| J28.9 | Excluir | soft delete do GoTrue (FKs de histórico intactas), vínculos revogados ANTES | **PASS** (unit) |
+| J28.10 | Suspender | `ban_duration` + motivo em `app_metadata` sem apagar o resto do metadado | **PASS** (unit) |
+| J28.11 | Editar nome | preserva idioma, fuso e avatar do `user_metadata` | **PASS** (unit) |
+| J28.12 | Relatório | totais, papel por vínculo ativo, série com zero explícito, inativos com "nunca entrou" primeiro | **PASS** (unit `relatorio-usuarios`) |
+| J28.13 | CSV com nome `=HYPERLINK(...)` | célula neutralizada com `'` | **PASS** (unit) |
+| J28.14 | Fazer tudo isso PELA TELA | criar → trocar papel → suspender → login do suspenso falha → reativar → remover da org → relatório → CSV | **NÃO MEDIDO NA TELA** |
+
+### O que ficou NÃO MEDIDO, e por quê
+
+- **A tela, com servidor de pé (J28.14).** O Playwright deste repo exige
+  Supabase local, e o CLI do Supabase não sobe na máquina usada (Windows). A
+  prova pela tela está devendo. **Quem retomar roda a jornada J28.14 primeiro.**
+- **Quanto tempo o suspenso ainda navega.** O ban do GoTrue recusa login e
+  refresh; o access token já emitido segue válido até expirar (`jwt_expiry`,
+  1h padrão). A tela diz "até 1 hora" — o número não foi medido nesta
+  instalação.
+- **Relatório num diretório grande.** A varredura do Auth tem teto de 50 × 1000
+  contas e falha alto (503) acima disso; não foi exercitada com volume real.
+
 ## J13 — A primeira tela: entrar e criar conta `[P0]`
 
 Contexto do código: as seis telas do grupo `app/(public)/` são uma **cena 3D em

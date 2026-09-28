@@ -21,6 +21,10 @@ export interface AdminUserDetail {
   created_at: string;
   email_confirmed_at: string | null;
   factors: AdminUserFactor[];
+  banned_until: string | null;
+  status: "ativo" | "suspenso" | "pendente";
+  suspensao: { motivo: string; por: string; em: string } | null;
+  is_platform_admin: boolean;
 }
 
 export interface AdminUserMembership {

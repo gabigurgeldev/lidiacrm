@@ -29,6 +29,10 @@ export {
   Robot,
   Sparkle,
   ShieldCheck,
+  // Porta para o painel da PLATAFORMA (`/admin`). Não é `ShieldCheck`, que já é
+  // Segurança da conta no mesmo menu — dois itens vizinhos com o mesmo desenho
+  // leem como duplicata.
+  ShieldStar,
   Gear,
   House,
   // admin platform
@@ -170,4 +174,10 @@ export {
   User,
   SquaresFour,
   FunnelSimple,
+  // gestão de usuários do painel da plataforma (/admin/users)
+  DotsThreeVertical,
+  Prohibit,
+  ArrowCounterClockwise,
+  UserPlus,
+  ArrowLeft,
 } from "@phosphor-icons/react/dist/ssr";

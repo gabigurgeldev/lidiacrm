@@ -6,6 +6,7 @@ import { AlertsBanner } from "@/components/admin/dashboard/AlertsBanner";
 import { useAdminDashboardKPIs } from "@/hooks/useAdminDashboardKPIs";
 import { useAlertsRealtime } from "@/hooks/useAlertsRealtime";
 import { useT } from "@/hooks/i18n/useT";
+import { ResumoDeUsuarios } from "@/components/admin/dashboard/ResumoDeUsuarios";
 
 function KPISkeleton() {
   return (
@@ -57,6 +58,7 @@ export function DashboardClient() {
       ) : (
         <>
           <KPICards kpis={data} />
+          <ResumoDeUsuarios />
           <AlertsBanner alerts={data.alerts} />
         </>
       )}

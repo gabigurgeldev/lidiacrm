@@ -18,12 +18,17 @@ export interface AdminUserRow {
   full_name: string | null;
   last_sign_in_at: string | null;
   created_at: string;
+  email_confirmed_at: string | null;
+  banned_until: string | null;
+  tem_mfa: boolean;
+  status: "ativo" | "suspenso" | "pendente";
 }
 
 export interface AdminUsersFilters {
   q?: string;
   tenant_id?: string;
   role?: "viewer" | "agent" | "manager" | "admin";
+  status?: "ativo" | "suspenso" | "pendente";
 }
 
 interface ListResponse {
@@ -44,6 +49,7 @@ export function useAdminUsers(filters: AdminUsersFilters = {}) {
       if (filters.q) qs.set("q", filters.q);
       if (filters.tenant_id) qs.set("tenant_id", filters.tenant_id);
       if (filters.role) qs.set("role", filters.role);
+      if (filters.status) qs.set("status", filters.status);
       if (pageParam) qs.set("cursor", pageParam);
       qs.set("limit", "30");
       return apiClient.get<ListResponse>(

@@ -19,6 +19,7 @@ import {
 import { Users } from "@/lib/ui/icons";
 import type { AdminUserRow } from "@/hooks/useAdminUsers";
 import { useT } from "@/hooks/i18n/useT";
+import { MenuDeAcoesDoUsuario, SeloDeEstado } from "@/components/admin/users/AcoesDeUsuario";
 
 // ---------------------------------------------------------------------------
 // Role badge
@@ -73,7 +74,7 @@ function relativeDate(iso: string | null, locale: Locale): string {
 export function UsersTableAdminSkeleton() {
   const t = useT();
   return (
-    <div className="rounded-md border">
+    <div className="overflow-x-auto rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
@@ -133,7 +134,7 @@ export function UsersTableAdmin({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border">
+      <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -143,7 +144,7 @@ export function UsersTableAdmin({
               <TableHead className="w-[100px]">Role</TableHead>
               <TableHead className="w-[160px]">{t("Último acesso")}</TableHead>
               <TableHead className="w-[100px]">{t("Status")}</TableHead>
-              <TableHead className="w-[60px]" />
+              <TableHead className="w-[110px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -170,19 +171,36 @@ export function UsersTableAdmin({
                   {relativeDate(row.last_sign_in_at, localeDaData)}
                 </TableCell>
                 <TableCell>
-                  {row.revoked_at ? (
-                    <Badge variant="error">{t("Revogado")}</Badge>
-                  ) : (
-                    <Badge variant="success">{t("Ativo")}</Badge>
-                  )}
+                  {/* Duas coisas diferentes, e a linha mostra as duas: o estado
+                      da CONTA (vale para a instalação inteira) e se ESTE
+                      vínculo foi removido (vale só para esta organização). */}
+                  <div className="flex flex-wrap items-center gap-1">
+                    <SeloDeEstado status={row.status} />
+                    {row.revoked_at && <Badge variant="neutral">{t("Fora da org")}</Badge>}
+                  </div>
                 </TableCell>
                 <TableCell>
-                  <Link
-                    href={`/admin/users/${row.user_id}`}
-                    className="text-xs font-medium text-accent hover:underline"
-                  >
-                    {t("Ver")}
-                  </Link>
+                  <div className="flex items-center justify-end gap-1">
+                    <Link
+                      href={`/admin/users/${row.user_id}`}
+                      className="rounded-md px-2 py-1 text-xs font-medium text-accent hover:bg-accent/10"
+                    >
+                      {t("Ver")}
+                    </Link>
+                    <MenuDeAcoesDoUsuario
+                      alvo={{
+                        id: row.user_id,
+                        email: row.email,
+                        full_name: row.full_name,
+                        status: row.status,
+                      }}
+                      organizacao={{
+                        id: row.organization_id,
+                        nome: row.tenant_name,
+                        revogado: !!row.revoked_at,
+                      }}
+                    />
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

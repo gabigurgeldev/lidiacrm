@@ -1,24 +1,31 @@
 "use client";
-import Link from "next/link";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
-import {
-  Gauge,
-  ChatsCircle,
-  Buildings,
-  ClipboardText,
-  Scales,
-  Warning,
-  ChartBar,
-  Users,
-  ShieldCheck,
-  CalendarBlank,
-  Palette,
-  ArrowRight,
-} from "@/lib/ui/icons";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
-import { cn } from "@/lib/utils";
-import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
+
+import { MarcaDaBarra } from "@/components/shell/sidebar/SidebarBrand";
+import { SidebarItem } from "@/components/shell/sidebar/SidebarItem";
+import { SidebarSection } from "@/components/shell/sidebar/SidebarSection";
 import { useT } from "@/hooks/i18n/useT";
+import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
+import { cn } from "@/lib/utils";
+import {
+  ArrowLeft,
+  Buildings,
+  CalendarBlank,
+  ChartBar,
+  ChartLineUp,
+  ChatsCircle,
+  ClipboardText,
+  Gauge,
+  Gear,
+  Palette,
+  Scales,
+  ShieldCheck,
+  Users,
+  UsersThree,
+  Warning,
+} from "@/lib/ui/icons";
 
 interface NavItem {
   href: string;
@@ -26,94 +33,184 @@ interface NavItem {
   icon: PhosphorIcon;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { href: "/admin/dashboard", label: "Dashboard", icon: Gauge },
-  { href: "/admin/inbox", label: "Inbox", icon: ChatsCircle },
-  { href: "/admin/tenants", label: "Tenants", icon: Buildings },
-  { href: "/admin/audit", label: "Audit", icon: ClipboardText },
-  { href: "/admin/lgpd", label: "LGPD", icon: Scales },
-  { href: "/admin/incidents", label: "Incidents", icon: Warning },
-  { href: "/admin/usage", label: "Usage", icon: ChartBar },
-  { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/admin/platform-admins", label: "Platform Admins", icon: ShieldCheck },
-  // A porta da tela de marca. Ela NÃO entra em `lib/navigation/registry.ts`:
-  // aquele registro descreve a navegação do tenant (`app/app/**`) e o teste de
-  // completude que o vigia varre só aquela raiz. O admin de plataforma tem
-  // navegação própria, e é esta lista.
-  { href: "/admin/marca", label: "Marca", icon: Palette },
-  // A porta da tela do app OAuth do Google — mesma razão da de cima: é
-  // configuração da INSTALAÇÃO, e /admin tem navegação própria.
-  { href: "/admin/google", label: "Google Agenda", icon: CalendarBlank },
+interface NavGrupo {
+  id: string;
+  label: string;
+  icon: PhosphorIcon;
+  itens: NavItem[];
+}
+
+/**
+ * A navegação do painel da plataforma, agrupada por objetivo — o mesmo
+ * desenho da barra do app (`components/shell/sidebar/AppSidebar.tsx`), com as
+ * mesmas peças (`SidebarSection`, `SidebarItem`) e as mesmas classes da
+ * moldura escura. Quem alterna entre `/app` e `/admin` reconhece o lugar.
+ *
+ * Ela NÃO entra em `lib/navigation/registry.ts`: aquele registro descreve a
+ * navegação do tenant (`app/app/**`) e o teste de completude que o vigia varre
+ * só aquela raiz. O admin de plataforma tem navegação própria, e é esta lista.
+ */
+const GRUPOS: NavGrupo[] = [
+  {
+    id: "visao",
+    label: "Visão geral",
+    icon: Gauge,
+    itens: [
+      { href: "/admin/dashboard", label: "Dashboard", icon: Gauge },
+      { href: "/admin/users/relatorios", label: "Relatórios", icon: ChartLineUp },
+      { href: "/admin/usage", label: "Uso", icon: ChartBar },
+    ],
+  },
+  {
+    id: "pessoas",
+    label: "Pessoas",
+    icon: UsersThree,
+    itens: [
+      { href: "/admin/users", label: "Usuários", icon: Users },
+      { href: "/admin/platform-admins", label: "Admins da plataforma", icon: ShieldCheck },
+    ],
+  },
+  {
+    id: "organizacoes",
+    label: "Organizações",
+    icon: Buildings,
+    itens: [
+      { href: "/admin/tenants", label: "Organizações", icon: Buildings },
+      { href: "/admin/inbox", label: "Inbox", icon: ChatsCircle },
+    ],
+  },
+  {
+    id: "conformidade",
+    label: "Conformidade",
+    icon: Scales,
+    itens: [
+      { href: "/admin/audit", label: "Auditoria", icon: ClipboardText },
+      { href: "/admin/lgpd", label: "LGPD", icon: Scales },
+      { href: "/admin/incidents", label: "Incidentes", icon: Warning },
+    ],
+  },
+  {
+    id: "instalacao",
+    label: "Instalação",
+    icon: Gear,
+    itens: [
+      // Configuração da INSTALAÇÃO, não de um tenant — por isso aqui e não em
+      // Configurações do app.
+      { href: "/admin/marca", label: "Marca", icon: Palette },
+      { href: "/admin/google", label: "Google Agenda", icon: CalendarBlank },
+    ],
+  },
 ];
+
+/** Todas as rotas do menu — exportado para o teste de que nenhuma tela ficou sem porta. */
+export const ROTAS_DO_MENU_ADMIN = GRUPOS.flatMap((g) => g.itens.map((i) => i.href));
+
+/**
+ * Item ativo = o de prefixo MAIS LONGO que casa. `/admin/users/relatorios`
+ * também começa com `/admin/users`, e sem esta regra os dois acenderiam juntos.
+ */
+function hrefAtivo(pathname: string): string | null {
+  let melhor: string | null = null;
+  for (const href of ROTAS_DO_MENU_ADMIN) {
+    if (pathname === href || pathname.startsWith(href + "/")) {
+      if (!melhor || href.length > melhor.length) melhor = href;
+    }
+  }
+  return melhor;
+}
 
 interface AdminSidebarProps {
   userEmail: string;
   /** "mobile" = conteúdo desta MESMA navegação dentro do drawer que `AdminShell`
-   * abre abaixo de `lg` — mesmo padrão de `components/shell/Sidebar.tsx`. */
+   * abre abaixo de `lg` — mesmo padrão de `components/shell/MobileSidebar.tsx`. */
   variant?: "desktop" | "mobile";
+  onNavigate?: () => void;
 }
 
-export function AdminSidebar({ userEmail, variant = "desktop" }: AdminSidebarProps) {
+export function AdminSidebar({ userEmail, variant = "desktop", onNavigate }: AdminSidebarProps) {
   const t = useT();
   const isMobile = variant === "mobile";
-  const pathname = usePathname();
-  // Por PROP do servidor, e nunca `branding()`: aquela função lê fontes
-  // diferentes nos dois lados da fronteira (`window.__PUBLIC_ENV__` no
-  // navegador, `process.env` no servidor), e desde que o layout raiz passou a
-  // injetar a marca do BANCO as duas divergem — o nome renderizado no SSR não
-  // batia com o hidratado, que é hydration mismatch. Ver `lib/branding/contexto.tsx`.
+  const pathname = usePathname() ?? "";
+  // Por PROP do servidor (contexto), e nunca `branding()`: aquela função lê
+  // fontes diferentes nos dois lados da fronteira e daria hydration mismatch.
+  // Ver `lib/branding/contexto.tsx`.
   const marca = useMarcaDaInstalacao();
+  const [fechados, setFechados] = useState<Set<string>>(() => new Set());
+  const ativo = hrefAtivo(pathname);
 
-  return (
-    <aside
-      className={cn(
-        "flex flex-col border-r bg-card",
-        isMobile ? "h-full w-full" : "hidden w-60 shrink-0 lg:flex",
-      )}
-    >
-      <div className="flex h-14 items-center border-b px-4">
-        <div className="flex flex-col">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground">
-            {marca.name}
-          </span>
-          <span className="text-sm font-semibold tracking-tight">{t("Admin Plataforma")}</span>
-        </div>
+  const conteudo = (
+    <>
+      <MarcaDaBarra nome={marca.name} logoConfigurado={marca.logoUrl} collapsed={false} />
+      <div className="px-4 pb-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-border-strong)] px-2 py-0.5 text-[11px] font-medium text-text-muted">
+          <ShieldCheck size={12} weight="duotone" aria-hidden />
+          {t("Admin da plataforma")}
+        </span>
       </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto p-2" aria-label={t("Navegação plataforma")}>
-        {NAV_ITEMS.map((item) => {
-          const isActive =
-            pathname === item.href || pathname.startsWith(item.href + "/");
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={isActive ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                isActive
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-              )}
-            >
-              <Icon size={18} weight={isActive ? "fill" : "regular"} aria-hidden />
-              <span className="truncate">{t(item.label)}</span>
-            </Link>
-          );
-        })}
+      <nav
+        className="nav-rolagem flex-1 space-y-0.5 overflow-y-auto p-2"
+        aria-label={t("Navegação plataforma")}
+      >
+        {GRUPOS.map((g) => (
+          <SidebarSection
+            key={g.id}
+            id={`admin-${g.id}`}
+            label={t(g.label)}
+            icon={g.icon}
+            aberto={!fechados.has(g.id)}
+            compacto={false}
+            onToggle={() =>
+              setFechados((atual) => {
+                const prox = new Set(atual);
+                if (prox.has(g.id)) prox.delete(g.id);
+                else prox.add(g.id);
+                return prox;
+              })
+            }
+          >
+            <ul className="space-y-0.5">
+              {g.itens.map((item) => (
+                <li key={item.href}>
+                  <SidebarItem
+                    href={item.href}
+                    label={t(item.label)}
+                    icon={item.icon}
+                    ativo={ativo === item.href}
+                    compacto={false}
+                    onNavigate={onNavigate}
+                  />
+                </li>
+              ))}
+            </ul>
+          </SidebarSection>
+        ))}
       </nav>
-      <div className="space-y-2 border-t p-3">
-        <Link
+      <div className="shrink-0 space-y-1 border-t p-2">
+        <SidebarItem
           href="/app"
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-        >
-          <ArrowRight size={14} aria-hidden />
-          <span>{t("Voltar pra app")}</span>
-        </Link>
-        <p className="truncate px-2 text-xs text-muted-foreground" title={userEmail}>
+          label={t("Voltar ao app")}
+          icon={ArrowLeft}
+          ativo={false}
+          compacto={false}
+          onNavigate={onNavigate}
+        />
+        <p className="truncate px-2.5 pb-1 text-[11px] text-text-subtle" title={userEmail}>
           {userEmail}
         </p>
       </div>
+    </>
+  );
+
+  if (isMobile) {
+    return <div className="flex h-full w-full flex-col">{conteudo}</div>;
+  }
+
+  return (
+    <aside
+      data-collapsed="false"
+      className={cn("app-sidebar casca-escura sticky top-0 hidden h-dvh shrink-0 flex-col lg:flex")}
+    >
+      {conteudo}
     </aside>
   );
 }

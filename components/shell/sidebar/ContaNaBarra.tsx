@@ -15,6 +15,7 @@ import { useAuth, useUser } from "@/hooks/auth/AuthProvider";
 import { useT } from "@/hooks/i18n/useT";
 import { ShieldCheck, SignOut, UserCircle } from "@/lib/ui/icons";
 import { canSee, NAV_DESTINATIONS } from "@/lib/navigation/registry";
+import { mostraPortaDoAdmin, PORTA_DO_ADMIN } from "@/lib/navigation/porta-do-admin";
 import { cn } from "@/lib/utils";
 
 /**
@@ -150,6 +151,20 @@ export function ContaNaBarra({ compacto }: { compacto: boolean }) {
           </DropdownMenuItem>
         ))}
         {atalhos.length > 0 && <DropdownMenuSeparator />}
+        {/* Mesma porta do rodapé da barra (`PORTA_DO_ADMIN`), e mesma regra.
+            Aqui também porque é no menu da conta que se procura "o que mais
+            esta conta pode fazer". */}
+        {mostraPortaDoAdmin(user) && (
+          <>
+            <DropdownMenuItem asChild className="rounded-[8px]">
+              <Link href={PORTA_DO_ADMIN.href} data-testid="porta-do-admin-menu">
+                <PORTA_DO_ADMIN.icon size={16} weight="duotone" className="mr-2" aria-hidden />
+                {t(PORTA_DO_ADMIN.label)}
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuItem
           className="rounded-[8px]"
           disabled={isPending}

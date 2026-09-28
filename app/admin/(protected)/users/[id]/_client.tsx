@@ -4,6 +4,8 @@ import type { Locale } from "date-fns";
 
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { formatDistanceToNow, format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,22 @@ import {
 } from "@/components/ui/table";
 import { CaretLeft } from "@/lib/ui/icons";
 import { useAdminUser } from "@/hooks/useAdminUser";
+import { useMudarPapelAdmin, useReativarUsuarioAdmin } from "@/hooks/useAdminUserActions";
+import {
+  MenuDeAcoesDoUsuario,
+  RemoverDaOrgDialog,
+  SeloDeEstado,
+  type AlvoDaAcao,
+} from "@/components/admin/users/AcoesDeUsuario";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ROTULO_DO_PAPEL } from "@/lib/auth/types";
+import { ROLES, type Role } from "@/lib/schemas/team";
 import { useT } from "@/hooks/i18n/useT";
 
 // ---------------------------------------------------------------------------
@@ -82,6 +100,9 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const { data, isLoading, isError } = useAdminUser(id);
+  const router = useRouter();
+  const reativar = useReativarUsuarioAdmin(id);
+  const [removendo, setRemovendo] = useState<{ id: string; nome: string } | null>(null);
 
   if (isLoading) {
     return (
@@ -110,6 +131,12 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
 
   const { user, memberships, recent_audit } = data.data;
   const hasMfa = user.factors.some((f) => f.status === "verified");
+  const alvo: AlvoDaAcao = {
+    id: user.id,
+    email: user.email,
+    full_name: user.full_name,
+    status: user.status,
+  };
 
   return (
     <div className="space-y-6">
@@ -125,15 +152,55 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
       </div>
 
       {/* Header */}
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {user.full_name ?? user.email ?? t("Usuário sem nome")}
-        </h1>
-        {user.full_name && (
-          <p className="font-mono text-sm text-muted-foreground">{user.email}</p>
-        )}
-        <p className="text-xs text-muted-foreground font-mono">{user.id}</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-2xl font-semibold tracking-tight">
+              {user.full_name ?? user.email ?? t("Usuário sem nome")}
+            </h1>
+            <SeloDeEstado status={user.status} />
+            {user.is_platform_admin && <Badge variant="info">{t("Admin da plataforma")}</Badge>}
+          </div>
+          {user.full_name && (
+            <p className="font-mono text-sm text-muted-foreground">{user.email}</p>
+          )}
+          <p className="text-xs text-muted-foreground font-mono">{user.id}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {user.status === "suspenso" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={reativar.isPending}
+              onClick={() => reativar.mutate()}
+              data-testid="detalhe-reativar"
+            >
+              {reativar.isPending ? t("Reativando...") : t("Reativar conta")}
+            </Button>
+          ) : null}
+          <MenuDeAcoesDoUsuario
+            alvo={alvo}
+            onExcluido={() => router.push("/admin/users")}
+          />
+        </div>
       </div>
+
+      {user.status === "suspenso" && (
+        <div
+          role="status"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm"
+          data-testid="banner-suspenso"
+        >
+          <p className="font-medium text-destructive">
+            {t("Conta suspensa — esta pessoa não consegue entrar em nenhuma organização.")}
+          </p>
+          {user.suspensao && (
+            <p className="mt-1 text-muted-foreground">
+              {t("Motivo")}: {user.suspensao.motivo} · {absoluteDate(user.suspensao.em, localeDaData)}
+            </p>
+          )}
+        </div>
+      )}
 
       <Separator />
 
@@ -192,10 +259,11 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tenant</TableHead>
-                  <TableHead className="w-[100px]">Role</TableHead>
+                  <TableHead>{t("Organização")}</TableHead>
+                  <TableHead className="w-[200px]">{t("Papel")}</TableHead>
                   <TableHead className="w-[140px]">{t("Aceito em")}</TableHead>
                   <TableHead className="w-[100px]">{t("Status")}</TableHead>
+                  <TableHead className="w-[60px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -217,7 +285,11 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <RoleBadge role={m.role} />
+                      {m.revoked_at ? (
+                        <RoleBadge role={m.role} />
+                      ) : (
+                        <PapelNoVinculo userId={user.id} organizationId={m.organization_id} papel={m.role} />
+                      )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {absoluteDate(m.accepted_at, localeDaData)}
@@ -227,6 +299,18 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
                         <Badge variant="error">{t("Revogado")}</Badge>
                       ) : (
                         <Badge variant="success">{t("Ativo")}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {!m.revoked_at && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setRemovendo({ id: m.organization_id, nome: m.tenant_name ?? m.organization_id })}
+                        >
+                          {t("Remover")}
+                        </Button>
                       )}
                     </TableCell>
                   </TableRow>
@@ -278,6 +362,51 @@ export function UserDetailClient({ id }: UserDetailClientProps) {
           )}
         </CardContent>
       </Card>
+
+      {removendo && (
+        <RemoverDaOrgDialog
+          alvo={alvo}
+          organizacao={removendo}
+          open
+          onClose={() => setRemovendo(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Papel da pessoa numa organização, editável direto na linha. As travas (último
+ * admin, vínculo revogado) são do servidor; o 409 volta como toast e o select
+ * volta ao valor real porque a query é invalidada.
+ */
+function PapelNoVinculo({
+  userId,
+  organizationId,
+  papel,
+}: {
+  userId: string;
+  organizationId: string;
+  papel: string;
+}) {
+  const t = useT();
+  const mudar = useMudarPapelAdmin(userId);
+  return (
+    <Select
+      value={papel}
+      disabled={mudar.isPending}
+      onValueChange={(v) => mudar.mutate({ organizationId, role: v as Role })}
+    >
+      <SelectTrigger className="h-8 w-[180px] text-xs" aria-label={t("Papel nesta organização")}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {ROLES.map((r) => (
+          <SelectItem key={r} value={r}>
+            {t(ROTULO_DO_PAPEL[r])}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

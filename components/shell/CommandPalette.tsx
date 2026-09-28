@@ -9,6 +9,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { useBuscaGlobal, useTermoAtrasado } from "@/hooks/search/useBuscaGlobal";
 import { ChatCircle, Kanban, MagnifyingGlass, Users } from "@/lib/ui/icons";
 import { NAV_GROUPS, searchable, type NavDestination } from "@/lib/navigation/registry";
+import { mostraPortaDoAdmin, PORTA_DO_ADMIN } from "@/lib/navigation/porta-do-admin";
 import { BUSCA_MIN, type SearchKind, type SearchResult } from "@/lib/schemas/search";
 import { cn } from "@/lib/utils";
 
@@ -120,6 +121,17 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
     return visiveis.filter((d) => normalizar(`${d.label} ${d.description}`).includes(termo));
   }, [busca, visiveis]);
 
+  // A porta do painel da plataforma fica FORA do registro (ver
+  // `lib/navigation/porta-do-admin.ts`), então entra aqui à parte — só quando
+  // há termo, para não disputar a lista de abertura com o trabalho do dia.
+  const mostraAdmin = useMemo(() => {
+    const termo = normalizar(busca.trim());
+    if (!termo || !mostraPortaDoAdmin(user)) return false;
+    return normalizar(
+      `${PORTA_DO_ADMIN.label} ${PORTA_DO_ADMIN.description} admin plataforma`,
+    ).includes(termo);
+  }, [busca, user]);
+
   const linhas = useMemo<Linha[]>(() => {
     const daNavegacao: Linha[] = paginas.map((d: NavDestination) => ({
       chave: `nav:${d.href}`,
@@ -130,6 +142,17 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
       icone: d.icon,
       href: d.href,
     }));
+    if (mostraAdmin) {
+      daNavegacao.push({
+        chave: `nav:${PORTA_DO_ADMIN.href}`,
+        secao: t("Páginas"),
+        titulo: t(PORTA_DO_ADMIN.label),
+        sub: t(PORTA_DO_ADMIN.description),
+        etiqueta: t("Plataforma"),
+        icone: PORTA_DO_ADMIN.icon,
+        href: PORTA_DO_ADMIN.href,
+      });
+    }
 
     // ⚠️ A ORDEM DAS SEÇÕES É FIXA, e não a que o servidor devolveu. A resposta
     // vem numa lista só e a ordem dentro dela depende de qual consulta terminou
@@ -160,7 +183,7 @@ function Resultados({ aoEscolher }: { aoEscolher: () => void }) {
     // item saltar quando a resposta chegasse — e o Enter apressado abriria
     // outra coisa.
     return [...daNavegacao, ...doBanco];
-  }, [paginas, remoto, t]);
+  }, [paginas, remoto, t, mostraAdmin]);
 
   function navegar(linha: Linha) {
     aoEscolher();

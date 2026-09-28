@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { randomUUID } from "node:crypto";
+import { varrerDiretorio } from "@/lib/admin/diretorio-auth";
+import { estadoDaConta, type EstadoDaConta } from "@/lib/admin/gestao-usuarios";
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -14,6 +16,7 @@ const querySchema = z.object({
   tenant_id: z.string().uuid().optional(),
   role: z.enum(["viewer", "agent", "manager", "admin"]).optional(),
   q: z.string().optional(),
+  status: z.enum(["ativo", "suspenso", "pendente"]).optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
 });
@@ -66,7 +69,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const { tenant_id, role, q, cursor, limit } = parsed.data;
+  const { tenant_id, role, q, status, cursor, limit } = parsed.data;
   const admin = createAdminClient();
   const cursorPayload = cursor ? decodeCursor(cursor) : null;
 
@@ -126,7 +129,7 @@ export async function GET(req: NextRequest) {
       actingAsPlatformAdmin: true,
       bypassedRls: true,
       requestId,
-      metadata: { filters: { tenant_id, role, has_q: !!q }, result_count: 0 },
+      metadata: { filters: { tenant_id, role, status, has_q: !!q }, result_count: 0 },
     });
     return ok([], { requestId, meta: { has_more: false, cursor: null } });
   }
@@ -134,110 +137,21 @@ export async function GET(req: NextRequest) {
   // Step 2: get unique user IDs
   const userIds = [...new Set((uoRows as unknown as UoRow[]).map((r) => r.user_id))];
 
-  // Step 3: fetch auth users via the Auth Admin API.
-  //
-  // Varredura paginada do diretório, NÃO um `getUserById` por vínculo. O
-  // fan-out custava um request HTTP por vínculo, todos concorrentes, e o número
-  // deles não é o tamanho da página — o `limit` só corta no Step 8. Medido na
-  // revisão do PR, em localhost com 300 vínculos: 214 respostas 504 em 12,2s.
-  //
-  // O trade-off é banda por número de requests: `listUsers` baixa o diretório
-  // inteiro (inclusive quem não tem vínculo nesta busca), mas num punhado de
-  // requests SEQUENCIAIS em vez de N concorrentes — e esse punhado depende do
-  // tamanho do diretório, não do número de vínculos. É a troca certa para o
-  // perfil do produto (self-host de PME, diretório na casa das dezenas a
-  // centenas). O servidor pode reduzir o `perPage` pedido; a varredura não
-  // depende disso: ela para na primeira página vazia, ou antes, assim que todos
-  // os ids necessários apareceram.
-  type AuthUser = {
-    id: string;
-    email: string | null;
-    last_sign_in_at: string | null;
-    created_at: string;
-    raw_user_meta_data: Record<string, unknown> | null;
-  };
-
-  const needed = new Set(userIds);
-  const authMap = new Map<string, AuthUser>();
-  const PER_PAGE = 1000;
-  // Teto defensivo: as paradas naturais da varredura são a página vazia e o
-  // mapa completo, e este é o terceiro fim (o erro do GoTrue, logo abaixo, é o
-  // quarto).
-  //
-  // A condição exata é "a página MAX_PAGES veio NÃO-VAZIA e ainda falta id", que
-  // NÃO é o mesmo que "o diretório é maior que MAX_PAGES × PER_PAGE". Um
-  // diretório com exatamente MAX_PAGES páginas não-vazias e um vínculo órfão
-  // (usuário removido do Auth) cai aqui igual: a varredura nunca chega a ver a
-  // página vazia que provaria o fim, e não há como saber qual dos dois mundos é
-  // o de fora — `listUsers` só preenche `total` quando a resposta traz header
-  // Link, e lê `lastPage` com `.substring(0, 1)` (@supabase/auth-js 2.111.0).
-  //
-  // Sem como distinguir, a rota falha alto: entregar a lista como se estivesse
-  // completa é o erro caro (some um usuário que existe, e ninguém fica sabendo).
-  // O que ela não pode é afirmar a causa que não mediu — daí a mensagem falar da
-  // varredura, e não do tamanho do diretório, e o `details` levar quantos
-  // vínculos ficaram sem resolver: 1 num diretório grande cheira a órfão,
-  // centenas cheiram a truncamento.
-  const MAX_PAGES = 50;
-  let authPage = 1;
-  let directoryExhausted = false;
-
-  while (authMap.size < needed.size && !directoryExhausted) {
-    const res = await admin.auth.admin.listUsers({
-      page: authPage,
-      perPage: PER_PAGE,
-    });
-
-    if (res.error) {
-      // O GoTrue devolve AuthRetryableFetchError SEM lançar em 504/500/socket
-      // fechado. Tratar isso como "usuário não existe" transformava
-      // indisponibilidade em "Nenhum usuário encontrado" — indistinguível de
-      // banco vazio, e uma regressão silenciosa em cima do 500 explícito que a
-      // rota dava antes.
-      return fail("upstream_unavailable", "Auth indisponível", 503, {
-        requestId,
-        details: res.error.message,
-      });
-    }
-
-    for (const u of res.data.users) {
-      if (!needed.has(u.id)) continue;
-      authMap.set(u.id, {
-        id: u.id,
-        email: u.email ?? null,
-        last_sign_in_at: u.last_sign_in_at ?? null,
-        created_at: u.created_at,
-        raw_user_meta_data:
-          (u.user_metadata as Record<string, unknown> | null) ?? null,
-      });
-    }
-
-    // Página vazia = fim do diretório. Não usamos `nextPage`: o auth-js o
-    // deriva do header Link com `.substring(0, 1)` (`GoTrueAdminApi.listUsers`,
-    // @supabase/auth-js 2.111.0), então da página 10 em diante ele lê "1" e a
-    // varredura andaria para trás.
-    if (res.data.users.length === 0) {
-      directoryExhausted = true;
-      break;
-    }
-    // O teto só é falha se ainda falta id para resolver. Um diretório com
-    // exatamente MAX_PAGES páginas não-vazias cujo último id necessário está na
-    // última delas deixa o mapa COMPLETO: nada foi truncado, e derrubar a
-    // listagem aqui seria reprovar quem terminou em cima da fronteira.
-    if (authMap.size < needed.size && authPage >= MAX_PAGES) {
-      const pendentes = needed.size - authMap.size;
-      return fail(
-        "upstream_unavailable",
-        "Varredura do diretório de usuários atingiu o teto de páginas sem resolver todos os vínculos",
-        503,
-        {
-          requestId,
-          details: `scanned ${MAX_PAGES} pages of ${PER_PAGE}; ${pendentes} of ${needed.size} link(s) unresolved`,
-        },
-      );
-    }
-    authPage += 1;
+  // Step 3: resolve os usuários no diretório do Auth. A varredura (paginada,
+  // com teto e parada por página vazia) mora em `lib/admin/diretorio-auth.ts`,
+  // compartilhada com o relatório e o export — ver o cabeçalho de lá.
+  const varredura = await varrerDiretorio(admin, new Set(userIds));
+  if (!varredura.ok) {
+    return fail(
+      "upstream_unavailable",
+      varredura.motivo === "auth_indisponivel"
+        ? "Auth indisponível"
+        : "Varredura do diretório de usuários atingiu o teto de páginas sem resolver todos os vínculos",
+      503,
+      { requestId, details: varredura.detalhe },
+    );
   }
+  const authMap = varredura.usuarios;
 
   // Step 4: build joined rows
   type JoinedRow = {
@@ -252,8 +166,14 @@ export async function GET(req: NextRequest) {
     full_name: string | null;
     last_sign_in_at: string | null;
     created_at: string;
+    email_confirmed_at: string | null;
+    banned_until: string | null;
+    tem_mfa: boolean;
+    /** Estado da CONTA (Auth), não do vínculo — o do vínculo é `revoked_at`. */
+    status: EstadoDaConta;
   };
 
+  const agora = new Date();
   let joined: JoinedRow[] = (uoRows as unknown as UoRow[]).flatMap((uo) => {
     const u = authMap.get(uo.user_id);
     // Chegar aqui sem usuário só é possível depois de o diretório inteiro ter
@@ -272,13 +192,20 @@ export async function GET(req: NextRequest) {
         tenant_name: org.display_name,
         tenant_slug: org.slug,
         email: u.email ?? null,
-        full_name:
-          (u.raw_user_meta_data?.full_name as string | undefined) ?? null,
+        full_name: u.full_name,
         last_sign_in_at: u.last_sign_in_at,
         created_at: u.created_at,
+        email_confirmed_at: u.email_confirmed_at,
+        banned_until: u.banned_until,
+        tem_mfa: u.tem_mfa,
+        status: estadoDaConta(u, agora),
       },
     ];
   });
+
+  if (status) {
+    joined = joined.filter((r) => r.status === status);
+  }
 
   // Step 5: apply q filter (email or full_name ilike)
   if (q) {
@@ -341,7 +268,7 @@ export async function GET(req: NextRequest) {
     bypassedRls: true,
     requestId,
     metadata: {
-      filters: { tenant_id, role, has_q: !!q },
+      filters: { tenant_id, role, status, has_q: !!q },
       result_count: page.length,
     },
   });

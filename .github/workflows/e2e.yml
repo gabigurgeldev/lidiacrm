@@ -260,6 +260,7 @@ jobs:
         followup-dossie.spec.ts followup-tempo-adaptativo.spec.ts
         gatilho-de-etapa.spec.ts gatilho-de-caso.spec.ts
         marca-logo.spec.ts
+        admin-gestao-usuarios.spec.ts
         historico-de-captacao.spec.ts
         automacao-diz-a-verdade.spec.ts
         inbox-quem-manda.spec.ts
