@@ -13,7 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { desfechoDoEnvio, type MensagemEnviada } from "@/lib/automation/desfecho-do-envio";
-import { ensureConversation, sessaoProntaParaEnvio } from "@/lib/automation/start-conversation";
+import { conexaoParaOContato, ensureConversation } from "@/lib/automation/start-conversation";
 import { criarDisparo } from "@/lib/bulk-send/criar-disparo";
 import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
 import { logger } from "@/lib/logger";
@@ -1064,22 +1064,12 @@ async function enviarParaContatoDoFunil(
     exec: FlowExecutionRow;
   },
 ): Promise<DesfechoDeEnvio> {
-  // A conexão escolhida precisa ser DESTA organização. Sem esta conferência, um
-  // id copiado para o config de um fluxo mandaria pelo número de outro cliente —
-  // o cliente admin não barraria, porque ele passa por cima da RLS.
-  let sessionId = input.channelSessionId;
-  if (sessionId !== null) {
-    const { data } = await admin
-      .from("channel_sessions")
-      .select("id")
-      .eq("id", sessionId)
-      .eq("organization_id", orgId)
-      .maybeSingle();
-    if (data === null) return { kind: "recusado", motivo: "conexao_nao_encontrada" };
-  } else {
-    sessionId = await sessaoProntaParaEnvio(admin, orgId);
-  }
-  if (sessionId === null) return { kind: "recusado", motivo: "sem_conexao_de_whatsapp" };
+  // A conexão escolhida precisa ser DESTA organização (o cliente admin passa
+  // por cima da RLS). Excluída ou vazia, responde pelo número em que o cliente
+  // escreveu — ver `conexaoParaOContato`.
+  const conexao = await conexaoParaOContato(admin, orgId, input.contactId, input.channelSessionId);
+  if (conexao.kind === "recusa") return { kind: "recusado", motivo: conexao.motivo };
+  const sessionId = conexao.id;
 
   try {
     const conversationId = await ensureConversation(admin, orgId, input.contactId, sessionId);
@@ -1133,20 +1123,10 @@ async function enviarTextoParaTelefone(
   // A conexão escolhida precisa ser DESTA organização — mesma conferência de
   // `enviarParaContatoDoFunil`, e pelo mesmo motivo: o cliente admin passa por
   // cima da RLS, então um id copiado para o config de um fluxo mandaria o aviso
-  // pelo número de outro cliente.
-  let sessionId = input.channelSessionId;
-  if (sessionId !== null) {
-    const { data } = await admin
-      .from("channel_sessions")
-      .select("id")
-      .eq("id", sessionId)
-      .eq("organization_id", orgId)
-      .maybeSingle();
-    if (data === null) return { kind: "recusado", motivo: "conexao_nao_encontrada" };
-  } else {
-    sessionId = await sessaoProntaParaEnvio(admin, orgId);
-  }
-  if (sessionId === null) return { kind: "recusado", motivo: "sem_conexao_de_whatsapp" };
+  // pelo número de outro cliente. Excluída, cai na primeira conexão viva.
+  const conexao = await conexaoParaOContato(admin, orgId, null, input.channelSessionId);
+  if (conexao.kind === "recusa") return { kind: "recusado", motivo: conexao.motivo };
+  const sessionId = conexao.id;
 
   let contactId: string;
   try {

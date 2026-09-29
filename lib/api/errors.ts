@@ -58,6 +58,7 @@ export const ApiErrorCodes = {
   invalid_state: "invalid_state", // resposta a um agent_case que saiu de awaiting_human (spec 15 §7)
   tenant_already_exists: "tenant_already_exists",
   duplicate_external_id: "duplicate_external_id",
+  contact_already_exists: "contact_already_exists", // telefone, e-mail ou CPF já cadastrado em outro contato da org (índices uniq_contacts_org_*)
   event_gone: "event_gone", // resend de run cujo event_log original foi apagado (on delete set null)
   no_actions_to_resend: "no_actions_to_resend", // resend de regra que não tem mais nenhuma ação de webhook — reenviar nada não é sucesso
   next_action_absent: "next_action_absent", // decisão sobre proposta que não existe (mais) [wave 4]

@@ -14,6 +14,7 @@ import { audit } from "@/lib/audit";
 import { roleAtLeast } from "@/lib/auth/types";
 import { canonicalPhoneBR, phoneLookupVariants } from "@/lib/channels/phone-variants";
 import { hashCpf, encryptCpfSql } from "@/lib/contacts/cpf";
+import { rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
 import type { Contact } from "@/lib/types/contacts";
 import { ensureConversation, sessaoProntaParaEnvio } from "@/lib/automation/start-conversation";
 import type {
@@ -327,6 +328,61 @@ export async function getContactHandler(
 // create
 // ---------------------------------------------------------------------------
 
+/**
+ * Telefone, e-mail ou CPF que JÁ é de outro contato da organização.
+ *
+ * Os índices `uniq_contacts_org_{phone,email,cpf}` recusam com 23505, e isto
+ * saía como 500 "erro interno": a pessoa tentava cadastrar um cliente que já
+ * existia (o caso mais comum — ele mandou mensagem antes e virou contato
+ * sozinho) e ficava sem saber o que fazer. Vira 409 dizendo QUAL dado repetiu
+ * e de QUEM ele é, com o id para a tela abrir a ficha.
+ */
+async function erroDeContatoDuplicado(
+  supabase: SB,
+  ctx: HandlerCtx,
+  err: { code?: string; message: string },
+  linha: Record<string, unknown>,
+  ignorarId?: string,
+): Promise<ApiError> {
+  if (err.code !== "23505") {
+    return new ApiError(500, "internal_error", undefined, ctx.requestId, err.message);
+  }
+  const campo = /phone/.test(err.message)
+    ? { rotulo: "telefone", coluna: "phone_number", valor: linha.phone_number }
+    : /email/.test(err.message)
+      ? { rotulo: "e-mail", coluna: "email_normalized", valor: String(linha.email ?? "").trim().toLowerCase() }
+      : /cpf/.test(err.message)
+        ? { rotulo: "CPF", coluna: "cpf_hash", valor: linha.cpf_hash }
+        : null;
+
+  let existente: { id: string; nome: string | null } | null = null;
+  if (campo && campo.valor) {
+    let q = supabase
+      .from("contacts")
+      .select("id, name, display_name")
+      .eq("organization_id", ctx.organization_id)
+      .eq(campo.coluna, campo.valor as string)
+      .is("is_merged_into", null)
+      .limit(1);
+    if (ignorarId) q = q.neq("id", ignorarId);
+    const { data } = await q.maybeSingle();
+    const c = data as { id: string; name: string | null; display_name: string | null } | null;
+    if (c) {
+      const rotulo = rotuloDoContato({ ...c, phone_number: null });
+      existente = { id: c.id, nome: rotulo === SEM_NOME ? null : rotulo };
+    }
+  }
+
+  const dono = existente?.nome ? ` (${existente.nome})` : "";
+  return new ApiError(
+    409,
+    "contact_already_exists",
+    existente ? { existing_contact_id: existente.id, campo: campo?.rotulo } : { campo: campo?.rotulo },
+    ctx.requestId,
+    `Já existe um contato com este ${campo?.rotulo ?? "dado"}${dono}. Abra a ficha dele em Contatos em vez de criar outro.`,
+  );
+}
+
 export interface CreateContactResult {
   contact: Contact;
   action: "created";
@@ -365,7 +421,7 @@ export async function createContactHandler(
     .single();
 
   if (insErr) {
-    throw new ApiError(500, "internal_error", undefined, ctx.requestId, insErr.message);
+    throw await erroDeContatoDuplicado(supabase, ctx, insErr, insertRow);
   }
 
   const contact = created as Contact;
@@ -511,7 +567,7 @@ export async function patchContactHandler(
     .maybeSingle();
 
   if (updErr) {
-    throw new ApiError(500, "internal_error", undefined, ctx.requestId, updErr.message);
+    throw await erroDeContatoDuplicado(supabase, ctx, updErr, patch, contactId);
   }
   if (!updated) {
     throw new ApiError(

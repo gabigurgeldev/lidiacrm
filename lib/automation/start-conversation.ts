@@ -39,6 +39,98 @@ export async function sessaoProntaParaEnvio(
   return (await tentar(true)) ?? (await tentar(false));
 }
 
+export type ConexaoEscolhida =
+  | { kind: "conexao"; id: string }
+  | { kind: "recusa"; motivo: "conexao_nao_encontrada" | "sem_conexao_de_whatsapp" };
+
+/**
+ * Por qual conexão uma automação fala com um contato.
+ *
+ * Medido em produção (2026-09-29): um fluxo guardava no bloco o id de uma
+ * conexão que a pessoa excluiu duas semanas antes. Cada execução ABRIA uma
+ * conversa nova naquela conexão morta (`ensureConversation` não sabe de
+ * arquivamento), o envio falhava com `channel_archived`, e a Caixa de entrada
+ * passou a mostrar o mesmo cliente em várias linhas — lido pelo dono como
+ * "contato duplicado".
+ *
+ * A ordem:
+ *   1. a conexão escolhida, se é desta organização e não foi excluída;
+ *   2. a conexão em que o PRÓPRIO contato escreveu por último — responder pelo
+ *      número que o cliente usou mantém a conversa numa linha só;
+ *   3. a primeira conexão viva da organização.
+ *
+ * Conexão escolhida que não é desta organização continua RECUSA, nunca queda
+ * para outra: é id copiado de outro cliente, e não uma conexão que morreu.
+ */
+export async function conexaoParaOContato(
+  supabase: SupabaseClient,
+  organizationId: string,
+  contactId: string | null,
+  escolhida: string | null,
+): Promise<ConexaoEscolhida> {
+  if (escolhida !== null) {
+    const { data } = await queryTolerantToMissingArchived(
+      () =>
+        supabase
+          .from("channel_sessions")
+          .select(`id, ${ARCHIVED_AT}`)
+          .eq("id", escolhida)
+          .eq("organization_id", organizationId)
+          .maybeSingle(),
+      () =>
+        supabase
+          .from("channel_sessions")
+          .select("id")
+          .eq("id", escolhida)
+          .eq("organization_id", organizationId)
+          .maybeSingle(),
+    );
+    const linha = data as { id: string; archived_at?: string | null } | null;
+    if (linha === null) return { kind: "recusa", motivo: "conexao_nao_encontrada" };
+    if (!linha.archived_at) return { kind: "conexao", id: linha.id };
+  }
+
+  if (contactId !== null) {
+    const { data: conversas } = await supabase
+      .from("conversations")
+      .select("channel_session_id")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .eq("is_group", false)
+      .not("last_inbound_at", "is", null)
+      .order("last_inbound_at", { ascending: false })
+      .limit(5);
+    const ids = ((conversas as Array<{ channel_session_id: string }> | null) ?? []).map(
+      (c) => c.channel_session_id,
+    );
+    if (ids.length > 0) {
+      const { data: vivas } = await queryTolerantToMissingArchived(
+        () =>
+          supabase
+            .from("channel_sessions")
+            .select("id")
+            .eq("organization_id", organizationId)
+            .in("id", ids)
+            .is(ARCHIVED_AT, null),
+        () =>
+          supabase
+            .from("channel_sessions")
+            .select("id")
+            .eq("organization_id", organizationId)
+            .in("id", ids),
+      );
+      const vivasIds = new Set(((vivas as Array<{ id: string }> | null) ?? []).map((s) => s.id));
+      const daUltimaConversa = ids.find((id) => vivasIds.has(id));
+      if (daUltimaConversa !== undefined) return { kind: "conexao", id: daUltimaConversa };
+    }
+  }
+
+  const padrao = await sessaoProntaParaEnvio(supabase, organizationId);
+  return padrao === null
+    ? { kind: "recusa", motivo: "sem_conexao_de_whatsapp" }
+    : { kind: "conexao", id: padrao };
+}
+
 export async function ensureConversation(
   admin: SupabaseClient,
   organizationId: string,

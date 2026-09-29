@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dialog";
 import { ROLES, type Role } from "@/lib/schemas/team";
 import { DotsThree } from "@/lib/ui/icons";
+import { EditarMembroDialog } from "./EditarMembroDialog";
 
 interface Props {
   currentUserId: string;
@@ -55,6 +56,7 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
   const revoke = useRevokeMember();
 
   const [revokeDialog, setRevokeDialog] = useState<TeamMember | null>(null);
+  const [editando, setEditando] = useState<TeamMember | null>(null);
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">{t("Carregando…")}</p>;
@@ -137,6 +139,9 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setEditando(m)}>
+                            {t("Editar usuário")}
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
                             onClick={() => setRevokeDialog(m)}
@@ -155,6 +160,8 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
           </TableBody>
         </Table>
       </div>
+
+      <EditarMembroDialog membro={editando} onOpenChange={(o) => !o && setEditando(null)} />
 
       <Dialog open={!!revokeDialog} onOpenChange={(o) => !o && setRevokeDialog(null)}>
         <DialogContent>

@@ -38,6 +38,21 @@ export const criarMembroSchema = z.object({
 });
 export type CriarMembroInput = z.infer<typeof criarMembroSchema>;
 
+/**
+ * A empresa edita uma pessoa da própria equipe: nome, e-mail, senha nova.
+ * Mesma régua de senha do `criarMembroSchema`.
+ */
+export const editarMembroSchema = z
+  .object({
+    nome: z.string().trim().max(120).nullable().optional(),
+    email: z.string().trim().toLowerCase().email().optional(),
+    senha: z.string().min(8, "Senha deve ter pelo menos 8 caracteres").optional(),
+  })
+  .refine((v) => v.nome !== undefined || v.email !== undefined || v.senha !== undefined, {
+    message: "Informe ao menos um campo para alterar.",
+  });
+export type EditarMembroInput = z.infer<typeof editarMembroSchema>;
+
 export const acceptInviteSchema = z.object({
   token: z.string().min(20),
 });

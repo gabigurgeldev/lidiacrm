@@ -25,8 +25,10 @@
  *      pelo oficial" não diz por qual — e a resposta que o motor daria (o
  *      primeiro que achasse) é resposta por acaso de ordem.
  *
- * `null` mantém o que já existia: a primeira conexão viva da organização. É o
- * default para quem tem um número só e não quer decidir nada.
+ * `null` responde pelo número em que o cliente escreveu por último e, sem
+ * conversa dele, pela primeira conexão viva da organização. Conexão escolhida
+ * que foi EXCLUÍDA segue a mesma regra, em vez de abrir conversa num número
+ * morto (`conexaoParaOContato`, em `lib/automation/start-conversation.ts`).
  */
 
 import { z } from "zod";

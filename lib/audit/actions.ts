@@ -226,6 +226,8 @@ export const AUDIT_ACTIONS = [
   "flow.started_manually",
   "authz.denied",
   "team.role_changed",
+  // A empresa editou nome, e-mail ou senha de uma pessoa da própria equipe.
+  "team.member_updated",
   "leads.bulk_assigned",
   "attendant.availability_changed",
   "routing.config_changed",

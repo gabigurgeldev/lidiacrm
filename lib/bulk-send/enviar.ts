@@ -31,11 +31,16 @@ import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { ensureConversation } from "@/lib/automation/start-conversation";
 import type { MensagemEnviada } from "@/lib/automation/desfecho-do-envio";
 import type { DestinatarioPendente, DisparoEmVoo } from "@/lib/bulk-send/motor";
+import { rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { personalizarTexto, personalizarValores, temVariavelDeNome } from "./personalizar";
 
-/** Nome de exibição do contato — `organization_id` filtrado: o cliente é admin. */
+/**
+ * O NOME de gente do contato, ou `null` — `organization_id` filtrado: o cliente
+ * é admin. Pela regra única de `rotuloDoContato`, sem o telefone: "Oi, +55 11…!"
+ * e "Oi, 1203…@lid!" são piores que o cumprimento sem nome.
+ */
 async function nomeDoContato(
   admin: ReturnType<typeof createAdminClient>,
   orgId: string,
@@ -48,7 +53,9 @@ async function nomeDoContato(
     .eq("organization_id", orgId)
     .maybeSingle();
   const c = data as { name: string | null; display_name: string | null } | null;
-  return (c?.display_name?.trim() || c?.name?.trim()) ?? null;
+  if (!c) return null;
+  const rotulo = rotuloDoContato({ ...c, phone_number: null });
+  return rotulo === SEM_NOME ? null : rotulo;
 }
 
 export async function enviarUmDoDisparo(
