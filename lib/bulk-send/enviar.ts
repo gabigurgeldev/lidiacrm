@@ -33,6 +33,24 @@ import type { MensagemEnviada } from "@/lib/automation/desfecho-do-envio";
 import type { DestinatarioPendente, DisparoEmVoo } from "@/lib/bulk-send/motor";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { personalizarTexto, personalizarValores, temVariavelDeNome } from "./personalizar";
+
+/** Nome de exibição do contato — `organization_id` filtrado: o cliente é admin. */
+async function nomeDoContato(
+  admin: ReturnType<typeof createAdminClient>,
+  orgId: string,
+  contactId: string,
+): Promise<string | null> {
+  const { data } = await admin
+    .from("contacts")
+    .select("name, display_name")
+    .eq("id", contactId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  const c = data as { name: string | null; display_name: string | null } | null;
+  return (c?.display_name?.trim() || c?.name?.trim()) ?? null;
+}
+
 export async function enviarUmDoDisparo(
   disparo: DisparoEmVoo,
   destinatario: DestinatarioPendente,
@@ -49,6 +67,15 @@ export async function enviarUmDoDisparo(
     disparo.channel_session_id,
   );
 
+  // `{{nome}}` / `{{primeiro_nome}}` por destinatário (`personalizar.ts`). O
+  // nome só é buscado quando há variável — disparo sem variável não paga a
+  // consulta a mais por mensagem.
+  const usaNome =
+    disparo.mode === "template"
+      ? Object.values(disparo.template_values ?? {}).some((v) => temVariavelDeNome(v))
+      : temVariavelDeNome(disparo.body);
+  const nome = usaNome ? await nomeDoContato(admin, disparo.organization_id, destinatario.contact_id) : null;
+
   const entrada =
     disparo.mode === "template"
       ? {
@@ -56,9 +83,15 @@ export async function enviarUmDoDisparo(
           type: "template",
           template_name: disparo.template_name,
           template_language: disparo.template_language,
-          template_values: disparo.template_values,
+          template_values: usaNome
+            ? personalizarValores(disparo.template_values, nome)
+            : disparo.template_values,
         }
-      : { conversation_id: conversationId, type: "text", body: disparo.body ?? "" };
+      : {
+          conversation_id: conversationId,
+          type: "text",
+          body: usaNome ? personalizarTexto(disparo.body ?? "", nome) : (disparo.body ?? ""),
+        };
 
   const mensagem = await sendMessageHandler(
     admin,

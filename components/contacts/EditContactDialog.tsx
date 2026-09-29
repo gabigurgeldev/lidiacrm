@@ -23,6 +23,7 @@ interface FormShape {
   name?: string;
   email?: string;
   phone_number?: string;
+  birthdate?: string;
   tagsRaw?: string;
 }
 
@@ -42,6 +43,7 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
       name: contact.name ?? "",
       email: contact.email ?? "",
       phone_number: contact.phone_number ? phoneForDisplay(contact.phone_number) : "",
+      birthdate: contact.birthdate ?? "",
       tagsRaw: contact.tags.join(", "),
     },
   });
@@ -68,6 +70,9 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
     if (values.name?.trim()) payload.name = values.name.trim();
     if (values.email?.trim()) payload.email = values.email.trim();
     if (values.phone_number?.trim()) payload.phone_number = values.phone_number.trim();
+    // Vazio APAGA a data (null) — o campo existe para corrigir, inclusive tirar.
+    const nascimento = values.birthdate?.trim() ?? "";
+    if (nascimento !== (contact.birthdate ?? "")) payload.birthdate = nascimento === "" ? null : nascimento;
     payload.tags = tags;
 
     const parsed = contactPatchSchema.safeParse(payload);
@@ -103,6 +108,11 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
           <div className="space-y-2">
             <Label htmlFor="ec-phone">{t("Telefone (E.164)")}</Label>
             <Input id="ec-phone" {...form.register("phone_number")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ec-birthdate">{t("Data de nascimento")}</Label>
+            <Input id="ec-birthdate" type="date" max={new Date().toISOString().slice(0, 10)} {...form.register("birthdate")} />
+            <p className="text-xs text-muted-foreground">{t("Usada para a mensagem de parabéns automática.")}</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="ec-tags">Tags</Label>

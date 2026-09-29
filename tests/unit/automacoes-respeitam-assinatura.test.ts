@@ -40,6 +40,11 @@ const ENTRADAS: Array<{ arquivo: string; exige: RegExp; porque: string }> = [
     porque: "follow-ups por fluxo",
   },
   {
+    arquivo: "app/api/v1/cron/aniversarios/route.ts",
+    exige: /podeOperar:\s*organizacaoPodeOperar/,
+    porque: "mensagem de aniversário",
+  },
+  {
     arquivo: "lib/automation/engine.handler.ts",
     exige: /organizacaoPodeOperar\(row\.organization_id\)/,
     porque: "regras automáticas (enviar WhatsApp, webhook, mudar etapa)",
@@ -68,7 +73,12 @@ describe("automações respeitam a assinatura", () => {
   });
 
   it("os motores injetáveis PULAM a org bloqueada (não só recebem a dependência)", () => {
-    for (const arquivo of ["lib/bulk-send/motor.ts", "lib/flow-engine/engine.ts", "lib/followup/engine.ts"]) {
+    for (const arquivo of [
+      "lib/bulk-send/motor.ts",
+      "lib/flow-engine/engine.ts",
+      "lib/followup/engine.ts",
+      "lib/aniversario/motor.ts",
+    ]) {
       const fonte = readFileSync(join(RAIZ, arquivo), "utf8");
       expect(fonte, arquivo).toMatch(/deps\.podeOperar && !\(await deps\.podeOperar\(/);
     }

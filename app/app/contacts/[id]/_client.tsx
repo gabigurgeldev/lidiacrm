@@ -148,6 +148,16 @@ export function ContactDetailClient({ contactId }: Props) {
                 <dd className="mt-1">{contact.phone_number ? phoneForDisplay(contact.phone_number) : "—"}</dd>
               </div>
               <div>
+                <dt className="text-xs uppercase text-muted-foreground">{t("Data de nascimento")}</dt>
+                <dd className="mt-1">
+                  {contact.birthdate
+                    ? // Montada à mão, sem `new Date`: a data não tem hora, e o
+                      // fuso do navegador a mostraria um dia antes.
+                      contact.birthdate.split("-").reverse().join("/")
+                    : "—"}
+                </dd>
+              </div>
+              <div>
                 <dt className="text-xs uppercase text-muted-foreground">Origem</dt>
                 <dd className="mt-1">{contact.source}</dd>
               </div>

@@ -41,11 +41,17 @@ import type { ChannelProvider } from "@/lib/channels/capabilities";
 import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
 import type { CriarDisparoInput } from "@/lib/schemas/bulk-sends";
 
-/** Quem criou o disparo. Uma das duas, nunca as duas. */
+/** Quem criou o disparo. Um dos três, nunca mais de um. */
 export type AutorDoDisparo =
   | { tipo: "pessoa"; userId: string }
   /** Um bloco de fluxo. `flowExecutionId` é o rastro de qual execução o criou. */
-  | { tipo: "fluxo"; flowExecutionId: string };
+  | { tipo: "fluxo"; flowExecutionId: string }
+  /**
+   * Uma automação do sistema (a mensagem de aniversário). Sem pessoa e sem
+   * fluxo: o rastro de origem mora na tabela da própria automação
+   * (`aniversario_envios.bulk_send_id`), e o nome do disparo diz o que ele é.
+   */
+  | { tipo: "automacao" };
 
 /**
  * Os motivos de recusa, em código.

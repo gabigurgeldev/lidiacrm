@@ -31,6 +31,14 @@ export function isValidCpf(raw: string): boolean {
   return d2 === parseInt(s[10]!, 10);
 }
 
+/** `YYYY-MM-DD` que existe no calendário, de 1900 até hoje. */
+export function dataDeNascimentoValida(iso: string): boolean {
+  const [a, m, d] = iso.split("-").map(Number) as [number, number, number];
+  const data = new Date(Date.UTC(a, m - 1, d));
+  if (data.getUTCFullYear() !== a || data.getUTCMonth() !== m - 1 || data.getUTCDate() !== d) return false;
+  return a >= 1900 && data.getTime() <= Date.now();
+}
+
 export const contactCreateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   display_name: z.string().min(1).max(200).optional(),
@@ -40,9 +48,15 @@ export const contactCreateSchema = z.object({
     .regex(PHONE_REGEX, "Telefone deve estar em formato E.164 (+5511999998888)")
     .optional(),
   cpf: z.string().refine(isValidCpf, "CPF inválido").optional(),
+  // `null` apaga (a ficha do contato tem "limpar"). A data precisa EXISTIR
+  // (31/02 não passa) e não pode ser futura — é o que o cron de aniversário lê
+  // para mandar os parabéns, e uma data impossível seria um contato que nunca
+  // recebe sem ninguém saber por quê.
   birthdate: z
     .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de nascimento inválida")
+    .refine(dataDeNascimentoValida, "Data de nascimento inválida")
+    .nullable()
     .optional(),
   tags: z.array(z.string()).optional(),
   source: z.string().min(1).default("manual"),

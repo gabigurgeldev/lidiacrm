@@ -495,6 +495,8 @@ export const AUDIT_ACTIONS = [
   "billing.isencao_alterada",
   "billing.webhook_recusado",
   "billing.conciliacao_run",
+  "aniversario.config_changed",
+  "aniversario.rodada",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -83,6 +83,13 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "leitura e o GRANT de escrita é revogado de authenticated — `update pago_ate` pela " +
       "anon key dá permission denied. eventos_asaas não tem policy e é invisível.",
   })),
+  {
+    tabela: "aniversario_envios",
+    razao:
+      "tests/invariants/aniversarios-rls.test.ts prova a leitura cross-org (membro da A " +
+      "não vê a B) e que o cliente NÃO apaga a trava do dia (permission denied) — sem " +
+      "isso um membro faria a base inteira receber os parabéns de novo.",
+  },
   ...(["flow_executions", "flow_execution_frames", "flow_execution_joins"] as const).map(
     (tabela) => ({
       tabela,

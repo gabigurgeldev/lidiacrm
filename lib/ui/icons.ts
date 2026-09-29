@@ -180,4 +180,6 @@ export {
   ArrowCounterClockwise,
   UserPlus,
   ArrowLeft,
+  // Configurações › Aniversários (mensagem de parabéns automática)
+  Cake,
 } from "@phosphor-icons/react/dist/ssr";

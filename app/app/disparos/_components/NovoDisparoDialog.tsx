@@ -342,7 +342,7 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
                   rows={5}
                   value={corpo}
                   onChange={(e) => setCorpo(e.target.value)}
-                  placeholder={t("Escreva a mensagem que todos vão receber.")}
+                  placeholder={t("Escreva a mensagem. Use {{primeiro_nome}} para cada cliente receber o próprio nome.")}
                 />
               </div>
             )}
@@ -388,8 +388,8 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
                   </p>
                 )}
 
-                {/* Um campo por lacuna do modelo. O valor é o MESMO para todos os
-                    destinatários — o disparo não troca por contato. */}
+                {/* Um campo por lacuna do modelo. `{{nome}}`/`{{primeiro_nome}}` viram o
+                    nome de cada destinatário na hora do envio (`lib/bulk-send/personalizar.ts`). */}
                 {lacunas.map((l) =>
                   l.expects === "image" ? (
                     // IMAGEM, não texto: o cabeçalho de mídia pede o arquivo, e o
@@ -451,7 +451,7 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
                 )}
                 {lacunas.length > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    {t("Todos os contatos recebem os mesmos valores.")}
+                    {t("Use {{primeiro_nome}} ou {{nome}} para cada cliente receber o próprio nome.")}
                   </p>
                 )}
               </div>

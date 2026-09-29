@@ -22,6 +22,7 @@ interface FormShape {
   email?: string;
   phone_number?: string;
   cpf?: string;
+  birthdate?: string;
   tagsRaw?: string;
 }
 
@@ -36,7 +37,7 @@ export function NewContactDialog({ open, onOpenChange }: Props) {
   const [serverError, setServerError] = useState<string | null>(null);
 
   const form = useForm<FormShape>({
-    defaultValues: { name: "", email: "", phone_number: "", cpf: "", tagsRaw: "" },
+    defaultValues: { name: "", email: "", phone_number: "", cpf: "", birthdate: "", tagsRaw: "" },
   });
 
   async function onSubmit(values: FormShape) {
@@ -51,6 +52,7 @@ export function NewContactDialog({ open, onOpenChange }: Props) {
     if (values.email?.trim()) payload.email = values.email.trim();
     if (values.phone_number?.trim()) payload.phone_number = values.phone_number.trim();
     if (values.cpf?.trim()) payload.cpf = values.cpf.trim();
+    if (values.birthdate?.trim()) payload.birthdate = values.birthdate.trim();
     if (tags.length) payload.tags = tags;
 
     const parsed = contactCreateSchema.safeParse(payload);
@@ -99,6 +101,10 @@ export function NewContactDialog({ open, onOpenChange }: Props) {
           <div className="space-y-2">
             <Label htmlFor="cpf">{t("CPF (opcional)")}</Label>
             <Input id="cpf" placeholder="00000000000" {...form.register("cpf")} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="birthdate">{t("Data de nascimento (opcional)")}</Label>
+            <Input id="birthdate" type="date" max={new Date().toISOString().slice(0, 10)} {...form.register("birthdate")} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="tagsRaw">{t("Tags (separadas por vírgula)")}</Label>

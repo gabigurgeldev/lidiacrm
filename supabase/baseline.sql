@@ -18552,6 +18552,51 @@ $placar$;
 revoke execute on function public.fn_flow_split_least_used(uuid, uuid, text, text[]) from public, anon, authenticated;
 grant execute on function public.fn_flow_split_least_used(uuid, uuid, text, text[]) to service_role;
 
+-- ---- mensagem de aniversário automática (migration 0218) ----
+create table if not exists public.aniversario_envios (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  data_local date not null,
+  bulk_send_id uuid references public.bulk_sends(id) on delete set null,
+  total integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists aniversario_envios_org_dia_unique
+  on public.aniversario_envios (organization_id, data_local);
+
+alter table public.aniversario_envios enable row level security;
+
+drop policy if exists aniversario_envios_select on public.aniversario_envios;
+create policy aniversario_envios_select on public.aniversario_envios
+  for select using (organization_id in (select fn_user_org_ids()));
+
+revoke insert, update, delete, truncate on public.aniversario_envios from anon, authenticated;
+
+comment on table public.aniversario_envios is
+  'Um registro por organização por dia local em que a mensagem de aniversário rodou; UNIQUE(organization_id, data_local) impede o segundo disparo no mesmo dia. Escrita só pelo cron (service role).';
+
+create or replace function public.fn_aniversariantes_do_dia(p_org uuid, p_mmdd text[])
+returns table (contact_id uuid, nome text, birthdate date)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select c.id, coalesce(nullif(c.display_name, ''), c.name), c.birthdate
+    from public.contacts c
+   where c.organization_id = p_org
+     and c.birthdate is not null
+     and to_char(c.birthdate, 'MM-DD') = any (p_mmdd)
+     and c.phone_number is not null
+     and coalesce(c.is_anonymized, false) = false
+     and c.is_merged_into is null
+   order by c.name
+$$;
+
+revoke execute on function public.fn_aniversariantes_do_dia(uuid, text[]) from public, anon, authenticated;
+grant execute on function public.fn_aniversariantes_do_dia(uuid, text[]) to service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
@@ -19164,3 +19209,4 @@ begin
     on conflict (organization_id) do nothing;
   end if;
 end $$;
+

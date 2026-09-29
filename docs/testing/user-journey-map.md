@@ -2248,6 +2248,35 @@ sair por SMTP (`EMAIL_SMTP_*`, Amazon SES) além do Resend.
 **Não medido nesta entrega:** entrega em Outlook/Hotmail (só Gmail), e
 cadastro de endereço não verificado enquanto o SES estiver em sandbox.
 
+## J31 — Parabéns automático no aniversário do cliente `[P1]` (2026-09-29)
+
+Em **Configurações › Aniversários** a empresa liga a mensagem de parabéns,
+escolhe a conexão (QR code aceita texto livre; API oficial só modelo aprovado),
+a mensagem ou o modelo e o horário. Um cron de hora em hora
+(`app/api/v1/cron/aniversarios`) cria, na hora local da empresa, UM disparo em
+massa "Aniversariantes de DD/MM" com quem faz aniversário no dia — o envio é o
+do disparo (ritmo anti-banimento, janela, opt-out, reenvio). A data vem de
+`contacts.birthdate`, que agora aparece na ficha e nos diálogos do contato e já
+vinha pela importação de planilha.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J31.1 | Antes do horário escolhido | nada acontece, nem reserva o dia | **PASS** (unit `aniversario`) |
+| J31.2 | Depois do horário | UM disparo com os aniversariantes do dia | **PASS** (unit) |
+| J31.3 | Cron roda de novo no mesmo dia | não cria segundo disparo | **PASS** (unit, sabotado; invariante UNIQUE) |
+| J31.4 | 22h em Brasília (já é amanhã em UTC) | o dia é o da empresa | **PASS** (unit) |
+| J31.5 | Nasceu em 29/02, ano não bissexto | recebe no 28/02 | **PASS** (unit, sabotado; invariante na função) |
+| J31.6 | Org bloqueada pela assinatura | não envia e não gasta o dia | **PASS** (unit; catraca `automacoes-respeitam-assinatura`) |
+| J31.7 | Conexão excluída / modelo reprovado | devolve o dia (tenta na hora seguinte) e UM aviso na Central | **PASS** (unit) |
+| J31.8 | Contato bloqueado/opt-out, anonimizado, mesclado, sem telefone | fica fora | **PASS** (invariante na função + `checarContato` do disparo) |
+| J31.9 | `{{primeiro_nome}}` sem nome no cadastro | a variável some e a pontuação é arrumada; no modelo vira "cliente" | **PASS** (unit) |
+| J31.10 | Membro tenta apagar a trava do dia pela anon key | permission denied | **PASS** (invariante `aniversarios-rls`) |
+| J31.11 | Ligar sem conexão / API oficial sem modelo | a tela recusa com a frase do que falta | **PASS** (unit do schema; rota confere conexão e modelo) |
+| J31.12 | Mensagem chegando de verdade no WhatsApp | contato de teste com aniversário hoje recebe no horário | ver seção de produção abaixo |
+
+**Não medido nesta entrega:** envio pela API oficial real (depende de um
+modelo de aniversário aprovado pela Meta na conta do cliente).
+
 ## J13 — A primeira tela: entrar e criar conta `[P0]`
 
 Contexto do código: as seis telas do grupo `app/(public)/` são uma **cena 3D em

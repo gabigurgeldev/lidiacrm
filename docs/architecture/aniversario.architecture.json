@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Mensagem de aniversário — parabéns automático pelo WhatsApp",
+    "subtitle": "um cron de hora em hora vira UM disparo em massa por dia; o envio é o do disparo, com todas as proteções",
+    "output": "aniversario.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "tela", "label": "Onde a pessoa está" },
+    { "id": "borda", "label": "Rotas e cron" },
+    { "id": "regra", "label": "Regra (pura) e adaptador" },
+    { "id": "envio", "label": "Envio reaproveitado" },
+    { "id": "dados", "label": "Banco" },
+    { "id": "retorno", "label": "Laço de retorno" }
+  ],
+  "mainPath": ["config_tela", "rota_config", "settings", "cron", "motor", "envios", "funcao", "criar_disparo", "motor_disparo", "personalizar"],
+  "nodes": [
+    { "id": "config_tela", "lane": "tela", "col": 0, "type": "component", "label": "Configurações › Aniversários", "sublabel": "liga, conexão (QR/oficial), mensagem ou modelo, horário, aniversariantes" },
+    { "id": "ficha_contato", "lane": "tela", "col": 1, "type": "component", "label": "Ficha / novo / editar contato", "sublabel": "campo Data de nascimento" },
+    { "id": "importacao", "lane": "tela", "col": 2, "type": "component", "label": "Importar planilha", "sublabel": "coluna Data de nascimento (já existia)" },
+    { "id": "disparos_tela", "lane": "tela", "col": 3, "type": "component", "label": "Disparo em massa", "sublabel": "\"Aniversariantes de DD/MM\" com resultado por contato" },
+    { "id": "rota_config", "lane": "borda", "col": 0, "type": "route", "label": "GET/PATCH /api/v1/settings/aniversario", "sublabel": "manager+; ao ligar confere conexão, modo e modelo aprovado" },
+    { "id": "cron", "lane": "borda", "col": 2, "type": "route", "label": "cron aniversarios (5 * * * *)", "sublabel": "podeOperar; audita só quando criou disparo ou falhou" },
+    { "id": "motor", "lane": "regra", "col": 2, "type": "module", "label": "lib/aniversario/motor.ts", "sublabel": "hora local da empresa · reserva o dia · 29/02 no 28/02" },
+    { "id": "adaptador", "lane": "regra", "col": 3, "type": "module", "label": "lib/aniversario/supabase.ts", "sublabel": "service role, organization_id explícito" },
+    { "id": "criar_disparo", "lane": "envio", "col": 3, "type": "module", "label": "criarDisparo (autor: automacao)", "sublabel": "recusa de modo, pré-voo do modelo, checarContato" },
+    { "id": "motor_disparo", "lane": "envio", "col": 4, "type": "service", "label": "lib/bulk-send/motor.ts", "sublabel": "ritmo anti-banimento, janela, opt-out, reenvio" },
+    { "id": "personalizar", "lane": "envio", "col": 5, "type": "module", "label": "lib/bulk-send/personalizar.ts", "sublabel": "{{primeiro_nome}} por destinatário; sem nome nunca sai literal" },
+    { "id": "settings", "lane": "dados", "col": 0, "type": "table", "label": "organizations.settings.aniversario", "sublabel": "ativo, canal_id, modo, hora, mensagem, modelo" },
+    { "id": "contatos", "lane": "dados", "col": 1, "type": "table", "label": "contacts.birthdate", "sublabel": "date; apagada na anonimização LGPD" },
+    { "id": "funcao", "lane": "dados", "col": 2, "type": "module", "label": "fn_aniversariantes_do_dia", "sublabel": "MM-DD[]; só service_role" },
+    { "id": "envios", "lane": "dados", "col": 3, "type": "table", "label": "aniversario_envios", "sublabel": "UNIQUE(org, dia): a trava de uma vez por dia" },
+    { "id": "aviso", "lane": "retorno", "col": 3, "type": "component", "label": "Central de avisos", "sublabel": "um aviso por dia quando o disparo não pôde ser montado" },
+    { "id": "audit", "lane": "retorno", "col": 4, "type": "table", "label": "api_audit_log aniversario.*", "sublabel": "config_changed · rodada" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "config_tela", "to": "rota_config", "label": "salvar" },
+    { "id": "e2", "from": "rota_config", "to": "settings", "label": "merge em settings" },
+    { "id": "e3", "from": "ficha_contato", "to": "contatos", "label": "PATCH birthdate" },
+    { "id": "e4", "from": "importacao", "to": "contatos", "label": "coluna da planilha" },
+    { "id": "e5", "from": "cron", "to": "motor", "label": "de hora em hora" },
+    { "id": "e6", "from": "settings", "to": "motor", "label": "orgs com a chave ligada" },
+    { "id": "e7", "from": "motor", "to": "adaptador", "label": "deps injetadas" },
+    { "id": "e8", "from": "adaptador", "to": "envios", "label": "reserva / conclui o dia" },
+    { "id": "e9", "from": "adaptador", "to": "funcao", "label": "aniversariantes de hoje" },
+    { "id": "e10", "from": "contatos", "to": "funcao", "label": "to_char(birthdate, MM-DD)" },
+    { "id": "e11", "from": "adaptador", "to": "criar_disparo", "label": "um disparo por dia" },
+    { "id": "e12", "from": "criar_disparo", "to": "motor_disparo", "label": "status running" },
+    { "id": "e13", "from": "motor_disparo", "to": "personalizar", "label": "nome de cada destinatário" },
+    { "id": "e14", "from": "motor_disparo", "to": "disparos_tela", "label": "resultado por contato" },
+    { "id": "e15", "from": "envios", "to": "config_tela", "label": "últimos envios" },
+    { "id": "e16", "from": "funcao", "to": "rota_config", "label": "hoje + 7 dias" },
+    { "id": "e17", "from": "adaptador", "to": "aviso", "label": "falha ao montar" },
+    { "id": "e18", "from": "aviso", "to": "config_tela", "label": "conferir conexão e mensagem" },
+    { "id": "e19", "from": "cron", "to": "audit", "label": "aniversario.rodada" },
+    { "id": "e20", "from": "rota_config", "to": "audit", "label": "aniversario.config_changed" }
+  ]
+}
