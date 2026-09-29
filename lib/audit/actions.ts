@@ -482,6 +482,19 @@ export const AUDIT_ACTIONS = [
   // Export é leitura, mas leitura EM MASSA de dado pessoal que sai da
   // instalação num arquivo — é a que a LGPD pergunta "quem baixou?".
   "platform_admin.users_exported",
+  // ── Assinatura paga (Asaas) ────────────────────────────────────────────
+  // Nenhum destes carrega dado de cartão — só últimos 4 dígitos e bandeira.
+  "billing.checkout_iniciado",
+  "billing.pagamento_confirmado",
+  "billing.pagamento_recusado",
+  "billing.pagamento_vencido",
+  "billing.pagamento_estornado",
+  "billing.cartao_trocado",
+  "billing.metodo_trocado",
+  "billing.assinatura_cancelada",
+  "billing.isencao_alterada",
+  "billing.webhook_recusado",
+  "billing.conciliacao_run",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -354,7 +354,7 @@
       "col": 7,
       "type": "service",
       "label": "lib/email/resend.ts",
-      "sublabel": "nome de exibição = marca; endereço = do OPERADOR (domínio verificado). Vazio = not_configured"
+      "sublabel": "SMTP (EMAIL_SMTP_*, Amazon SES) ou Resend; nome de exibição = marca; endereço = do OPERADOR. Nenhum dos dois = not_configured"
     },
     {
       "id": "lgpdworker",
@@ -395,6 +395,22 @@
       "type": "service",
       "label": "proxy.ts — allowlist de extensão",
       "sublabel": "a lista que dispensa o proxy é ALLOWLIST, não heurística de ponto · .glb faltava e o modelo respondia 307 para /login em toda instalação · as nuvens são SVG INLINE e por isso não dependem desta lista — a lição fica para o próximo asset servido de public/"
+    },
+    {
+      "id": "layoutemail",
+      "lane": "saida",
+      "col": 7,
+      "type": "service",
+      "label": "lib/email/layout.ts",
+      "sublabel": "casca ÚNICA de todo e-mail: logo absoluto (o /gestalt-crm.png relativo quebrava), botão no accent, neutros da régua"
+    },
+    {
+      "id": "modeloslogin",
+      "lane": "saida",
+      "col": 7,
+      "type": "api",
+      "label": "app/email/modelos/[tipo]",
+      "sublabel": "HTML dos e-mails do login, com as variáveis do GoTrue cruas; público (o Auth não tem sessão)"
     }
   ],
   "edges": [
@@ -632,7 +648,7 @@
       "id": "e39",
       "from": "env",
       "to": "resend",
-      "label": "RESEND_API_KEY + RESEND_FROM_EMAIL (agora dentro do Zod, não process.env cru)"
+      "label": "RESEND_API_KEY + RESEND_FROM_EMAIL, ou EMAIL_SMTP_* (SES) que vence o Resend"
     },
     {
       "id": "e40",
@@ -814,6 +830,42 @@
       "from": "cenadevidro",
       "to": "saida",
       "label": "a cena é o pior caso de contraste do cartão; tests/unit/acesso-vidro-contraste.test.ts mede o vidro composto sobre PRETO e sobre BRANCO, e toda cena real cai entre os dois"
+    },
+    {
+      "id": "e70",
+      "from": "layoutemail",
+      "to": "invite",
+      "label": "convite de equipe na casca"
+    },
+    {
+      "id": "e71",
+      "from": "layoutemail",
+      "to": "lgpdemail",
+      "label": "entrega do export na casca"
+    },
+    {
+      "id": "e72",
+      "from": "layoutemail",
+      "to": "slaalarm",
+      "label": "alarme do DPO na casca (o vermelho de alerta fica)"
+    },
+    {
+      "id": "e73",
+      "from": "layoutemail",
+      "to": "modeloslogin",
+      "label": "confirmação, senha, convite, link mágico, troca de e-mail, reautenticação"
+    },
+    {
+      "id": "e74",
+      "from": "saida",
+      "to": "modeloslogin",
+      "label": "marcaDaSaida(null): classe B, antes de haver organização"
+    },
+    {
+      "id": "e75",
+      "from": "modeloslogin",
+      "to": "gotrue",
+      "label": "GOTRUE_MAILER_TEMPLATES_<TIPO> aponta para cá; o GoTrue baixa e preenche"
     }
   ],
   "cards": [

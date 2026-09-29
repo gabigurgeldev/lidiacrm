@@ -6,6 +6,8 @@ import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { createClient } from "@/lib/supabase/server";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import { traduzir } from "@/lib/i18n/dicionario";
+import { cobrancaLigada } from "@/lib/billing/asaas";
+import { env } from "@/lib/env";
 
 export const metadata = { title: "Criar conta" };
 
@@ -36,20 +38,26 @@ export default async function SignupPage({
     (user?.user_metadata?.locale as string | undefined) ?? null,
   );
   const t = (texto: string) => traduzir(texto, idioma);
+  // Só o ENDEREÇO do remetente (sem o nome de exibição): é o que a pessoa
+  // procura na caixa de spam. Vazio = a tela não cita remetente nenhum.
+  const remetente = (env.EMAIL_FROM.trim() || env.RESEND_FROM_EMAIL.trim()).replace(/^.*<([^>]+)>\s*$/, "$1");
 
   return (
     // Mesmo contrato de `login/page.tsx`: o nome da marca saiu da tela, e este
     // atributo é o que mantém a resolução do `.env` observável para a spec que
     // a cruza com o título da aba. Ver o comentário longo lá.
-    <div className="space-y-6" data-marca-do-ambiente={branding().name}>
-      <div className="space-y-2 text-center">
+    <div className="group/cadastro space-y-6" data-marca-do-ambiente={branding().name}>
+      {/* Some quando a tela de "confirme seu e-mail" aparece — ela tem o próprio título. */}
+      <div className="space-y-2 text-center group-has-[[data-cadastro-enviado]]/cadastro:hidden">
         <h1 className="text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] text-text">
           {t("Criar conta")}
         </h1>
         <p className="text-sm text-text-muted">
           {convite
             ? t("Crie sua senha para entrar na empresa que te convidou")
-            : t("Leva menos de um minuto. Você confirma pelo e-mail e já começa.")}
+            : cobrancaLigada()
+              ? `${t("Teste grátis por")} ${env.COBRANCA_DIAS_TRIAL} ${t("dias, sem cartão. Você confirma pelo e-mail e já começa.")}`
+              : t("Leva menos de um minuto. Você confirma pelo e-mail e já começa.")}
         </p>
       </div>
 
@@ -64,9 +72,9 @@ export default async function SignupPage({
         </p>
       )}
 
-      <SignupForm convite={convite} />
+      <SignupForm convite={convite} remetente={remetente || undefined} />
 
-      <p className="border-t border-border pt-3 text-sm text-text-muted">
+      <p className="border-t border-border pt-3 text-sm text-text-muted group-has-[[data-cadastro-enviado]]/cadastro:hidden">
         {t("Já tem conta?")}{" "}
         <Link
           href="/login"

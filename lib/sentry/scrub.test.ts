@@ -57,6 +57,23 @@ describe("scrubUrl", () => {
   });
 });
 
+describe("scrubMessage — cartão (checkout da assinatura)", () => {
+  it.each([
+    "4111111111111111",
+    "4111 1111 1111 1111",
+    "5162-3060-0482-9058",
+    "3782 822463 10005",
+  ])("mascara %s", (numero) => {
+    const saida = scrubMessage(`falhou com o cartão ${numero} agora`);
+    expect(saida).toContain("[CARTAO]");
+    expect(saida).not.toMatch(/\d{4}/);
+  });
+
+  it("não confunde telefone com cartão", () => {
+    expect(scrubMessage("ligar +55 11 98765-4321")).toContain("[PHONE]");
+  });
+});
+
 describe("scrubMessage", () => {
   it("substitui CPF, telefone e e-mail", () => {
     const out = scrubMessage("falha para 123.456.789-01, +55 11 98765-4321, joao@exemplo.com");

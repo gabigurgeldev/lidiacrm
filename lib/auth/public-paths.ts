@@ -52,9 +52,14 @@ export const PUBLIC_PATHS: RegExp[] = [
   // `/icon.png` (inexistente) devolvia 404 — a diferença é só a extensão.
   /^\/icon$/,
   /^\/manifest\.webmanifest$/,
+  // Modelos dos e-mails do login, baixados pelo contêiner do Auth (GoTrue) —
+  // que não tem sessão. Só a casca com a marca da instalação e as variáveis do
+  // GoTrue cruas (`app/email/modelos/[tipo]/route.ts`). Tipos ancorados.
+  /^\/email\/modelos\/(confirmation|recovery|invite|magic_link|email_change|reauthentication)$/,
   /^\/team\/accept-invite\/.+$/,
   /^\/account-suspended$/,
-  // Documentos legais. O checkbox obrigatório de `/onboarding/welcome` linka os
+  // Documentos legais. O checkbox obrigatório do `/signup` (e o do assistente
+  // `/onboarding/welcome`, que sobra para o dono da instalação) linka os
   // dois, e o aceite acontece antes de a pessoa ter qualquer coisa no sistema —
   // exigir sessão para LER o que se está aceitando inverte a ordem. Âncorado nos
   // dois nomes de propósito: `/^\/legal/` deixaria qualquer sub-path futuro

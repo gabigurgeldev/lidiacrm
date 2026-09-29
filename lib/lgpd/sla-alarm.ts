@@ -12,7 +12,8 @@
 
 import * as Sentry from "@sentry/nextjs";
 
-import { NEUTROS_DE_SAIDA, type MarcaDeSaida } from "@/lib/branding/saida";
+import type { MarcaDeSaida } from "@/lib/branding/saida";
+import { escapeHtml, layoutDeEmail, paragrafo } from "@/lib/email/layout";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail } from "@/lib/email/resend";
 import { audit } from "@/lib/audit";
@@ -135,23 +136,29 @@ export async function triggerSlaAlarm(
       // verde deixa de comunicar urgência — a cor aqui é a informação.
       const overdueNote =
         daysOverdue > 0
-          ? `<p style="color:#dc2626;font-weight:600;">⚠ Esta solicitação está ${daysOverdue} dia(s) em atraso.</p>`
-          : `<p>O prazo vence em <strong>${dueFmt}</strong>.</p>`;
+          ? paragrafo(
+              `<span style="color:#dc2626;font-weight:600">⚠ Esta solicitação está ${daysOverdue} dia(s) em atraso.</span>`,
+            )
+          : paragrafo(`O prazo vence em <strong>${dueFmt}</strong>.`);
 
-      const html = `<!doctype html>
-<html lang="pt-BR">
-<body style="font-family:-apple-system,Helvetica,Arial,sans-serif;color:${NEUTROS_DE_SAIDA.texto};line-height:1.5;max-width:560px;margin:0 auto;padding:24px;">
-  <h2 style="margin:0 0 12px;font-size:18px;">[LGPD] Alerta de SLA — Solicitação #${shortId}</h2>
-  <p>Olá,</p>
-  <p>A solicitação LGPD <strong>#${shortId}</strong> de <strong>${orgName}</strong> atingiu o limiar <strong>${thresholdLabel}</strong>.</p>
-  ${overdueNote}
-  <p>Status atual: <code>${request.request_type}</code> / <code>${request.status}</code></p>
-  <p style="margin:24px 0;">
-    <a href="${requestUrl}" style="background:${marca.accent};color:${marca.accentFg};padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block;">Ver solicitação no painel</a>
-  </p>
-  <p style="font-size:12px;color:${NEUTROS_DE_SAIDA.suave};">Base legal: LGPD Lei nº 13.709/2018, Art. 18. SLA obrigatório conforme regulamentação vigente.</p>
-</body>
-</html>`;
+      const html = layoutDeEmail({
+        marca,
+        previa: `A solicitação LGPD #${shortId} atingiu o limiar ${thresholdLabel}.`,
+        titulo: `Alerta de prazo LGPD — solicitação #${shortId}`,
+        corpoHtml:
+          paragrafo("Olá,") +
+          paragrafo(
+            `A solicitação LGPD <strong>#${shortId}</strong> de <strong>${orgName}</strong> atingiu o limiar <strong>${escapeHtml(thresholdLabel)}</strong>.`,
+          ) +
+          overdueNote +
+          paragrafo(
+            `Status atual: <code>${escapeHtml(request.request_type)}</code> / <code>${escapeHtml(request.status)}</code>`,
+          ),
+        botao: { texto: "Ver solicitação no painel", url: requestUrl },
+        observacaoHtml:
+          "Base legal: LGPD Lei nº 13.709/2018, Art. 18. SLA obrigatório conforme regulamentação vigente.",
+        motivo: "Você recebeu este e-mail porque é o encarregado de dados (DPO) desta organização.",
+      });
 
       // Texto puro não escapa: `&amp;` no corpo de um alarme é ruído.
       const text = `[LGPD] Alerta de SLA — Solicitação #${shortId}
@@ -239,17 +246,3 @@ Base legal: LGPD Lei nº 13.709/2018, Art. 18.`;
   return { alarmed, sentry: sentryOk, email: emailOk };
 }
 
-/**
- * O nome da organização e a marca passaram a vir de campos que uma pessoa
- * digita numa tela (`organizations.display_name`, `settings.branding`) — então
- * entram no HTML escapados. Antes desta fase o pior caso era o literal
- * `"DeskcommCRM"`.
- */
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}

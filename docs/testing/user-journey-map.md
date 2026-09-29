@@ -20,6 +20,9 @@
 
 ## J1 — Onboarding do primeiro usuário `[P0]`
 
+> **Desde 2026-09-29 o cadastro público NÃO passa por aqui** — ver J30. Este
+> assistente sobra para a organização criada pelo `install.sh` ou pelo `/admin`.
+
 Contexto do código: primeiro usuário nasce do `scripts/bootstrap-owner.ts`
 (install.sh); quem é convidado e ainda não tem conta entra por `/signup?invite=`.
 Wizard: welcome → whatsapp → (nuvemshop se `NUVEMSHOP_ENABLED`) → setup-ai →
@@ -2170,6 +2173,80 @@ teste, e a recusa é 409 que não escreve nada.
   instalação.
 - **Relatório num diretório grande.** A varredura do Auth tem teto de 50 × 1000
   contas e falha alto (503) acima disso; não foi exercitada com volume real.
+
+## J29 — Cadastrar, testar 7 dias, pagar e ser liberado na hora `[P0]` (2026-09-28)
+
+O sistema passou a cobrar (SaaS próprio): cadastro aberto com teste grátis,
+mensalidade paga dentro do CRM por PIX ou cartão (Asaas), bloqueio de quem não
+paga e liberação imediata de quem paga. É P0 porque o bloqueio é a primeira
+impressão do oitavo dia — e porque um bloqueio que falha para o lado errado
+(pagou e continua bloqueado) é o pior defeito que um produto pago pode ter.
+
+**O que muda no risco:** a tela, a API e cada motor de automação passaram a
+consultar a MESMA regra (`lib/billing/acesso.ts`). Antes desta entrega, nem a
+suspensão manual parava a API e as automações — só a tela.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J29.1 | Dia 7, 23:59 do teste | liberado, com aviso para o admin | **PASS** (unit `acesso`) |
+| J29.2 | Dia 8 sem assinar | bloqueado, sem tolerância | **PASS** (unit) |
+| J29.3 | Mensalidade vencida | 3 dias liberado com aviso; depois bloqueado | **PASS** (unit) |
+| J29.4 | Webhook de pagamento | grava a cobrança e recalcula — libera | **PASS** (unit `asaas-webhook`) |
+| J29.5 | Webhook repetido / CONFIRMED+RECEIVED | não estende o acesso duas vezes | **PASS** (unit: `pago_ate` derivado das cobranças; 23505 não reprocessa) |
+| J29.6 | Estorno / chargeback | a cobrança deixa de contar e o acesso recua | **PASS** (unit) |
+| J29.7 | Webhook sem token / token errado | 401, nada gravado | **PASS** (unit) |
+| J29.8 | `externalReference` de outra org | não alcança ninguém | **PASS** (unit) |
+| J29.9 | Membro tenta `update pago_ate` pela anon key | `permission denied` | **PASS** (invariante `assinaturas-rls`) |
+| J29.10 | API com org bloqueada | 402 `payment_required` | **PASS** (unit pela catraca; `requireRole`) |
+| J29.11 | Agente, disparo, fluxo, follow-up, regras com org bloqueada | não agem; ingestão continua | **PASS** (catraca `automacoes-respeitam-assinatura`, sabotada) |
+| J29.12 | Cartão no audit / na resposta | só os 4 últimos dígitos | **PASS** (unit, sabotado) |
+| J29.13 | Assinar durante o teste | 1ª cobrança vence no fim do teste | **PASS** (unit) |
+| J29.14 | Orgs existentes no lançamento | isentas; org nova nunca isentada pelo `update.sh` | **PASS** (invariante) |
+| J29.15 | Pagar PIX pela tela no sandbox e ver liberar | QR → confirmar no sandbox → tela libera em ≤3s | **NÃO MEDIDO** |
+| J29.16 | Cartão aprovado e recusado pela tela no sandbox | aprovado libera; recusado mostra motivo e oferece PIX | **NÃO MEDIDO** |
+| J29.17 | Tela `/assinatura` e Configurações › Assinatura num navegador | layout, estados, mobile | **NÃO MEDIDO** |
+
+### O que ficou NÃO MEDIDO, e por quê
+
+- **J29.15–17, a tela e o Asaas de verdade.** O Playwright deste repo não sobe
+  nesta máquina (Windows, sem CLI do Supabase), e o `.env.local` aponta para um
+  Supabase remoto onde a migration 0217 não foi aplicada — aplicá-la lá não foi
+  feito sem pedido explícito. **Quem retomar:** aplicar o baseline num banco de
+  teste, pôr a chave SANDBOX, expor o webhook por túnel e percorrer J29.15–17.
+- **A cobrança recorrente do mês 2 no cartão** só acontece com o calendário
+  real; a conciliação horária cobre webhook perdido.
+- **Worker em outro processo:** o cache de acesso é por processo (30s); o
+  worker do agente lê o banco a cada job, sem cache.
+
+## J30 — Cadastro de uma tela, e-mails com a marca, direto para o CRM `[P0]` (2026-09-29)
+
+O cadastro público deixou de passar pelo assistente de 7 passos (J1). Ele pede
+de uma vez **nome, empresa, WhatsApp, e-mail, senha e aceite dos termos**; a
+organização nasce com `onboarded_at` preenchido em `ensureTenantForUser`
+(`lib/auth/provision.ts`) e a pessoa cai em `/app/inbox`. O assistente continua
+existindo só para organização criada pelo `install.sh` ou pelo `/admin`.
+
+Todo e-mail sai numa casca só (`lib/email/layout.ts`) com logo, cor e rodapé
+da marca. Os do login (confirmação, senha, convite, link mágico, troca de
+e-mail, reautenticação) são servidos pelo próprio CRM em
+`/email/modelos/<tipo>` e baixados pelo GoTrue
+(`GOTRUE_MAILER_TEMPLATES_<TIPO>`). Os do CRM (convite de equipe, LGPD) podem
+sair por SMTP (`EMAIL_SMTP_*`, Amazon SES) além do Resend.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J30.1 | Cadastro sem nome, WhatsApp ou aceite | o formulário aponta cada campo | **PASS** (unit `cadastro-direto-para-o-crm`) |
+| J30.2 | Cadastro com confirmação ligada | tela "Falta só confirmar seu e-mail", com remetente, aviso de Spam e reenviar | **PASS** (spec `signup-journey`, CI) |
+| J30.3 | Clique no link do e-mail | cai em `/app/inbox`, sem `/onboarding` | **PASS** (unit + spec `signup-journey`) |
+| J30.4 | Confirmação DESLIGADA (`ENABLE_EMAIL_AUTOCONFIRM=true`) | organização criada no próprio cadastro e entra no CRM (antes: org nunca criada) | **PASS** (unit, sabotado) |
+| J30.5 | Convidado com confirmação desligada | vai para a tela de aceite, não abre empresa | **PASS** (unit) |
+| J30.6 | Logo padrão `/gestalt-crm.png` no e-mail | vira URL absoluta; sem endereço do app, o topo leva o nome | **PASS** (unit, sabotado) |
+| J30.7 | Modelos do login | variáveis do GoTrue cruas; link `{{ .RedirectTo }}&token_hash=` | **PASS** (unit) |
+| J30.8 | `EMAIL_SMTP_HOST` preenchido | convite/LGPD saem por SMTP; "not verified" do SES tem nome próprio | **PASS** (unit, sabotado) |
+| J30.9 | E-mail real de confirmação e de senha no Gmail, pelo SES, com a marca | chega na caixa de entrada; o link abre | ver seção de produção abaixo |
+
+**Não medido nesta entrega:** entrega em Outlook/Hotmail (só Gmail), e
+cadastro de endereço não verificado enquanto o SES estiver em sandbox.
 
 ## J13 — A primeira tela: entrar e criar conta `[P0]`
 

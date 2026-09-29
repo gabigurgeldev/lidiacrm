@@ -1,3 +1,4 @@
+import { abrirAssinatura } from "@/lib/billing/servico";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
 
@@ -21,8 +22,11 @@ type ProvisionUser = {
 
 /**
  * Provisiona o tenant de um usuário recém-confirmado via signup self-service:
- * cria a organização (status `active`, `onboarded_at` null → cai no onboarding)
- * e a membership `admin` do usuário.
+ * cria a organização JÁ PRONTA (status `active`, `onboarded_at` preenchido) e a
+ * membership `admin` do usuário. A pessoa entra direto no CRM — o assistente de
+ * `/onboarding` não aparece para quem veio do cadastro: tudo o que ele pedia de
+ * indispensável (nome, empresa, contato, aceite dos termos) já veio no
+ * formulário de cadastro, em `user_metadata`.
  *
  * Idempotente: se o usuário já tem membership ativa (link de confirmação
  * clicado duas vezes, ou usuário que entrou antes por convite), não faz nada.
@@ -65,6 +69,7 @@ export async function ensureTenantForUser(
         legal_name: orgName,
         status: "active",
         created_by: user.id,
+        onboarded_at: new Date().toISOString(),
       })
       .select("id, slug")
       .single();
@@ -86,6 +91,11 @@ export async function ensureTenantForUser(
     throw new Error(`signup provisioning: membership insert failed: ${memberError.message}`);
   }
 
+  // Teste grátis: a assinatura nasce junto da organização do cadastro. Se esta
+  // gravação falhar, `lerAssinatura` abre o trial do `created_at` na primeira
+  // leitura — nunca uma isenção por acidente.
+  await abrirAssinatura(admin, org.id).catch(() => undefined);
+
   void audit({
     action: "tenant.created_by_signup",
     actorUserId: user.id,
@@ -93,7 +103,32 @@ export async function ensureTenantForUser(
     resourceType: "organization",
     resourceId: org.id,
     bypassedRls: true,
-    metadata: { slug: org.slug },
+    metadata: {
+      slug: org.slug,
+      // O aceite dos termos é gravado no cadastro (`signUp.ts`); aqui ele
+      // fica registrado no audit, que é append-only.
+      accepted_terms_at: (user.user_metadata?.accepted_terms_at as string | undefined) ?? null,
+    },
+  });
+
+  // Os mesmos efeitos de `finishOnboarding` — quem escuta `tenant.onboarded`
+  // não pode deixar de ouvir só porque o assistente saiu do caminho.
+  await admin
+    .from("event_log")
+    .insert({
+      organization_id: org.id,
+      event_type: "tenant.onboarded",
+      payload: { completed_by: user.id, origem: "cadastro" },
+    })
+    .then(
+      () => undefined,
+      () => undefined,
+    );
+  void audit({
+    action: "onboarding.completed",
+    actorUserId: user.id,
+    organizationId: org.id,
+    metadata: { origem: "cadastro" },
   });
 
   return { provisioned: true, organizationId: org.id };

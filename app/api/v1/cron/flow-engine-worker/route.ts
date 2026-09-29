@@ -7,6 +7,7 @@
  *
  * Auth: Bearer INTERNAL_CRON_SECRET|INTERNAL_SECRET, fail-closed.
  */
+import { organizacaoPodeOperar } from "@/lib/billing/servico";
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
@@ -42,6 +43,7 @@ async function handle(req: NextRequest): Promise<Response> {
       db: criarFlowAdminClient(admin),
       relogio,
       portas: (exec) => criarPortas(admin, exec, relogio),
+      podeOperar: organizacaoPodeOperar,
     });
   } catch (err) {
     const detalhe = err instanceof Error ? err.message : String(err);

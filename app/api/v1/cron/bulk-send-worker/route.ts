@@ -24,6 +24,7 @@
  * todos os contadores são zero e ainda assim algo aconteceu (o claim não chegou
  * ao banco). Sem ele, tique quebrado e instalação parada são a MESMA linha.
  */
+import { organizacaoPodeOperar } from "@/lib/billing/servico";
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
@@ -58,6 +59,7 @@ async function handle(req: NextRequest): Promise<Response> {
       relogio: () => new Date(),
       dormir: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       enviar: enviarUmDoDisparo,
+      podeOperar: organizacaoPodeOperar,
     });
   } catch (err) {
     const detalhe = err instanceof Error ? err.message : String(err);

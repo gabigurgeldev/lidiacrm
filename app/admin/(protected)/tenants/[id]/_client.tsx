@@ -1,4 +1,5 @@
 "use client";
+import { AssinaturaDoTenant } from "@/components/admin/tenants/AssinaturaDoTenant";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTenantDetail } from "@/hooks/useTenantDetail";
 import { TenantOverview } from "@/components/admin/tenants/TenantOverview";
@@ -50,11 +51,14 @@ export function TenantOverviewClient({ id }: TenantOverviewClientProps) {
           counts={counts}
           integrations={integrations}
         />
-        <TenantActions
+        <div className="space-y-6">
+          <TenantActions
           organizationId={organization.id}
           status={organization.status}
           displayName={organization.display_name}
         />
+          <AssinaturaDoTenant organizationId={organization.id} />
+        </div>
       </div>
     </div>
   );

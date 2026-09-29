@@ -1,9 +1,12 @@
 "use server";
 
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { ensureTenantForUser } from "@/lib/auth/provision";
 import {
+  normalizarWhatsapp,
   signupSchema,
   signupComConviteSchema,
   type SignupInput,
@@ -93,9 +96,7 @@ export async function signUp(
       // O convite é revalidado no servidor mesmo tendo sido validado ao montar
       // a tela: o campo de e-mail do formulário é adulterável no cliente, e a
       // decisão que importa acontece com o e-mail JÁ confirmado pelo provedor.
-      data: convite
-        ? { invite_token: convite }
-        : { org_name: (parsed.data as SignupInput).org_name },
+      data: convite ? { invite_token: convite } : metadadosDoCadastro(parsed.data as SignupInput),
     },
   });
 
@@ -123,5 +124,30 @@ export async function signUp(
     userAgent,
   });
 
+  // Confirmação de e-mail DESLIGADA no Auth (`ENABLE_EMAIL_AUTOCONFIRM=true`):
+  // o GoTrue já devolve a sessão, nenhum e-mail sai e `/auth/confirm` nunca
+  // roda. Sem este ramo a pessoa via "confirme seu e-mail" para sempre e a
+  // organização nunca era criada. Aqui ela nasce na hora e a pessoa entra.
+  if (data.session && data.user) {
+    // Convidado: quem decide a entrada é a tela de aceite, que confere o
+    // convite contra o e-mail da sessão — o mesmo destino de `/auth/confirm`.
+    if (convite) redirect(`/team/accept-invite/${encodeURIComponent(convite)}`);
+    await ensureTenantForUser(data.user);
+    redirect("/app/inbox");
+  }
+
   return { ok: true };
+}
+
+/**
+ * O que o cadastro guarda em `user_metadata` — lido por `ensureTenantForUser`
+ * (empresa, aceite) e pelo resto do produto (`full_name` é o nome exibido).
+ */
+function metadadosDoCadastro(v: SignupInput): Record<string, string> {
+  return {
+    org_name: v.org_name.trim(),
+    full_name: v.full_name.trim(),
+    phone: normalizarWhatsapp(v.whatsapp),
+    accepted_terms_at: new Date().toISOString(),
+  };
 }

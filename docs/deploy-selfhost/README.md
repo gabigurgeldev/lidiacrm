@@ -210,8 +210,24 @@ bash hostgator-setup-kit/marca-emails.sh --render-em /opt/deskcomm/emails
 # GOTRUE_MAILER_TEMPLATES_RECOVERY=/opt/deskcomm/emails/recovery.html
 ```
 
-Num Supabase próprio não existe Management API, então este é o único caminho —
-e é preciso repetir o comando quando a marca mudar.
+Num Supabase próprio não existe Management API. O caminho **recomendado** é
+apontar o GoTrue para os modelos que o próprio app serve — com logo, cor e
+nome da marca resolvidos do banco, sem script e sem repetir nada quando a
+marca muda:
+
+```bash
+# no environment do serviço auth (docker-compose.override.yml), um par por tipo:
+GOTRUE_MAILER_TEMPLATES_CONFIRMATION=https://SEU_DOMINIO/email/modelos/confirmation
+GOTRUE_MAILER_SUBJECTS_CONFIRMATION="Confirme seu e-mail — SUA_MARCA"
+GOTRUE_MAILER_TEMPLATES_RECOVERY=https://SEU_DOMINIO/email/modelos/recovery
+GOTRUE_MAILER_SUBJECTS_RECOVERY="Redefinir sua senha — SUA_MARCA"
+# idem para invite, magic_link, email_change, reauthentication
+```
+
+`https://SEU_DOMINIO/email/modelos/<tipo>?assunto=1` devolve o assunto
+sugerido. O `marca-emails.sh --render-em` acima continua valendo para quem não
+quer depender do app no ar para montar e-mail. Nos dois casos, recrie só o
+contêiner do Auth (`docker compose up -d --no-deps auth`).
 
 ## 4. Conectar o WhatsApp
 

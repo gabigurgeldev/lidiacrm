@@ -7,6 +7,7 @@
  * `event_log.consumed_by[]`) lives in one obvious place.
  */
 
+import { organizacaoPodeOperar } from "@/lib/billing/servico";
 import type { EventHandler, HandlerResult } from "@/lib/event-log/dispatcher";
 import { processMessageReceived } from "@/workers/ai-response-worker";
 
@@ -16,6 +17,10 @@ export const aiResponseHandler: EventHandler = {
   key: AI_RESPONSE_HANDLER_KEY,
   events: ["message.received"],
   async handle(row): Promise<HandlerResult> {
+    // Assinatura vencida: a IA não responde (regra em `lib/billing/acesso.ts`).
+    if (!(await organizacaoPodeOperar(row.organization_id))) {
+      return { consumer_key: AI_RESPONSE_HANDLER_KEY, status: "skipped", detail: "assinatura_bloqueada" };
+    }
     const result = await processMessageReceived(row);
     if (result.status === "sent_to_dispatch") {
       return { consumer_key: AI_RESPONSE_HANDLER_KEY, status: "ok", detail: result.outbound_message_id };

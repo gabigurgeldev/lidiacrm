@@ -23,6 +23,9 @@ import { ConexaoCaidaBanner } from "@/components/app/ConexaoCaidaBanner";
 import { IdiomaProvider } from "@/lib/i18n/IdiomaProvider";
 import { COOKIE_GRUPOS, lerGruposAbertos } from "@/lib/navigation/grupos-abertos";
 import { listarConexoesCaidas, type ConexaoCaida } from "@/lib/channels/health";
+import { acessoDaOrganizacao } from "@/lib/billing/servico";
+import type { EstadoDeAcesso } from "@/lib/billing/acesso";
+import { AvisoDeAssinatura } from "@/components/billing/AvisoDeAssinatura";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await loadAuthUser();
@@ -40,6 +43,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
    */
   let cssDaOrganizacao: string | null = null;
 
+  /** Estado da assinatura quando pede aviso (fim do trial, tolerância). */
+  let avisoDeAssinatura: EstadoDeAcesso | null = null;
+
   // EPIC-02: gate /app/* on completed onboarding.
   // EPIC-11: gate /app/* on org not being suspended (S-11.08).
   if (activeOrg) {
@@ -51,6 +57,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .maybeSingle();
     if (orgRow && !orgRow.onboarded_at) redirect("/onboarding");
     if (orgRow?.status === "suspended") redirect("/account-suspended");
+    // Assinatura: trial vencido ou mensalidade atrasada além da tolerância → a
+    // tela de pagamento, e nada mais. Platform admin (inclusive impersonando)
+    // passa: suporte precisa entrar na org bloqueada. A mesma regra barra a API
+    // em `requireRole` e os motores de automação em `organizacaoPodeOperar`.
+    if (!user.is_platform_admin) {
+      const acesso = await acessoDaOrganizacao(activeOrg.orgId).catch(() => null);
+      if (acesso && !acesso.estado.liberado) redirect("/assinatura");
+      avisoDeAssinatura = acesso?.estado.emAviso ? acesso.estado : null;
+    }
     // G4-02: expõe visibility_mode ao client (inbox decide visões visíveis).
     // Fonte confiável (admin client, org do cookie validado) — nunca do body.
     const mode = (orgRow?.settings as { visibility_mode?: VisibilityMode } | null)
@@ -194,6 +209,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <EstiloDaMarcaDaOrganizacao css={cssDaOrganizacao} />
         <ImpersonateBanner impersonating={impersonating} />
         <ConexaoCaidaBanner caidas={conexoesCaidas} />
+        {avisoDeAssinatura && activeOrg?.role === "admin" && (
+          <AvisoDeAssinatura estado={avisoDeAssinatura} />
+        )}
         {needsMfaGate ? (
           // Gate always mounted for MFA-required roles; it latches the blocking
           // decision client-side so the enroll Server Action's revalidation

@@ -193,6 +193,12 @@ export interface DisparoDeps {
   ) => Promise<MensagemEnviada>;
   rng?: () => number;
   orcamentoMs?: number;
+  /**
+   * A organização pode operar agora (assinatura em dia)? Ausente = sempre pode
+   * (testes antigos e instalação sem cobrança). A rota do cron injeta
+   * `organizacaoPodeOperar` de `lib/billing/servico.ts`.
+   */
+  podeOperar?: (organizationId: string) => Promise<boolean>;
 }
 
 export interface ResumoDoTique {
@@ -286,6 +292,21 @@ async function tocarUmDisparo(
 ): Promise<void> {
   const { db } = deps;
   const org = disparo.organization_id;
+
+  // Assinatura vencida: o disparo PAUSA com o motivo escrito, em vez de mandar.
+  // Pausar (e não pular calado) é o que deixa a tela do disparo explicar por que
+  // parou; depois de pagar, quem manda retoma com um clique.
+  if (deps.podeOperar && !(await deps.podeOperar(org))) {
+    await db.atualizarDisparo(disparo.id, org, {
+      status: "paused",
+      pause_reason: "operador",
+      pause_detail: "Pausado porque a assinatura está com pagamento pendente. Depois de regularizar, retome o disparo.",
+      next_send_at: null,
+      claimed_until: null,
+    });
+    resumo.adiados += 1;
+    return;
+  }
 
   // ─── 1. Os que ficaram em voo quando o tique anterior morreu ───────────────
   //

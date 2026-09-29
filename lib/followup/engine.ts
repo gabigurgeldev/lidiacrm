@@ -126,6 +126,12 @@ export interface TickDeps {
   db: AdminClient;
   clock: () => Date;
   enqueueJob: (job: FollowupJobRequest) => Promise<void>;
+  /**
+   * A organização pode operar agora (assinatura em dia)? Ausente = sempre pode.
+   * Bloqueada, a inscrição é ADIADA em 1h sem avançar nem gastar tentativa —
+   * pular o enfileiramento em silêncio faria o recheck declarar o toque morto.
+   */
+  podeOperar?: (organizationId: string) => Promise<boolean>;
 }
 
 export interface TickSummary {
@@ -657,6 +663,14 @@ export async function runFollowupTick(deps: TickDeps, opts?: { limit?: number })
 
   for (const enrollment of claimed) {
     try {
+      if (deps.podeOperar && !(await deps.podeOperar(enrollment.organization_id))) {
+        await deps.db.updateEnrollment(enrollment.id, enrollment.organization_id, {
+          next_eval_at: new Date(deps.clock().getTime() + 60 * 60 * 1000).toISOString(),
+          claimed_until: null,
+        });
+        summary.scheduled++;
+        continue;
+      }
       await processEnrollment(deps, enrollment, summary);
     } catch (err) {
       try {

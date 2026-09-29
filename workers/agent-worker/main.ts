@@ -30,6 +30,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { resolveSentryDsn, isCommunityDsn, DEFAULT_SENTRY_DSN } from '@/lib/sentry/dsn';
 import { sentryScrubHooks } from '@/lib/sentry/scrub';
+import { organizacaoPodeOperarPg } from '@/lib/billing/pode-operar-pg';
 
 const sentryDsn = resolveSentryDsn(process.env.SENTRY_DSN);
 const sentryCommunity = isCommunityDsn(sentryDsn);
@@ -383,6 +384,16 @@ export async function startWorker(
       const handler = handlers.get(job.kind);
       if (!handler) {
         throw new Error(`nenhum handler registrado para kind=${job.kind}`);
+      }
+      // Assinatura vencida: o job de turno (resposta, follow-up, caso, operador)
+      // é CONCLUÍDO sem rodar — a IA não fala por quem não pagou. A mensagem do
+      // cliente já está gravada pela ingestão; nada se perde. Concluir, e não
+      // reagendar: reagendar faria a fila girar a cada tique sobre jobs que só
+      // voltam a valer depois de um pagamento. Regra em `lib/billing/acesso.ts`.
+      if (!(await organizacaoPodeOperarPg(pool, job.organization_id))) {
+        await completeJob(pool, job.id, workerId);
+        log.info('job pulado: assinatura bloqueada', { job_id: job.id, kind: job.kind, tenant_id: job.organization_id });
+        return;
       }
       await handler(job, pool, { workerId });
       await completeJob(pool, job.id, workerId);

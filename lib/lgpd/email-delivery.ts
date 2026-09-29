@@ -26,7 +26,8 @@
 
 import { createHash } from "node:crypto";
 
-import { NEUTROS_DE_SAIDA, type MarcaDeSaida } from "@/lib/branding/saida";
+import type { MarcaDeSaida } from "@/lib/branding/saida";
+import { escapeHtml, layoutDeEmail, paragrafo } from "@/lib/email/layout";
 import { sendEmail } from "@/lib/email/resend";
 
 export class EmailNotConfigured extends Error {
@@ -65,20 +66,23 @@ export async function sendExportEmail(args: SendArgs): Promise<{ messageId: stri
 
   const subject = `Sua solicitação LGPD #${shortId}`;
 
-  const html = `<!doctype html>
-<html lang="pt-BR">
-<body style="font-family:-apple-system,Helvetica,Arial,sans-serif;color:${NEUTROS_DE_SAIDA.texto};line-height:1.5;max-width:560px;margin:0 auto;padding:24px;">
-  <h2 style="margin:0 0 12px;font-size:18px;">Solicitação LGPD #${shortId} processada</h2>
-  <p>Olá,</p>
-  <p>Sua solicitação de acesso aos dados pessoais (LGPD Art. 18, II) foi processada por <strong>${orgName}</strong>.</p>
-  <p>O relatório completo está disponível para download no link abaixo. Por motivos de segurança, o link expira em <strong>${expiresFmt}</strong>.</p>
-  <p style="margin:24px 0;">
-    <a href="${args.signedUrl}" style="background:${args.marca.accent};color:${args.marca.accentFg};padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block;">Baixar relatório LGPD</a>
-  </p>
-  <p style="font-size:12px;color:${NEUTROS_DE_SAIDA.suave};">Se você não solicitou este relatório, ignore este email — nenhum dado adicional é compartilhado.</p>
-  <p style="font-size:12px;color:${NEUTROS_DE_SAIDA.suave};">Base legal: LGPD Lei nº 13.709/2018, Art. 18, II.</p>
-</body>
-</html>`;
+  const html = layoutDeEmail({
+    marca: args.marca,
+    previa: `Seu relatório de dados pessoais está pronto para download.`,
+    titulo: `Solicitação LGPD #${shortId} processada`,
+    corpoHtml:
+      paragrafo("Olá,") +
+      paragrafo(
+        `Sua solicitação de acesso aos dados pessoais (LGPD Art. 18, II) foi processada por <strong>${orgName}</strong>.`,
+      ) +
+      paragrafo(
+        `O relatório completo está disponível no botão abaixo. Por segurança, o link expira em <strong>${escapeHtml(expiresFmt)}</strong>.`,
+      ),
+    botao: { texto: "Baixar relatório LGPD", url: args.signedUrl },
+    observacaoHtml:
+      "Se você não solicitou este relatório, ignore este e-mail — nenhum dado adicional é compartilhado.<br>Base legal: LGPD Lei nº 13.709/2018, Art. 18, II.",
+    motivo: "Você recebeu este e-mail porque fez uma solicitação de acesso aos seus dados pessoais.",
+  });
 
   // O corpo em texto puro NÃO passa por `escapeHtml` — escapar aqui mostraria
   // `&amp;` ao titular numa marca como "Silva &amp; Filhos".
@@ -112,18 +116,4 @@ Base legal: LGPD Lei nº 13.709/2018, Art. 18, II.`;
   }
 
   return { messageId: result.id ?? "unknown" };
-}
-
-/**
- * A marca deixou de ser constante e passou a vir de um campo que o operador
- * digita numa tela — então ela entra no HTML escapada. Antes desta fase o valor
- * era o literal `"DeskcommCRM"` e a questão não existia.
- */
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }

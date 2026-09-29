@@ -606,8 +606,8 @@ export const NAV_DESTINATIONS: NavDestination[] = [
   },
   {
     href: "/app/settings/billing",
-    label: "Billing",
-    description: "Plano e cobrança.",
+    label: "Assinatura",
+    description: "Plano, forma de pagamento e faturas.",
     icon: Receipt,
     group: "organizacao",
     section: "Sua empresa",

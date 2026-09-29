@@ -75,6 +75,14 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  ...(["assinaturas", "cobrancas", "eventos_asaas"] as const).map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/assinaturas-rls.test.ts prova a leitura cross-org (membro da A " +
+      "não vê a B) e, mais importante aqui, que o cliente NÃO escreve: a policy é só de " +
+      "leitura e o GRANT de escrita é revogado de authenticated — `update pago_ate` pela " +
+      "anon key dá permission denied. eventos_asaas não tem policy e é invisível.",
+  })),
   ...(["flow_executions", "flow_execution_frames", "flow_execution_joins"] as const).map(
     (tabela) => ({
       tabela,

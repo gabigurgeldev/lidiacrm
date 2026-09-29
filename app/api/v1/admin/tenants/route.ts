@@ -1,3 +1,4 @@
+import { abrirAssinatura } from "@/lib/billing/servico";
 import { type NextRequest } from "next/server";
 import { z } from "zod";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
@@ -230,6 +231,10 @@ export async function POST(req: NextRequest) {
       details: insertError.message,
     });
   }
+
+  // Org criada pelo painel entra em teste grátis como a do cadastro; quem não
+  // paga (parceiro, a própria empresa) é isentado depois, na tela da org.
+  if (org) await abrirAssinatura(admin, org.id).catch(() => undefined);
 
   // O dono, se veio senha. Depois do audit de criação da organização seria
   // tarde: quem lê a trilha veria o tenant nascer e a pessoa aparecer sem

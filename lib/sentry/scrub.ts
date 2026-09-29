@@ -51,6 +51,9 @@ export function isSensitiveHeader(name: string): boolean {
 
 export function scrubMessage(input: string): string {
   return input
+    // Número de cartão (13–19 dígitos, com ou sem espaço/hífen) ANTES do CPF e
+    // do telefone: senão as regras deles mordem pedaços do cartão e o resto sobra.
+    .replace(/\b\d{13,19}\b|\b\d{4}(?:[ -]\d{4}){2,3}(?:[ -]\d{1,3})?\b|\b\d{4}[ -]\d{6}[ -]\d{4,5}\b/g, "[CARTAO]")
     .replace(/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/g, "[CPF]")
     .replace(/\+?\d{2}\s?\d{4,5}-?\d{4}/g, "[PHONE]")
     .replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[EMAIL]");
@@ -152,6 +155,11 @@ function scrubEventUrls<T extends EventLike>(event: T): T {
 export const sentryScrubHooks = {
   beforeSend<T extends EventLike>(event: T): T {
     scrubEventUrls(event);
+    // Corpo de requisição NUNCA vai para o Sentry: o do checkout traz número de
+    // cartão e CVV, e não há lista de campos que se mantenha completa.
+    if (event.request && "data" in event.request) {
+      delete (event.request as { data?: unknown }).data;
+    }
     if (typeof event.message === "string") {
       event.message = scrubMessage(event.message);
     }

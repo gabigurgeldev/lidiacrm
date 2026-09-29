@@ -28,6 +28,13 @@ export const ApiErrorCodes = {
   forbidden_tenant: "forbidden_tenant",
   lgpd_anonymization_irreversible: "lgpd_anonymization_irreversible",
 
+  // 402 — assinatura: trial vencido ou mensalidade em atraso além da tolerância.
+  // A organização continua existindo e os dados intactos; o que falta é pagar
+  // (`/assinatura`). Regra em `lib/billing/acesso.ts`.
+  payment_required: "payment_required",
+  // 402 — o Asaas recusou o cartão; `message` traz o motivo dito por ele.
+  payment_declined: "payment_declined",
+
   // 404
   not_found: "not_found",
 

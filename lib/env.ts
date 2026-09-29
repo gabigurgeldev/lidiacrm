@@ -61,6 +61,21 @@ const diasDeRetencao = (nome: string, padrao: number) =>
       return padrao;
     });
 
+/** Mesmo contrato de `diasDeRetencao` (falha fechada na ação, aberta na informação), com mensagem neutra. */
+const inteiroPositivo = (nome: string, padrao: number) =>
+  z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(padrao)
+    .catch(() => {
+      console.warn(
+        `[env] ${nome} inválida (${JSON.stringify(process.env[nome])}) — usando o padrão ${padrao}. ` +
+          `Só número inteiro maior que zero vale aqui.`,
+      );
+      return padrao;
+    });
+
 const schema = z.object({
   // Node
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -245,11 +260,47 @@ const schema = z.object({
   RESEND_FROM_EMAIL: z.string().optional().default(""),
 
   /**
+   * SMTP — o outro transporte (Amazon SES, ou qualquer servidor SMTP). Quando
+   * `EMAIL_SMTP_HOST` está preenchido ele VENCE o Resend (`lib/email/resend.ts`).
+   * Prefixo `EMAIL_` de propósito: `SMTP_*` sem prefixo são as variáveis do
+   * Auth do Supabase, e numa instalação com um `.env` só as duas se
+   * confundiriam. `EMAIL_FROM` vazio cai em `RESEND_FROM_EMAIL`.
+   */
+  EMAIL_SMTP_HOST: z.string().optional().default(""),
+  EMAIL_SMTP_PORT: inteiroPositivo("EMAIL_SMTP_PORT", 587),
+  EMAIL_SMTP_USER: z.string().optional().default(""),
+  EMAIL_SMTP_PASS: z.string().optional().default(""),
+  EMAIL_FROM: z.string().optional().default(""),
+
+  /**
    * Segredo que o Back Office de afiliados da Gestalt usa para assinar as
    * chamadas às rotas `/backoffice/*` (criar/suspender/reativar tenant,
    * conciliação). Vazio = integração desligada: as rotas respondem 503.
    */
   BACKOFFICE_OUTBOUND_SECRET: z.string().optional().default(""),
+
+  /**
+   * Cobrança da assinatura pelo Asaas (`lib/billing/*`).
+   *
+   * `ASAAS_API_KEY` vazia = cobrança DESLIGADA: ninguém entra em trial, ninguém
+   * é bloqueado e a tela de pagamento não oferece checkout. É o estado de dev e
+   * do CI, e é por isso que a suíte existente não muda com esta feature.
+   *
+   * `ASAAS_AMBIENTE` é string e não enum: valor digitado pelo operador e
+   * recusado derrubaria o app inteiro no import (ver o cabeçalho deste
+   * arquivo). Só "producao" liga a API de produção; qualquer outra coisa é
+   * sandbox — errar para o lado que não cobra ninguém de verdade.
+   *
+   * `ASAAS_WEBHOOK_TOKEN` é o "token de autenticação" configurado no webhook do
+   * painel Asaas; vazio = a rota do webhook recusa tudo (401).
+   */
+  ASAAS_API_KEY: z.string().optional().default(""),
+  ASAAS_AMBIENTE: z.string().optional().default("sandbox"),
+  ASAAS_WEBHOOK_TOKEN: z.string().optional().default(""),
+  /** Mensalidade em centavos. Padrão R$ 1.200,00. */
+  COBRANCA_VALOR_CENTAVOS: inteiroPositivo("COBRANCA_VALOR_CENTAVOS", 120000),
+  COBRANCA_DIAS_TRIAL: inteiroPositivo("COBRANCA_DIAS_TRIAL", 7),
+  COBRANCA_DIAS_TOLERANCIA: inteiroPositivo("COBRANCA_DIAS_TOLERANCIA", 3),
 
   /**
    * E-mail de suporte que a instalação mostra ao CLIENTE FINAL (tela de conta

@@ -13,6 +13,14 @@ const nextConfig: NextConfig = {
   // quebra o onBuildComplete com ENOENT next-server.js.nft.json (#96646).
   output: process.env.VERCEL ? undefined : "standalone",
   /**
+   * Só vale no `next dev`. O Next 16 recusa com 403 os recursos de dev
+   * (`/_next/*`, HMR) pedidos por origem que não é localhost. Aberta por um
+   * túnel (`cloudflared tunnel --url http://localhost:3000`, usado para receber
+   * o webhook do Asaas sandbox), a página chegava sem JavaScript, e o login e o
+   * cadastro só recarregavam a tela.
+   */
+  allowedDevOrigins: ["*.trycloudflare.com"],
+  /**
    * O `standalone` copia SÓ o que o file tracing detecta — e ele não detecta
    * tudo de `@swc/helpers`.
    *

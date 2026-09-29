@@ -1,9 +1,19 @@
 "use client";
 
 import { useForm, type Resolver } from "react-hook-form";
-import { BuildingOfficeIcon, EnvelopeSimpleIcon, LockSimpleIcon, ShieldCheckIcon } from "@phosphor-icons/react";
+import {
+  ArrowCounterClockwiseIcon,
+  BuildingOfficeIcon,
+  EnvelopeSimpleIcon,
+  EnvelopeSimpleOpenIcon,
+  LockSimpleIcon,
+  ShieldCheckIcon,
+  UserIcon,
+  WarningCircleIcon,
+  WhatsappLogoIcon,
+} from "@phosphor-icons/react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useTransition, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
 import {
@@ -15,19 +25,39 @@ import {
 import { Button } from "@/components/ui/button";
 import { CampoDeAcesso, ForcaDaSenha } from "@/components/auth/CampoDeAcesso";
 import { signUp } from "@/app/actions/auth/signUp";
+import { reenviarConfirmacao } from "@/app/actions/auth/reenviarConfirmacao";
 
 /**
  * Convite em curso: a conta está sendo criada para ACEITAR um convite, não para
- * abrir uma empresa. Muda duas coisas na tela — some o campo "Nome da empresa"
- * (a empresa já existe; pedir seria mandar a pessoa batizar a organização de
- * outra gente) e o e-mail fica travado no do convite.
+ * abrir uma empresa. Muda a tela — somem os campos da empresa (ela já existe;
+ * pedir seria mandar a pessoa batizar a organização de outra gente) e o e-mail
+ * fica travado no do convite.
  */
 export interface ConviteDoSignup {
   token: string;
   email: string;
 }
 
-export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
+/** Máscara de exibição do WhatsApp: (11) 98765-4321. O servidor guarda só dígitos. */
+function mascararWhatsapp(bruto: string): string {
+  const d = bruto.replace(/\D/g, "").slice(0, 11);
+  if (d.length <= 2) return d.length ? `(${d}` : "";
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
+/** O GoTrue aceita um reenvio por minuto por endereço. */
+const ESPERA_DO_REENVIO_S = 60;
+
+export function SignupForm({
+  convite,
+  remetente,
+}: {
+  convite?: ConviteDoSignup;
+  /** Endereço que envia a confirmação — para a pessoa saber o que procurar. */
+  remetente?: string;
+}) {
   const t = useT();
   const [isPending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
@@ -37,27 +67,29 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<SignupInput>({
-    // O formulário tem UM tipo e DOIS contratos: no modo convite o campo de
-    // empresa não é renderizado, e exigi-lo bloquearia o envio de um campo que
-    // a pessoa não pode ver. O resolver troca; o tipo do form continua o largo,
-    // e `org_name` simplesmente não é enviado ao servidor nesse modo.
+    // O formulário tem UM tipo e DOIS contratos: no modo convite os campos da
+    // empresa não são renderizados, e exigi-los bloquearia o envio de campos que
+    // a pessoa não pode ver. O resolver troca; o tipo do form continua o largo.
     resolver: (convite
       ? zodResolver(signupComConviteSchema)
       : zodResolver(signupSchema)) as Resolver<SignupInput>,
     defaultValues: {
+      full_name: "",
       org_name: "",
+      whatsapp: "",
       email: convite?.email ?? "",
       password: "",
       password_confirm: "",
+      aceite_termos: false,
     },
   });
 
-  // O medidor de força precisa do valor a cada tecla, e `watch` de UM campo só
-  // re-renderiza por esse campo. `watch()` sem argumento assinaria o formulário
-  // inteiro e faria o nome da empresa redesenhar a barra de senha.
+  // `watch` de UM campo só re-renderiza por esse campo — ver o medidor de força.
   const senha = watch("password") ?? "";
+  const whatsappField = register("whatsapp");
 
   const onSubmit = (values: SignupInput) => {
     setServerError(null);
@@ -67,6 +99,8 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
       const entrada: SignupInput | SignupComConviteInput = convite
         ? { email: convite.email, password: values.password, password_confirm: values.password_confirm }
         : values;
+      // Com a confirmação de e-mail desligada no Auth, a action já entra no CRM
+      // por redirect e nada volta para cá.
       const res = await signUp(entrada, convite?.token);
       if (res.ok) {
         setSentTo(values.email);
@@ -83,34 +117,47 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
   };
 
   if (sentTo) {
-    return (
-      <div
-        className="acesso-erro space-y-2 rounded-[12px] border border-border bg-surface-elevated px-4 py-6 text-center"
-        role="status"
-      >
-        <p className="text-sm font-medium text-text">{t("Confirme seu e-mail")}</p>
-        <p className="text-sm text-text-muted">
-          {t("Enviamos um link de confirmação para")} <strong className="text-text">{sentTo}</strong>.{" "}
-          {t("Abra o e-mail e clique no link para ativar sua conta.")}
-        </p>
-      </div>
-    );
+    return <ConfirmeSeuEmail email={sentTo} remetente={remetente} onTrocarEmail={() => setSentTo(null)} />;
   }
 
   return (
     <form method="post" onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
       <div className="acesso-cascata space-y-4">
         {!convite && (
-          <CampoDeAcesso
-            id="org_name"
-            rotulo={t("Nome da empresa")}
-            type="text"
-            autoComplete="organization"
-            icone={<BuildingOfficeIcon size={20} weight="duotone" />}
-            autoFocus
-            erro={errors.org_name ? t(errors.org_name.message ?? "") : undefined}
-            {...register("org_name")}
-          />
+          <>
+            <CampoDeAcesso
+              id="full_name"
+              rotulo={t("Seu nome")}
+              type="text"
+              autoComplete="name"
+              icone={<UserIcon size={20} weight="duotone" />}
+              autoFocus
+              erro={errors.full_name ? t(errors.full_name.message ?? "") : undefined}
+              {...register("full_name")}
+            />
+            <CampoDeAcesso
+              id="org_name"
+              rotulo={t("Nome da empresa")}
+              type="text"
+              autoComplete="organization"
+              icone={<BuildingOfficeIcon size={20} weight="duotone" />}
+              erro={errors.org_name ? t(errors.org_name.message ?? "") : undefined}
+              {...register("org_name")}
+            />
+            <CampoDeAcesso
+              id="whatsapp"
+              rotulo={t("WhatsApp")}
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel-national"
+              icone={<WhatsappLogoIcon size={20} weight="duotone" />}
+              erro={errors.whatsapp ? t(errors.whatsapp.message ?? "") : undefined}
+              {...whatsappField}
+              onChange={(e) => {
+                setValue("whatsapp", mascararWhatsapp(e.target.value), { shouldValidate: Boolean(errors.whatsapp) });
+              }}
+            />
+          </>
         )}
         <CampoDeAcesso
           id="email"
@@ -145,6 +192,36 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
           erro={errors.password_confirm ? t(errors.password_confirm.message ?? "") : undefined}
           {...register("password_confirm")}
         />
+        {!convite && (
+          <div className="space-y-1.5">
+            <label htmlFor="aceite_termos" className="flex cursor-pointer items-start gap-3 text-sm leading-snug text-text-muted">
+              <input
+                id="aceite_termos"
+                type="checkbox"
+                className="mt-0.5 h-[18px] w-[18px] shrink-0 cursor-pointer rounded-[5px] border-border-strong accent-[var(--color-accent)]"
+                aria-invalid={Boolean(errors.aceite_termos)}
+                aria-describedby={errors.aceite_termos ? "aceite_termos-erro" : undefined}
+                {...register("aceite_termos")}
+              />
+              <span>
+                {t("Li e aceito os")}{" "}
+                <a href="/legal/terms" target="_blank" rel="noreferrer" className="font-medium text-text underline underline-offset-4">
+                  {t("Termos de uso")}
+                </a>{" "}
+                {t("e a")}{" "}
+                <a href="/legal/privacy" target="_blank" rel="noreferrer" className="font-medium text-text underline underline-offset-4">
+                  {t("Política de privacidade")}
+                </a>
+                .
+              </span>
+            </label>
+            {errors.aceite_termos && (
+              <p id="aceite_termos-erro" className="pl-[30px] text-xs text-error">
+                {t(errors.aceite_termos.message ?? "")}
+              </p>
+            )}
+          </div>
+        )}
         {serverError && (
           <div
             className="acesso-erro rounded-[10px] border border-error/30 bg-error-bg px-3.5 py-2.5 text-sm text-error"
@@ -158,5 +235,138 @@ export function SignupForm({ convite }: { convite?: ConviteDoSignup }) {
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * A tela depois do "Criar conta". É o momento em que mais gente desiste: o
+ * e-mail demora, cai no spam, e a pessoa não sabe o que procurar. Por isso ela
+ * diz o remetente, manda olhar Spam e Promoções e oferece o reenvio — com a
+ * espera de 60s que o próprio Auth impõe, visível no botão.
+ *
+ * `data-cadastro-enviado` esconde o título "Criar conta" da página
+ * (`app/(public)/signup/page.tsx`), que é server component.
+ */
+function ConfirmeSeuEmail({
+  email,
+  remetente,
+  onTrocarEmail,
+}: {
+  email: string;
+  remetente?: string;
+  onTrocarEmail: () => void;
+}) {
+  const t = useT();
+  const [espera, setEspera] = useState(ESPERA_DO_REENVIO_S);
+  const [reenviando, startReenvio] = useTransition();
+  const [aviso, setAviso] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
+
+  useEffect(() => {
+    if (espera <= 0) return;
+    const id = window.setTimeout(() => setEspera((s) => s - 1), 1000);
+    return () => window.clearTimeout(id);
+  }, [espera]);
+
+  const reenvioBloqueado = espera > 0 || reenviando;
+
+  const reenviar = () => {
+    setAviso(null);
+    startReenvio(async () => {
+      const r = await reenviarConfirmacao(email);
+      if (r.ok) {
+        setAviso({ tipo: "ok", texto: t("Pronto! Enviamos um novo link. Confira de novo a caixa de entrada.") });
+        setEspera(ESPERA_DO_REENVIO_S);
+      } else {
+        setAviso({ tipo: "erro", texto: t("Muitas tentativas. Aguarde alguns minutos e tente de novo.") });
+        setEspera(ESPERA_DO_REENVIO_S);
+      }
+    });
+  };
+
+  return (
+    <div data-cadastro-enviado className="acesso-cascata space-y-6 text-center" role="status" aria-live="polite">
+      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft text-accent">
+        <EnvelopeSimpleOpenIcon size={34} weight="duotone" />
+      </div>
+
+      <div className="space-y-2">
+        <h1 className="text-balance text-[1.6rem] font-semibold leading-tight tracking-[-0.02em] text-text">
+          {/* Hífen inseparável: no celular o título quebrava em "e-" / "mail". */}
+          {t("Falta só confirmar seu e-mail").replace("e-mail", "e‑mail")}
+        </h1>
+        <p className="text-sm leading-relaxed text-text-muted">
+          {t("Enviamos um link de confirmação para")}
+          <br />
+          <strong className="break-all text-base text-text">{email}</strong>
+        </p>
+      </div>
+
+      <ol className="space-y-3 rounded-[14px] border border-border bg-surface-elevated p-4 text-left text-sm text-text">
+        <li className="flex gap-3">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">1</span>
+          <span>{t("Abra o e-mail que acabamos de enviar.")}</span>
+        </li>
+        <li className="flex gap-3">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-semibold text-accent-foreground">2</span>
+          <span>
+            {t("Clique em")} <strong>{t("Confirmar e entrar")}</strong>{" "}
+            {t("— você cai direto no sistema, com sua empresa pronta.")}
+          </span>
+        </li>
+      </ol>
+
+      <div className="flex gap-3 rounded-[12px] border border-warning/30 bg-warning-bg px-4 py-3 text-left text-sm text-text">
+        <WarningCircleIcon size={20} weight="duotone" className="mt-0.5 shrink-0 text-warning" />
+        <p className="leading-relaxed">
+          <strong>{t("Não chegou em 2 minutos?")}</strong>{" "}
+          {t("Olhe as pastas Spam, Lixo eletrônico e Promoções.")}
+          {remetente && (
+            <>
+              {" "}
+              {t("O remetente é")} <span className="break-all font-medium">{remetente}</span>.
+            </>
+          )}
+        </p>
+      </div>
+
+      {aviso && (
+        <p
+          role={aviso.tipo === "erro" ? "alert" : undefined}
+          className={
+            aviso.tipo === "ok"
+              ? "rounded-[10px] border border-accent/30 bg-accent-soft px-3.5 py-2.5 text-sm text-text"
+              : "rounded-[10px] border border-error/30 bg-error-bg px-3.5 py-2.5 text-sm text-error"
+          }
+        >
+          {aviso.texto}
+        </p>
+      )}
+
+      <div className="space-y-3">
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          className="h-12 w-full rounded-[14px] text-[15px] font-semibold"
+          disabled={reenvioBloqueado}
+          title={reenvioBloqueado ? t("Aguarde para reenviar — o e-mail pode levar alguns minutos.") : undefined}
+          onClick={reenviar}
+        >
+          <ArrowCounterClockwiseIcon size={18} weight="bold" />
+          {reenviando
+            ? t("Reenviando...")
+            : espera > 0
+              ? `${t("Reenviar e-mail em")} ${espera}s`
+              : t("Reenviar e-mail")}
+        </Button>
+        <button
+          type="button"
+          onClick={onTrocarEmail}
+          className="text-sm font-medium text-text-muted underline underline-offset-4 hover:text-text"
+        >
+          {t("Digitei o e-mail errado")}
+        </button>
+      </div>
+    </div>
   );
 }

@@ -8,6 +8,7 @@
  * e só vale se tiver linha em `backoffice_tenants` — o Back Office não alcança
  * organização que ele não criou.
  */
+import { abrirAssinatura } from "@/lib/billing/servico";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
@@ -134,6 +135,10 @@ export async function criarTenant(
     });
     return { status: 500, body: { error: "link_insert_failed" } };
   }
+
+  // O Back Office cobra o cliente por fora: a org nasce ISENTA da assinatura
+  // do CRM, senão o cliente pagaria duas vezes (e seria bloqueado no dia 8).
+  await abrirAssinatura(admin, org.id, { isenta: true }).catch(() => undefined);
 
   const convite = linkDoConvite(baseUrl, org.id, pedido.owner.email);
   const marca = await marcaDaSaida(org.id);

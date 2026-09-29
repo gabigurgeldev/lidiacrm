@@ -273,6 +273,12 @@ export interface TickDeps {
   relogio: () => Date;
   /** Monta as portas com o escopo daquela execução (org, lead, conversa). */
   portas: (exec: FlowExecutionRow) => PortasDaExecucao;
+  /**
+   * A organização pode operar agora (assinatura em dia)? Ausente = sempre pode.
+   * Bloqueada, a execução NÃO morre: é adiada em 1h e volta a ser conferida —
+   * pagou, o fluxo segue de onde estava.
+   */
+  podeOperar?: (organizationId: string) => Promise<boolean>;
 }
 
 export interface TickSummary {
@@ -302,6 +308,9 @@ function backoffAte(agora: Date, tentativas: number): Date {
 
 // ─────────────────────────────── o tick ──────────────────────────────────────
 
+/** Quanto uma execução de org com assinatura bloqueada espera antes de ser conferida de novo. */
+const ADIAMENTO_SEM_ASSINATURA_MS = 60 * 60 * 1000;
+
 export async function rodarTickDeFluxos(deps: TickDeps): Promise<TickSummary> {
   const resumo: TickSummary = {
     reclamadas: 0,
@@ -323,6 +332,14 @@ export async function rodarTickDeFluxos(deps: TickDeps): Promise<TickSummary> {
 
   for (const execucao of lote) {
     try {
+      if (deps.podeOperar && !(await deps.podeOperar(execucao.organization_id))) {
+        await deps.db.atualizarExecucao(execucao.id, execucao.organization_id, {
+          next_eval_at: new Date(deps.relogio().getTime() + ADIAMENTO_SEM_ASSINATURA_MS).toISOString(),
+          claimed_until: null,
+        });
+        resumo.esperando += 1;
+        continue;
+      }
       await caminhar(execucao, deps, resumo);
     } catch (err) {
       // Erro fora do nó (grafo ilegível, porta que explodiu) conta como

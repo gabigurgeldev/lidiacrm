@@ -7,15 +7,37 @@ export const loginSchema = z.object({
 
 export type LoginInput = z.infer<typeof loginSchema>;
 
+/** Só os dígitos do telefone; `55` na frente quando veio sem DDI. */
+export function normalizarWhatsapp(bruto: string): string {
+  const digitos = bruto.replace(/\D/g, "");
+  return digitos.length === 10 || digitos.length === 11 ? `55${digitos}` : digitos;
+}
+
+/**
+ * Cadastro de quem ABRE a empresa. Pede, de uma vez, tudo o que o assistente
+ * de 7 passos pedia de indispensável — quem é a pessoa, a empresa, um contato e
+ * o aceite dos termos —, e a organização nasce pronta no clique do link de
+ * confirmação (`lib/auth/provision.ts`), sem assistente.
+ */
 export const signupSchema = z
   .object({
+    full_name: z
+      .string()
+      .trim()
+      .min(2, "Informe seu nome")
+      .max(120, "Nome deve ter no máximo 120 caracteres"),
     org_name: z
       .string()
+      .trim()
       .min(2, "Nome da empresa deve ter pelo menos 2 caracteres")
       .max(120, "Nome da empresa deve ter no máximo 120 caracteres"),
+    whatsapp: z
+      .string()
+      .refine((v) => /^\d{12,13}$/.test(normalizarWhatsapp(v)), "Informe o WhatsApp com DDD"),
     email: z.string().email("Email inválido"),
     password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
     password_confirm: z.string(),
+    aceite_termos: z.boolean().refine((v) => v === true, "Aceite os termos para continuar"),
   })
   .refine((v) => v.password === v.password_confirm, {
     path: ["password_confirm"],

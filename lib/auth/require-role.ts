@@ -42,6 +42,11 @@ interface RequireRoleOpts {
    * NUNCA do body. O role vem de `fn_user_role_in_org(p_org)` nessa org.
    */
   organizationId?: string;
+  /**
+   * Não barra por assinatura vencida. SÓ para as rotas de cobrança
+   * (`/api/v1/billing/*`): sem isto quem está bloqueado não consegue pagar.
+   */
+  permitirSemAssinatura?: boolean;
 }
 
 /**
@@ -49,7 +54,7 @@ interface RequireRoleOpts {
  * `if (!authz.ok) return authz.response;`
  */
 export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promise<RoleCheck> {
-  const { requestId, resource, allowPlatformAdmin = false, organizationId } = opts;
+  const { requestId, resource, allowPlatformAdmin = false, organizationId, permitirSemAssinatura = false } = opts;
 
   const user = await loadAuthUser();
   if (!user) {
@@ -141,6 +146,33 @@ export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promis
         requestId,
       }),
     };
+  }
+
+  // Assinatura: trial vencido ou mensalidade em atraso além da tolerância → 402.
+  //
+  // Fica DEPOIS do papel e do MFA pelo mesmo motivo do MFA: quem não chegaria
+  // lá por papel não aprende nada sobre a cobrança da organização. E fica aqui,
+  // e não só no layout, porque layout não roda em rota de API — sem isto a tela
+  // bloqueia e o `fetch` direto continua funcionando.
+  //
+  // Platform admin agindo como tal já saiu mais acima: o painel da plataforma
+  // precisa operar em organização bloqueada (isentar, conferir, suporte).
+  if (!permitirSemAssinatura) {
+    const { acessoDaOrganizacao } = await import("@/lib/billing/servico");
+    const acesso = await acessoDaOrganizacao(org.orgId).catch(() => null);
+    if (acesso && !acesso.estado.liberado) {
+      return {
+        ok: false,
+        response: fail(
+          "payment_required",
+          acesso.estado.motivo === "trial_vencido"
+            ? "O período de teste terminou. Assine para continuar usando."
+            : "A assinatura está com pagamento pendente. Regularize para continuar usando.",
+          402,
+          { requestId, details: { motivo: acesso.estado.motivo, pagar_em: "/assinatura" } },
+        ),
+      };
+    }
   }
 
   return { ok: true, user, org: { ...org, role: effectiveRole as Role } };

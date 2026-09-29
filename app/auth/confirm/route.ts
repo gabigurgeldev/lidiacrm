@@ -149,5 +149,7 @@ export async function GET(request: NextRequest) {
     requestId,
   });
 
-  return redirectTo("/onboarding/welcome");
+  // Direto para o CRM: a organização nasceu pronta (`onboarded_at` preenchido
+  // em `ensureTenantForUser`) com o que o cadastro já pediu.
+  return redirectTo("/app/inbox");
 }

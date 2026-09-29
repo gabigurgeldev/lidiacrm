@@ -19,6 +19,7 @@
  * agregada por tick (`followup.worker_run` + `followup.silence_sweep_run`),
  * sem organization_id (roda pra todas as orgs).
  */
+import { organizacaoPodeOperar } from "@/lib/billing/servico";
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
@@ -62,6 +63,7 @@ async function handle(req: NextRequest): Promise<Response> {
     db: createSupabaseAdminClient(admin),
     clock: () => new Date(),
     enqueueJob,
+    podeOperar: organizacaoPodeOperar,
   };
 
   let summary;
