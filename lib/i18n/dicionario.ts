@@ -5369,6 +5369,13 @@ export const DICIONARIO: Traducoes = {
   // ─── Auth: login, cadastro, recuperação de senha, MFA, códigos de recuperação ───
   "Entrar": { es: "Entrar" },
   "Criar conta": { es: "Crear cuenta" },
+  "Código de indicação (opcional)": { es: "Código de referido (opcional)" },
+  "Código de indicação inválido": { es: "Código de referido inválido" },
+  "Tenho um código de indicação": { es: "Tengo un código de referido" },
+  "Indicação de": { es: "Referido por" },
+  "de desconto": { es: "de descuento" },
+  "na mensalidade": { es: "en la mensualidad" },
+  "/mês": { es: "/mes" },
   "Use o e-mail e a senha da sua conta para continuar.": {
     es: "Usa el correo y la contraseña de tu cuenta para continuar.",
   },

@@ -38,14 +38,55 @@ e responde `{ external_tenant_id, access_url }`:
   quem já tem conta e a quem ainda não tem. Também vai por e-mail quando o Resend está configurado; sem
   ele, o admin da Gestalt manda o link pelo WhatsApp.
 - `external_tenant_id` é o `organizations.id`. O Back Office grava o cliente com esse ID e o vincula
-  ao afiliado informado; por isso o CRM **não** envia `customer.created`.
+  ao afiliado informado; por isso o CRM **não** envia `customer.created` para essas organizações.
 - Suspender/reativar/plano só alcançam organizações com linha em `backoffice_tenants` — organização
   criada por signup ou pelo painel de plataforma responde 404.
 - Suspender e reativar emitem `tenant.suspended` / `tenant.reactivated` no `event_log`, como o painel
   de plataforma, e ficam no `api_audit_log`.
 
+## Caminho de volta: cadastro indicado, pagamentos e comissão (CRM → Back Office)
+
+Liga com `BACKOFFICE_URL` (URL do Back Office, sem `/api`) + `BACKOFFICE_API_KEY` (chave do produto,
+**Produtos → Gestalt CRM → Integração → Gerar chave**). Qualquer uma vazia = nada sai do CRM.
+Código em `lib/backoffice/saida.ts`; tabelas `backoffice_indicacoes` e `backoffice_saida` (migration 0221).
+
+1. **Link do afiliado.** No Back Office o produto fica **aberto**, com URL de cadastro
+   `https://<crm>/signup`. O link `/r/CODIGO/gestalt-crm` cai em `/signup?ref=CODIGO`; a tela pergunta
+   ao Back Office (`GET /api/v1/affiliates/validate`) e mostra o desconto. O código fica num cookie
+   `bo_ref` por 90 dias e também pode ser digitado ("Tenho um código de indicação").
+2. **Desconto.** Ao criar a organização o código é conferido de novo e o desconto do afiliado vira
+   `assinaturas.valor_centavos` (ex.: 50% de R$ 1.200 = R$ 600). A assinatura do Asaas nasce com esse
+   valor, então toda renovação já sai descontada.
+3. **Eventos** (`POST /api/v1/events`, `Authorization: Bearer <chave>`, `X-Timestamp`,
+   `X-Signature: sha256=HMAC(chave, "{ts}.{corpo}")`). Cliente = organização (`customer.external_id` =
+   `organizations.id`), com `affiliate_code` quando houver indicação:
+
+   | Quando | Evento | `event_id` |
+   | --- | --- | --- |
+   | Organização criada pelo cadastro | `customer.created` | `crm_org_<orgId>_created` |
+   | Cobrança do Asaas paga (`CONFIRMED`/`RECEIVED`) | `payment.succeeded` | `crm_pay_<paymentId>_succeeded` |
+   | Cobrança estornada (`REFUNDED`, total) | `payment.refunded` | `crm_pay_<paymentId>_refunded` |
+   | Chargeback | `payment.chargeback` | `crm_pay_<paymentId>_chargeback` |
+   | Assinatura cancelada | `subscription.canceled` | `crm_sub_<subId>_canceled` |
+
+   Todo caminho que grava cobrança (webhook, checkout, conciliação horária) passa por
+   `gravarCobranca`, que enfileira; o `event_id` estável faz a repetição não contar. O envio sai logo
+   depois da resposta; o cron `backoffice-saida` (5 min) reenvia o que falhou (1, 2, 4… min, até 1 h
+   entre tentativas, por até 7 dias). 200/409 = entregue; outro 4xx = `falhou` com o erro gravado.
+
+Estorno parcial (`PAYMENT_PARTIALLY_REFUNDED`) não é enviado: o Asaas não informa o total estornado no
+evento. Faça o ajuste pelo Back Office (lançamento manual) se acontecer.
+
+Para ver a fila:
+
+```sql
+select status, count(*) from backoffice_saida group by 1;
+select event_id, tentativas, ultimo_erro from backoffice_saida where status <> 'enviado' order by created_at desc limit 20;
+```
+
 ## Testar
 
 ```bash
 pnpm vitest run lib/backoffice
+pnpm test:db   # inclui tests/invariants/backoffice-indicacao-rls.test.ts
 ```

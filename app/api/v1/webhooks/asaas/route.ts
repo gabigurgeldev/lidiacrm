@@ -24,6 +24,7 @@ import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { emitirCancelamento } from "@/lib/backoffice/saida";
 import { pagamentoSchema } from "@/lib/billing/asaas";
 import { tokenConfere } from "@/lib/billing/webhook";
 import { gravarCobranca, recalcularAssinatura } from "@/lib/billing/servico";
@@ -172,6 +173,7 @@ export async function POST(req: NextRequest) {
         .eq("organization_id", organizationId)
         .eq("asaas_subscription_id", subscriptionId);
       await recalcularAssinatura(admin, organizationId);
+      await emitirCancelamento(admin, organizationId, subscriptionId);
     }
 
     await admin

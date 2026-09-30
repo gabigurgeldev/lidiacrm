@@ -5,6 +5,7 @@
  * Quem escreve é só isto aqui, com service role: o cliente não tem grant de
  * escrita nas tabelas (migration 0217), senão ele mesmo esticaria `pago_ate`.
  */
+import { emitirCobranca } from "@/lib/backoffice/saida";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { env } from "@/lib/env";
 
@@ -146,11 +147,16 @@ export async function organizacaoPodeOperar(organizationId: string): Promise<boo
 // Escrita
 // ---------------------------------------------------------------------------
 
-/** Abre a assinatura de uma org recém-criada. Idempotente. */
+/**
+ * Abre a assinatura de uma org recém-criada. Idempotente.
+ *
+ * `valorCentavos` é a mensalidade com o desconto do afiliado que indicou
+ * (`lib/backoffice/saida.ts`); sem ele, o valor cheio do `.env`.
+ */
 export async function abrirAssinatura(
   admin: Admin,
   organizationId: string,
-  opts: { isenta?: boolean } = {},
+  opts: { isenta?: boolean; valorCentavos?: number } = {},
 ): Promise<void> {
   const agora = Date.now();
   await admin.from("assinaturas").upsert(
@@ -159,7 +165,7 @@ export async function abrirAssinatura(
       status: opts.isenta ? "ativa" : "trial",
       isenta: opts.isenta ?? false,
       trial_termina_em: opts.isenta ? null : new Date(agora + env.COBRANCA_DIAS_TRIAL * DIA_MS).toISOString(),
-      valor_centavos: env.COBRANCA_VALOR_CENTAVOS,
+      valor_centavos: opts.valorCentavos ?? env.COBRANCA_VALOR_CENTAVOS,
     },
     { onConflict: "organization_id", ignoreDuplicates: true },
   );
@@ -186,6 +192,10 @@ export async function gravarCobranca(admin: Admin, organizationId: string, p: Pa
     { onConflict: "asaas_payment_id" },
   );
   if (error) throw new Error(`cobrancas: ${error.message}`);
+  // Paga, estornada ou contestada vira evento para o Back Office de afiliados
+  // (receita e comissão). Todo caminho que grava cobrança passa aqui — webhook,
+  // checkout e conciliação —, e o `event_id` estável faz a repetição não contar.
+  await emitirCobranca(admin, organizationId, p);
 }
 
 /**

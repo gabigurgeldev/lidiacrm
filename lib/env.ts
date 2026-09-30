@@ -278,6 +278,15 @@ const schema = z.object({
    * conciliação). Vazio = integração desligada: as rotas respondem 503.
    */
   BACKOFFICE_OUTBOUND_SECRET: z.string().optional().default(""),
+  /**
+   * O caminho de volta: CRM → Back Office (`lib/backoffice/saida.ts`). URL base
+   * do Back Office (sem `/api`) e a chave de API do produto gerada lá. Com as
+   * duas preenchidas, o cadastro aceita código de indicação (com o desconto do
+   * afiliado na mensalidade) e cada cobrança paga, estornada ou contestada vira
+   * evento para a comissão. Qualquer uma vazia = nada sai daqui.
+   */
+  BACKOFFICE_URL: z.string().optional().default(""),
+  BACKOFFICE_API_KEY: z.string().optional().default(""),
 
   /**
    * Cobrança da assinatura pelo Asaas (`lib/billing/*`).
