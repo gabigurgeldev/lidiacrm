@@ -7332,6 +7332,16 @@ export const DICIONARIO: Traducoes = {
   "Digite o e-mail da conta para confirmar": { es: "Escribe el correo de la cuenta para confirmar" },
   "E-mail não confirmado": { es: "Correo no confirmado" },
   "Editar usuário": { es: "Editar usuario" },
+  // Disparo em massa com imagem ou vídeo (migration 0219)
+  "Imagem ou vídeo (opcional)": { es: "Imagen o video (opcional)" },
+  "vai junto com o texto, como legenda": { es: "va junto con el texto, como leyenda" },
+  "Remover imagem ou vídeo": { es: "Quitar imagen o video" },
+  "Enviando arquivo…": { es: "Subiendo archivo…" },
+  "Adicionar imagem ou vídeo": { es: "Agregar imagen o video" },
+  "Imagem JPG, PNG ou WEBP até 5 MB, ou vídeo MP4 até 16 MB.": { es: "Imagen JPG, PNG o WEBP de hasta 5 MB, o video MP4 de hasta 16 MB." },
+  "Com imagem, e o texto como legenda.": { es: "Con imagen, y el texto como leyenda." },
+  "Com vídeo, e o texto como legenda.": { es: "Con video, y el texto como leyenda." },
+  "Não consegui subir o arquivo.": { es: "No pude subir el archivo." },
   "Dados salvos.": { es: "Datos guardados." },
   // Inbox com cara de mensageiro (menu de opções, gravação, exportar conversa)
   "Nota interna — só a equipe vê": { es: "Nota interna — solo el equipo la ve" },

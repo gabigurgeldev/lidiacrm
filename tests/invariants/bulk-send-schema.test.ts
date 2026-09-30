@@ -109,6 +109,36 @@ describe("campanha impossível não nasce", () => {
     ).toBe(true);
   });
 
+  // Migration 0219 — imagem/vídeo junto do texto. No modelo aprovado a imagem é
+  // a do cabeçalho do modelo; uma mídia solta ali seria ignorada pelo envio e o
+  // operador acharia que a campanha saiu com ela.
+  it("mídia em disparo por MODELO é recusada", () => {
+    semear();
+    expect(
+      recusado(`insert into public.bulk_sends
+        (organization_id, name, status, channel_session_id, provider, mode, template_name, template_language, interval_ms, media_storage_path, media_mime, media_kind)
+        values ('${ORG}', 'modelo com midia', 'draft', '${SESS}', 'meta_cloud', 'template', 'promo', 'pt_BR', 5000, '${ORG}/disparos/a.jpg', 'image/jpeg', 'image')`),
+    ).toBe(true);
+  });
+
+  it("mídia pela metade (caminho sem tipo) é recusada", () => {
+    semear();
+    expect(
+      recusado(`insert into public.bulk_sends
+        (organization_id, name, status, channel_session_id, provider, mode, body, interval_ms, media_storage_path)
+        values ('${ORG}', 'midia sem tipo', 'draft', '${SESS}', 'waha', 'freeform', 'oi', 5000, '${ORG}/disparos/a.jpg')`),
+    ).toBe(true);
+  });
+
+  it("texto livre com imagem e legenda é aceito", () => {
+    semear();
+    expect(
+      recusado(`insert into public.bulk_sends
+        (organization_id, name, status, channel_session_id, provider, mode, body, interval_ms, media_storage_path, media_mime, media_kind)
+        values ('${ORG}', 'com imagem', 'draft', '${SESS}', 'waha', 'freeform', 'oi', 5000, '${ORG}/disparos/a.jpg', 'image/jpeg', 'image')`),
+    ).toBe(false);
+  });
+
   it("corpo só com espaços conta como vazio", () => {
     semear();
     expect(

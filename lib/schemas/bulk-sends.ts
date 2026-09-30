@@ -33,12 +33,26 @@ export const audienciaSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
+/**
+ * Imagem ou vídeo que vai junto com o texto (a legenda), no modo texto livre.
+ * O arquivo já subiu por `POST /api/v1/bulk-sends/media`; aqui chega o caminho.
+ * O prefixo da organização NÃO é conferido aqui — o schema não conhece a sessão.
+ * Quem confere é `criarDisparo`, com a organização da sessão.
+ */
+export const midiaDoDisparoSchema = z.object({
+  storage_path: z.string().trim().min(1).max(500),
+  mime: z.string().trim().min(3).max(100),
+  kind: z.enum(["image", "video"]),
+});
+export type MidiaDoDisparo = z.infer<typeof midiaDoDisparoSchema>;
+
 export const criarDisparoSchema = z
   .object({
     name: z.string().trim().min(2).max(120),
     channel_session_id: z.string().uuid(),
     mode: z.enum(["freeform", "template"]),
     body: z.string().trim().min(1).max(4096).optional(),
+    midia: midiaDoDisparoSchema.optional(),
     template_name: z.string().trim().min(1).max(200).optional(),
     template_language: z.string().trim().min(2).max(20).optional(),
     template_values: z.record(z.string(), z.string()).default({}),
@@ -60,6 +74,15 @@ export const criarDisparoSchema = z
         code: "custom",
         path: ["body"],
         message: "Escreva o texto da mensagem.",
+      });
+    }
+    // Espelha `bulk_sends_midia_check`: no modelo aprovado a imagem é a do
+    // cabeçalho do modelo, com caminho próprio.
+    if (v.mode === "template" && v.midia) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["midia"],
+        message: "Imagem ou vídeo anexado só vale para texto livre (número por QR code).",
       });
     }
     if (v.mode === "template" && (!v.template_name || !v.template_language)) {

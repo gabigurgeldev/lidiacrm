@@ -18597,6 +18597,24 @@ $$;
 revoke execute on function public.fn_aniversariantes_do_dia(uuid, text[]) from public, anon, authenticated;
 grant execute on function public.fn_aniversariantes_do_dia(uuid, text[]) to service_role;
 
+-- ---- disparo em massa com imagem ou vídeo (migration 0219) ----
+-- Um arquivo por disparo; a mensagem aponta para ele em `metadata`. Ver o
+-- cabeçalho da migration para o porquê de não copiar por destinatário.
+alter table public.bulk_sends add column if not exists media_storage_path text;
+alter table public.bulk_sends add column if not exists media_mime text;
+alter table public.bulk_sends add column if not exists media_kind text;
+alter table public.bulk_sends drop constraint if exists bulk_sends_midia_check;
+alter table public.bulk_sends add constraint bulk_sends_midia_check
+  check (
+    (media_storage_path is null and media_kind is null and media_mime is null)
+    or (
+      media_storage_path is not null
+      and media_mime is not null
+      and media_kind in ('image', 'video')
+      and mode = 'freeform'
+    )
+  );
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

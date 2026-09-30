@@ -260,10 +260,26 @@ function extendBotSilence(current: string | null, now: string): string | undefin
   return candidate.toISOString();
 }
 
+/**
+ * Opções que SÓ chamada interna alcança — não estão no schema HTTP, então a API
+ * pública não consegue passá-las (o Zod descarta o que não conhece).
+ */
+export interface OpcoesDeEnvio {
+  /**
+   * O arquivo do DISPARO EM MASSA: um só, em `<org>/disparos/…`, compartilhado
+   * por todas as mensagens da campanha. Não entra em `media_storage_path` — a
+   * anonimização LGPD apaga todo `media_storage_path` das mensagens do contato,
+   * e apagaria o arquivo da campanha inteira por causa de um destinatário. Fica
+   * em `metadata.midia_do_disparo`, que é de onde a tela o assina para mostrar.
+   */
+  midiaCompartilhada?: { path: string; mime: string };
+}
+
 export async function sendMessageHandler(
   supabase: SB,
   ctx: HandlerCtx,
   input: SendMessageInput,
+  opcoes: OpcoesDeEnvio = {},
 ): Promise<Message> {
   // `archived_at` entra pelo helper tolerante porque este é O caminho de saída do
   // sistema inteiro (UI, automação, MCP e o agente passam por aqui): num clone que
@@ -323,6 +339,21 @@ export async function sendMessageHandler(
       "media_storage_path fora da conversa.",
     );
   }
+
+  // Mídia compartilhada só da PRÓPRIA organização, e só da pasta de disparos:
+  // o envio assina a URL com a service role, que não passa pela RLS do Storage.
+  const midiaCompartilhada = opcoes.midiaCompartilhada ?? null;
+  if (midiaCompartilhada && !midiaCompartilhada.path.startsWith(`${c.organization_id}/disparos/`)) {
+    throw new ApiError(
+      422,
+      "invalid_media_path",
+      undefined,
+      ctx.requestId,
+      "Arquivo do disparo fora da organização.",
+    );
+  }
+  const caminhoDaMidia = input.media_storage_path ?? midiaCompartilhada?.path ?? null;
+  const mimeDaMidia = input.media_mime ?? midiaCompartilhada?.mime ?? null;
 
   let outboundBody = input.body ?? null;
   let outboundMetadata: Record<string, unknown> = { ...(input.metadata ?? {}) };
@@ -457,7 +488,7 @@ export async function sendMessageHandler(
     status: "queued",
     body: input.body ?? null,
     media_url: input.media_url ?? null,
-    media_mime: input.media_mime ?? null,
+    media_mime: mimeDaMidia,
     media_storage_path: input.media_storage_path ?? null,
     media_size_bytes: input.media_size_bytes ?? null,
     sent_via: ctx.actor.type !== "user" ? ("ai" as const) : ("user" as const),
@@ -466,6 +497,7 @@ export async function sendMessageHandler(
     metadata: {
       ...(input.metadata ?? {}),
       ...(ctx.actor.type === "ai_agent" ? { ai_actor_id: ctx.actor.id } : {}),
+      ...(midiaCompartilhada ? { midia_do_disparo: midiaCompartilhada.path } : {}),
     },
   };
 
@@ -543,6 +575,29 @@ export async function sendMessageHandler(
       .select(MSG_COLS)
       .maybeSingle();
     if (updated) message = updated as unknown as Message;
+  } else if (
+    (!c.channel_sessions || c.channel_sessions.status !== "WORKING") &&
+    ctx.actor.type === "user"
+  ) {
+    // QUEM DIGITOU NA TELA recebe "Falhou" na hora, e não uma fila sem dono.
+    //
+    // Medido em produção (2026-09-30): o atendente reconectou o número e mandou
+    // uma mensagem um segundo depois, com a sessão ainda subindo. Ela ficou
+    // `queued` para sempre — só o agent-engine reagenda o que É DELE, e nada
+    // reenvia o que uma pessoa digitou. Na tela a mensagem parecia a caminho.
+    // Falhar com o motivo deixa a pessoa reenviar quando o número voltar.
+    const { data: updated } = await supabase
+      .from("messages")
+      .update({
+        status: "failed",
+        error_code: "channel_session_not_working",
+        error_message:
+          "O número não está conectado agora. Confira em Conexões e envie de novo quando ele voltar.",
+      })
+      .eq("id", message.id)
+      .select(MSG_COLS)
+      .maybeSingle();
+    if (updated) message = updated as unknown as Message;
   } else if (!c.channel_sessions || c.channel_sessions.status !== "WORKING") {
     const { data: updated } = await supabase
       .from("messages")
@@ -614,7 +669,7 @@ export async function sendMessageHandler(
               language: input.template_language ?? "",
               values: input.template_values ?? {},
             });
-      } else if (input.media_storage_path) {
+      } else if (caminhoDaMidia) {
         // Guarda de FORMATO de voz, capability-aware: um canal `opus-only`
         // recusa a ENTREGA de um áudio que não seja ogg/opus (131053) DEPOIS de
         // aceitar o envio — erro que culpa a URL. Falhar aqui troca esse erro
@@ -626,7 +681,7 @@ export async function sendMessageHandler(
             mode: (c.channel_sessions as { provider_mode?: string | null }).provider_mode,
           }),
           input.type,
-          input.media_mime ?? "application/octet-stream",
+          mimeDaMidia ?? "application/octet-stream",
         );
         if (vozBarrada) throw new Error(vozBarrada);
 
@@ -634,11 +689,11 @@ export async function sendMessageHandler(
         const admin = createAdminClient();
         const { data: signed, error: signErr } = await admin.storage
           .from("whatsapp-media")
-          .createSignedUrl(input.media_storage_path, 600);
+          .createSignedUrl(caminhoDaMidia, 600);
         if (signErr || !signed?.signedUrl) {
           throw new Error(`storage_sign_failed: ${signErr?.message ?? "no_url"}`);
         }
-        const filename = input.media_storage_path.split("/").pop() ?? undefined;
+        const filename = caminhoDaMidia.split("/").pop() ?? undefined;
         ({ externalId } = await adapter.send({
           organizationId: ctx.organization_id,
           sessionRef: resolveSessionRef(c.channel_sessions),
@@ -647,7 +702,7 @@ export async function sendMessageHandler(
           kind: input.type,
           media: {
             url: signed.signedUrl,
-            mime: input.media_mime ?? "application/octet-stream",
+            mime: mimeDaMidia ?? "application/octet-stream",
             filename,
             caption: input.body ?? null,
           },

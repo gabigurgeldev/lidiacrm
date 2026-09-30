@@ -88,7 +88,13 @@ export function MessageBubble({
   const isOutbound = message.direction === "outbound";
   const time = format(new Date(message.sent_at), "HH:mm", { locale: localeDaData });
   const isFailed = message.status === "failed";
-  const hasMedia = Boolean(message.media_url || message.media_storage_path);
+  // `midia_do_disparo`: imagem/vídeo de disparo em massa, um arquivo por
+  // campanha apontado pela metadata (ver `OpcoesDeEnvio` no handler de envio).
+  const hasMedia = Boolean(
+    message.media_url ||
+      message.media_storage_path ||
+      typeof (message.metadata as Record<string, unknown> | null)?.midia_do_disparo === "string",
+  );
   const isContact = message.type === "contact";
   // Figurinha sem caption: sem moldura de bolha (padrão WhatsApp).
   const isBareSticker = hasMedia && message.type === "sticker" && !message.body;

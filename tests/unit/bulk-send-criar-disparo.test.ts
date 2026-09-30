@@ -189,3 +189,42 @@ describe("criar disparo, venha de quem vier", () => {
     if (!r.ok) expect(r.recusa.codigo).toBe("conexao_arquivada");
   });
 });
+
+describe("imagem ou vídeo junto com o texto (migration 0219)", () => {
+  const pessoa = { organizationId: "org-1", autor: { tipo: "pessoa" as const, userId: "u" } };
+
+  it("⭐ grava o caminho, o tipo e o formato do arquivo no disparo", async () => {
+    const db = supabaseFalso();
+    const r = await criarDisparo(db, pessoa, {
+      ...ENTRADA,
+      midia: { storage_path: "org-1/disparos/a.mp4", mime: "video/mp4", kind: "video" },
+    });
+    expect(r.ok).toBe(true);
+    expect(db.inseridos.bulk_sends[0]).toMatchObject({
+      media_storage_path: "org-1/disparos/a.mp4",
+      media_mime: "video/mp4",
+      media_kind: "video",
+    });
+  });
+
+  it("sem mídia, as três colunas ficam nulas — disparo só de texto como sempre", async () => {
+    const db = supabaseFalso();
+    await criarDisparo(db, pessoa, ENTRADA);
+    expect(db.inseridos.bulk_sends[0]).toMatchObject({
+      media_storage_path: null,
+      media_mime: null,
+      media_kind: null,
+    });
+  });
+
+  it("⭐ arquivo de OUTRA organização é recusado — o envio assinaria o arquivo dela", async () => {
+    const db = supabaseFalso();
+    const r = await criarDisparo(db, pessoa, {
+      ...ENTRADA,
+      midia: { storage_path: "org-2/disparos/a.jpg", mime: "image/jpeg", kind: "image" },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.recusa.codigo).toBe("midia_invalida");
+    expect(db.inseridos.bulk_sends).toHaveLength(0);
+  });
+});

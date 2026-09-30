@@ -65,6 +65,7 @@ export type RecusaDeDisparo =
   | { codigo: "conexao_arquivada"; mensagem: string }
   | { codigo: "modo_incompativel"; mensagem: string }
   | { codigo: "modelo_invalido"; mensagem: string }
+  | { codigo: "midia_invalida"; mensagem: string }
   | { codigo: "sem_destinatario"; mensagem: string; recorte: Recorte }
   | { codigo: "falha_ao_gravar"; mensagem: string };
 
@@ -152,6 +153,18 @@ export async function criarDisparo(
     return { ok: false, recusa: { codigo: "modo_incompativel", mensagem: recusa } };
   }
 
+  // ─── A mídia é DESTA organização ───────────────────────────────────────────
+  //
+  // O caminho vem do body; a organização, da sessão. Sem esta conferência, um
+  // caminho copiado de outra empresa faria o disparo mandar o arquivo DELA — o
+  // envio assina a URL com a service role, que não passa pela RLS do Storage.
+  if (entrada.midia && !entrada.midia.storage_path.startsWith(`${orgId}/disparos/`)) {
+    return {
+      ok: false,
+      recusa: { codigo: "midia_invalida", mensagem: "Arquivo do disparo não encontrado. Envie a imagem ou o vídeo de novo." },
+    };
+  }
+
   // ─── Pré-voo do contrato do modelo, uma vez ────────────────────────────────
   //
   // `conferirDefinicao` roda de novo por mensagem dentro do `sendMessageHandler`
@@ -222,6 +235,9 @@ export async function criarDisparo(
       provider: sessao.provider,
       mode: entrada.mode,
       body: entrada.body ?? null,
+      media_storage_path: entrada.midia?.storage_path ?? null,
+      media_mime: entrada.midia?.mime ?? null,
+      media_kind: entrada.midia?.kind ?? null,
       template_name: entrada.template_name ?? null,
       template_language: entrada.template_language ?? null,
       template_values: entrada.template_values,
