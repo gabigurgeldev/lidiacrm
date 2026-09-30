@@ -4032,6 +4032,32 @@ export const DICIONARIO: Traducoes = {
   "Em 1 hora": { es: "En 1 hora" },
   "Em 3 horas": { es: "En 3 horas" },
   "Em 24 horas": { es: "En 24 horas" },
+  // Lembrar → "Agendar mensagem…" (`AgendarMensagemDialog`).
+  "Agendar mensagem…": { es: "Programar mensaje…" },
+  "Agendar mensagem": { es: "Programar mensaje" },
+  Agendar: { es: "Programar" },
+  "Data e hora": { es: "Fecha y hora" },
+  "Enviar pelo número": { es: "Enviar por el número" },
+  "Se cair fora do horário de envio do número, sai assim que o horário abrir.": {
+    es: "Si cae fuera del horario de envío del número, sale apenas el horario abra.",
+  },
+  "Mensagem para o cliente": { es: "Mensaje para el cliente" },
+  "Oi! Passando para lembrar…": { es: "¡Hola! Paso para recordarte…" },
+  "Me avisar também no WhatsApp": { es: "Avisarme también por WhatsApp" },
+  "Telefone do aviso": { es: "Teléfono del aviso" },
+  "O aviso sai pelo mesmo número escolhido acima.": {
+    es: "El aviso sale por el mismo número elegido arriba.",
+  },
+  "Já agendadas nesta conversa": { es: "Ya programados en esta conversación" },
+  Desmarcar: { es: "Desmarcar" },
+  "Escolha a data e a hora.": { es: "Elige la fecha y la hora." },
+  "Escolha um horário no futuro.": { es: "Elige un horario futuro." },
+  "Escreva a mensagem.": { es: "Escribe el mensaje." },
+  "Escolha por qual número a mensagem sai.": { es: "Elige por qué número sale el mensaje." },
+  "Telefone do aviso inválido. Use DDD e número.": {
+    es: "Teléfono del aviso inválido. Usa código de área y número.",
+  },
+  "Escreva o texto do aviso.": { es: "Escribe el texto del aviso." },
 
   // ─── Inbox: composer (anexos, áudio, contato, templates) ───
   Anexar: { es: "Adjuntar" },

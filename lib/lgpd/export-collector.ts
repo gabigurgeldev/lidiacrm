@@ -139,6 +139,20 @@ export interface CaptureRow {
   received_at: string;
 }
 
+/**
+ * Mensagem que o atendente agendou para o titular pela conversa (migration
+ * 0220). Entra porque a cascata de anonimização a redige: o texto foi escrito
+ * PARA a pessoa. O aviso ao atendente (`notify_*`) não vai — é recado interno,
+ * e o telefone ali é de alguém da equipe, não do titular.
+ */
+export interface ScheduledMessageRow {
+  id: string;
+  body: string;
+  scheduled_for: string;
+  status: string;
+  sent_at: string | null;
+}
+
 export interface AuditRow {
   id: string;
   action: string;
@@ -173,6 +187,7 @@ export interface ExportPayload {
   appointments: AppointmentRow[];
   webhook_captures: CaptureRow[];
   flow_executions: FlowExecutionRow[];
+  scheduled_messages: ScheduledMessageRow[];
   audit_log_extract: AuditRow[];
 }
 
@@ -601,6 +616,26 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // Mensagens agendadas pela conversa — `contact_id` direto (migration 0220).
+  let scheduled_messages: ScheduledMessageRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("conversation_scheduled_messages")
+      .select("id, body, scheduled_for, status, sent_at")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("scheduled_for", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] scheduled messages load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      scheduled_messages = data;
+    }
+  }
+
   let webhook_captures: CaptureRow[] = [];
   if (contactId) {
     const { data, error } = await admin
@@ -667,6 +702,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     appointments,
     webhook_captures,
     flow_executions,
+    scheduled_messages,
     audit_log_extract,
   };
 }
@@ -695,6 +731,7 @@ function emptyPayload(
     appointments: [],
     webhook_captures: [],
     flow_executions: [],
+    scheduled_messages: [],
     audit_log_extract: [],
   };
 }

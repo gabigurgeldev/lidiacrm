@@ -18,6 +18,11 @@ import { enviarTextoFixoPendente } from "@/lib/followup/enviar-texto-fixo";
 import type { EnrollmentRow } from "@/lib/followup/node-handlers";
 import { createSupabaseSilenceSweepDb, runSilenceSweep } from "@/lib/followup/silence-sweep";
 import { logger } from "@/lib/logger";
+import {
+  houveEfeito as agendamentoTeveEfeito,
+  rodarAgendamentos,
+} from "@/lib/mensagem-agendada/motor";
+import { portasDoSupabase } from "@/lib/mensagem-agendada/supabase";
 import { runRoutingWorker } from "@/lib/routing/worker";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -172,6 +177,13 @@ export async function executarTickDoRelogio(): Promise<{
       orcamentoMs: 10_000,
     });
     if (houveEfeito(resumo)) mexeu = true;
+    return resumo;
+  });
+
+  await uma("scheduled-messages", async () => {
+    // Lote menor que o do cron dedicado: aqui divide o tique com as outras.
+    const resumo = await rodarAgendamentos(portasDoSupabase(admin), new Date(), 10);
+    if (agendamentoTeveEfeito(resumo)) mexeu = true;
     return resumo;
   });
 

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Mensagem agendada pela conversa — Lembrar › Agendar mensagem",
+    "subtitle": "o atendente marca texto, número e horário; o cron envia na janela do número e avisa o atendente se ele pediu",
+    "output": "mensagem-agendada.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "tela", "label": "Onde a pessoa está" },
+    { "id": "borda", "label": "Rotas e cron" },
+    { "id": "regra", "label": "Regra (pura) e adaptador" },
+    { "id": "envio", "label": "Envio reaproveitado" },
+    { "id": "dados", "label": "Banco" },
+    { "id": "retorno", "label": "Laço de retorno" }
+  ],
+  "mainPath": ["cabecalho", "dialogo", "rota", "tabela", "cron", "motor", "adaptador", "envio", "thread"],
+  "nodes": [
+    { "id": "cabecalho", "lane": "tela", "col": 0, "type": "component", "label": "Cabeçalho da conversa › Lembrar", "sublabel": "1h/3h/24h (só o atendente) + Agendar mensagem…" },
+    { "id": "dialogo", "lane": "tela", "col": 1, "type": "component", "label": "AgendarMensagemDialog", "sublabel": "data e hora, número, texto, aviso opcional; lista e desmarca as pendentes" },
+    { "id": "thread", "lane": "tela", "col": 5, "type": "component", "label": "Thread da conversa", "sublabel": "a mensagem aparece como enviada pelo atendente" },
+    { "id": "equipe", "lane": "tela", "col": 2, "type": "component", "label": "Equipe › Telefone de aviso", "sublabel": "preenche o telefone do aviso" },
+    { "id": "rota", "lane": "borda", "col": 1, "type": "route", "label": "/api/v1/conversations/[id]/scheduled-messages", "sublabel": "GET viewer+ · POST/DELETE agent+ · contato vem da conversa" },
+    { "id": "cron", "lane": "borda", "col": 3, "type": "route", "label": "cron scheduled-messages (* * * * *)", "sublabel": "e no relógio HTTP; audita só quando houve efeito" },
+    { "id": "motor", "lane": "regra", "col": 3, "type": "module", "label": "lib/mensagem-agendada/motor.ts", "sublabel": "assinatura · janela · contato · envio · aviso; sending preso nunca reenvia" },
+    { "id": "adaptador", "lane": "regra", "col": 4, "type": "module", "label": "lib/mensagem-agendada/supabase.ts", "sublabel": "service role, organization_id da própria linha" },
+    { "id": "envio", "lane": "envio", "col": 5, "type": "service", "label": "sendMessageHandler", "sublabel": "ponto único de saída; desfecho lido do estado da mensagem" },
+    { "id": "contato_aviso", "lane": "envio", "col": 4, "type": "module", "label": "lib/automation/contato-do-aviso.ts", "sublabel": "contato interno force_human (compartilhado com o motor de fluxos)" },
+    { "id": "janela", "lane": "envio", "col": 3, "type": "module", "label": "adiarAteAJanelaAbrir", "sublabel": "knobs do número (7h–22h por padrão)" },
+    { "id": "tabela", "lane": "dados", "col": 2, "type": "table", "label": "conversation_scheduled_messages", "sublabel": "scheduled → sending → sent/queued/failed · cancelled" },
+    { "id": "lgpd", "lane": "dados", "col": 3, "type": "module", "label": "fn_lgpd_cascade_redact_contact", "sublabel": "passo 6c: apaga o texto e desmarca o pendente" },
+    { "id": "aviso", "lane": "retorno", "col": 4, "type": "component", "label": "Central de avisos", "sublabel": "não saiu (motivo) · interrompido · aviso ao atendente falhou" },
+    { "id": "audit", "lane": "retorno", "col": 2, "type": "table", "label": "api_audit_log conversation.*", "sublabel": "message_scheduled · scheduled_message_cancelled · scheduled_messages_run" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "cabecalho", "to": "dialogo", "label": "Agendar mensagem…" },
+    { "id": "e2", "from": "equipe", "to": "dialogo", "label": "telefone de aviso" },
+    { "id": "e3", "from": "dialogo", "to": "rota", "label": "POST / DELETE / GET" },
+    { "id": "e4", "from": "rota", "to": "tabela", "label": "insert / cancelled (RLS agent+)" },
+    { "id": "e5", "from": "rota", "to": "audit", "label": "message_scheduled · cancelled" },
+    { "id": "e6", "from": "cron", "to": "motor", "label": "a cada minuto" },
+    { "id": "e7", "from": "motor", "to": "adaptador", "label": "portas injetadas" },
+    { "id": "e8", "from": "adaptador", "to": "tabela", "label": "claim · remarca · conclui" },
+    { "id": "e9", "from": "adaptador", "to": "janela", "label": "janela fechada remarca" },
+    { "id": "e10", "from": "adaptador", "to": "envio", "label": "cliente e aviso" },
+    { "id": "e11", "from": "adaptador", "to": "contato_aviso", "label": "telefone do aviso" },
+    { "id": "e12", "from": "envio", "to": "thread", "label": "mensagem na conversa" },
+    { "id": "e13", "from": "adaptador", "to": "aviso", "label": "falha com motivo" },
+    { "id": "e14", "from": "aviso", "to": "cabecalho", "label": "abrir a conversa e agendar de novo" },
+    { "id": "e15", "from": "cron", "to": "audit", "label": "scheduled_messages_run" },
+    { "id": "e16", "from": "lgpd", "to": "tabela", "label": "anonimiza o texto" }
+  ]
+}

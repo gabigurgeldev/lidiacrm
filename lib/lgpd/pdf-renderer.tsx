@@ -342,6 +342,20 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
           </View>
         ) : null}
 
+        {data.scheduled_messages.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Mensagens agendadas para você</Text>
+            {data.scheduled_messages.map((m) => (
+              <View key={m.id} style={styles.itemBlock}>
+                <Text>{m.body.slice(0, 500)}</Text>
+                <Text style={styles.small}>
+                  Agendada para {fmtDate(m.scheduled_for)} · {m.status}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         {/* Audit */}
         {data.audit_log_extract.length > 0 ? (
           <View style={styles.section}>

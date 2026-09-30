@@ -10,6 +10,7 @@ import { JanelaSelo } from "@/components/inbox/JanelaSelo";
 import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import {
   ArrowBendUpLeft,
+  CalendarPlus,
   Clock,
   DotsThreeVertical,
   FilePdf,
@@ -33,6 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useSnoozeConversation } from "@/hooks/inbox/useSnoozeConversation";
 import { AtivarFluxoDialog } from "@/components/inbox/AtivarFluxoDialog";
+import { AgendarMensagemDialog } from "@/components/inbox/AgendarMensagemDialog";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useReleaseConversation } from "@/hooks/inbox/useReleaseConversation";
@@ -90,6 +92,7 @@ export function ConversationHeader({ conversation, onAbrirPerfil }: Props) {
   const automaticoDaOrg = useAutomaticoAtivo();
   const [reassignOpen, setReassignOpen] = useState(false);
   const [ativarFluxoOpen, setAtivarFluxoOpen] = useState(false);
+  const [agendarOpen, setAgendarOpen] = useState(false);
 
   const c = conversation.contacts ?? null;
   const displayName = rotuloDoContato(c);
@@ -388,6 +391,20 @@ export function ConversationHeader({ conversation, onAbrirPerfil }: Props) {
                       </DropdownMenuItem>
                     ))
                   )}
+                  {/* Os 1h/3h/24h avisam SÓ o atendente, se o cliente não
+                      responder. Este manda mensagem ao CLIENTE na hora marcada. */}
+                  {!conversation.is_group && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        data-testid="acao-agendar-mensagem"
+                        onSelect={() => setAgendarOpen(true)}
+                      >
+                        <CalendarPlus size={16} aria-hidden className="mr-2" />
+                        {t("Agendar mensagem…")}
+                      </DropdownMenuItem>
+                    </>
+                  )}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             )}
@@ -451,6 +468,13 @@ export function ConversationHeader({ conversation, onAbrirPerfil }: Props) {
         contactId={c?.id ?? null}
         open={ativarFluxoOpen}
         onOpenChange={setAtivarFluxoOpen}
+      />
+      <AgendarMensagemDialog
+        conversationId={conversation.id}
+        channelSessionId={conversation.channel_session_id ?? null}
+        nomeDoCliente={displayName}
+        open={agendarOpen}
+        onOpenChange={setAgendarOpen}
       />
     </div>
   );

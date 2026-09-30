@@ -301,6 +301,11 @@ export const AUDIT_ACTIONS = [
   "conversation.snoozed",
   "conversation.snooze_cancelled",
   "conversation.snooze_watcher_run",
+  // Lembrar → "Agendar mensagem…" (migration 0220). O `_run` é do cron, e só
+  // quando a rodada enviou, remarcou ou falhou algo.
+  "conversation.message_scheduled",
+  "conversation.scheduled_message_cancelled",
+  "conversation.scheduled_messages_run",
   "conversation.note_added",
   "conversation.note_deleted",
   // Exportar a conversa (PDF/Excel) é leitura, mas leitura em massa de dado

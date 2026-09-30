@@ -31,6 +31,11 @@ export const TAREFAS_DO_RELOGIO = [
     rotulo: "Andar os disparos em massa",
     porque: "É quem manda a próxima mensagem da lista, no ritmo que o número aguenta.",
   },
+  {
+    id: "scheduled-messages",
+    rotulo: "Enviar mensagens agendadas",
+    porque: "Manda na hora marcada o que o atendente agendou pela conversa.",
+  },
 ] as const;
 
 export type IdDeTarefaDoRelogio = (typeof TAREFAS_DO_RELOGIO)[number]["id"];

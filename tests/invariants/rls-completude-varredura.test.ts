@@ -90,6 +90,13 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "não vê a B) e que o cliente NÃO apaga a trava do dia (permission denied) — sem " +
       "isso um membro faria a base inteira receber os parabéns de novo.",
   },
+  {
+    tabela: "conversation_scheduled_messages",
+    razao:
+      "tests/invariants/mensagem-agendada-rls.test.ts prova a leitura cross-org, que o " +
+      "agente da A não desmarca nem apaga a da B (com controle positivo na A), que o " +
+      "viewer lê mas não escreve, e que a cascata LGPD apaga o texto.",
+  },
   ...(["flow_executions", "flow_execution_frames", "flow_execution_joins"] as const).map(
     (tabela) => ({
       tabela,

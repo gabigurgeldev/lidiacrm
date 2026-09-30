@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { desfechoDoEnvio, type MensagemEnviada } from "@/lib/automation/desfecho-do-envio";
+import { acharOuCriarContato } from "@/lib/automation/contato-do-aviso";
 import { conexaoParaOContato, ensureConversation } from "@/lib/automation/start-conversation";
 import { criarDisparo } from "@/lib/bulk-send/criar-disparo";
 import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
@@ -41,8 +42,10 @@ import type {
   TipoDeMensagemDoFluxo,
 } from "./types";
 
-/** Marca do contato criado só para avisar alguém da equipe. */
-export const ORIGEM_DO_CONTATO_INTERNO = "flow_engine:aviso_interno";
+// O contato do aviso mora em `lib/automation/contato-do-aviso.ts`, que a
+// mensagem agendada também usa. A constante segue exportada daqui para quem já
+// a importava deste módulo.
+export { ORIGEM_DO_CONTATO_INTERNO } from "@/lib/automation/contato-do-aviso";
 
 export function criarFlowAdminClient(admin: SupabaseClient): FlowAdminClient {
   return {
@@ -1169,56 +1172,6 @@ async function enviarTextoParaTelefone(
   }
 }
 
-/**
- * Contato para o telefone do aviso. Se for interno, nasce com `force_human`.
- *
- * ⚠️ `force_human = true` NÃO impede o Flow Engine de enviar — `sendMessageHandler`
- * só barra em `is_blocked`. O que ele faz é armar o `stopGate`, o primeiro gate
- * da cadeia `before_send`, de modo que o AGENTE DE IA não puxa conversa com o
- * vendedor quando ele responder ao aviso. Sem isto, avisar a equipe criaria um
- * contato que o agente trataria como cliente.
- */
-async function acharOuCriarContato(
-  admin: SupabaseClient,
-  orgId: string,
-  telefone: string,
-  interno: boolean,
-): Promise<string> {
-  const { data: existente } = await admin
-    .from("contacts")
-    .select("id")
-    .eq("organization_id", orgId)
-    .eq("phone_number", telefone)
-    .maybeSingle();
-  if (existente !== null) return (existente as { id: string }).id;
-
-  const { data: criado, error } = await admin
-    .from("contacts")
-    .insert({
-      organization_id: orgId,
-      phone_number: telefone,
-      name: interno ? "Equipe (avisos)" : null,
-      source: interno ? ORIGEM_DO_CONTATO_INTERNO : "flow_engine",
-      force_human: interno,
-    })
-    .select("id")
-    .single();
-
-  if (error !== null) {
-    // Corrida com outra execução avisando o mesmo vendedor no mesmo instante.
-    if ((error as { code?: string }).code === "23505") {
-      const { data: vencedor } = await admin
-        .from("contacts")
-        .select("id")
-        .eq("organization_id", orgId)
-        .eq("phone_number", telefone)
-        .maybeSingle();
-      if (vencedor !== null) return (vencedor as { id: string }).id;
-    }
-    throw new Error(error.message);
-  }
-  return (criado as { id: string }).id;
-}
 
 // ───────────────────────────────── avisos ────────────────────────────────────
 

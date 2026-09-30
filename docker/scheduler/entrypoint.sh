@@ -64,6 +64,7 @@ CRONS="
 * * * * *|25|api/v1/cron/recover-stuck-messages
 * * * * *|45|api/v1/cron/bulk-send-worker
 * * * * *|45|api/v1/cron/flow-engine-worker
+* * * * *|45|api/v1/cron/scheduled-messages
 */5 * * * *|25|api/v1/cron/storage-redaction?limit=50
 */5 * * * *|25|api/v1/cron/snooze-watcher
 */5 * * * *|25|api/v1/cron/attendant-heartbeat
