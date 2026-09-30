@@ -121,6 +121,38 @@ export function traduzirCatalogo(modelos: readonly ModeloDaOpenRouter[]): LinhaD
 }
 
 /**
+ * Procura no catálogo da origem o que a pessoa digitou — nome OU código.
+ *
+ * Existe porque o seletor só mostra o que já está em `ai_models`, e o que está
+ * lá só muda quando o cron diário roda: modelo lançado hoje de manhã não
+ * aparecia até amanhã, e não havia como escolhê-lo. A busca vai à origem.
+ *
+ * A ordem importa mais que o filtro: quem cola `anthropic/claude-sonnet-4.5`
+ * quer ESSE modelo no topo, não os seis `:beta`/`:thinking` que contêm o mesmo
+ * texto. Código exato primeiro, depois quem começa com o termo, depois quem o
+ * contém — e, dentro de cada faixa, a ordem da origem (a OpenRouter devolve os
+ * mais recentes primeiro, que é o que quem busca modelo novo quer ver).
+ */
+export function buscarNoCatalogo(
+  modelos: readonly ModeloDaOpenRouter[],
+  termo: string,
+  limite = 30,
+): LinhaDeCatalogo[] {
+  const alvo = termo.trim().toLowerCase();
+  if (alvo === "") return [];
+
+  const faixas: [LinhaDeCatalogo[], LinhaDeCatalogo[], LinhaDeCatalogo[]] = [[], [], []];
+  for (const linha of traduzirCatalogo(modelos)) {
+    const id = linha.model_id.toLowerCase();
+    const nome = linha.display_name.toLowerCase();
+    if (id === alvo) faixas[0].push(linha);
+    else if (id.startsWith(alvo) || nome.startsWith(alvo)) faixas[1].push(linha);
+    else if (id.includes(alvo) || nome.includes(alvo)) faixas[2].push(linha);
+  }
+  return faixas.flat().slice(0, limite);
+}
+
+/**
  * A descrição da OpenRouter é longa e vem com markdown e links. A tela mostra
  * uma linha; guardar o texto inteiro só engorda a resposta da API do painel.
  */

@@ -112,6 +112,7 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 | J3.13 | A escolha sobrevive ao salvar e recarregar | o servidor aceita a lista (o mesmo teto da tela, `TETO_TOOLS_POR_AGENTE`, fonte única) e o estado volta igual · **PASS** |
 | J3.14 | Ver se o que está ligado está funcionando (aba Capacidades) | usos, falhas, quantos vieram de teste, última vez — e o que fazer com cada número · **PASS** (números escritos pelo emissor real de audit) |
 | J3.15 | O teto recusa a passagem, explicando em português | **PASS** — exercitável desde que o catálogo cresceu (57 capacidades). `capacidades-do-agente.spec.ts` liga "Atender" sobre as 8 do seed e prova a recusa por 1 vaga. A afirmação "não exercitável hoje, com 16 capacidades no catálogo" VENCEU |
+| J3.16 | Usar no agente um modelo da OpenRouter lançado hoje (o cron diário ainda não trouxe) | busca embaixo de "Modelo" consulta a OpenRouter ao vivo; colar o código exato ou escolher um resultado CONFERE na origem, grava em `ai_models` com preço real e seleciona — sem isso a publicação recusa com `model_not_found`. Código com erro de digitação é 404 com o motivo · **PASS** unit (`tests/unit/ai-providers-models-post-route.test.ts`, `ai-providers-models-search-route.test.ts`, `catalogo-openrouter-busca.test.ts`, `ModelPicker.test.tsx`) + busca medida contra a OpenRouter real (464 modelos, 2026-09-30). **NÃO MEDIDO pela tela** em instalação fresca: o E2E local não sobe nesta máquina |
 
 ## J4 — CRM e Pipelines `[P1]`
 

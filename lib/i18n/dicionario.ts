@@ -3290,6 +3290,29 @@ export const DICIONARIO: Traducoes = {
   "Não deu para carregar os modelos. Tente de novo.": { es: "No se pudieron cargar los modelos. Inténtelo de nuevo." },
   "O catálogo desta conta ainda não foi sincronizado.": { es: "El catálogo de esta cuenta todavía no se sincronizó." },
   "Sincronizar catálogo agora": { es: "Sincronizar catálogo ahora" },
+  "Não achou o modelo? Busque na OpenRouter ou cole o código": {
+    es: "¿No encontró el modelo? Búsquelo en OpenRouter o pegue el código",
+  },
+  "Atualizar lista da OpenRouter": { es: "Actualizar lista de OpenRouter" },
+  "Ex.: sonnet, gemini, ou anthropic/claude-sonnet-4.5": {
+    es: "Ej.: sonnet, gemini, o anthropic/claude-sonnet-4.5",
+  },
+  "Buscando na OpenRouter…": { es: "Buscando en OpenRouter…" },
+  "Não conseguimos falar com a OpenRouter agora. Tente de novo em instantes.": {
+    es: "No pudimos comunicarnos con OpenRouter ahora. Inténtelo de nuevo en unos instantes.",
+  },
+  "Nenhum modelo da OpenRouter com esse nome.": { es: "Ningún modelo de OpenRouter con ese nombre." },
+  "já na lista": { es: "ya en la lista" },
+  "adicionar": { es: "agregar" },
+  "Entrada": { es: "Entrada" },
+  "saída": { es: "salida" },
+  "por 1M de tokens": { es: "por 1M de tokens" },
+  "Não usa ferramentas: conversa, mas não mexe no funil nem registra nada.": {
+    es: "No usa herramientas: conversa, pero no mueve el embudo ni registra nada.",
+  },
+  "Conferindo na OpenRouter…": { es: "Verificando en OpenRouter…" },
+  "Usar o código": { es: "Usar el código" },
+  "Modelo adicionado e escolhido.": { es: "Modelo agregado y seleccionado." },
   "Sincronizar com a Meta": { es: "Sincronizar con Meta" },
   "Nenhum template ainda": { es: "Ninguna plantilla todavía" },
   "Crie templates no Gerenciador do WhatsApp e clique em": {

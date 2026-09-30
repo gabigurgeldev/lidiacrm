@@ -11,10 +11,10 @@
  * exercitado pela árvore de verdade.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { estadoDoPicker, ModelPicker } from "./ModelPicker";
+import { estadoDoPicker, ModelPicker, ofereceUsarCodigo, precoLegivel } from "./ModelPicker";
 
 describe("estadoDoPicker — a regra isolada da árvore", () => {
   it("⭐ carregando não é 'vazio', mesmo com zero modelos ainda", () => {
@@ -85,5 +85,94 @@ describe("ModelPicker — o botão de sincronizar (fora do Select, DOM normal)",
     await screen.findByRole("combobox");
     await waitFor(() => expect(get).toHaveBeenCalled());
     expect(screen.queryByText("Sincronizar catálogo agora")).not.toBeInTheDocument();
+  });
+});
+
+describe("regras da busca na origem", () => {
+  it("⭐ 'usar o código' só aparece para termo com cara de código e sem resultado exato", () => {
+    expect(ofereceUsarCodigo("moonshotai/kimi-k3", [])).toBe(true);
+    expect(ofereceUsarCodigo("moonshotai/kimi-k3", [{ model_id: "moonshotai/kimi-k3" }])).toBe(false);
+    expect(ofereceUsarCodigo("sonnet", [])).toBe(false);
+    expect(ofereceUsarCodigo("fabricante/ com espaço", [])).toBe(false);
+  });
+
+  it("preço desconhecido é '?', nunca grátis", () => {
+    expect(precoLegivel(null)).toBe("?");
+    expect(precoLegivel(0)).toBe("US$ 0,00");
+    expect(precoLegivel(1500)).toBe("US$ 15,00");
+  });
+});
+
+describe("ModelPicker — busca na OpenRouter (fora do Select, DOM normal)", () => {
+  beforeEach(() => {
+    get.mockReset();
+    post.mockReset();
+  });
+
+  function montarCom(onChange: (id: string) => void, provider: "openrouter" | "anthropic" = "openrouter") {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={qc}>
+        <ModelPicker provider={provider} value="" onChange={onChange} id="modelo" />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("⭐ achar o modelo novo e clicar grava no catálogo e escolhe ele", async () => {
+    get.mockImplementation(async (url: string) =>
+      url.includes("/search")
+        ? {
+            data: {
+              models: [
+                {
+                  model_id: "moonshotai/kimi-k3",
+                  display_name: "MoonshotAI: Kimi K3",
+                  context_window: 256000,
+                  input_price_per_million_cents: 60,
+                  output_price_per_million_cents: 250,
+                  supports_tools: true,
+                  no_catalogo: false,
+                },
+              ],
+            },
+          }
+        : { data: { models: [{ model_id: "openai/gpt-5", display_name: "GPT-5" }] } },
+    );
+    post.mockResolvedValue({ data: { model: { model_id: "moonshotai/kimi-k3", context_window: 256000 } } });
+    const onChange = vi.fn();
+    montarCom(onChange);
+
+    fireEvent.change(await screen.findByPlaceholderText(/anthropic\/claude-sonnet-4.5/u), {
+      target: { value: "kimi" },
+    });
+    fireEvent.click(await screen.findByText("MoonshotAI: Kimi K3"));
+
+    await waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith("moonshotai/kimi-k3", { contextWindow: 256000 }),
+    );
+    expect(post).toHaveBeenCalledWith("/api/v1/ai/providers/openrouter/models", {
+      model_id: "moonshotai/kimi-k3",
+    });
+  });
+
+  it("⭐ colar um código que a busca não achou oferece 'Usar o código'", async () => {
+    get.mockResolvedValue({ data: { models: [] } });
+    post.mockResolvedValue({ data: { model: { model_id: "lab/modelo-x", context_window: null } } });
+    const onChange = vi.fn();
+    montarCom(onChange);
+
+    fireEvent.change(await screen.findByPlaceholderText(/anthropic\/claude-sonnet-4.5/u), {
+      target: { value: "lab/modelo-x" },
+    });
+    fireEvent.click(await screen.findByText("Usar o código lab/modelo-x"));
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith("lab/modelo-x", { contextWindow: null }));
+  });
+
+  it("Anthropic não mostra a busca — não há origem para buscar", async () => {
+    get.mockResolvedValue({ data: { models: [] } });
+    montarCom(vi.fn(), "anthropic");
+    await screen.findByRole("combobox");
+    expect(screen.queryByPlaceholderText(/anthropic\/claude-sonnet-4.5/u)).not.toBeInTheDocument();
   });
 });

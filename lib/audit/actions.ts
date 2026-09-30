@@ -179,6 +179,10 @@ export const AUDIT_ACTIONS = [
   // seletor de modelo estava mudo. `metadata` carrega recebidos/gravados/
   // depreciados; é o que responde "por que a lista mudou" depois.
   "ai.model_catalog_synced",
+  // Alguém trouxe UM modelo da OpenRouter para o catálogo, pelo código ou pela
+  // busca ao vivo — o modelo lançado hoje que o cron diário ainda não trouxe.
+  // `metadata.model_id` diz qual.
+  "ai.model_catalog_added",
   "ai.org_memory_entry_created",
   "ai.org_memory_entry_updated",
   /** Provedor/modelo de um ponto do sistema que usa IA foi trocado no painel. */
