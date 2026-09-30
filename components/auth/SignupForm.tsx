@@ -8,6 +8,7 @@ import {
   EnvelopeSimpleOpenIcon,
   LockSimpleIcon,
   ShieldCheckIcon,
+  TagIcon,
   UserIcon,
   WarningCircleIcon,
   WhatsappLogoIcon,
@@ -38,6 +39,24 @@ export interface ConviteDoSignup {
   email: string;
 }
 
+/**
+ * Indicação de um afiliado do Back Office (link `/r/CODIGO/...` → `?ref=`).
+ * O servidor já perguntou ao Back Office ao montar a tela; `descontoPct` null =
+ * não deu para confirmar agora (o código segue e é conferido de novo no envio).
+ */
+export interface IndicacaoDoSignup {
+  codigo: string;
+  /** Veio na URL agora (grava o cookie) ou de um cookie de visita anterior. */
+  daUrl: boolean;
+  nomeAfiliado: string | null;
+  descontoPct: number | null;
+  precoCheioCentavos: number;
+  precoFinalCentavos: number;
+}
+
+const brl = (centavos: number) =>
+  (centavos / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
 /** Máscara de exibição do WhatsApp: (11) 98765-4321. O servidor guarda só dígitos. */
 function mascararWhatsapp(bruto: string): string {
   const d = bruto.replace(/\D/g, "").slice(0, 11);
@@ -53,8 +72,10 @@ const ESPERA_DO_REENVIO_S = 60;
 export function SignupForm({
   convite,
   remetente,
+  indicacao,
 }: {
   convite?: ConviteDoSignup;
+  indicacao?: IndicacaoDoSignup;
   /** Endereço que envia a confirmação — para a pessoa saber o que procurar. */
   remetente?: string;
 }) {
@@ -62,12 +83,23 @@ export function SignupForm({
   const [isPending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const [comCodigo, setComCodigo] = useState(Boolean(indicacao));
+
+  // O link do afiliado vale por 90 dias: quem chega pelo link, sai e volta
+  // depois pelo endereço direto continua indicado.
+  useEffect(() => {
+    if (!indicacao?.daUrl) return;
+    document.cookie = `bo_ref=${indicacao.codigo}; Path=/; Max-Age=${90 * 24 * 60 * 60}; SameSite=Lax${
+      location.protocol === "https:" ? "; Secure" : ""
+    }`;
+  }, [indicacao]);
 
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    setError,
     formState: { errors },
   } = useForm<SignupInput>({
     // O formulário tem UM tipo e DOIS contratos: no modo convite os campos da
@@ -84,6 +116,7 @@ export function SignupForm({
       password: "",
       password_confirm: "",
       aceite_termos: false,
+      codigo_indicacao: indicacao?.codigo ?? "",
     },
   });
 
@@ -108,6 +141,8 @@ export function SignupForm({
       }
       if (res.error === "rate_limited") {
         setServerError(t("Muitas tentativas. Aguarde alguns minutos."));
+      } else if (res.error === "validation_error" && res.details?.codigo_indicacao) {
+        setError("codigo_indicacao", { message: "Código de indicação inválido" });
       } else if (res.error === "validation_error") {
         setServerError(t("Dados inválidos. Confira os campos."));
       } else {
@@ -192,6 +227,44 @@ export function SignupForm({
           erro={errors.password_confirm ? t(errors.password_confirm.message ?? "") : undefined}
           {...register("password_confirm")}
         />
+        {!convite &&
+          (comCodigo ? (
+            <div className="space-y-1.5">
+              <CampoDeAcesso
+                id="codigo_indicacao"
+                rotulo={t("Código de indicação (opcional)")}
+                type="text"
+                autoComplete="off"
+                autoCapitalize="characters"
+                icone={<TagIcon size={20} weight="duotone" />}
+                erro={errors.codigo_indicacao ? t(errors.codigo_indicacao.message ?? "") : undefined}
+                {...register("codigo_indicacao")}
+              />
+              {indicacao?.descontoPct ? (
+                <p data-indicacao-desconto className="text-sm leading-snug text-text-muted">
+                  {indicacao.nomeAfiliado ? (
+                    <>
+                      {t("Indicação de")} <strong className="text-text">{indicacao.nomeAfiliado}</strong>:{" "}
+                    </>
+                  ) : null}
+                  <strong className="text-text">
+                    {indicacao.descontoPct}% {t("de desconto")}
+                  </strong>{" "}
+                  {t("na mensalidade")} — <s>{brl(indicacao.precoCheioCentavos)}</s>{" "}
+                  <strong className="text-text">{brl(indicacao.precoFinalCentavos)}</strong>
+                  {t("/mês")}.
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setComCodigo(true)}
+              className="text-sm font-medium text-text-muted underline underline-offset-4 hover:text-text"
+            >
+              {t("Tenho um código de indicação")}
+            </button>
+          ))}
         {!convite && (
           <div className="space-y-1.5">
             <label htmlFor="aceite_termos" className="flex cursor-pointer items-start gap-3 text-sm leading-snug text-text-muted">

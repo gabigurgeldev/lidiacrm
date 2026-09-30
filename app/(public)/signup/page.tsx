@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 
-import { SignupForm } from "@/components/auth/SignupForm";
+import { SignupForm, type IndicacaoDoSignup } from "@/components/auth/SignupForm";
+import { backofficeLigado, normalizarCodigo, precoComDesconto, validarCodigo } from "@/lib/backoffice/saida";
 import { branding } from "@/lib/branding";
 import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { createClient } from "@/lib/supabase/server";
@@ -23,12 +25,13 @@ export const metadata = { title: "Criar conta" };
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ invite?: string }>;
+  searchParams: Promise<{ invite?: string; ref?: string }>;
 }) {
-  const { invite } = await searchParams;
+  const { invite, ref } = await searchParams;
   const payload = invite ? verifyInviteToken(invite) : null;
   const convite = invite && payload ? { token: invite, email: payload.email } : undefined;
   const conviteExpirado = Boolean(invite) && !payload;
+  const indicacao = convite ? undefined : await indicacaoDaVisita(ref);
 
   const supabase = await createClient();
   const {
@@ -72,7 +75,7 @@ export default async function SignupPage({
         </p>
       )}
 
-      <SignupForm convite={convite} remetente={remetente || undefined} />
+      <SignupForm convite={convite} remetente={remetente || undefined} indicacao={indicacao} />
 
       <p className="border-t border-border pt-3 text-sm text-text-muted group-has-[[data-cadastro-enviado]]/cadastro:hidden">
         {t("Já tem conta?")}{" "}
@@ -85,4 +88,27 @@ export default async function SignupPage({
       </p>
     </div>
   );
+}
+
+/**
+ * `?ref=CODIGO` (link do afiliado no Back Office) ou o cookie `bo_ref` de uma
+ * visita anterior. Pergunta ao Back Office para mostrar o desconto ANTES do
+ * envio; código que o Back Office recusa some da tela em vez de virar erro.
+ */
+async function indicacaoDaVisita(ref: string | undefined): Promise<IndicacaoDoSignup | undefined> {
+  if (!backofficeLigado()) return undefined;
+  const daUrl = normalizarCodigo(ref);
+  const codigo = daUrl ?? normalizarCodigo((await cookies()).get("bo_ref")?.value);
+  if (!codigo) return undefined;
+  const v = await validarCodigo(codigo);
+  if (v.estado === "invalido") return undefined;
+  const descontoBps = v.estado === "valido" ? v.descontoBps : null;
+  return {
+    codigo,
+    daUrl: Boolean(daUrl),
+    nomeAfiliado: v.estado === "valido" ? v.nomeAfiliado : null,
+    descontoPct: descontoBps ? descontoBps / 100 : null,
+    precoCheioCentavos: env.COBRANCA_VALOR_CENTAVOS,
+    precoFinalCentavos: precoComDesconto(env.COBRANCA_VALOR_CENTAVOS, descontoBps),
+  };
 }

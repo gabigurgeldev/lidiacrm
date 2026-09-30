@@ -16,6 +16,7 @@ import { verifyInviteToken } from "@/lib/auth/invite-token";
 import { audit, hashEmail } from "@/lib/audit";
 import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
 import { env } from "@/lib/env";
+import { validarCodigo } from "@/lib/backoffice/saida";
 
 export type SignUpResult =
   | { ok: true }
@@ -84,6 +85,19 @@ export async function signUp(
     convite = inviteToken;
   }
 
+  // Código de indicação: recusado AQUI só quando o Back Office diz que não
+  // existe — a pessoa ainda está na tela e pode corrigir. Back Office fora do ar
+  // não barra o cadastro; o código segue e é conferido de novo ao criar a
+  // organização (`registrarIndicacao`).
+  let codigoIndicacao: string | null = null;
+  if (!convite && (parsed.data as SignupInput).codigo_indicacao) {
+    const v = await validarCodigo((parsed.data as SignupInput).codigo_indicacao);
+    if (v.estado === "invalido") {
+      return { ok: false, error: "validation_error", details: { codigo_indicacao: ["codigo_invalido"] } };
+    }
+    codigoIndicacao = v.codigo;
+  }
+
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
@@ -96,7 +110,12 @@ export async function signUp(
       // O convite é revalidado no servidor mesmo tendo sido validado ao montar
       // a tela: o campo de e-mail do formulário é adulterável no cliente, e a
       // decisão que importa acontece com o e-mail JÁ confirmado pelo provedor.
-      data: convite ? { invite_token: convite } : metadadosDoCadastro(parsed.data as SignupInput),
+      data: convite
+        ? { invite_token: convite }
+        : {
+            ...metadadosDoCadastro(parsed.data as SignupInput),
+            ...(codigoIndicacao ? { affiliate_code: codigoIndicacao } : {}),
+          },
     },
   });
 

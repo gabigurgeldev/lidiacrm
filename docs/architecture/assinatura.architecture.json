@@ -39,7 +39,11 @@
     { "id": "eventos", "lane": "dados", "col": 3, "type": "table", "label": "eventos_asaas", "sublabel": "idempotência do webhook; invisível ao cliente" },
     { "id": "asaas", "lane": "dados", "col": 4, "type": "service", "label": "Asaas API v3", "sublabel": "cliente · assinatura MONTHLY · pixQrCode · payWithCreditCard" },
     { "id": "audit", "lane": "retorno", "col": 2, "type": "table", "label": "api_audit_log billing.*", "sublabel": "sem dado de cartão — só 4 últimos dígitos" },
-    { "id": "recusa", "lane": "retorno", "col": 3, "type": "component", "label": "402 payment_declined → tela", "sublabel": "mensagem do Asaas + oferta de PIX" }
+    { "id": "recusa", "lane": "retorno", "col": 3, "type": "component", "label": "402 payment_declined → tela", "sublabel": "mensagem do Asaas + oferta de PIX" },
+    { "id": "saida_bo", "lane": "regra", "col": 4, "type": "module", "label": "lib/backoffice/saida.ts", "sublabel": "código de indicação · desconto · eventos para o Back Office" },
+    { "id": "fila_bo", "lane": "dados", "col": 5, "type": "table", "label": "backoffice_saida + backoffice_indicacoes", "sublabel": "event_id UNIQUE · invisível ao cliente" },
+    { "id": "cron_bo", "lane": "borda", "col": 5, "type": "route", "label": "cron backoffice-saida (5 min)", "sublabel": "reenvia com espera crescente, 7 dias" },
+    { "id": "backoffice", "lane": "retorno", "col": 4, "type": "service", "label": "Back Office de afiliados", "sublabel": "receita · comissão · aviso ao afiliado" }
   ],
   "edges": [
     { "id": "e1", "from": "signup", "to": "provision", "label": "confirmação do e-mail" },
@@ -70,6 +74,13 @@
     { "id": "e26", "from": "config_tela", "to": "rota_checkout", "label": "trocar forma" },
     { "id": "e27", "from": "servico", "to": "config_tela", "label": "status + faturas" },
     { "id": "e28", "from": "admin_tela", "to": "assinaturas", "label": "isenta" },
-    { "id": "e29", "from": "servico", "to": "admin_tela", "label": "estado" }
+    { "id": "e29", "from": "servico", "to": "admin_tela", "label": "estado" },
+    { "id": "e30", "from": "signup", "to": "saida_bo", "label": "?ref= → valida código" },
+    { "id": "e31", "from": "provision", "to": "saida_bo", "label": "indicação + desconto na mensalidade" },
+    { "id": "e32", "from": "cobrancas", "to": "saida_bo", "label": "paga/estornada/chargeback" },
+    { "id": "e33", "from": "saida_bo", "to": "fila_bo", "label": "enfileira" },
+    { "id": "e34", "from": "fila_bo", "to": "backoffice", "label": "POST /api/v1/events" },
+    { "id": "e35", "from": "cron_bo", "to": "fila_bo", "label": "reenvia pendentes" },
+    { "id": "e36", "from": "cron_bo", "to": "audit", "label": "backoffice.saida_run" }
   ]
 }

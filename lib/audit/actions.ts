@@ -511,6 +511,8 @@ export const AUDIT_ACTIONS = [
   "billing.isencao_alterada",
   "billing.webhook_recusado",
   "billing.conciliacao_run",
+  // ── Back Office de afiliados (CRM → Back Office) ─────────────────────────
+  "backoffice.saida_run",
   "aniversario.config_changed",
   "aniversario.rodada",
 ] as const;

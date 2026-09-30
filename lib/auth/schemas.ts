@@ -38,6 +38,14 @@ export const signupSchema = z
     password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
     password_confirm: z.string(),
     aceite_termos: z.boolean().refine((v) => v === true, "Aceite os termos para continuar"),
+    // Código do afiliado que indicou (link do Back Office). Opcional; quem diz
+    // se ele vale é o servidor, perguntando ao Back Office.
+    codigo_indicacao: z
+      .string()
+      .trim()
+      .max(20, "Código de indicação inválido")
+      .refine((v) => v === "" || /^[A-Za-z0-9]{3,20}$/.test(v), "Código de indicação inválido")
+      .optional(),
   })
   .refine((v) => v.password === v.password_confirm, {
     path: ["password_confirm"],

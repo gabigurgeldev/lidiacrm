@@ -1,4 +1,6 @@
+import { emitirParaBackoffice, precoComDesconto, registrarIndicacao } from "@/lib/backoffice/saida";
 import { abrirAssinatura } from "@/lib/billing/servico";
+import { env } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { audit } from "@/lib/audit";
 
@@ -94,7 +96,23 @@ export async function ensureTenantForUser(
   // Teste grátis: a assinatura nasce junto da organização do cadastro. Se esta
   // gravação falhar, `lerAssinatura` abre o trial do `created_at` na primeira
   // leitura — nunca uma isenção por acidente.
-  await abrirAssinatura(admin, org.id).catch(() => undefined);
+  //
+  // Veio pelo link de um afiliado do Back Office? O código (revalidado lá)
+  // vira indicação, e o desconto dele já entra na mensalidade: toda cobrança
+  // do Asaas — a primeira e as renovações — sai com o valor descontado.
+  const indicacao = await registrarIndicacao(
+    admin,
+    org.id,
+    user.user_metadata?.affiliate_code as string | undefined,
+  ).catch(() => null);
+  await abrirAssinatura(admin, org.id, {
+    valorCentavos: precoComDesconto(env.COBRANCA_VALOR_CENTAVOS, indicacao?.desconto_bps ?? null),
+  }).catch(() => undefined);
+  // O Back Office passa a conhecer o cliente (e o afiliado, se houver) já no
+  // cadastro — o afiliado vê a indicação antes do primeiro pagamento.
+  await emitirParaBackoffice(admin, org.id, [
+    { event_id: `crm_org_${org.id}_created`, type: "customer.created", occurred_at: new Date().toISOString() },
+  ]);
 
   void audit({
     action: "tenant.created_by_signup",

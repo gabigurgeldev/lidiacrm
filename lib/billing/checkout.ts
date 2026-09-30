@@ -19,6 +19,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { emitirCancelamento } from "@/lib/backoffice/saida";
+
 import { STATUS_PAGOS } from "./acesso";
 import * as asaas from "./asaas";
 import {
@@ -236,4 +238,5 @@ export async function cancelar(admin: SupabaseClient, organizationId: string): P
     .update({ status: "cancelada", cancelada_em: agora, updated_at: agora })
     .eq("organization_id", organizationId);
   await recalcularAssinatura(admin, organizationId);
+  await emitirCancelamento(admin, organizationId, atual.asaas_subscription_id);
 }
