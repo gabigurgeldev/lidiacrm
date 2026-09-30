@@ -575,6 +575,29 @@ export async function sendMessageHandler(
       .select(MSG_COLS)
       .maybeSingle();
     if (updated) message = updated as unknown as Message;
+  } else if (
+    (!c.channel_sessions || c.channel_sessions.status !== "WORKING") &&
+    ctx.actor.type === "user"
+  ) {
+    // QUEM DIGITOU NA TELA recebe "Falhou" na hora, e não uma fila sem dono.
+    //
+    // Medido em produção (2026-09-30): o atendente reconectou o número e mandou
+    // uma mensagem um segundo depois, com a sessão ainda subindo. Ela ficou
+    // `queued` para sempre — só o agent-engine reagenda o que É DELE, e nada
+    // reenvia o que uma pessoa digitou. Na tela a mensagem parecia a caminho.
+    // Falhar com o motivo deixa a pessoa reenviar quando o número voltar.
+    const { data: updated } = await supabase
+      .from("messages")
+      .update({
+        status: "failed",
+        error_code: "channel_session_not_working",
+        error_message:
+          "O número não está conectado agora. Confira em Conexões e envie de novo quando ele voltar.",
+      })
+      .eq("id", message.id)
+      .select(MSG_COLS)
+      .maybeSingle();
+    if (updated) message = updated as unknown as Message;
   } else if (!c.channel_sessions || c.channel_sessions.status !== "WORKING") {
     const { data: updated } = await supabase
       .from("messages")

@@ -225,7 +225,9 @@ describe('sendMessageHandler — os 6 desfechos do envio', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('3. sessão fora de WORKING: fica queued com channel_session_not_working', async () => {
+  it('3a. sessão fora de WORKING, quem digitou foi uma PESSOA: falha na hora, com o motivo', async () => {
+    // Medido em produção (2026-09-30): a mensagem digitada durante a
+    // reconexão ficou `queued` para sempre — nada reenvia o que é de pessoa.
     wahaConfigured(true);
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -233,6 +235,23 @@ describe('sendMessageHandler — os 6 desfechos do envio', () => {
     const msg = await sendMessageHandler(
       makeSupabase(conversationRow({ sessionStatus: 'SCAN_QR_CODE' })),
       ctx,
+      textInput(),
+    );
+
+    expect(msg.status).toBe('failed');
+    expect(msg.error_code).toBe('channel_session_not_working');
+    expect(msg.error_message).toMatch(/não está conectado/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('3b. sessão fora de WORKING, envio AUTOMÁTICO: segue queued, como antes', async () => {
+    wahaConfigured(true);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const msg = await sendMessageHandler(
+      makeSupabase(conversationRow({ sessionStatus: 'SCAN_QR_CODE' })),
+      { ...ctx, actor: { type: 'webhook_source', id: 'fluxo-1' } },
       textInput(),
     );
 
