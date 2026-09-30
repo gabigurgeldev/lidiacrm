@@ -6,6 +6,7 @@ import { useRefetchDeSeguranca } from "@/hooks/realtime/useRefetchDeSeguranca";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Conversation } from "@/lib/types/messaging";
+import type { ConversationSort } from "@/lib/schemas/messaging";
 
 export interface ContactSummary {
   id: string;
@@ -101,6 +102,8 @@ export interface ConversationsFilters {
   search?: string;
   channel_session_id?: string;
   tag?: string;
+  /** Ausente = ordem padrão da aba, decidida no servidor. */
+  sort?: ConversationSort;
 }
 
 interface ListResponse {
@@ -131,6 +134,7 @@ export function useConversationsRealtime(
       if (filters.search) qs.set("search", filters.search);
       if (filters.channel_session_id) qs.set("channel_session_id", filters.channel_session_id);
       if (filters.tag) qs.set("tag", filters.tag);
+      if (filters.sort) qs.set("sort", filters.sort);
       if (pageParam) qs.set("cursor", pageParam);
       qs.set("limit", "50");
       try {

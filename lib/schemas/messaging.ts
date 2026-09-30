@@ -218,6 +218,9 @@ export const CONVERSATION_TERMINAL_STATUSES = ["closed", "archived"] as const;
  */
 export const CONVERSATION_QUEUE_STATUSES = ["open", "pending"] as const;
 
+export const CONVERSATION_SORTS = ["espera", "recentes"] as const;
+export type ConversationSort = (typeof CONVERSATION_SORTS)[number];
+
 export const listConversationsQuerySchema = z.object({
   /**
    * Um status, ou vários separados por vírgula (`?status=open,pending`).
@@ -267,6 +270,14 @@ export const listConversationsQuerySchema = z.object({
   channel_session_id: z.string().uuid().optional(),
   tag: conversationTagSchema.optional(),
   search: z.string().optional(),
+  /**
+   * Ordem da lista. Ausente = a de sempre: Fila por quem espera há mais tempo
+   * (`last_inbound_at` asc), demais abas por atividade recente
+   * (`last_message_at` desc). `espera` e `recentes` forçam uma das duas em
+   * qualquer aba — o atendente que quer ver a Fila pelo que acabou de chegar
+   * pede `recentes`.
+   */
+  sort: z.enum(CONVERSATION_SORTS).optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });

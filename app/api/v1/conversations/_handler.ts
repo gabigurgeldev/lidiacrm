@@ -31,6 +31,15 @@ const SELECT_COLS = `
 interface CursorPayload {
   sort: string | null;
   id: string;
+  /**
+   * Coluna e direção com que o cursor foi emitido. Opcionais porque cursores
+   * anteriores à ordenação escolhível não os têm — esses seguem valendo pela
+   * regra antiga. Sem eles, um cursor da ordem "recentes" reaplicado na ordem
+   * "espera" compararia `last_message_at` com `last_inbound_at` e devolveria
+   * uma página errada sem erro nenhum.
+   */
+  col?: string;
+  asc?: boolean;
 }
 
 function encodeCursor(p: CursorPayload): string {
@@ -44,7 +53,12 @@ function decodeCursor(raw: string): CursorPayload | null {
     // `last_message_at` é o nome legado do campo de ordenação (cursores em voo
     // durante deploy); `sort` é o genérico atual (default OU fila).
     const sort = parsed.sort ?? parsed.last_message_at ?? null;
-    return { sort, id: parsed.id };
+    return {
+      sort,
+      id: parsed.id,
+      ...(typeof parsed.col === "string" ? { col: parsed.col } : {}),
+      ...(typeof parsed.asc === "boolean" ? { asc: parsed.asc } : {}),
+    };
   } catch {
     return null;
   }
@@ -88,9 +102,11 @@ export async function listConversationsHandler(
   // mais tempo primeiro. `last_inbound_at` = última mensagem do cliente = "há
   // quanto tempo aguarda resposta" (não `created_at`, que pode ser uma conversa
   // antiga reaberta). Demais visões: por atividade recente (last_message_at desc).
+  // `q.sort` explícito vale em qualquer aba e passa por cima do padrão.
   const isQueue = q.assigned_to === "unassigned";
-  const sortCol = isQueue ? "last_inbound_at" : "last_message_at";
-  const asc = isQueue;
+  const porEspera = q.sort ? q.sort === "espera" : isQueue;
+  const sortCol = porEspera ? "last_inbound_at" : "last_message_at";
+  const asc = porEspera;
 
   let query = supabase
     .from("conversations")
@@ -141,6 +157,15 @@ export async function listConversationsHandler(
     if (!c) {
       throw new ApiError(400, "invalid_cursor", undefined, ctx.requestId, "Cursor inválido.");
     }
+    if ((c.col !== undefined && c.col !== sortCol) || (c.asc !== undefined && c.asc !== asc)) {
+      throw new ApiError(
+        400,
+        "invalid_cursor",
+        undefined,
+        ctx.requestId,
+        "Cursor emitido para outra ordenação — recomece sem cursor.",
+      );
+    }
     const op = asc ? "gt" : "lt";
     if (c.sort) {
       query = query.or(
@@ -164,7 +189,12 @@ export async function listConversationsHandler(
   const last = page[page.length - 1];
   const cursor =
     hasMore && last
-      ? encodeCursor({ sort: (last[sortCol] as string | null) ?? null, id: last.id })
+      ? encodeCursor({
+          sort: (last[sortCol] as string | null) ?? null,
+          id: last.id,
+          col: sortCol,
+          asc,
+        })
       : null;
 
   return { conversations: page, cursor, has_more: hasMore };

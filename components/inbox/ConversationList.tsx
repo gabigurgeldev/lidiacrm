@@ -52,7 +52,10 @@ export function ConversationList({
 
   // Fila (G5-03): a lista já vem ordenada por tempo de espera (server), então a
   // posição é o índice na lista visível. Só mostramos posição/espera nessa visão.
-  const isQueue = filters.assigned_to === "unassigned";
+  // Em "mais recentes" o índice deixa de ser a posição na fila — numerar seria
+  // afirmar uma ordem de atendimento que a tela não está mostrando.
+  const isQueue =
+    filters.assigned_to === "unassigned" && (filters.sort ?? "espera") === "espera";
   // Uma leitura por lista, compartilhada por todas as linhas (react-query dedupa
   // com o cabeçalho, que faz a mesma pergunta).
   const automaticoDaOrg = useAutomaticoAtivo();

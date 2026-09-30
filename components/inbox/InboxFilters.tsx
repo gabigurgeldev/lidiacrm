@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useConversationTagVocabulary } from "@/hooks/inbox/useConversationTags";
 import { useConversationCounts } from "@/hooks/inbox/useConversationCounts";
 import type { Role, VisibilityMode } from "@/lib/auth/types";
+import type { ConversationSort } from "@/lib/schemas/messaging";
 import { cn } from "@/lib/utils";
 
 export type InboxTab = "unassigned" | "mine" | "all" | "closed" | "ai";
@@ -49,6 +50,17 @@ export interface InboxFiltersValue {
   onlyUnread: boolean;
   channel_session_id?: string;
   tag?: string;
+  /** Ausente = ordem padrão da aba (ver `ordemPadraoDaAba`). */
+  sort?: ConversationSort;
+}
+
+/**
+ * A ordem que cada aba usa quando ninguém escolheu: a Fila existe para
+ * atender quem espera há mais tempo; as demais são histórico de atividade.
+ * Espelha a regra do handler (`listConversationsHandler`).
+ */
+export function ordemPadraoDaAba(tab: InboxTab): ConversationSort {
+  return tab === "unassigned" ? "espera" : "recentes";
 }
 
 interface Props {
@@ -111,7 +123,12 @@ export function InboxFilters({ value, onChange }: Props) {
   // O contador do botão. Sem ele, um filtro esquecido dentro do popover deixa a
   // lista curta sem nenhum sinal na tela — o mesmo defeito que o seletor de
   // número resolve ficando à mostra.
-  const filtrosAtivos = (value.tag ? 1 : 0) + (value.onlyUnread ? 1 : 0);
+  const ordemPadrao = ordemPadraoDaAba(value.tab);
+  const ordem = value.sort ?? ordemPadrao;
+  // Ordem fora do padrão conta como filtro: a Fila em "mais recentes" some com
+  // o 1º/2º da tela, e sem o número no botão isso pareceria defeito.
+  const filtrosAtivos =
+    (value.tag ? 1 : 0) + (value.onlyUnread ? 1 : 0) + (ordem !== ordemPadrao ? 1 : 0);
 
   // Debounce search input → propagate to parent.
   useEffect(() => {
@@ -144,102 +161,128 @@ export function InboxFilters({ value, onChange }: Props) {
         </div>
       </div>
 
-      {(showChannelSwitch || temTags) && (
-        <div className="flex items-center gap-2 px-3 pb-2.5">
-          {showChannelSwitch && (
-            <Select
-              value={value.channel_session_id ?? "all"}
-              onValueChange={(v) =>
-                onChange({ ...value, channel_session_id: v === "all" ? undefined : v })
-              }
+      {/* Sempre visível: a ordenação vale para toda org, com ou sem tags. */}
+      <div className="flex items-center gap-2 px-3 pb-2.5">
+        {showChannelSwitch && (
+          <Select
+            value={value.channel_session_id ?? "all"}
+            onValueChange={(v) =>
+              onChange({ ...value, channel_session_id: v === "all" ? undefined : v })
+            }
+          >
+            <SelectTrigger
+              className="border-border/70 h-8 min-w-0 flex-1 rounded-full text-[13px]"
+              aria-label={t("Filtrar por número de WhatsApp")}
             >
-              <SelectTrigger
-                className="border-border/70 h-8 min-w-0 flex-1 rounded-full text-[13px]"
-                aria-label={t("Filtrar por número de WhatsApp")}
-              >
-                <SelectValue placeholder={t("Todos os números")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("Todos os números")}</SelectItem>
-                {filtroForaDaLista && value.channel_session_id != null && (
-                  <SelectItem value={value.channel_session_id}>{t("Número removido")}</SelectItem>
-                )}
-                {channels?.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {/*
+              <SelectValue placeholder={t("Todos os números")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("Todos os números")}</SelectItem>
+              {filtroForaDaLista && value.channel_session_id != null && (
+                <SelectItem value={value.channel_session_id}>{t("Número removido")}</SelectItem>
+              )}
+              {channels?.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {/*
                       O NOME E O TIPO juntos, porque a escolha é das duas coisas.
                       Dois números com nomes parecidos podem ter regras de envio
                       opostas — no canal oficial existe a janela de 24h, no
                       número por QR não existe —, e até aqui o seletor mostrava
                       só o apelido. Ver `lib/channels/tipo-de-conexao.ts`.
                     */}
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="truncate">{channelLabel(c, t)}</span>
-                      <TipoDeCanal provider={c.provider} className="shrink-0" />
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{channelLabel(c, t)}</span>
+                    <TipoDeCanal provider={c.provider} className="shrink-0" />
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
-          {temTags && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={cn(
-                    "h-8 shrink-0 gap-1.5 rounded-full px-2.5 text-xs",
-                    filtrosAtivos > 0 && "border-accent text-accent",
-                  )}
-                  aria-label={t("Mais filtros")}
-                  data-testid="inbox-mais-filtros"
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn(
+                "ml-auto h-8 shrink-0 gap-1.5 rounded-full px-2.5 text-xs",
+                filtrosAtivos > 0 && "border-accent text-accent",
+              )}
+              aria-label={t("Mais filtros")}
+              data-testid="inbox-mais-filtros"
+            >
+              <FunnelSimple size={14} aria-hidden />
+              {filtrosAtivos > 0 && (
+                <span className="tabular-nums" data-testid="inbox-filtros-ativos">
+                  {filtrosAtivos}
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-60 space-y-3 rounded-[14px]">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-text-muted">{t("Ordenar por")}</Label>
+              <Select
+                value={ordem}
+                onValueChange={(v) =>
+                  onChange({
+                    ...value,
+                    // Voltar ao padrão da aba limpa a escolha, para a ordem
+                    // seguir a aba quando o atendente trocar de aba.
+                    sort: v === ordemPadrao ? undefined : (v as ConversationSort),
+                  })
+                }
+              >
+                <SelectTrigger
+                  className="h-8 text-sm"
+                  aria-label={t("Ordenar conversas")}
+                  data-testid="inbox-ordenar"
                 >
-                  <FunnelSimple size={14} aria-hidden />
-                  {filtrosAtivos > 0 && (
-                    <span className="tabular-nums" data-testid="inbox-filtros-ativos">
-                      {filtrosAtivos}
-                    </span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-60 space-y-3 rounded-[14px]">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-text-muted">{t("Tag da conversa")}</Label>
-                  <Select
-                    value={value.tag ?? "all"}
-                    onValueChange={(v) => onChange({ ...value, tag: v === "all" ? undefined : v })}
-                  >
-                    <SelectTrigger className="h-8 text-sm" aria-label={t("Filtrar por tag")}>
-                      <SelectValue placeholder={t("Todas as tags")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t("Todas as tags")}</SelectItem>
-                      {tagVocabulary?.map((tag) => (
-                        <SelectItem key={tag} value={tag}>
-                          {tag}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="recentes">{t("Mensagens mais recentes")}</SelectItem>
+                  <SelectItem value="espera">{t("Esperando há mais tempo")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="only-unread" className="text-xs text-text-muted">
-                    {t("Apenas não lidos")}
-                  </Label>
-                  <Switch
-                    id="only-unread"
-                    checked={value.onlyUnread}
-                    onCheckedChange={(v) => onChange({ ...value, onlyUnread: v })}
-                  />
-                </div>
-              </PopoverContent>
-            </Popover>
-          )}
-        </div>
-      )}
+            {temTags && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-text-muted">{t("Tag da conversa")}</Label>
+                <Select
+                  value={value.tag ?? "all"}
+                  onValueChange={(v) => onChange({ ...value, tag: v === "all" ? undefined : v })}
+                >
+                  <SelectTrigger className="h-8 text-sm" aria-label={t("Filtrar por tag")}>
+                    <SelectValue placeholder={t("Todas as tags")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("Todas as tags")}</SelectItem>
+                    {tagVocabulary?.map((tag) => (
+                      <SelectItem key={tag} value={tag}>
+                        {tag}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <Label htmlFor="only-unread" className="text-xs text-text-muted">
+                {t("Apenas não lidos")}
+              </Label>
+              <Switch
+                id="only-unread"
+                checked={value.onlyUnread}
+                onCheckedChange={(v) => onChange({ ...value, onlyUnread: v })}
+              />
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
 
       {/*
         ⚠️ CONTINUA SENDO O `Tabs` DO RADIX, e a caixa é que mudou.
