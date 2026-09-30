@@ -73,7 +73,8 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   // Organização da SESSÃO, nunca do body — o caminho é o que `criarDisparo`
   // confere depois, e é o prefixo que o envio aceita assinar.
-  const caminho = `${orgId}/disparos/${randomUUID()}.${formato.ext}`;
+  const arquivoId = randomUUID();
+  const caminho = `${orgId}/disparos/${arquivoId}.${formato.ext}`;
   const admin = createAdminClient();
 
   const { error: erroUp } = await admin.storage
@@ -93,9 +94,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     actorUserId: authz.user.id,
     organizationId: orgId,
     resourceType: "bulk_send_media",
-    resourceId: caminho,
+    // `resource_id` é uuid: o id do arquivo, e o caminho inteiro vai no metadata.
+    resourceId: arquivoId,
     requestId,
-    metadata: { kind: formato.kind, mime: file.type, bytes: file.size },
+    metadata: { kind: formato.kind, mime: file.type, bytes: file.size, storage_path: caminho },
   });
 
   return ok(
