@@ -91,6 +91,10 @@ export function useMessagesRealtime(conversationId: string | null) {
       return `${msgs.length}:${msgs[0]?.id ?? ""}`;
     },
     ultimaEntrega,
+    // 15s e não os 45s do padrão: com a conversa ABERTA a pessoa está esperando
+    // a resposta do cliente, e 45s de tela parada lê como "a mensagem não
+    // chegou". Uma consulta leve (uma página) por conversa aberta.
+    intervaloMs: 15_000,
     enabled: !!conversationId,
   });
 
