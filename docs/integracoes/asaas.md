@@ -43,7 +43,7 @@ cron que bloqueia — a data passa e o bloqueio acontece.
 
    ```env
    ASAAS_API_KEY=aact_...             # chave do passo 1, SEM o "$" inicial
-   ASAAS_AMBIENTE=sandbox             # "producao" para cobrar de verdade
+   ASAAS_AMBIENTE=sandbox             # rótulo; quem decide é o prefixo da chave (aact_prod_ / aact_hmlg_)
    ASAAS_WEBHOOK_TOKEN=...            # o mesmo token do passo 2
    COBRANCA_VALOR_CENTAVOS=120000     # R$ 1.200,00
    COBRANCA_DIAS_TRIAL=7
@@ -69,6 +69,26 @@ Sem `ASAAS_API_KEY` a cobrança fica **desligada**: ninguém entra em teste, nin
   oferece PIX.
 - **Webhook local:** exponha `localhost:3000` com um túnel (`cloudflared tunnel --url http://localhost:3000`)
   e aponte o webhook do sandbox para `https://<túnel>/api/v1/webhooks/asaas`.
+
+## Virar do sandbox para a produção
+
+Webhook, chave e dados do sandbox **não** passam para a conta de produção. Na virada:
+
+1. **Conta de produção pronta:** aprovada pelo Asaas, com **chave PIX cadastrada**
+   (sem ela a geração do QR falha) e cartão de crédito habilitado.
+2. **Chave nova** (`aact_prod_…`) em `ASAAS_API_KEY`, sem o `$`. O ambiente vem do
+   prefixo da chave — `ASAAS_AMBIENTE` contraditório só gera aviso no log.
+3. **Token novo** em `ASAAS_WEBHOOK_TOKEN` e **webhook cadastrado de novo** na conta
+   de produção (mesmos campos do passo 2 de *Ligar*).
+4. **Ids do sandbox fora do banco:** `assinaturas.asaas_customer_id` /
+   `asaas_subscription_id` que vieram de testes no sandbox não existem na produção
+   (o checkout leva 404 e o cron falha para aquela organização). Zere esses ids e
+   apague as `cobrancas` de teste antes de cobrar.
+5. Recriar app, worker e scheduler e conferir: `GET /v3/myAccount` com a chave nova
+   responde 200, e o *Enviar teste* do webhook no painel do Asaas volta 200.
+
+Chave recusada (401) aparece para quem paga como "problema de configuração, avise o
+suporte" — nunca como cartão recusado — e fica no log como `asaas: chave recusada (401)`.
 
 ## Segurança
 
