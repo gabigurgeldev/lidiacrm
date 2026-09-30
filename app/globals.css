@@ -1696,27 +1696,47 @@
    e o desenho tem 300 bytes. `currentColor` não funciona em `background-image`,
    então a cor entra pela opacidade sobre a superfície de baixo: o padrão fica
    claro no tema claro e escuro no escuro, sem duas cópias do SVG. */
+/* O chão tem a COR e a TEXTURA de mensageiro — bege acinzentado com desenhos
+   finos repetidos — porque é isso que faz a tela ser lida como conversa. Os
+   desenhos são NOSSOS (balão, telefone, sacola, calendário, bolo…), no mesmo
+   espírito de rabisco, nunca a arte da Meta. Tile de 240px: menor que isso a
+   repetição vira grade e o olho percebe o padrão antes da conversa. */
+:root {
+  --inbox-chao: #efeae2;
+  --inbox-barra: #f0f2f5;
+  --bolha-entrada-bg: #ffffff;
+  --bolha-entrada-fg: #111b21;
+  --bolha-sombra: 0 1px 0.5px rgb(11 20 26 / 0.13);
+  --bolha-meta: #667781;
+  --bolha-lida: #53bdeb;
+}
+[data-theme="dark"] {
+  --inbox-chao: #0b141a;
+  --inbox-barra: #202c33;
+  --bolha-entrada-bg: #202c33;
+  --bolha-entrada-fg: #e9edef;
+  --bolha-meta: #8696a0;
+}
+
 .inbox-papel {
-  background-color: var(--color-bg);
+  background-color: var(--inbox-chao);
   background-repeat: repeat;
+  background-size: 240px 240px;
   /* A OPACIDADE MORA DENTRO DO SVG (`stroke-opacity`), e não em
-     `background-blend-mode`.
-
-     ⚠️ MEDIDO: com `blend-mode` o padrão simplesmente NÃO APARECIA. Um cinza
-     médio misturado por `soft-light` contra `#161510` devolve quase o próprio
-     fundo — a regra existia, o navegador a aplicava, e a tela ficava lisa. É o
-     pior tipo de CSS: o que passa no gate ("tem `background-image`") e não
-     entrega nada ao olho.
-
-     Com o traço já semitransparente no próprio desenho, o que se vê é o que
-     está escrito. Duas cópias do SVG porque a cor do traço inverte entre os
-     temas — no claro é preto, no escuro é branco —, e isso é uma diferença de
-     desenho, não de opacidade. */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='104' height='104' viewBox='0 0 104 104'%3E%3Cg fill='none' stroke='%23000000' stroke-opacity='0.038' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M12 18h10M17 13v10'/%3E%3Ccircle cx='54' cy='20' r='5'/%3E%3Cpath d='M46 54h12M52 48v12'/%3E%3Cpath d='M14 50c4-6 10-6 14 0'/%3E%3C/g%3E%3C/svg%3E");
+     `background-blend-mode`. MEDIDO: com `blend-mode` o padrão não aparecia —
+     a regra existia e a tela ficava lisa. Duas cópias do SVG porque a cor do
+     traço inverte entre os temas. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='%233b4a54' stroke-opacity='0.13' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 22h22a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H30l-7 6v-6h-3a4 4 0 0 1-4-4V26a4 4 0 0 1 4-4z'/%3E%3Cpath d='M92 48c-8-6-13-10-13-15a6 6 0 0 1 13-2a6 6 0 0 1 13 2c0 5-5 9-13 15z'/%3E%3Cpath d='M150 18l4 8l9 1l-7 6l2 9l-8-5l-8 5l2-9l-7-6l9-1z'/%3E%3Cpath d='M198 22c2-2 5-2 6 0l3 5c1 2 0 4-1 5l-2 1c1 4 5 8 9 9l1-2c1-1 3-2 5-1l5 3c2 1 2 4 0 6l-3 3c-3 2-9 1-15-4s-10-12-8-17z'/%3E%3Cpath d='M22 96h24l-2 24H24zM28 96v-4a6 6 0 0 1 12 0v4'/%3E%3Cpath d='M82 92h24v22H82zM82 100h24M88 88v6M100 88v6'/%3E%3Cpath d='M160 94v6l4 3'/%3E%3Cpath d='M206 112V92l14-3v19'/%3E%3Cpath d='M14 156h8l3-4h10l3 4h8v18H14z'/%3E%3Cpath d='M78 154h26v18H78zM78 154l13 10l13-10'/%3E%3Cpath d='M160 180s-10-10-10-17a10 10 0 0 1 20 0c0 7-10 17-10 17z'/%3E%3Cpath d='M204 160h22v16h-22zM202 154h26v6h-26zM215 154v22M215 154c-3-6-9-6-9-2s6 2 9 2c3 0 9 2 9-2s-6-4-9 2'/%3E%3Cpath d='M25 224c3 3 7 3 10 0M26 216h.01M34 216h.01'/%3E%3Cpath d='M84 226h24a7 7 0 0 0 0-14a10 10 0 0 0-19-2a6 6 0 0 0-5 16z'/%3E%3Cpath d='M163 204l-10 14h8l-3 12l10-15h-8z'/%3E%3Cpath d='M200 222h22v12h-22zM200 228c4 3 7-3 11 0s7 3 11 0M206 222v-5M216 222v-5'/%3E%3Cpath d='M55 70h6M58 67v6M122 128h6M125 125v6M186 64h6M189 61v6M52 190h6M55 187v6'/%3E%3Ccircle cx='160' cy='100' r='10'/%3E%3Ccircle cx='202' cy='112' r='4'/%3E%3Ccircle cx='216' cy='108' r='4'/%3E%3Ccircle cx='30' cy='165' r='5'/%3E%3Ccircle cx='160' cy='163' r='3'/%3E%3Ccircle cx='30' cy='220' r='11'/%3E%3Ccircle cx='125' cy='62' r='1.5'/%3E%3Ccircle cx='60' cy='135' r='1.5'/%3E%3Ccircle cx='190' cy='135' r='1.5'/%3E%3Ccircle cx='125' cy='190' r='1.5'/%3E%3C/g%3E%3C/svg%3E");
 }
 
 [data-theme="dark"] .inbox-papel {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='104' height='104' viewBox='0 0 104 104'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='0.034' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M12 18h10M17 13v10'/%3E%3Ccircle cx='54' cy='20' r='5'/%3E%3Cpath d='M46 54h12M52 48v12'/%3E%3Cpath d='M14 50c4-6 10-6 14 0'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240' viewBox='0 0 240 240'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='0.06' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 22h22a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H30l-7 6v-6h-3a4 4 0 0 1-4-4V26a4 4 0 0 1 4-4z'/%3E%3Cpath d='M92 48c-8-6-13-10-13-15a6 6 0 0 1 13-2a6 6 0 0 1 13 2c0 5-5 9-13 15z'/%3E%3Cpath d='M150 18l4 8l9 1l-7 6l2 9l-8-5l-8 5l2-9l-7-6l9-1z'/%3E%3Cpath d='M198 22c2-2 5-2 6 0l3 5c1 2 0 4-1 5l-2 1c1 4 5 8 9 9l1-2c1-1 3-2 5-1l5 3c2 1 2 4 0 6l-3 3c-3 2-9 1-15-4s-10-12-8-17z'/%3E%3Cpath d='M22 96h24l-2 24H24zM28 96v-4a6 6 0 0 1 12 0v4'/%3E%3Cpath d='M82 92h24v22H82zM82 100h24M88 88v6M100 88v6'/%3E%3Cpath d='M160 94v6l4 3'/%3E%3Cpath d='M206 112V92l14-3v19'/%3E%3Cpath d='M14 156h8l3-4h10l3 4h8v18H14z'/%3E%3Cpath d='M78 154h26v18H78zM78 154l13 10l13-10'/%3E%3Cpath d='M160 180s-10-10-10-17a10 10 0 0 1 20 0c0 7-10 17-10 17z'/%3E%3Cpath d='M204 160h22v16h-22zM202 154h26v6h-26zM215 154v22M215 154c-3-6-9-6-9-2s6 2 9 2c3 0 9 2 9-2s-6-4-9 2'/%3E%3Cpath d='M25 224c3 3 7 3 10 0M26 216h.01M34 216h.01'/%3E%3Cpath d='M84 226h24a7 7 0 0 0 0-14a10 10 0 0 0-19-2a6 6 0 0 0-5 16z'/%3E%3Cpath d='M163 204l-10 14h8l-3 12l10-15h-8z'/%3E%3Cpath d='M200 222h22v12h-22zM200 228c4 3 7-3 11 0s7 3 11 0M206 222v-5M216 222v-5'/%3E%3Cpath d='M55 70h6M58 67v6M122 128h6M125 125v6M186 64h6M189 61v6M52 190h6M55 187v6'/%3E%3Ccircle cx='160' cy='100' r='10'/%3E%3Ccircle cx='202' cy='112' r='4'/%3E%3Ccircle cx='216' cy='108' r='4'/%3E%3Ccircle cx='30' cy='165' r='5'/%3E%3Ccircle cx='160' cy='163' r='3'/%3E%3Ccircle cx='30' cy='220' r='11'/%3E%3Ccircle cx='125' cy='62' r='1.5'/%3E%3Ccircle cx='60' cy='135' r='1.5'/%3E%3Ccircle cx='190' cy='135' r='1.5'/%3E%3Ccircle cx='125' cy='190' r='1.5'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* As barras de cima e de baixo da conversa — cinza de mensageiro, não branco:
+   é o que separa "moldura" de "conversa" sem precisar de borda grossa. */
+.inbox-barra {
+  background-color: var(--inbox-barra);
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -1732,7 +1752,12 @@
 
 .bolha {
   position: relative;
-  border-radius: 12px;
+  border-radius: 8px;
+  box-shadow: var(--bolha-sombra);
+}
+.bolha-entrada {
+  background-color: var(--bolha-entrada-bg);
+  color: var(--bolha-entrada-fg);
 }
 
 /* A bolha de SAÍDA tem verde PRÓPRIO de mensageiro, não a cor de marca.
@@ -1804,15 +1829,15 @@
 .bolha-meta-flutuante {
   position: absolute;
   inset-inline-end: 0.55rem;
-  inset-block-end: 0.3rem;
+  inset-block-end: 0.35rem;
 }
 
 /* Quem SAI leva hora + confirmação de leitura; quem ENTRA leva só a hora. */
 .bolha[data-lado="saida"] {
-  --bolha-reserva: 4rem;
+  --bolha-reserva: 4.6rem;
 }
 .bolha[data-lado="entrada"] {
-  --bolha-reserva: 2.9rem;
+  --bolha-reserva: 3.2rem;
 }
 
 /* O selo de canal entra NA MESMA faixa, então a faixa cresce — senão ele empurra
@@ -1823,10 +1848,10 @@
    linha. A classe é posta pela bolha SÓ quando o selo é de fato desenhado —
    canal desconhecido não paga reserva de algo que não aparece. */
 .bolha[data-com-selo="true"][data-lado="saida"] {
-  --bolha-reserva: 6.1rem;
+  --bolha-reserva: 6.7rem;
 }
 .bolha[data-com-selo="true"][data-lado="entrada"] {
-  --bolha-reserva: 5rem;
+  --bolha-reserva: 5.3rem;
 }
 
 /* ---- Áudio --------------------------------------------------------------- */
@@ -1839,13 +1864,91 @@
   transition: background-color 120ms var(--ease-out);
 }
 
+/* ---- Menu de opções do campo de escrever -------------------------------- */
+
+/* Sobe da BASE, onde fica o botão que o abriu — a origem da animação é o
+   próprio botão, então o olho liga o menu ao gesto. Os itens entram em cascata
+   curta (`--i` × 25ms): rápido o bastante para não atrasar quem já sabe onde
+   clicar, visível o bastante para mostrar que é uma lista nova. */
+@keyframes opcoes-surge {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes opcao-item-surge {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.opcoes-painel {
+  transform-origin: bottom left;
+  animation: opcoes-surge 180ms var(--ease-out) both;
+}
+.opcoes-item {
+  animation: opcao-item-surge 200ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 25ms);
+}
+.opcoes-gatilho svg {
+  transition: transform 200ms var(--ease-out);
+}
+.opcoes-gatilho[aria-expanded="true"] svg {
+  transform: rotate(45deg);
+}
+
+/* ---- Dados do contato ---------------------------------------------------- */
+
+/* Entra deslizando da direita, como o painel de perfil do WhatsApp. */
+@keyframes perfil-entra {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.perfil-entra {
+  animation: perfil-entra 200ms var(--ease-out) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .perfil-entra { animation: none; }
+}
+
+/* ---- Gravação de áudio --------------------------------------------------- */
+
+@keyframes gravacao-surge {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes gravacao-ponto {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+.gravacao-barra {
+  animation: gravacao-surge 200ms var(--ease-out) both;
+}
+.gravacao-ponto {
+  animation: gravacao-ponto 1.2s ease-in-out infinite;
+}
+/* A onda ao vivo: cada barra é a altura do som naquele instante, então a
+   transição curta só suaviza o salto entre duas leituras. */
+.gravacao-onda-barra {
+  transition: height 90ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opcoes-painel,
+  .opcoes-item,
+  .gravacao-barra,
+  .gravacao-ponto {
+    animation: none;
+  }
+  .opcoes-gatilho svg,
+  .gravacao-onda-barra {
+    transition: none;
+  }
+}
+
 /* ---- Separador de data --------------------------------------------------- */
 
 /* Opaco, e não `bg-background/80`: sobre o papel de parede a versão translúcida
    deixava o padrão passar por dentro do texto da data. */
 .inbox-selo-de-data {
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-xs);
+  background-color: var(--bolha-entrada-bg);
+  box-shadow: var(--bolha-sombra);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

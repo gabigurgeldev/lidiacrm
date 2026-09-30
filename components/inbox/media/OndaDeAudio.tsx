@@ -76,14 +76,14 @@ export function OndaDeAudio({
         <span
           key={i}
           className={cn(
-            "onda-barra w-[2px] shrink-0 rounded-full",
+            "onda-barra w-[3px] shrink-0 rounded-full",
+            // A bolha de saída é verde CLARO: barra branca sumia nela. Tocado é
+            // o verde do produto nos dois lados; o resto, o cinza do metadado.
             i < tocadas
               ? isOutbound
-                ? "bg-primary-foreground"
+                ? "bg-[var(--bolha-lida)]"
                 : "bg-accent"
-              : isOutbound
-                ? "bg-primary-foreground/35"
-                : "bg-text-subtle/50",
+              : "bg-[var(--bolha-meta)] opacity-45",
           )}
           style={{ height: `${Math.round(altura * 100)}%` }}
         />

@@ -303,6 +303,9 @@ export const AUDIT_ACTIONS = [
   "conversation.snooze_watcher_run",
   "conversation.note_added",
   "conversation.note_deleted",
+  // Exportar a conversa (PDF/Excel) é leitura, mas leitura em massa de dado
+  // pessoal que SAI do sistema — por isso audita, como o export de usuários.
+  "conversation.exported",
   "ai.case_replied",
   // O agente participando do chamado — separado de `ai.case_replied` (a pessoa
   // respondendo) porque juntar os dois apagaria justamente quem agiu.

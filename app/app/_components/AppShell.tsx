@@ -56,8 +56,10 @@ export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, children }: Ap
       que se vê através da curva é este fundo. Pintar só a barra e só o
       cabeçalho deixaria um quadradinho da cor da página dentro da curva.
     */
-    <div className="casca-moldura flex h-dvh w-full overflow-hidden">
-      <div className="hidden md:block">
+    // `h-full`: quem dá a altura da janela é o contêiner do layout, que a
+    // divide com os avisos do topo (ver `app/app/layout.tsx`).
+    <div className="casca-moldura flex h-full w-full overflow-hidden">
+      <div className="hidden h-full md:block">
         <Sidebar collapsed={sidebarCollapsed} gruposAbertosSalvos={gruposAbertosSalvos} />
       </div>
       {/*

@@ -70,6 +70,12 @@ export type EventoStevo =
       externalId: string | null;
       /** Telefone do CLIENTE, só dígitos. */
       telefone: string | null;
+      /**
+       * Nome que o cliente usa no WhatsApp (perfil). `null` quando o payload
+       * não traz — e SEMPRE `null` no eco do celular do operador, onde o nome
+       * seria o da empresa, não o do cliente.
+       */
+      nome: string | null;
       texto: string | null;
       midiaUrl: string | null;
       midiaMime: string | null;
@@ -81,9 +87,27 @@ export type EventoStevo =
   | { tipo: "ignorado"; motivo: string };
 
 const CAMPOS_TEXTO = ["text", "body", "message", "caption", "conversation"];
-const CAMPOS_TELEFONE = ["from", "phone", "phone_number", "sender", "number", "remoteJid", "chatId"];
+const CAMPOS_TELEFONE = [
+  "from",
+  "phone",
+  "phone_number",
+  "sender",
+  "number",
+  "remoteJid",
+  "chatId",
+];
 const CAMPOS_ID = ["id", "message_id", "messageId", "wamid", "key_id", "external_id"];
 const CAMPOS_MIDIA = ["media_url", "mediaUrl", "url", "file_url"];
+// Nome de perfil no modo QR. "name" fica de fora de propósito: no payload
+// achatado colide com nome de arquivo, de instância e de contato compartilhado.
+const CAMPOS_NOME = [
+  "pushName",
+  "push_name",
+  "notifyName",
+  "notify_name",
+  "senderName",
+  "sender_name",
+];
 
 function primeiroTexto(o: Record<string, unknown>, chaves: string[]): string | null {
   for (const k of chaves) {
@@ -108,7 +132,11 @@ function primeiroDoArray(v: unknown): Record<string, unknown> | null {
  * indiferente à profundidade — o custo é uma colisão de nome entre níveis, que
  * aqui é aceitável porque os campos procurados são todos do mesmo assunto.
  */
-function achatar(v: unknown, profundidade = 0, acc: Record<string, unknown> = {}): Record<string, unknown> {
+function achatar(
+  v: unknown,
+  profundidade = 0,
+  acc: Record<string, unknown> = {},
+): Record<string, unknown> {
   if (profundidade > 4 || v === null || typeof v !== "object" || Array.isArray(v)) return acc;
   for (const [k, filho] of Object.entries(v as Record<string, unknown>)) {
     if (!(k in acc)) acc[k] = filho;
@@ -163,6 +191,19 @@ function lerEventoCloudApiOficial(bruto: Record<string, unknown>): EventoStevo {
   const telefone = digitosDoEndereco(typeof mensagem.from === "string" ? mensagem.from : null);
   if (!telefone) return { tipo: "ignorado", motivo: "sem_remetente_reconhecivel" };
 
+  // O perfil vem ao lado da mensagem, em `value.contacts` — o mesmo lugar que
+  // `lib/channels/meta/webhook.ts` lê para a Meta direta. Medido em produção
+  // (2026-09-29): presente nos payloads da conta Oficial, e até aqui descartado,
+  // o que deixava todo contato que chegou pelo Stevo sem nome.
+  const contatos = Array.isArray(value.contacts)
+    ? (value.contacts as Record<string, unknown>[])
+    : [];
+  const perfil =
+    contatos.find((c) => typeof c.wa_id === "string" && digitosDoEndereco(c.wa_id) === telefone) ??
+    (contatos.length === 1 ? contatos[0] : undefined);
+  const nomeDoPerfil = (perfil?.profile as { name?: unknown } | undefined)?.name;
+  const nome = typeof nomeDoPerfil === "string" && nomeDoPerfil.trim() ? nomeDoPerfil.trim() : null;
+
   const tipo = typeof mensagem.type === "string" ? mensagem.type : null;
   const corpoTexto = mensagem.text as { body?: unknown } | undefined;
   const texto = typeof corpoTexto?.body === "string" ? corpoTexto.body : null;
@@ -180,9 +221,10 @@ function lerEventoCloudApiOficial(bruto: Record<string, unknown>): EventoStevo {
   }
 
   const carimboSegundos = Number(mensagem.timestamp);
-  const enviadaEm = Number.isFinite(carimboSegundos) && carimboSegundos > 0
-    ? new Date(carimboSegundos * 1000)
-    : new Date();
+  const enviadaEm =
+    Number.isFinite(carimboSegundos) && carimboSegundos > 0
+      ? new Date(carimboSegundos * 1000)
+      : new Date();
 
   return {
     tipo: "mensagem",
@@ -192,6 +234,7 @@ function lerEventoCloudApiOficial(bruto: Record<string, unknown>): EventoStevo {
     daEmpresa: false,
     externalId: typeof mensagem.id === "string" ? mensagem.id : null,
     telefone,
+    nome,
     texto: texto ?? (typeof midia?.caption === "string" ? midia.caption : null),
     midiaUrl,
     midiaMime: typeof midia?.mime_type === "string" ? midia.mime_type : null,
@@ -256,15 +299,18 @@ function lerEventoStevoSemLog(bruto: unknown): EventoStevo {
         ? new Date(carimbo)
         : new Date();
 
+  const daEmpresa =
+    plano.fromMe === true || plano.from_me === true || evento.includes("SEND_MESSAGE");
+
   return {
     tipo: "mensagem",
     // `fromMe` é o nome consagrado; `from_me` e o evento SEND_MESSAGE cobrem as
     // variações. Marcar errado aqui faz a mensagem do cliente aparecer como
     // nossa na thread — e o agente responder a si mesmo.
-    daEmpresa:
-      plano.fromMe === true || plano.from_me === true || evento.includes("SEND_MESSAGE"),
+    daEmpresa,
     externalId: primeiroTexto(plano, CAMPOS_ID),
     telefone,
+    nome: daEmpresa ? null : primeiroTexto(plano, CAMPOS_NOME),
     texto,
     midiaUrl,
     midiaMime: primeiroTexto(plano, ["mime", "mimetype", "mime_type", "content_type"]),

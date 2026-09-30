@@ -196,3 +196,42 @@ describe("Cloud API oficial — MEDIDO em produção (não é chute)", () => {
     expect(e.tipo === "mensagem" && e.daEmpresa).toBe(false);
   });
 });
+
+describe("nome do cliente — medido em produção (2026-09-29)", () => {
+  function envelope(value: Record<string, unknown>) {
+    return {
+      object: "whatsapp_business_account",
+      entry: [{ id: "WABA_ID", changes: [{ value, field: "messages" }] }],
+    };
+  }
+  const mensagem = { from: "5531999998888", id: "wamid.X", timestamp: "1767225600", type: "text", text: { body: "oi" } };
+
+  it("⭐ conta Oficial: o nome vem de value.contacts[].profile.name do MESMO remetente", () => {
+    const e = lerEventoStevo(
+      envelope({
+        contacts: [
+          { profile: { name: "Outra Pessoa" }, wa_id: "5531000000000" },
+          { profile: { name: "Flor de Juá Moda" }, wa_id: "5531999998888" },
+        ],
+        messages: [mensagem],
+      }),
+    );
+    expect(e.tipo === "mensagem" && e.nome).toBe("Flor de Juá Moda");
+  });
+
+  it("conta Oficial sem contacts: nome null, a mensagem entra do mesmo jeito", () => {
+    const e = lerEventoStevo(envelope({ messages: [mensagem] }));
+    expect(e.tipo).toBe("mensagem");
+    expect(e.tipo === "mensagem" && e.nome).toBeNull();
+  });
+
+  it("modo QR: pushName do cliente vira o nome", () => {
+    const e = lerEventoStevo({ event: "MESSAGE", from: "5531999998888", text: "oi", pushName: "Ana" });
+    expect(e.tipo === "mensagem" && e.nome).toBe("Ana");
+  });
+
+  it("⭐ eco do celular do operador NUNCA dá nome — seria o nome da empresa no cliente", () => {
+    const e = lerEventoStevo({ event: "MESSAGE", fromMe: true, from: "5531999998888", text: "x", pushName: "Loja" });
+    expect(e.tipo === "mensagem" && e.nome).toBeNull();
+  });
+});

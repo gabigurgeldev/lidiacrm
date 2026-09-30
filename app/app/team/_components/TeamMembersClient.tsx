@@ -40,7 +40,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ROLES, type Role } from "@/lib/schemas/team";
-import { DotsThree } from "@/lib/ui/icons";
+import { DotsThree, PencilSimple } from "@/lib/ui/icons";
 import { EditarMembroDialog } from "./EditarMembroDialog";
 
 interface Props {
@@ -79,17 +79,17 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
               <TableHead>Role</TableHead>
               <TableHead>{t("Status")}</TableHead>
               <TableHead>{t("Última atividade")}</TableHead>
-              {canManage ? <TableHead className="w-[80px]" /> : null}
+              {canManage ? <TableHead className="w-[112px]" /> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
             {members.map((m) => (
               <TableRow key={m.user_id}>
                 <TableCell>
-                  <div className="font-medium">{m.full_name ?? m.email ?? m.user_id.slice(0, 8)}</div>
-                  {m.email ? (
-                    <div className="text-xs text-muted-foreground">{m.email}</div>
-                  ) : null}
+                  <div className="font-medium">
+                    {m.full_name ?? m.email ?? m.user_id.slice(0, 8)}
+                  </div>
+                  {m.email ? <div className="text-xs text-muted-foreground">{m.email}</div> : null}
                 </TableCell>
                 <TableCell>
                   {canManage && m.user_id !== currentUserId ? (
@@ -132,24 +132,38 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
                 {canManage ? (
                   <TableCell>
                     {m.user_id !== currentUserId ? (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" aria-label={t("Ações")}>
-                            <DotsThree size={20} />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setEditando(m)}>
-                            {t("Editar usuário")}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => setRevokeDialog(m)}
-                          >
-                            {t("Revogar acesso")}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center justify-end gap-1">
+                        {/* A canetinha à mostra: editar é a ação que se procura
+                          nesta linha, e escondida só no ⋮ ninguém a achava. */}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`${t("Editar usuário")} ${m.full_name ?? m.email ?? ""}`.trim()}
+                          title={t("Editar usuário")}
+                          onClick={() => setEditando(m)}
+                          data-testid="editar-membro"
+                        >
+                          <PencilSimple size={18} />
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" aria-label={t("Ações")}>
+                              <DotsThree size={20} />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setEditando(m)}>
+                              {t("Editar usuário")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => setRevokeDialog(m)}
+                            >
+                              {t("Revogar acesso")}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     ) : (
                       <span className="text-xs text-muted-foreground">{t("você")}</span>
                     )}
@@ -168,7 +182,8 @@ export function TeamMembersClient({ currentUserId, canManage }: Props) {
           <DialogHeader>
             <DialogTitle>{t("Revogar acesso")}</DialogTitle>
             <DialogDescription>
-              {revokeDialog?.email ?? revokeDialog?.user_id} {t("perderá acesso ao tenant. Esta ação pode ser desfeita reconvidando o membro.")}
+              {revokeDialog?.email ?? revokeDialog?.user_id}{" "}
+              {t("perderá acesso ao tenant. Esta ação pode ser desfeita reconvidando o membro.")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

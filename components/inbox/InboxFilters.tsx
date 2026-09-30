@@ -125,27 +125,27 @@ export function InboxFilters({ value, onChange }: Props) {
   }, [searchInput]);
 
   return (
-    <div className="border-b border-border bg-background">
-      <div className="px-3 pb-2 pt-3">
+    <div className="border-border/60 border-b bg-background">
+      <div className="px-3 pb-2.5 pt-3">
         <div className="relative">
           <MagnifyingGlass
-            size={15}
+            size={17}
             weight="regular"
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
+            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted"
             aria-hidden
           />
           <Input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder={t("Buscar mensagens…")}
-            className="h-9 rounded-full border-transparent bg-surface-elevated pl-8 text-sm focus-visible:border-border"
+            placeholder={t("Pesquisar conversa")}
+            className="h-10 rounded-lg border-transparent bg-surface-elevated pl-11 text-[15px] focus-visible:border-border"
             aria-label={t("Buscar conversas")}
           />
         </div>
       </div>
 
       {(showChannelSwitch || temTags) && (
-        <div className="flex items-center gap-1.5 px-3 pb-2">
+        <div className="flex items-center gap-2 px-3 pb-2.5">
           {showChannelSwitch && (
             <Select
               value={value.channel_session_id ?? "all"}
@@ -154,7 +154,7 @@ export function InboxFilters({ value, onChange }: Props) {
               }
             >
               <SelectTrigger
-                className="h-8 min-w-0 flex-1 rounded-full border-border text-xs"
+                className="border-border/70 h-8 min-w-0 flex-1 rounded-full text-[13px]"
                 aria-label={t("Filtrar por número de WhatsApp")}
               >
                 <SelectValue placeholder={t("Todos os números")} />
@@ -254,7 +254,9 @@ export function InboxFilters({ value, onChange }: Props) {
         usa leitor de tela.
       */}
       <Tabs value={value.tab} onValueChange={(v) => onChange({ ...value, tab: v as InboxTab })}>
-        <TabsList className="nav-rolagem flex h-auto w-full flex-wrap justify-start gap-1 rounded-none bg-transparent px-2 pb-2">
+        {/* UMA fileira, rolável de lado (como os filtros do WhatsApp): quebrar em
+            duas linhas deixava "IA" sozinho embaixo, com cara de defeito. */}
+        <TabsList className="nav-rolagem flex h-auto w-full flex-nowrap justify-start gap-1.5 overflow-x-auto rounded-none bg-transparent px-3 pb-3 pt-0">
           {tabs.map((tab) => {
             const meta = INBOX_TABS.find((t) => t.value === tab)!;
             const count = countFor[tab];
@@ -262,13 +264,17 @@ export function InboxFilters({ value, onChange }: Props) {
               <TabsTrigger
                 key={tab}
                 value={tab}
-                className="h-7 shrink-0 gap-1.5 rounded-full px-2.5 text-xs data-[state=active]:bg-accent-soft data-[state=active]:text-accent data-[state=active]:shadow-none"
+                // Pílulas de mensageiro: cinza quando desligada, verde quando é a
+                // visão aberta. Todas com a MESMA altura e o mesmo respiro — era o
+                // "Fila 27" colado no "Minhas 1" que fazia a fileira parecer
+                // amontoada.
+                className="hover:bg-surface-elevated/70 h-8 shrink-0 gap-1.5 rounded-full bg-surface-elevated px-3.5 text-[13px] font-normal text-text-muted transition-colors hover:text-foreground data-[state=active]:bg-accent-soft data-[state=active]:font-medium data-[state=active]:text-accent data-[state=active]:shadow-none"
               >
                 {t(meta.label)}
                 {typeof count === "number" && count > 0 && (
                   // Bolinha, e não um número solto do mesmo tamanho do rótulo:
                   // antes "Fila 10" lia-se como um nome de duas palavras.
-                  <span className="rounded-full bg-surface-elevated px-1.5 text-[10px] font-medium tabular-nums text-text-muted">
+                  <span className="bg-background/80 rounded-full px-1.5 text-[11px] font-medium tabular-nums">
                     {count}
                   </span>
                 )}

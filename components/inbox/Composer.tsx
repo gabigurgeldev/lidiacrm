@@ -8,18 +8,15 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
-import { PaperPlaneTilt } from "@/lib/ui/icons";
-import { Button } from "@/components/ui/button";
-import { AttachMenu } from "@/components/inbox/composer/AttachMenu";
+import { PaperPlaneTilt, X } from "@/lib/ui/icons";
+import { MenuDeOpcoes } from "@/components/inbox/composer/MenuDeOpcoes";
 import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentPreviewDialog";
 import { ContactPickerDialog } from "@/components/inbox/composer/ContactPickerDialog";
 import { AudioRecorder } from "@/components/inbox/composer/AudioRecorder";
-import { DraftReplyButton } from "@/components/inbox/composer/DraftReplyButton";
 import { EmojiButton } from "@/components/inbox/composer/EmojiButton";
 import { resolveSlash, TemplateMenu } from "@/components/inbox/composer/TemplateMenu";
 import { useCreateNote } from "@/hooks/inbox/useCreateNote";
 import { useMessageTemplates, type MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
-import { X } from "lucide-react";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
 import { useUploadMedia } from "@/hooks/inbox/useUploadMedia";
 import { imagemDoClipboard } from "@/lib/inbox/clipboard-image";
@@ -79,6 +76,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [menuDismissed, setMenuDismissed] = useState(false);
   const [mode, setMode] = useState<"reply" | "note">("reply");
+  const [gravando, setGravando] = useState(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const send = useSendMessage();
   const upload = useUploadMedia();
@@ -201,7 +199,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
   if (blockedReason) {
     return (
-      <div className="border-t border-border bg-muted/40 px-4 py-3 text-center text-xs text-muted-foreground">
+      <div className="bg-muted/40 border-t border-border px-4 py-3 text-center text-xs text-muted-foreground">
         {blockedReason}
       </div>
     );
@@ -209,12 +207,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
   return (
     <>
-      <div
-        className={cn(
-          "relative border-t border-border bg-background px-3 py-2",
-          mode === "note" && "border-warning/40 bg-warning-bg",
-        )}
-      >
+      <div className={cn("inbox-barra relative px-3 py-2.5", mode === "note" && "bg-warning-bg")}>
         <TemplateMenu
           open={menuOpen}
           query={slash.query}
@@ -222,32 +215,26 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           onPick={applyTemplate}
           onClose={() => setMenuDismissed(true)}
         />
-        <div className="mb-1.5 flex gap-1">
-          <button
-            type="button"
-            onClick={() => setMode("reply")}
-            className={cn(
-              "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
-              mode === "reply"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:bg-muted",
-            )}
-          >
-            {t("Responder")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("note")}
-            className={cn(
-              "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
-              mode === "note"
-                ? "bg-warning text-warning-fg"
-                : "text-muted-foreground hover:bg-muted",
-            )}
-          >
-            {t("Nota interna")}
-          </button>
-        </div>
+        {/*
+          Nota interna é um MODO, e o modo precisa estar à vista enquanto dura:
+          a faixa âmbar diz, em cima do campo, que o que se digita não vai para o
+          cliente. Antes eram duas pílulas fixas "Responder / Nota interna"
+          ocupando uma linha inteira em toda conversa; agora a nota se liga pelo
+          menu de opções e só aparece quando está ligada.
+        */}
+        {mode === "note" && (
+          <div className="border-warning/40 bg-background/70 mb-2 flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs text-warning-fg">
+            <span className="flex-1 font-medium">{t("Nota interna — só a equipe vê")}</span>
+            <button
+              type="button"
+              onClick={() => setMode("reply")}
+              aria-label={t("Voltar a responder")}
+              className="hover:bg-warning/20 rounded-full p-0.5"
+            >
+              <X size={14} weight="bold" aria-hidden />
+            </button>
+          </div>
+        )}
         {/*
           A FAIXA DA CITAÇÃO — o que o atendente escolheu responder.
 
@@ -259,9 +246,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           relê-la — ela está logo acima, no fio.
         */}
         {respondendo && mode === "reply" && (
-          <div className="mb-1 flex items-start gap-2 rounded-md border-l-2 border-primary bg-muted/60 px-2 py-1.5">
+          <div className="bg-background/80 mb-2 flex items-start gap-2 rounded-lg border-l-4 border-primary px-3 py-2">
             <div className="min-w-0 flex-1">
-              <div className="text-[11px] font-medium text-primary">
+              <div className="text-xs font-medium text-primary">
                 {respondendo.direction === "outbound" ? t("Você") : t("Cliente")}
               </div>
               <div className="line-clamp-2 text-xs text-muted-foreground">
@@ -272,91 +259,99 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               type="button"
               onClick={onCancelarResposta}
               aria-label={t("Cancelar resposta")}
-              className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              <X className="size-4" />
+              <X size={16} aria-hidden />
             </button>
           </div>
         )}
-        <div className="flex items-end gap-2">
-          {mode === "reply" && (
-            <AttachMenu
-              disabled={respostaBarrada}
-              onPick={setPendingFile}
-              onPickContact={() => setContactPickerOpen(true)}
-            />
+        <div className="flex items-end gap-1.5">
+          {!gravando && (
+            <>
+              <MenuDeOpcoes
+                conversationId={conversationId}
+                modo={mode}
+                respostaBarrada={respostaBarrada}
+                desabilitado={!!disabled || upload.isPending}
+                onArquivo={setPendingFile}
+                onContato={() => setContactPickerOpen(true)}
+                onMensagensProntas={() => {
+                  setText("/");
+                  setMenuDismissed(false);
+                  requestAnimationFrame(() => taRef.current?.focus());
+                }}
+                onRascunho={applyDraft}
+                onAlternarNota={() => setMode((m) => (m === "note" ? "reply" : "note"))}
+              />
+              <EmojiButton
+                disabled={isDisabled}
+                onPick={(emoji) => {
+                  const ta = taRef.current;
+                  if (!ta) {
+                    setText((t) => t + emoji);
+                    return;
+                  }
+                  const start = ta.selectionStart ?? text.length;
+                  const end = ta.selectionEnd ?? text.length;
+                  const next = text.slice(0, start) + emoji + text.slice(end);
+                  setText(next);
+                  requestAnimationFrame(() => {
+                    ta.focus();
+                    ta.selectionStart = ta.selectionEnd = start + emoji.length;
+                    autoresize();
+                  });
+                }}
+              />
+              <textarea
+                ref={taRef}
+                value={text}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  if (!resolveSlash(e.target.value).open) setMenuDismissed(false);
+                  autoresize();
+                }}
+                onKeyDown={onKeyDown}
+                onPaste={onPaste}
+                rows={1}
+                // "(só o time vê)" FICA no placeholder da nota: não é atalho, é
+                // consequência. Quem escreve uma nota interna precisa saber que
+                // ela não vai para o cliente. Os atalhos moram no `title` e no
+                // diálogo `?`.
+                placeholder={
+                  mode === "note"
+                    ? t("Escreva uma nota interna… (só o time vê)")
+                    : t("Digite uma mensagem")
+                }
+                title={
+                  mode === "note"
+                    ? t("Enter salva a nota · Shift+Enter quebra linha")
+                    : t("Enter envia · Shift+Enter quebra linha")
+                }
+                className={cn(
+                  "max-h-40 min-h-10 min-w-0 flex-1 resize-none rounded-lg border-0 bg-background px-3.5 py-2.5 text-[15px] leading-5 shadow-[0_1px_0.5px_rgb(11_20_26/0.06)]",
+                  "placeholder:text-muted-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                )}
+                disabled={mode === "note" ? isDisabled : respostaBarrada}
+                aria-label={t("Mensagem")}
+              />
+            </>
           )}
-          {mode === "reply" && (
-            <DraftReplyButton conversationId={conversationId} disabled={isDisabled} onDraft={applyDraft} />
-          )}
-          <EmojiButton
-            disabled={isDisabled}
-            onPick={(emoji) => {
-              const ta = taRef.current;
-              if (!ta) {
-                setText((t) => t + emoji);
-                return;
-              }
-              const start = ta.selectionStart ?? text.length;
-              const end = ta.selectionEnd ?? text.length;
-              const next = text.slice(0, start) + emoji + text.slice(end);
-              setText(next);
-              requestAnimationFrame(() => {
-                ta.focus();
-                ta.selectionStart = ta.selectionEnd = start + emoji.length;
-                autoresize();
-              });
-            }}
-          />
-          <textarea
-            ref={taRef}
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              if (!resolveSlash(e.target.value).open) setMenuDismissed(false);
-              autoresize();
-            }}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-            rows={1}
-            // O atalho saiu do placeholder e foi para o diálogo de atalhos (`?`)
-            // e para o `title` aqui. Dois motivos, nesta ordem: ele some assim
-            // que se digita a primeira letra — isto é, some justamente quando
-            // você ia quebrar linha —; e, com a coluna do inbox mais estreita
-            // depois do conserto do layout, a frase quebrava em duas linhas
-            // dentro de um campo de uma linha só.
-            //
-            // "(só o time vê)" FICA: não é atalho, é consequência. Quem escreve
-            // uma nota interna precisa saber que ela não vai para o cliente, e
-            // essa informação não pode depender de abrir um diálogo.
-            placeholder={
-              mode === "note" ? t("Escreva uma nota interna… (só o time vê)") : t("Escreva uma mensagem…")
-            }
-            title={
-              mode === "note"
-                ? t("Enter salva a nota · Shift+Enter quebra linha")
-                : t("Enter envia · Shift+Enter quebra linha")
-            }
-            className={cn(
-              "min-h-9 max-h-40 flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm",
-              "placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring",
-            )}
-            disabled={mode === "note" ? isDisabled : respostaBarrada}
-            aria-label={t("Mensagem")}
-          />
-          {text.trim() || mode === "note" ? (
-            <Button
+          {!gravando && (text.trim() || mode === "note") ? (
+            <button
               type="button"
-              size="icon"
-              className="h-9 w-9 shrink-0"
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground shadow-sm transition-transform hover:scale-105 active:scale-95 disabled:scale-100 disabled:opacity-40"
               onClick={handleSubmit}
               disabled={(mode === "note" ? isDisabled : respostaBarrada) || !text.trim()}
               aria-label={t("Enviar")}
             >
-              <PaperPlaneTilt size={16} weight="fill" aria-hidden />
-            </Button>
+              <PaperPlaneTilt size={20} weight="fill" aria-hidden />
+            </button>
           ) : (
-            <AudioRecorder conversationId={conversationId} disabled={respostaBarrada} />
+            <AudioRecorder
+              conversationId={conversationId}
+              disabled={respostaBarrada}
+              onGravandoChange={setGravando}
+            />
           )}
         </div>
       </div>

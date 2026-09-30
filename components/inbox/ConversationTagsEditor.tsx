@@ -43,7 +43,7 @@ export function ConversationTagsEditor({ conversationId, orgId, tags }: Props) {
 
   return (
     <section>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <h3 className="text-sm text-muted-foreground">
         {t("Tags da conversa")}
       </h3>
 

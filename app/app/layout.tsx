@@ -207,19 +207,30 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       */}
       <div data-marca-org="" className="contents">
         <EstiloDaMarcaDaOrganizacao css={cssDaOrganizacao} />
-        <ImpersonateBanner impersonating={impersonating} />
-        <ConexaoCaidaBanner caidas={conexoesCaidas} />
-        {avisoDeAssinatura && activeOrg?.role === "admin" && (
-          <AvisoDeAssinatura estado={avisoDeAssinatura} />
-        )}
-        {needsMfaGate ? (
-          // Gate always mounted for MFA-required roles; it latches the blocking
-          // decision client-side so the enroll Server Action's revalidation
-          // can't tear down the recovery-codes screen mid-flow.
-          <MfaEnrollGate enrolled={enrolled}>{shell}</MfaEnrollGate>
-        ) : (
-          shell
-        )}
+        {/*
+          OS AVISOS E A CASCA DIVIDEM A MESMA ALTURA DA JANELA. Antes a casca
+          tinha `h-dvh` sozinha e os avisos (número desconectado, assinatura,
+          impersonação) ficavam EM CIMA dela — a página passava a janela na
+          altura do aviso, rolava, e o campo de escrever do inbox saía da tela.
+          Medido: 47px de rolagem com um número desconectado.
+        */}
+        <div className="flex h-dvh flex-col overflow-hidden">
+          <ImpersonateBanner impersonating={impersonating} />
+          <ConexaoCaidaBanner caidas={conexoesCaidas} />
+          {avisoDeAssinatura && activeOrg?.role === "admin" && (
+            <AvisoDeAssinatura estado={avisoDeAssinatura} />
+          )}
+          <div className="min-h-0 flex-1">
+            {needsMfaGate ? (
+              // Gate always mounted for MFA-required roles; it latches the blocking
+              // decision client-side so the enroll Server Action's revalidation
+              // can't tear down the recovery-codes screen mid-flow.
+              <MfaEnrollGate enrolled={enrolled}>{shell}</MfaEnrollGate>
+            ) : (
+              shell
+            )}
+          </div>
+        </div>
       </div>
     </AuthProvider>
     </IdiomaProvider>

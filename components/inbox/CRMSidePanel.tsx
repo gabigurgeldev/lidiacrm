@@ -7,13 +7,12 @@ import Link from "next/link";
 import { useT } from "@/hooks/i18n/useT";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { Card } from "@/components/ui/card";
 import { AvatarDoContato } from "@/components/inbox/AvatarDoContato";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
-import { Tag, Receipt, Users, ArrowRight } from "@/lib/ui/icons";
+import { Tag, Receipt, Users, ArrowRight, FilePdf, FileXls, X } from "@/lib/ui/icons";
+import { DataDeNascimentoInline } from "./DataDeNascimentoInline";
 import { apiClient } from "@/lib/api/client";
 import { toast } from "sonner";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
@@ -30,6 +29,8 @@ import { phoneForDisplay } from "@/lib/channels/phone-variants";
 
 interface Props {
   conversation: ConversationWithContact | null;
+  /** Fecha o painel (o X do topo, como no WhatsApp). */
+  onFechar?: () => void;
 }
 
 interface LeadRow {
@@ -178,12 +179,7 @@ function MarcarProximoPasso({ demandaId, onPronto }: { demandaId: string; onPron
         >
           {salvando ? t("Salvando…") : t("Salvar")}
         </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 text-xs"
-          onClick={() => setAberto(false)}
-        >
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setAberto(false)}>
           {t("Cancelar")}
         </Button>
       </div>
@@ -195,9 +191,7 @@ function formatMoney(cents: number | null, currency: string | null): string {
   if (cents == null) return "—";
   const cur = currency ?? "BRL";
   try {
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: cur }).format(
-      cents / 100,
-    );
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: cur }).format(cents / 100);
   } catch {
     return `${(cents / 100).toFixed(2)} ${cur}`;
   }
@@ -274,7 +268,7 @@ function InboxLeadEditor({
                   onClick={() => onSelecionar(l.id)}
                   className={cn(
                     "w-full rounded-md border p-2 text-left text-xs",
-                    marcado ? "border-accent bg-accent/10" : "border-border",
+                    marcado ? "bg-accent/10 border-accent" : "border-border",
                   )}
                 >
                   <div className="truncate font-medium">{l.title}</div>
@@ -322,7 +316,9 @@ function CamposDoFunil({
   const [customFields, setCustomFields] = useState(valores);
 
   if (fieldDefs.length === 0) {
-    return <p className="text-xs text-muted-foreground">{t("Este funil não tem campos extras.")}</p>;
+    return (
+      <p className="text-xs text-muted-foreground">{t("Este funil não tem campos extras.")}</p>
+    );
   }
 
   async function salvar() {
@@ -356,7 +352,7 @@ function CamposDoFunil({
   );
 }
 
-export function CRMSidePanel({ conversation }: Props) {
+export function CRMSidePanel({ conversation, onFechar }: Props) {
   const localeDaData = useLocaleDeData();
   const t = useT();
   const contact = conversation?.contacts ?? null;
@@ -486,74 +482,118 @@ export function CRMSidePanel({ conversation }: Props) {
   }
 
   return (
-    <aside className="flex h-full flex-col gap-4 overflow-y-auto border-l border-border bg-background p-4">
-      <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {t("Contato")}
-        </h3>
-        <Card className="mt-2 space-y-2 p-3 text-sm">
-          {/* O TERCEIRO lugar onde o rosto aparece — a lista, o cabeçalho e
-              aqui. Este painel responde "quem é essa pessoa?", e era o único dos
-              três que respondia sem mostrar a cara dela. */}
-          <div className="flex items-center gap-2.5">
-            <AvatarDoContato
-              contactId={contactId}
-              temFoto={Boolean(contact?.avatar_storage_path)}
-              anonimizado={contact?.is_anonymized}
-              nome={displayName}
-              className="h-11 w-11 shrink-0"
-              tamanhoDoIcone={20}
-            />
-            <div className="min-w-0">
-              <div className="truncate font-medium">{displayName}</div>
-              {contact?.phone_number && (
-                <div className="truncate text-xs text-muted-foreground">
-                  {phoneForDisplay(contact.phone_number)}
-                </div>
-              )}
-            </div>
+    // "DADOS DO CONTATO" no desenho do WhatsApp: fundo cinza, e cada assunto num
+    // bloco branco separado por uma faixa cinza — o olho acha a seção pelo
+    // bloco, sem precisar de linha divisória nem de título gritando.
+    <aside className="flex h-full flex-col gap-2 overflow-y-auto border-l border-border/60 bg-[var(--inbox-barra)]">
+      <div className="sticky top-0 z-10 flex h-[60px] shrink-0 items-center gap-5 bg-[var(--inbox-barra)] px-5">
+        {onFechar && (
+          <button
+            type="button"
+            onClick={onFechar}
+            aria-label={t("Fechar dados do contato")}
+            className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground"
+          >
+            <X size={20} aria-hidden />
+          </button>
+        )}
+        <h2 className="text-base font-medium">{t("Dados do contato")}</h2>
+      </div>
+
+      <section className="flex flex-col items-center gap-1 bg-background px-6 pb-6 pt-7 text-center">
+        <AvatarDoContato
+          contactId={contactId}
+          temFoto={Boolean(contact?.avatar_storage_path)}
+          anonimizado={contact?.is_anonymized}
+          nome={displayName}
+          className="mb-3 h-40 w-40"
+          tamanhoDoIcone={72}
+        />
+        <div className="max-w-full truncate text-2xl leading-8">{displayName}</div>
+        {contact?.phone_number && (
+          <div className="max-w-full truncate text-base text-muted-foreground">
+            {phoneForDisplay(contact.phone_number)}
           </div>
-          {tags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {tags.map((t) => (
-                <Badge key={t} variant="secondary" className="h-4 px-1.5 text-[10px]">
-                  {t}
-                </Badge>
-              ))}
-            </div>
-          )}
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-2 text-xs"
-              disabled={!contactId}
-              aria-pressed={tagEditorOpen}
-              onClick={() => setTagEditorOpen((v) => !v)}
-            >
-              <Tag size={12} className="mr-1" weight="regular" aria-hidden /> {t("Tag")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 px-2 text-xs"
-              disabled={!contactId || (leadDialogOpen && defaultPipeline.isLoading)}
-              onClick={() => setLeadDialogOpen(true)}
-            >
-              <Users size={12} className="mr-1" weight="regular" aria-hidden />
-              {leadDialogOpen && defaultPipeline.isLoading ? t("Carregando…") : t("Lead")}
-            </Button>
-            {contactId && (
-              <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
-                <Link href={`/app/contacts/${contactId}`}>
-                  {t("Ver contato")}
-                  <ArrowRight size={12} className="ml-1" weight="regular" aria-hidden />
-                </Link>
-              </Button>
-            )}
+        )}
+        {tags.length > 0 && (
+          <div className="mt-2 flex flex-wrap justify-center gap-1">
+            {tags.map((t) => (
+              <Badge key={t} variant="secondary" className="h-5 px-2 text-[11px] font-normal">
+                {t}
+              </Badge>
+            ))}
           </div>
-          {tagEditorOpen && contactId && <ContactTagsEditor contactId={contactId} tags={tags} />}
-        </Card>
+        )}
+        {/* Ações em cartões com ícone e rótulo embaixo, como os atalhos do
+            perfil do WhatsApp (Áudio · Vídeo · Pesquisar). */}
+        <div className="mt-5 grid w-full grid-cols-3 gap-2">
+          <button
+            type="button"
+            disabled={!contactId}
+            aria-pressed={tagEditorOpen}
+            onClick={() => setTagEditorOpen((v) => !v)}
+            className="flex flex-col items-center gap-1.5 rounded-xl border border-border/70 py-3 text-xs text-foreground transition-colors hover:bg-surface-elevated aria-pressed:bg-accent-soft aria-pressed:text-accent disabled:opacity-40"
+          >
+            <Tag size={20} className="text-accent" aria-hidden />
+            {t("Tag")}
+          </button>
+          <button
+            type="button"
+            disabled={!contactId || (leadDialogOpen && defaultPipeline.isLoading)}
+            onClick={() => setLeadDialogOpen(true)}
+            className="flex flex-col items-center gap-1.5 rounded-xl border border-border/70 py-3 text-xs text-foreground transition-colors hover:bg-surface-elevated disabled:opacity-40"
+          >
+            <Users size={20} className="text-accent" aria-hidden />
+            {leadDialogOpen && defaultPipeline.isLoading ? t("Carregando…") : t("Lead")}
+          </button>
+          {contactId ? (
+            <Link
+              href={`/app/contacts/${contactId}`}
+              className="flex flex-col items-center gap-1.5 rounded-xl border border-border/70 py-3 text-xs text-foreground transition-colors hover:bg-surface-elevated"
+            >
+              <ArrowRight size={20} className="text-accent" aria-hidden />
+              {t("Ver contato")}
+            </Link>
+          ) : null}
+        </div>
+        {tagEditorOpen && contactId && (
+          <div className="mt-3 w-full text-left">
+            <ContactTagsEditor contactId={contactId} tags={tags} />
+          </div>
+        )}
+      </section>
+
+      {contactId && (
+        <section className="bg-background px-6 py-4">
+          {/* `key`: trocar de conversa reabre o campo com a data DAQUELE contato. */}
+          <DataDeNascimentoInline
+            key={contactId}
+            contactId={contactId}
+            valor={contact?.birthdate ?? null}
+          />
+        </section>
+      )}
+
+      <section className="bg-background px-6 py-4">
+        <h3 className="mb-2 text-sm text-muted-foreground">{t("Exportar conversa")}</h3>
+        <div className="flex flex-col">
+          <a
+            href={`/api/v1/conversations/${conversation.id}/export?formato=pdf`}
+            download
+            className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 text-sm transition-colors hover:bg-surface-elevated"
+          >
+            <FilePdf size={22} className="text-destructive" aria-hidden />
+            <span className="flex-1">{t("Exportar conversa em PDF")}</span>
+          </a>
+          <a
+            href={`/api/v1/conversations/${conversation.id}/export?formato=xlsx`}
+            download
+            className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 text-sm transition-colors hover:bg-surface-elevated"
+          >
+            <FileXls size={22} className="text-accent" aria-hidden />
+            <span className="flex-1">{t("Exportar conversa em Excel")}</span>
+          </a>
+        </div>
       </section>
 
       {contactId && defaultPipeline.data && (
@@ -570,22 +610,22 @@ export function CRMSidePanel({ conversation }: Props) {
         />
       )}
 
-      <Separator />
 
-      <ConversationTagsEditor
-        conversationId={conversation.id}
-        orgId={conversation.organization_id}
-        tags={conversation.tags ?? []}
-      />
+      <section className="bg-background px-6 py-4">
+        <ConversationTagsEditor
+          conversationId={conversation.id}
+          orgId={conversation.organization_id}
+          tags={conversation.tags ?? []}
+        />
+      </section>
 
-      <Separator />
 
       {/* ANTES dos negócios de propósito (doutrina cap. 5): lead é o negócio,
           conversa é o canal, demanda é o que precisa acabar. Quem abre esta
           conversa está atendendo alguém que pediu alguma coisa — a primeira
           pergunta a responder é o que ainda está pendente, não quanto vale. */}
-      <section data-testid="inbox-demandas">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <section data-testid="inbox-demandas" className="bg-background px-6 py-4">
+        <h3 className="text-sm text-muted-foreground">
           {t("Demandas abertas")}
         </h3>
         {sectionsLoading ? (
@@ -634,10 +674,9 @@ export function CRMSidePanel({ conversation }: Props) {
         )}
       </section>
 
-      <Separator />
 
-      <section data-testid="inbox-campos-lead">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <section data-testid="inbox-campos-lead" className="bg-background px-6 py-4">
+        <h3 className="text-sm text-muted-foreground">
           {t("Leads recentes")}
         </h3>
         {sectionsLoading ? (
@@ -650,14 +689,17 @@ export function CRMSidePanel({ conversation }: Props) {
             onSalvo={recarregar}
           />
         ) : (
-          <SemLista vazio="Sem leads." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
+          <SemLista
+            vazio="Sem leads."
+            erro={erro}
+            onTentarDeNovo={() => setTentativa((n) => n + 1)}
+          />
         )}
       </section>
 
-      <Separator />
 
-      <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <section className="bg-background px-6 py-4">
+        <h3 className="text-sm text-muted-foreground">
           {t("Pedidos recentes")}
         </h3>
         {sectionsLoading ? (
@@ -682,14 +724,17 @@ export function CRMSidePanel({ conversation }: Props) {
             ))}
           </ul>
         ) : (
-          <SemLista vazio="Sem pedidos." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
+          <SemLista
+            vazio="Sem pedidos."
+            erro={erro}
+            onTentarDeNovo={() => setTentativa((n) => n + 1)}
+          />
         )}
       </section>
 
-      <Separator />
 
-      <section>
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <section className="bg-background px-6 py-4">
+        <h3 className="text-sm text-muted-foreground">
           {t("Atividade")}
         </h3>
         {sectionsLoading ? (
@@ -715,15 +760,22 @@ export function CRMSidePanel({ conversation }: Props) {
                   />
                   {t(activityLabel(a.type))}
                 </div>
-                {a.reason && <div className="mt-0.5 truncate text-muted-foreground">{a.reason}</div>}
+                {a.reason && (
+                  <div className="mt-0.5 truncate text-muted-foreground">{a.reason}</div>
+                )}
                 <div className="text-muted-foreground">
-                  {a.performed_by_name ?? t(actorLabel(a.actor_kind))} · {shortDate(a.performed_at, localeDaData)}
+                  {a.performed_by_name ?? t(actorLabel(a.actor_kind))} ·{" "}
+                  {shortDate(a.performed_at, localeDaData)}
                 </div>
               </li>
             ))}
           </ul>
         ) : (
-          <SemLista vazio="Sem atividade." erro={erro} onTentarDeNovo={() => setTentativa((n) => n + 1)} />
+          <SemLista
+            vazio="Sem atividade."
+            erro={erro}
+            onTentarDeNovo={() => setTentativa((n) => n + 1)}
+          />
         )}
       </section>
     </aside>

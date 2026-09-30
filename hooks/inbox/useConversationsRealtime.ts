@@ -25,6 +25,8 @@ export interface ContactSummary {
    * esperar o cron. Ausente = resposta em cache de antes do campo existir.
    */
   avatar_updated_at?: string | null;
+  /** Data de nascimento (`YYYY-MM-DD`), editável no painel do contato. */
+  birthdate?: string | null;
   /**
    * A trava irrevogável pelo agente: ligada, NENHUM envio automático sai (o
    * guard de before-send lê esta coluna). É o sinal mais honesto de "a pessoa

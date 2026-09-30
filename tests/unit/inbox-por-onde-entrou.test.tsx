@@ -46,16 +46,19 @@ const pintar = (conv: ConversationWithContact, mostrarCanal: boolean) =>
   );
 
 describe("mostra o número da empresa quando há mais de um canal", () => {
-  it("pinta o número por onde a conversa entrou", () => {
+  // Desde o visual de mensageiro (2026-09-29) a linha mostra o SELO do tipo
+  // de conexão, e o número vai no `title` — escrito por extenso em toda linha
+  // ele era a "fileira de selos" que fazia a lista parecer planilha.
+  it("indica o número por onde a conversa entrou", () => {
     pintar(comCanal({ phone_number: "+19392301037", display_name: "MP wp" }), true);
-    expect(screen.getByText("+19392301037")).toBeInTheDocument();
+    expect(screen.getByTitle("Entrou por +19392301037")).toBeInTheDocument();
   });
 
   it("cai no NOME do canal quando ainda não há número", () => {
     // Canal recém-conectado pode não ter número resolvido; mostrar nada seria
     // pior que mostrar como ele se chama.
     pintar(comCanal({ phone_number: null, display_name: "Canal novo" }), true);
-    expect(screen.getByText("Canal novo")).toBeInTheDocument();
+    expect(screen.getByTitle("Entrou por Canal novo")).toBeInTheDocument();
   });
 
   it("explica o rótulo no title — o número solto não diz o que é", () => {
@@ -75,7 +78,7 @@ describe("mostra o número da empresa quando há mais de um canal", () => {
 describe("NÃO mostra quando não ajuda", () => {
   it("com um canal só — seria a mesma palavra em toda linha", () => {
     pintar(comCanal({ phone_number: "+19392301037", display_name: "MP wp" }), false);
-    expect(screen.queryByText("+19392301037")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Entrou por +19392301037")).not.toBeInTheDocument();
   });
 
   it("sem canal no payload não quebra a linha", () => {

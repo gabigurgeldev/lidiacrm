@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getAdapter } from "@/lib/channels";
-import { sessaoAtivaDaOrg, type SessaoAtiva } from "@/lib/channels/sessao-ativa";
+import { phoneLookupVariants } from "@/lib/channels/phone-variants";
+import {
+  sessaoAtivaDaOrg,
+  sessaoDaConversaDoContato,
+  type SessaoAtiva,
+} from "@/lib/channels/sessao-ativa";
 import { logger } from "@/lib/logger";
 
 /**
@@ -40,7 +45,12 @@ export interface ContatoParaAvatar {
   readonly id: string;
   readonly organization_id: string;
   readonly wa_identity: string | null;
+  /** Endereço opaco do WhatsApp — responde mesmo com privacidade de número. */
+  readonly wa_lid?: string | null;
 }
+
+/** Uma pergunta ao canal não pode segurar o lote inteiro. */
+const TEMPO_MAXIMO_DA_PERGUNTA_MS = 8_000;
 
 export type ResultadoDoAvatar = "atualizado" | "sem_foto" | "falhou";
 
@@ -49,6 +59,47 @@ export function chatIdDaIdentidade(identity: string): string | null {
   if (identity.startsWith("lid:")) return `${identity.slice(4)}@lid`;
   if (identity.startsWith("phone:")) return `${identity.slice(6).replace(/\D/g, "")}@c.us`;
   return null;
+}
+
+/**
+ * Os endereços pelos quais perguntar a foto, na ordem em que costumam responder.
+ *
+ * Medido em produção (2026-09-29), no mesmo contato e na mesma conexão:
+ * `55 94 9xxxx-xxxx@c.us` (COM o nono dígito, como o CRM grava) devolveu
+ * `profilePictureURL: null`; SEM o nono dígito e pelo `@lid` devolveram a foto.
+ * O WhatsApp registra muito celular brasileiro sem o 9 — perguntar só pela forma
+ * canônica deixava ~90% dos contatos na silhueta.
+ *
+ * Ordem: `@lid` (responde mesmo com privacidade de número), depois o telefone
+ * SEM o nono dígito, depois COM. O primeiro que devolver foto vence.
+ */
+export function enderecosParaFoto(c: Pick<ContatoParaAvatar, "wa_identity" | "wa_lid">): string[] {
+  const saida: string[] = [];
+  const lid = (c.wa_lid ?? "").replace(/@.*$/, "").trim();
+  if (lid) saida.push(`${lid}@lid`);
+
+  const identidade = c.wa_identity ?? "";
+  if (identidade.startsWith("lid:")) {
+    saida.push(`${identidade.slice(4)}@lid`);
+  } else if (identidade.startsWith("phone:")) {
+    const variantes = phoneLookupVariants(identidade.slice(6)).map((v) => v.replace(/\D/g, ""));
+    // A mais curta é a sem o nono dígito.
+    variantes.sort((a, b) => a.length - b.length);
+    for (const v of variantes) saida.push(`${v}@c.us`);
+  }
+  return [...new Set(saida)];
+}
+
+async function comTempoMaximo<T>(p: Promise<T>): Promise<T | null> {
+  let relogio: ReturnType<typeof setTimeout> | undefined;
+  const limite = new Promise<null>((resolve) => {
+    relogio = setTimeout(() => resolve(null), TEMPO_MAXIMO_DA_PERGUNTA_MS);
+  });
+  try {
+    return await Promise.race([p, limite]);
+  } finally {
+    clearTimeout(relogio);
+  }
 }
 
 export async function sincronizarAvatar(
@@ -64,7 +115,7 @@ export async function sincronizarAvatar(
    */
   sessaoPreferida?: SessaoAtiva,
 ): Promise<ResultadoDoAvatar> {
-  const chatId = contato.wa_identity ? chatIdDaIdentidade(contato.wa_identity) : null;
+  const enderecos = enderecosParaFoto(contato);
 
   /**
    * Carimba mesmo sem conseguir resolver o chatId: sem isso o contato voltaria
@@ -92,13 +143,18 @@ export async function sincronizarAvatar(
     return (afetadas ?? []).length > 0;
   };
 
-  if (!chatId) {
+  if (enderecos.length === 0) {
     await carimbar(null);
     return "sem_foto";
   }
 
   try {
-    const sessao = sessaoPreferida ?? (await sessaoAtivaDaOrg(admin, contato.organization_id));
+    // O canal em que o contato FALA sabe a foto dele; outro canal da org não.
+    // O cron não tem a conversa em mãos, então a busca é feita aqui.
+    const sessao =
+      sessaoPreferida ??
+      (await sessaoDaConversaDoContato(admin, contato.organization_id, contato.id)) ??
+      (await sessaoAtivaDaOrg(admin, contato.organization_id));
     if (!sessao) {
       await carimbar(null);
       return "sem_foto";
@@ -112,18 +168,26 @@ export async function sincronizarAvatar(
       return "sem_foto";
     }
 
-    const profilePictureURL = await adapter.fetchProfilePictureUrl({
-      organizationId: contato.organization_id,
-      sessionRef: sessao.sessionRef,
-      recipient: chatId,
-    });
+    let profilePictureURL: string | null = null;
+    for (const recipient of enderecos) {
+      profilePictureURL = await comTempoMaximo(
+        adapter.fetchProfilePictureUrl({
+          organizationId: contato.organization_id,
+          sessionRef: sessao.sessionRef,
+          recipient,
+        }),
+      );
+      if (profilePictureURL) break;
+    }
     if (!profilePictureURL) {
       // Contato sem foto ou com privacidade fechada: estado normal, não erro.
       await carimbar(null);
       return "sem_foto";
     }
 
-    const img = await fetch(profilePictureURL);
+    const img = await fetch(profilePictureURL, {
+      signal: AbortSignal.timeout(TEMPO_MAXIMO_DA_PERGUNTA_MS),
+    });
     if (!img.ok) {
       await carimbar(null);
       return "falhou";

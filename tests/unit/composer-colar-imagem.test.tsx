@@ -137,7 +137,9 @@ describe("Composer — colar imagem", () => {
 
   it("em 'Nota interna' colar imagem não vira anexo — nota é só texto", () => {
     renderComposer();
-    fireEvent.click(screen.getByRole("button", { name: /nota interna/i }));
+    // A nota se liga pelo menu de opções ("+"), não por uma pílula fixa.
+    fireEvent.click(screen.getByRole("button", { name: /anexar/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /nota interna/i }));
     const seguiu = fireEvent.paste(campo(), { clipboardData: clipboard({ files: [png()] }) });
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -146,7 +148,6 @@ describe("Composer — colar imagem", () => {
 
   it("com anexo já em preview, colar não substitui em silêncio o que o operador escolheu", async () => {
     renderComposer();
-    fireEvent.click(screen.getByRole("button", { name: /anexar/i }));
     const inputDoc = document.querySelector('input[accept^=".pdf"]') as HTMLInputElement;
     const doc = new File([new Uint8Array([1])], "contrato-assinado.pdf", { type: "application/pdf" });
     fireEvent.change(inputDoc, { target: { files: [doc] } });

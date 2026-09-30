@@ -182,4 +182,9 @@ export {
   ArrowLeft,
   // Configurações › Aniversários (mensagem de parabéns automática)
   Cake,
+  // Inbox: mensagens prontas no menu de opções; exportar a conversa
+  Lightning,
+  FilePdf,
+  FileXls,
+  Stop,
 } from "@phosphor-icons/react/dist/ssr";

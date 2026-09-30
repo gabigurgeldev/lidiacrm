@@ -49,7 +49,9 @@ export function AvatarDoContato({
   const mostrar = Boolean(contactId) && temFoto && !anonimizado;
 
   return (
-    <Avatar className={cn("bg-surface-elevated", className)}>
+    // Cinza-azulado do WhatsApp, e não o cinza da superfície: numa linha
+    // selecionada (que usa o cinza da superfície) o círculo sumia no fundo.
+    <Avatar className={cn("bg-[#dfe5e7]", className)}>
       {/*
         Só monta a <img> quando existe arquivo: sem isso o browser pediria a rota
         para TODO contato da lista e levaria 404 em cada um sem foto — que é a
@@ -63,7 +65,7 @@ export function AvatarDoContato({
           className="object-cover"
         />
       ) : null}
-      <AvatarFallback className="bg-transparent text-text-subtle">
+      <AvatarFallback className="bg-transparent text-white">
         <User size={tamanhoDoIcone} weight="fill" aria-hidden />
       </AvatarFallback>
     </Avatar>

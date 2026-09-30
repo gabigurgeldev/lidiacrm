@@ -35,10 +35,17 @@ export const dynamic = "force-dynamic";
 const SCAN_LIMIT = 25;
 /** Revisita a foto a cada 7 dias — gente troca de foto, mas não toda hora. */
 const REFRESH_AFTER_DAYS = 7;
+/**
+ * Orçamento de tempo da rodada. O scheduler desiste em 60s; com até três
+ * endereços por contato, 25 contatos lentos passariam disso. O que sobrar fica
+ * para a próxima rodada, com `avatar_updated_at` ainda nulo.
+ */
+const ORCAMENTO_MS = 45_000;
 interface ContactRow {
   id: string;
   organization_id: string;
   wa_identity: string | null;
+  wa_lid: string | null;
   avatar_storage_path: string | null;
 }
 
@@ -64,8 +71,12 @@ async function handle(req: NextRequest): Promise<Response> {
   // declarada irreversível no produto; esta linha é o que sustenta isso.
   const { data: contatos, error: queryError } = await admin
     .from("contacts")
-    .select("id, organization_id, wa_identity, avatar_storage_path")
+    .select("id, organization_id, wa_identity, wa_lid, avatar_storage_path")
     .not("wa_identity", "is", null)
+    // Só quem já conversou. Contato importado de planilha que nunca falou pelo
+    // WhatsApp ocupava a fila à frente dos clientes da Caixa de entrada — medido
+    // em produção: 363 de 663 importados sem conversa nenhuma.
+    .not("last_activity_at", "is", null)
     .eq("is_anonymized", false)
     .or(`avatar_updated_at.is.null,avatar_updated_at.lt.${cutoff}`)
     .order("avatar_updated_at", { ascending: true, nullsFirst: true })
@@ -92,7 +103,11 @@ async function handle(req: NextRequest): Promise<Response> {
   //
   // O comportamento deste cron não mudou em nada: mesma ordem, mesmo lote, mesma
   // contagem de saída.
+  const inicio = Date.now();
+  let varridos = 0;
   for (const c of rows) {
+    if (Date.now() - inicio > ORCAMENTO_MS) break;
+    varridos++;
     const resultado = await sincronizarAvatar(admin, c, { requestId });
     if (resultado === "atualizado") atualizados++;
     else if (resultado === "sem_foto") semFoto++;
@@ -100,7 +115,7 @@ async function handle(req: NextRequest): Promise<Response> {
   }
 
   return ok(
-    { scanned: rows.length, updated: atualizados, no_picture: semFoto, failed: falhas },
+    { scanned: varridos, updated: atualizados, no_picture: semFoto, failed: falhas },
     { requestId },
   );
 }

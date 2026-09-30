@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { ConversationHeader } from "@/components/inbox/ConversationHeader";
@@ -102,27 +102,26 @@ describe("header do inbox — não trava a largura da tela", () => {
     expect(acoes.className).toContain("min-w-0");
   });
 
-  it("as ações continuam TODAS no header — reorganizar não é esconder", () => {
+  it("a ação principal fica à vista; as outras moram no ⋮ — nenhuma some", async () => {
     renderHeader();
-    // Se um dia alguém "resolver" o aperto colapsando ações num menu, este caso
-    // reprova. Esconder ação de quem atende é pior que uma segunda linha.
-    for (const rotulo of ["Assumir", "Transferir", "Fechar"]) {
-      expect(screen.getByText(rotulo), `a ação "${rotulo}" sumiu do header`).toBeTruthy();
+    // Decisão do dono (2026-09-29): cabeçalho de mensageiro, sem poluição —
+    // só a ação que a conversa pede agora na barra, e o resto no ⋮. A regra
+    // que vale continua sendo "nenhuma ação some": cada uma tem que estar no
+    // menu, a um clique.
+    expect(screen.getByRole("button", { name: "Assumir" })).toBeTruthy();
+    const menu = screen.getByTestId("menu-acoes-conversa");
+    fireEvent.keyDown(menu, { key: "Enter" });
+    for (const rotulo of ["Transferir", "Lembrar", "Ativar fluxo", "Ver contato", "Fechar conversa"]) {
+      expect(await screen.findByText(rotulo), `a ação "${rotulo}" sumiu do ⋮`).toBeTruthy();
     }
   });
 
-  it('"Ver contato" existe no DOM e só se cala onde há outra porta', () => {
+  it("exportar a conversa em PDF e Excel está no ⋮, apontando para a rota de exportação", async () => {
     renderHeader();
-    // Ele NÃO sai do markup: some por CSS a partir de `xl`, exatamente a largura
-    // em que o painel lateral entra na tela com um "Ver contato" próprio. A
-    // distinção importa — remover do DOM tiraria a ação de quem usa 1024px, que
-    // é onde o painel não existe e esta é a única porta para o contato.
-    const link = screen.getByText("Ver contato").closest("a, button") as HTMLElement;
-    expect(link, "o link para o contato sumiu do markup").toBeTruthy();
-    const classes = `${link.className} ${link.parentElement?.className ?? ""}`;
-    expect(
-      classes,
-      "sem `xl:hidden`, a duplicata volta e o header ganha uma segunda linha em 1280px",
-    ).toContain("xl:hidden");
+    fireEvent.keyDown(screen.getByTestId("menu-acoes-conversa"), { key: "Enter" });
+    const pdf = (await screen.findByTestId("exportar-conversa-pdf")) as HTMLAnchorElement;
+    const xlsx = screen.getByTestId("exportar-conversa-excel") as HTMLAnchorElement;
+    expect(pdf.getAttribute("href")).toBe("/api/v1/conversations/cv-1/export?formato=pdf");
+    expect(xlsx.getAttribute("href")).toBe("/api/v1/conversations/cv-1/export?formato=xlsx");
   });
 });

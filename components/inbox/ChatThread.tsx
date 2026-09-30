@@ -47,8 +47,7 @@ interface Props {
 
 /** Onda 5.2: union de item do thread — mensagem real ou nota interna (nunca vai ao cliente). */
 export type ThreadItem =
-  | { kind: "message"; ts: string; data: Message }
-  | { kind: "note"; ts: string; data: Note };
+  { kind: "message"; ts: string; data: Message } | { kind: "note"; ts: string; data: Note };
 
 /** Intercala mensagens e notas por timestamp asc (puro, sem I/O — testado em thread-merge.test.ts). */
 export function mergeThreadItems(messages: Message[], notes: Note[]): ThreadItem[] {
@@ -62,7 +61,11 @@ export function mergeThreadItems(messages: Message[], notes: Note[]): ThreadItem
   return items;
 }
 
-function dayLabel(d: Date, t: (texto: string) => string = (texto) => texto, locale: Locale): string {
+function dayLabel(
+  d: Date,
+  t: (texto: string) => string = (texto) => texto,
+  locale: Locale,
+): string {
   if (isToday(d)) return t("Hoje");
   if (isYesterday(d)) return t("Ontem");
   return format(d, "dd/MM/yyyy", { locale: locale });
@@ -99,10 +102,7 @@ export function ChatThread({ conversationId, onResponder, canalDaConversa }: Pro
   const canManage = activeOrg != null && ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
   const { enabled: debugCitations } = useDebugToggle(activeOrg?.role ?? null);
 
-  const messages: Message[] = useMemo(
-    () => q.data?.pages.flatMap((p) => p.data) ?? [],
-    [q.data],
-  );
+  const messages: Message[] = useMemo(() => q.data?.pages.flatMap((p) => p.data) ?? [], [q.data]);
 
   /**
    * As mensagens por id, para resolver a CITADA sem ir ao servidor.
@@ -114,10 +114,7 @@ export function ChatThread({ conversationId, onResponder, canalDaConversa }: Pro
    */
   const porId = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
 
-  const items: ThreadItem[] = useMemo(
-    () => mergeThreadItems(messages, notes),
-    [messages, notes],
-  );
+  const items: ThreadItem[] = useMemo(() => mergeThreadItems(messages, notes), [messages, notes]);
 
   const paginas = q.data?.pages.length ?? 0;
 
@@ -240,7 +237,7 @@ export function ChatThread({ conversationId, onResponder, canalDaConversa }: Pro
 
   return (
     <div {...sinalDoCanal} className="inbox-papel flex h-full flex-col">
-      <div ref={scrollerRef} className="nav-rolagem flex-1 overflow-y-auto py-2">
+      <div ref={scrollerRef} className="nav-rolagem flex-1 overflow-y-auto pb-3 pt-2">
         {q.hasNextPage && (
           <div className="flex justify-center py-2">
             <Button
@@ -256,11 +253,11 @@ export function ChatThread({ conversationId, onResponder, canalDaConversa }: Pro
 
         {groups.map((g) => (
           <div key={g.key} className="space-y-1">
-            <div className="sticky top-0 z-10 flex justify-center py-1">
+            <div className="sticky top-0 z-10 flex justify-center py-2">
               {/* OPACO, e não `bg-background/80`: sobre o papel de parede a
                   versão translúcida deixava o padrão passar por dentro do texto
                   da data — o único lugar da tela onde ele competia com leitura. */}
-              <span className="inbox-selo-de-data rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-muted">
+              <span className="inbox-selo-de-data rounded-lg px-3 py-1.5 text-[12.5px] font-medium uppercase text-[var(--bolha-meta)]">
                 {dayLabel(g.date, t, localeDaData)}
               </span>
             </div>

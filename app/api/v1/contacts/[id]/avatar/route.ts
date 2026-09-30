@@ -140,7 +140,7 @@ export async function POST(
   // da sessão, nunca do path (doutrina do CLAUDE.md).
   const { data } = await admin
     .from("contacts")
-    .select("id, organization_id, wa_identity, avatar_updated_at, is_anonymized")
+    .select("id, organization_id, wa_identity, wa_lid, avatar_updated_at, is_anonymized")
     .eq("id", id)
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
@@ -149,6 +149,7 @@ export async function POST(
     id: string;
     organization_id: string;
     wa_identity: string | null;
+    wa_lid: string | null;
     avatar_updated_at: string | null;
     is_anonymized: boolean | null;
   } | null;

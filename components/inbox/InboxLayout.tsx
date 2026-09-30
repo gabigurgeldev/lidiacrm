@@ -30,7 +30,7 @@ import { CONVERSATION_QUEUE_STATUSES } from "@/lib/schemas";
 import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
 import { OpenConversationProvider } from "@/hooks/notifications/OpenConversationContext";
 // ADR-05: ícone de feature sai do mapa canônico, nunca do pacote direto.
-import { CaretLeft, IdentificationCard } from "@/lib/ui/icons";
+import { CaretLeft, ChatCircleText, IdentificationCard } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -137,6 +137,21 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   const [helpOpen, setHelpOpen] = useState(false);
   /** A ficha do contato como painel deslizante — só existe abaixo do `xl`. */
   const [fichaAberta, setFichaAberta] = useState(false);
+  /**
+   * "Dados do contato" como no WhatsApp: FECHADO por padrão, e abre só quando
+   * se clica no cabeçalho da conversa. Aberto sempre, ele comia 300px da
+   * conversa em toda tela — e é consulta, não o lugar onde se trabalha.
+   * Em tela larga (≥1536px) vira terceira coluna; abaixo disso abre por cima
+   * (Sheet) — medido: em 1280 a coluna apertava a conversa a ~300px.
+   */
+  const [perfilAberto, setPerfilAberto] = useState(false);
+  const abrirPerfil = useCallback(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(min-width: 1536px)").matches) {
+      setPerfilAberto((v) => !v);
+    } else {
+      setFichaAberta(true);
+    }
+  }, []);
   /**
    * A mensagem escolhida para responder "em cima".
    *
@@ -320,7 +335,18 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
   return (
     <OpenConversationProvider conversationId={selectedId}>
     <div
-      className="grid h-full w-full grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[272px_1fr_296px] 2xl:grid-cols-[300px_1fr_320px]"
+      // `minmax(0, 1fr)` e a linha `minmax(0, 1fr)`, NUNCA `1fr` puro: `1fr` é
+      // `minmax(auto, 1fr)`, e o `auto` deixa o CONTEÚDO ditar o tamanho. Medido
+      // em produção: um link comprido numa mensagem esticava a coluna da
+      // conversa para fora da tela (a lista aparecia cortada à esquerda e o
+      // painel sumia à direita), e o painel de contato alto empurrava a página
+      // para baixo, deixando meia tela em branco.
+      className={cn(
+        "grid h-full w-full grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden md:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]",
+        perfilAberto &&
+          selectedConversation &&
+          "2xl:grid-cols-[400px_minmax(0,1fr)_400px]",
+      )}
       /*
        * O ESTADO DO TEMPO REAL, LEGÍVEL DE FORA — mesmo par que o dossiê do lead
        * já publica (`LeadDossier`), e pela mesma razão: quando a entrega morre,
@@ -420,9 +446,9 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
                     {t("Ficha")}
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="right" className="w-[min(22rem,90vw)] overflow-y-auto p-0">
+                <SheetContent side="right" className="w-[min(26rem,94vw)] overflow-y-auto p-0">
                   <SheetTitle className="sr-only">{t("Ficha do contato")}</SheetTitle>
-                  <CRMSidePanel conversation={selectedConversation} />
+                  <CRMSidePanel conversation={selectedConversation} onFechar={() => setFichaAberta(false)} />
                 </SheetContent>
               </Sheet>
             )}
@@ -430,7 +456,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         )}
         {selectedConversation ? (
           <>
-            <ConversationHeader conversation={selectedConversation} />
+            <ConversationHeader conversation={selectedConversation} onAbrirPerfil={abrirPerfil} />
             <div className="min-h-0 flex-1 overflow-hidden">
               <ChatThread
                 conversationId={selectedConversation.id}
@@ -469,16 +495,25 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
             {t("Conversa não encontrada ou fora do seu acesso.")}
           </div>
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            {t("Selecione uma conversa")}
+          // O vazio também é chão de conversa — com a textura, e dizendo o que
+          // fazer, em vez de uma frase solta num branco.
+          <div className="inbox-papel flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <span className="flex size-16 items-center justify-center rounded-full bg-background shadow-sm">
+              <ChatCircleText size={30} weight="duotone" className="text-accent" aria-hidden />
+            </span>
+            <p className="text-lg font-medium text-foreground">{t("Selecione uma conversa")}</p>
+            <p className="max-w-xs text-sm text-muted-foreground">
+              {t("Escolha uma conversa na lista ao lado para ver as mensagens e responder.")}
+            </p>
           </div>
         )}
       </div>
 
-      <div className="hidden h-full min-h-0 xl:block">
-        <CRMSidePanel conversation={selectedConversation} />
-      </div>
-
+      {perfilAberto && selectedConversation && (
+        <div className="perfil-entra hidden h-full min-h-0 2xl:block">
+          <CRMSidePanel conversation={selectedConversation} onFechar={() => setPerfilAberto(false)} />
+        </div>
+      )}
       <InboxKeyboardShortcuts
         visibleIds={visibleIds}
         selectedId={selectedId}

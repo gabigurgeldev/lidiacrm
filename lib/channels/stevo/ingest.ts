@@ -121,7 +121,8 @@ export async function ingestStevoInbound(
     p_phone: telefone,
     p_lid: null,
     p_chat_id: evento.telefone,
-    p_notify: null,
+    // Só preenche nome VAZIO (`coalesce` na RPC): nome editado à mão vence.
+    p_notify: evento.daEmpresa ? null : evento.nome,
   } as never);
   if (erroContato || !contactId) {
     return { status: "failed", reason: `contato: ${erroContato?.message ?? "sem id"}` };
@@ -206,7 +207,7 @@ export async function ingestStevoInbound(
       messageId: messageId || null,
       channelSessionId: input.channelSessionId,
       texto: evento.texto,
-      nomeDoContato: null,
+      nomeDoContato: evento.nome,
       origem: "stevo_webhook",
     });
   }

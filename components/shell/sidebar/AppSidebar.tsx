@@ -323,7 +323,7 @@ export function AppSidebar({
         // sejam literalmente a MESMA superfície (é o que a curva do painel
         // revela no canto); e a borda direita seria uma costura no meio dessa
         // peça — a separação já é dada pelo preto encontrando o painel branco.
-        "app-sidebar casca-escura sticky top-0 z-30 flex h-screen shrink-0 flex-col",
+        "app-sidebar casca-escura sticky top-0 z-30 flex h-full shrink-0 flex-col",
       )}
     >
       <SidebarContent collapsed={collapsed} gruposAbertosSalvos={gruposAbertosSalvos} />

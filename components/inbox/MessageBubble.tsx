@@ -3,7 +3,7 @@
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
 import { format } from "date-fns";
 import { useT } from "@/hooks/i18n/useT";
-import { ArrowBendUpLeft, Check, Checks, Robot, WarningOctagon } from "@/lib/ui/icons";
+import { ArrowBendUpLeft, Check, Checks, Clock, Robot, WarningOctagon } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Message } from "@/lib/types/messaging";
@@ -12,10 +12,7 @@ import { TipoDeCanal } from "@/components/channels/TipoDeCanal";
 import { conexaoNaTela } from "@/lib/channels/tipo-de-conexao";
 import { MediaRenderer } from "@/components/inbox/media/MediaRenderer";
 import { ContactCard } from "@/components/inbox/media/ContactCard";
-import {
-  extractCitations,
-  isAiGeneratedMessage,
-} from "@/lib/ai/citations/types";
+import { extractCitations, isAiGeneratedMessage } from "@/lib/ai/citations/types";
 
 interface Props {
   message: Message;
@@ -55,13 +52,24 @@ interface Props {
 
 function AckIndicator({ status, t }: { status: string; t: (texto: string) => string }) {
   if (status === "read") {
-    return <Checks size={12} weight="bold" className="text-blue-400" aria-label={t("Lida")} />;
+    return (
+      <Checks size={15} weight="bold" className="text-[var(--bolha-lida)]" aria-label={t("Lida")} />
+    );
   }
   if (status === "delivered") {
-    return <Checks size={12} weight="bold" className="text-current/70" aria-label={t("Entregue")} />;
+    return (
+      <Checks size={15} weight="bold" className="text-current/70" aria-label={t("Entregue")} />
+    );
   }
   if (status === "sent") {
-    return <Check size={12} weight="bold" className="text-current/70" aria-label={t("Enviada")} />;
+    return <Check size={15} weight="bold" className="text-current/70" aria-label={t("Enviada")} />;
+  }
+  // Na fila / enviando: o relógio do WhatsApp. Antes não aparecia NADA, e a
+  // mensagem que ainda não saiu parecia igual à que saiu e ninguém confirmou.
+  if (status === "queued" || status === "sending") {
+    return (
+      <Clock size={13} weight="regular" className="text-current/60" aria-label={t("Enviando")} />
+    );
   }
   return null;
 }
@@ -92,8 +100,7 @@ export function MessageBubble({
   const editada = Boolean(message.edited_at) && !apagada;
   const aiGenerated = isAiGeneratedMessage(message.metadata);
   const citations = extractCitations(message.metadata);
-  const showCitationButton =
-    isOutbound && aiGenerated && (debugCitations ?? false);
+  const showCitationButton = isOutbound && aiGenerated && (debugCitations ?? false);
   /**
    * A HORA DENTRO DA BOLHA, com o texto correndo em volta.
    *
@@ -131,7 +138,7 @@ export function MessageBubble({
   return (
     <div
       className={cn(
-        "group flex w-full items-center gap-1 px-4",
+        "group flex w-full items-center gap-1 px-[4%] xl:px-[6%]",
         // O respiro entre BLOCOS é o dobro do respiro DENTRO de um bloco. É o
         // agrupamento inteiro: a mesma pessoa falando três vezes seguidas é um
         // parágrafo, não três turnos.
@@ -168,13 +175,14 @@ export function MessageBubble({
             // largura: um tablet largo com toque continua mostrando, e um
             // desktop estreito continua escondendo. Largura não é a pergunta.
             "opacity-100 [@media(hover:hover)]:opacity-0",
-            "[@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100",
+            "focus-visible:opacity-100 [@media(hover:hover)]:group-hover:opacity-100",
           )}
         >
           <ArrowBendUpLeft size={14} />
         </button>
       )}
       <div
+        data-testid="bolha-de-mensagem"
         // `data-lado` e `data-ponta` em vez de classes condicionais porque quem
         // desenha o rabo é um `::after` (app/globals.css, bloco "INBOX"), e
         // pseudo-elemento não existe no JSX. O rabo herda a cor da bolha com
@@ -190,15 +198,12 @@ export function MessageBubble({
           // 65% e não 75%: numa coluna larga, uma bolha de três quartos da
           // largura deixa de parecer uma fala e passa a parecer um bloco de
           // texto. É a proporção que o WhatsApp usa.
-          "max-w-[65%] text-sm",
+          // Mais larga onde a coluna é estreita (1280 com o painel aberto): 65% de
+          // ~410px deixava três palavras por linha.
+          "max-w-[80%] text-[14.2px] leading-[19px] 2xl:max-w-[65%]",
           isBareSticker
             ? "px-0 py-0"
-            : cn(
-                "bolha px-2.5 py-1.5 shadow-sm",
-                isOutbound
-                  ? "bolha-saida"
-                  : "bg-surface-elevated text-foreground",
-              ),
+            : cn("bolha px-[9px] pb-2 pt-1.5", isOutbound ? "bolha-saida" : "bolha-entrada"),
           isFailed && "border border-destructive",
         )}
       >
@@ -212,9 +217,7 @@ export function MessageBubble({
           <div
             className={cn(
               "mb-1 rounded border-l-2 px-2 py-1 text-xs",
-              isOutbound
-                ? "border-current/40 bg-current/10"
-                : "border-primary bg-background/60",
+              isOutbound ? "border-current/40 bg-current/10" : "bg-background/60 border-primary",
             )}
           >
             <div className="font-medium opacity-80">
@@ -239,9 +242,7 @@ export function MessageBubble({
         )}
         {senderLabel && (
           <div className="mb-0.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide opacity-80">
-            {senderLabel === "IA" ? (
-              <Robot size={10} weight="duotone" aria-hidden />
-            ) : null}
+            {senderLabel === "IA" ? <Robot size={10} weight="duotone" aria-hidden /> : null}
             {senderLabel && t(senderLabel)}
           </div>
         )}
@@ -286,9 +287,9 @@ export function MessageBubble({
 
         <div
           className={cn(
-            "flex items-center justify-end gap-1 text-[10px]",
+            "flex items-center justify-end gap-1 text-[11px] leading-none",
             horaFlutuante ? "bolha-meta-flutuante" : "mt-1",
-            isOutbound ? "text-current opacity-70" : "text-muted-foreground",
+            "text-[var(--bolha-meta)]",
           )}
         >
           {/* DE ONDE VEIO ESTA MENSAGEM — primeiro da fila de metadados porque é
@@ -304,7 +305,7 @@ export function MessageBubble({
               variante="bolha"
               // Herda a cor da bolha (o meta já está em opacity-70); antes era
               // `primary-foreground`, que não contrasta no verde claro do tema light.
-              className={isOutbound ? "text-current" : undefined}
+              className="text-current"
             />
           )}
           {editada && (
@@ -315,9 +316,7 @@ export function MessageBubble({
             <span title={t("O autor editou esta mensagem")}>{t("editada")}</span>
           )}
           <span>{time}</span>
-          {showCitationButton && (
-            <CitationButton citations={citations} messageId={message.id} />
-          )}
+          {showCitationButton && <CitationButton citations={citations} messageId={message.id} />}
           {isOutbound && !isFailed && <AckIndicator status={message.status} t={t} />}
           {isFailed && (
             // Provider local: o painel do inbox não tem TooltipProvider ancestral e
@@ -357,7 +356,7 @@ export function MessageBubble({
             // largura: um tablet largo com toque continua mostrando, e um
             // desktop estreito continua escondendo. Largura não é a pergunta.
             "opacity-100 [@media(hover:hover)]:opacity-0",
-            "[@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100",
+            "focus-visible:opacity-100 [@media(hover:hover)]:group-hover:opacity-100",
           )}
         >
           <ArrowBendUpLeft size={14} />

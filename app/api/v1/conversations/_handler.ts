@@ -24,7 +24,7 @@ const SELECT_COLS = `
   unread_count_for_assignee, is_group, group_chat_id, tags, metadata,
   snooze_until, created_at, updated_at,
   bot_silenced_until, last_handoff_at,
-  contacts:contact_id (id, display_name, name, phone_number, is_anonymized, tags, is_blocked, avatar_storage_path, avatar_updated_at, force_human),
+  contacts:contact_id (id, display_name, name, phone_number, is_anonymized, tags, is_blocked, avatar_storage_path, avatar_updated_at, force_human, birthdate),
   channel_sessions:channel_session_id (id, phone_number, display_name, provider)
 `;
 

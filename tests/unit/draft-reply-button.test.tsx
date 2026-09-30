@@ -1,3 +1,8 @@
+/**
+ * "Sugerir resposta" (rascunho da IA) mora no menu de opções do campo de
+ * escrever — abre o "+" e escolhe. O item fica ocupado enquanto a IA pensa e
+ * não fecha o menu antes do rascunho chegar.
+ */
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -12,10 +17,27 @@ vi.mock("@/components/feedback/ApiErrorToast", () => ({
   showApiError: (...args: unknown[]) => showApiErrorMock(...args),
 }));
 
-import { DraftReplyButton } from "@/components/inbox/composer/DraftReplyButton";
+import { MenuDeOpcoes } from "@/components/inbox/composer/MenuDeOpcoes";
 
-function wrap(ui: React.ReactNode) {
-  return <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>;
+function montar(onRascunho = vi.fn(), extra: Partial<React.ComponentProps<typeof MenuDeOpcoes>> = {}) {
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MenuDeOpcoes
+        conversationId="conv-1"
+        modo="reply"
+        respostaBarrada={false}
+        desabilitado={false}
+        onArquivo={vi.fn()}
+        onContato={vi.fn()}
+        onMensagensProntas={vi.fn()}
+        onRascunho={onRascunho}
+        onAlternarNota={vi.fn()}
+        {...extra}
+      />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Anexar" }));
+  return onRascunho;
 }
 
 beforeEach(() => {
@@ -23,39 +45,36 @@ beforeEach(() => {
   showApiErrorMock.mockReset();
 });
 
-describe("DraftReplyButton", () => {
-  it("clicar dispara a mutation e desabilita enquanto pendente", async () => {
+describe("Sugerir resposta no menu de opções", () => {
+  it("clicar dispara a IA, marca o item ocupado e entrega o rascunho", async () => {
     let resolvePost!: (v: unknown) => void;
     postMock.mockReturnValue(new Promise((resolve) => (resolvePost = resolve)));
-    const onDraft = vi.fn();
+    const onRascunho = montar();
 
-    render(wrap(<DraftReplyButton conversationId="conv-1" onDraft={onDraft} />));
-    const btn = screen.getByRole("button", { name: "Sugerir resposta" });
-    fireEvent.click(btn);
+    const item = screen.getByRole("menuitem", { name: "Sugerir resposta" });
+    fireEvent.click(item);
 
     await waitFor(() =>
       expect(postMock).toHaveBeenCalledWith("/api/v1/conversations/conv-1/draft-reply", {}),
     );
-    await waitFor(() => expect(btn).toBeDisabled());
-    expect(btn).toHaveAttribute("aria-busy", "true");
+    await waitFor(() => expect(item).toHaveAttribute("aria-busy", "true"));
 
     resolvePost({ data: { draft: "texto sugerido" } });
-    await waitFor(() => expect(onDraft).toHaveBeenCalledWith("texto sugerido"));
+    await waitFor(() => expect(onRascunho).toHaveBeenCalledWith("texto sugerido"));
   });
 
-  it("erro chama showApiError e não chama onDraft", async () => {
+  it("erro chama showApiError e não entrega rascunho", async () => {
     postMock.mockRejectedValue(new Error("falhou"));
-    const onDraft = vi.fn();
-
-    render(wrap(<DraftReplyButton conversationId="conv-1" onDraft={onDraft} />));
-    fireEvent.click(screen.getByRole("button", { name: "Sugerir resposta" }));
-
+    const onRascunho = montar();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sugerir resposta" }));
     await waitFor(() => expect(showApiErrorMock).toHaveBeenCalled());
-    expect(onDraft).not.toHaveBeenCalled();
+    expect(onRascunho).not.toHaveBeenCalled();
   });
 
-  it("disabled prop desabilita o botão", () => {
-    render(wrap(<DraftReplyButton conversationId="conv-1" onDraft={vi.fn()} disabled />));
-    expect(screen.getByRole("button", { name: "Sugerir resposta" })).toBeDisabled();
+  it("com a resposta barrada (janela fechada), anexos e IA saem do menu — a nota fica", () => {
+    montar(vi.fn(), { respostaBarrada: true });
+    expect(screen.queryByRole("menuitem", { name: "Sugerir resposta" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Fotos e vídeos" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Nota interna" })).toBeTruthy();
   });
 });

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/hooks/i18n/useT";
 
-import { Pause, Play } from "@/lib/ui/icons";
+import { Microphone, Pause, Play } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 
 import { MediaUnavailable } from "./MediaUnavailable";
@@ -112,31 +112,60 @@ export function AudioPlayer({ messageId, isOutbound }: Props) {
   const tempo = playing || current > 0 ? fmt(current) : fmt(safeDuration);
   const progresso = safeDuration > 0 ? Math.min(1, current / safeDuration) : 0;
 
+  // O selo da ESQUERDA é o do WhatsApp: microfone verde enquanto parado, e a
+  // velocidade no mesmo lugar depois do primeiro play — a pessoa acha o "2x"
+  // onde o olho já estava, em vez de mais um botão no fim da linha.
+  const selo = jaTocou ? (
+    <button
+      type="button"
+      aria-label={`${t("Velocidade de reprodução")}: ${RATES[rateIdx]}x`}
+      onClick={cycleRate}
+      className="flex size-11 shrink-0 items-center justify-center rounded-full bg-black/[0.07] text-[13px] font-semibold tabular-nums text-foreground transition-colors hover:bg-black/[0.12]"
+    >
+      {RATES[rateIdx]}x
+    </button>
+  ) : (
+    <span
+      className="relative flex size-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground"
+      aria-hidden
+    >
+      <Microphone size={22} weight="fill" />
+    </span>
+  );
+
   return (
-    <div className="flex w-[15.5rem] max-w-full items-center gap-2 py-0.5">
+    <div
+      className={cn(
+        "flex w-[17rem] max-w-full items-center gap-2.5 py-1",
+        isOutbound && "flex-row-reverse",
+      )}
+    >
       <audio ref={audioRef} src={mediaSrc(messageId)} preload="metadata" />
+      {selo}
       <button
         type="button"
         aria-label={playing ? t("Pausar áudio") : t("Reproduzir áudio")}
         onClick={toggle}
-        className={cn(
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors",
-          isOutbound
-            ? "bg-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground/30"
-            : "bg-accent/15 text-accent hover:bg-accent/25",
-        )}
+        className="flex size-8 shrink-0 items-center justify-center text-[var(--bolha-meta)] transition-transform hover:scale-110"
       >
         {playing ? (
-          <Pause size={16} weight="fill" aria-hidden />
+          <Pause size={26} weight="fill" aria-hidden />
         ) : (
-          <Play size={16} weight="fill" aria-hidden />
+          <Play size={26} weight="fill" aria-hidden />
         )}
       </button>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         {/* As barras desenham; o `range` por cima controla. Ver o cabeçalho. */}
         <div className="relative h-7">
           <OndaDeAudio semente={messageId} progresso={progresso} isOutbound={isOutbound} />
+          {/* A bolinha de posição, como no WhatsApp: mostra ONDE o áudio está,
+              não só até onde as barras acenderam. */}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent shadow-sm transition-[left] duration-100"
+            style={{ left: `${progresso * 100}%` }}
+          />
           <input
             type="range"
             aria-label={t("Progresso do áudio")}
@@ -149,26 +178,8 @@ export function AudioPlayer({ messageId, isOutbound }: Props) {
             className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] tabular-nums opacity-70">{tempo}</span>
-        </div>
+        <span className="text-[11px] tabular-nums text-[var(--bolha-meta)]">{tempo}</span>
       </div>
-
-      {jaTocou && (
-        <button
-          type="button"
-          aria-label={`${t("Velocidade de reprodução")}: ${RATES[rateIdx]}x`}
-          onClick={cycleRate}
-          className={cn(
-            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums transition-colors",
-            isOutbound
-              ? "bg-primary-foreground/20 text-primary-foreground"
-              : "bg-accent/15 text-accent",
-          )}
-        >
-          {RATES[rateIdx]}x
-        </button>
-      )}
     </div>
   );
 }

@@ -64,20 +64,26 @@ describe("Composer + modo nota interna", () => {
 
   it("alterna pra modo nota interna: some anexo/rascunho/áudio, muda placeholder", () => {
     renderComposer();
-    expect(screen.getByRole("button", { name: /anexar/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /sugerir resposta/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /anexar/i }));
+    expect(screen.getByRole("menuitem", { name: /fotos e vídeos/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /sugerir resposta/i })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /nota interna/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /nota interna/i }));
 
-    expect(screen.queryByRole("button", { name: /anexar/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /sugerir resposta/i })).not.toBeInTheDocument();
+    // Em nota, o menu só oferece voltar: nota é texto para a equipe, sem anexo nem IA.
+    fireEvent.click(screen.getByRole("button", { name: /anexar/i }));
+    expect(screen.queryByRole("menuitem", { name: /fotos e vídeos/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /sugerir resposta/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /voltar a responder/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /gravar áudio/i })).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText(/nota interna/i)).toBeInTheDocument();
   });
 
   it("modo nota interna: enviar chama useCreateNote e NÃO useSendMessage", () => {
     renderComposer();
-    fireEvent.click(screen.getByRole("button", { name: /nota interna/i }));
+    // A nota se liga pelo menu de opções ("+"), não por uma pílula fixa.
+    fireEvent.click(screen.getByRole("button", { name: /anexar/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /nota interna/i }));
 
     fireEvent.change(screen.getByPlaceholderText(/nota interna/i), { target: { value: "cliente ligou reclamando" } });
     fireEvent.click(screen.getByRole("button", { name: /^enviar$/i }));
