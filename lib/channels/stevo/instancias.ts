@@ -31,6 +31,19 @@
 
 const TIMEOUT_MS = 15_000;
 
+/**
+ * Prazo das chamadas de GESTÃO da conta (listar instâncias, apontar webhook) —
+ * as que a pessoa espera com a tela aberta.
+ *
+ * Medido em 2026-09-30: `GET /v1/instances` levou 19s e 33s para responder, e
+ * isso só para RECUSAR uma chave inválida (401). Com 15s o fetch abortava antes
+ * de qualquer resposta: chave certa ou errada, a tela girava e caía em "não foi
+ * possível falar com o provedor". O health check (`lerInstanciaStevo`) fica nos
+ * 15s de propósito — ele roda em lote no cron, e ali "não deu para perguntar"
+ * já é um desfecho que não sobrescreve o estado.
+ */
+export const TIMEOUT_DA_GESTAO_MS = 60_000;
+
 export interface StevoInstancia {
   id: string;
   nome: string | null;
@@ -118,7 +131,7 @@ export async function validarContaStevo(input: {
   try {
     resposta = await fetch(`${input.baseUrl}/v1/instances`, {
       headers: cabecalhos(input.apiKey),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(TIMEOUT_DA_GESTAO_MS),
       cache: "no-store",
     });
   } catch {
@@ -258,7 +271,7 @@ export async function apontarWebhookStevo(input: {
                 events: ["MESSAGE", "SEND_MESSAGE", "CONNECTION"],
               },
         ),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(TIMEOUT_DA_GESTAO_MS),
       },
     );
   } catch {

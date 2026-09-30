@@ -54,12 +54,27 @@ export function useConexoesDaConta() {
  * cabeçalho da rota: importar todas seria decidir pelo operador quais números da
  * conta dele pertencem a este CRM.
  */
+/**
+ * Prazos das chamadas que falam com o provedor na hora.
+ *
+ * O provedor leva 20–30s para responder (medido em 2026-09-30, até para recusar
+ * chave — ver `TIMEOUT_DA_GESTAO_MS`). Com o padrão do `apiClient` (10s, três
+ * tentativas), a tela desistia ANTES do servidor e mandava de novo: o botão
+ * ficava ~35s em "Consultando o provedor…" e terminava em erro mesmo com a
+ * chave certa. Uma tentativa, com prazo acima do do servidor, para a resposta
+ * dele — sucesso ou motivo — chegar à tela.
+ */
+export const PRAZO_DA_CONSULTA_MS = 90_000;
+/** Importar aponta o webhook de cada número escolhido, um depois do outro. */
+export const PRAZO_DA_IMPORTACAO_MS = 300_000;
+
 export function useDescobrirInstancias() {
   return useMutation({
     mutationFn: async (input: { api_key: string }) =>
       apiClient.post<{ data: { label: string; instancias: InstanciaDaConta[] } }>(
         "/api/v1/channels/account",
         input,
+        { timeoutMs: PRAZO_DA_CONSULTA_MS, semRepetir: true },
       ),
     onError: showApiError,
   });
@@ -73,7 +88,10 @@ export function useImportarInstancias() {
         data: {
           importadas: Array<{ id: string; nome: string; recebendo: boolean; motivo?: string }>;
         };
-      }>("/api/v1/channels/account/instances", input),
+      }>("/api/v1/channels/account/instances", input, {
+        timeoutMs: PRAZO_DA_IMPORTACAO_MS,
+        semRepetir: true,
+      }),
     onError: showApiError,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["conta-de-instancias"] });
@@ -95,6 +113,7 @@ export function useReconectarWebhook() {
       apiClient.post<{ data: { recebendo: true } }>(
         `/api/v1/channels/account/instances/${channelSessionId}/webhook`,
         {},
+        { timeoutMs: PRAZO_DA_CONSULTA_MS, semRepetir: true },
       ),
     onError: showApiError,
   });
