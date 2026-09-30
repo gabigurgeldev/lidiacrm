@@ -492,3 +492,61 @@ describe("nenhum desfecho diz `sent` sem nada ter saído", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * DISPARO EM MASSA COM IMAGEM OU VÍDEO (migration 0219).
+ *
+ * O arquivo é UM por campanha, em `<org>/disparos/…`, e chega ao handler pela
+ * opção interna `midiaCompartilhada` — nunca pelo schema HTTP. Tem de sair pelo
+ * MESMO ramo de mídia (URL assinada no adapter), e a linha NÃO pode levar o
+ * caminho em `media_storage_path`: a anonimização LGPD apaga todo
+ * `media_storage_path` das mensagens do contato, e apagaria o arquivo da
+ * campanha inteira por causa de um destinatário.
+ */
+describe("mídia compartilhada do disparo em massa", () => {
+  it("⭐ sai pelo ramo de mídia, com o texto como legenda, e fica só na metadata", async () => {
+    vi.stubEnv("ZERNIO_ACCOUNT_ID", CONTA);
+    vi.stubEnv("ZERNIO_API_KEY", "sk_env");
+    const fetchMock = respostaOk("wamid.DISPARO");
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { supabase, estado } = makeSupabase(conversaCompleta({ providerConversationId: THREAD }));
+    const msg = await sendMessageHandler(
+      supabase,
+      ctx,
+      texto({ type: "image", body: "Promoção de hoje" }),
+      { midiaCompartilhada: { path: `${ORG}/disparos/campanha.jpg`, mime: "image/jpeg" } },
+    );
+
+    expect(msg.status).toBe("sent");
+    const corpo = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.body ?? "{}"),
+    ) as Record<string, unknown>;
+    expect(corpo.attachmentUrl).toBe("https://signed.example/a.jpg");
+    expect(corpo.attachmentType).toBe("image");
+    expect(estado.message?.media_storage_path).toBeNull();
+    expect(estado.message?.media_mime).toBe("image/jpeg");
+    expect((estado.message?.metadata as Record<string, unknown>).midia_do_disparo).toBe(
+      `${ORG}/disparos/campanha.jpg`,
+    );
+  });
+
+  it("⭐ arquivo fora da pasta de disparos DESTA organização é recusado antes de qualquer envio", async () => {
+    vi.stubEnv("ZERNIO_ACCOUNT_ID", CONTA);
+    vi.stubEnv("ZERNIO_API_KEY", "sk_env");
+    const fetchMock = respostaOk();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { supabase } = makeSupabase(conversaCompleta({ providerConversationId: THREAD }));
+    const outraOrg = "99999999-9999-4999-8999-999999999999";
+    const erro = await sendMessageHandler(
+      supabase,
+      ctx,
+      texto({ type: "image", body: "x" }),
+      { midiaCompartilhada: { path: `${outraOrg}/disparos/dela.jpg`, mime: "image/jpeg" } },
+    ).catch((e) => e);
+
+    expect(erro.status).toBe(422);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

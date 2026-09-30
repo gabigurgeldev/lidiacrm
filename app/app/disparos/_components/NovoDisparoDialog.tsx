@@ -22,7 +22,7 @@ import { useImportarLista, type RecorteDaPlanilha } from "@/hooks/bulk-send/useI
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { lerConteudo } from "@/lib/channels/template-conteudo";
-import { Warning } from "@/lib/ui/icons";
+import { ImageSquare, Trash, Warning } from "@/lib/ui/icons";
 
 /**
  * O WIZARD — quatro passos, e o quarto é obrigatório.
@@ -109,6 +109,47 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
   /** `nome|idioma` do modelo escolhido — o par é a identidade da definição. */
   const [modeloChave, setModeloChave] = React.useState("");
   const [valores, setValores] = React.useState<Record<string, string>>({});
+  /**
+   * Imagem ou vídeo que vai JUNTO com o texto (a legenda), no texto livre.
+   * O arquivo sobe na hora da escolha (`/api/v1/bulk-sends/media`), e o disparo
+   * guarda só o caminho — um arquivo por campanha, não um por destinatário.
+   */
+  const [midia, setMidia] = React.useState<{
+    storage_path: string;
+    mime: string;
+    kind: "image" | "video";
+    preview_url: string | null;
+    nome: string;
+  } | null>(null);
+  const [subindoMidia, setSubindoMidia] = React.useState(false);
+  const entradaDeMidia = React.useRef<HTMLInputElement | null>(null);
+
+  async function subirMidia(arquivo: File) {
+    setSubindoMidia(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", arquivo);
+      const r = await fetch("/api/v1/bulk-sends/media", { method: "POST", body: fd });
+      const j = (await r.json().catch(() => ({}))) as {
+        data?: { storage_path: string; media_mime: string; media_kind: "image" | "video"; preview_url: string | null };
+        error?: { message?: string };
+      };
+      if (!r.ok || !j.data) {
+        toast.error(t(j.error?.message ?? "Não consegui subir o arquivo."));
+        return;
+      }
+      setMidia({
+        storage_path: j.data.storage_path,
+        mime: j.data.media_mime,
+        kind: j.data.media_kind,
+        preview_url: j.data.preview_url,
+        nome: arquivo.name,
+      });
+    } finally {
+      setSubindoMidia(false);
+    }
+  }
+
   /** A lacuna cuja imagem está subindo agora — trava o botão só dela. */
   const [subindoImagem, setSubindoImagem] = React.useState<string | null>(null);
 
@@ -177,7 +218,7 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
   const podeSeguirDoPasso2 =
     conexao !== null &&
     (conexao.modo === "freeform"
-      ? corpo.trim() !== ""
+      ? corpo.trim() !== "" && !subindoMidia
       : modelo !== null && !faltaValor && subindoImagem === null);
 
   /**
@@ -213,7 +254,10 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
               template_language: modelo?.language,
               template_values: valores,
             }
-          : { body: corpo }),
+          : {
+              body: corpo,
+              ...(midia ? { midia: { storage_path: midia.storage_path, mime: midia.mime, kind: midia.kind } } : {}),
+            }),
         interval_ms: intervaloValido * 1000,
         scheduled_for: agendarPara ? new Date(agendarPara).toISOString() : undefined,
         audiencia: { kind: "file", contact_ids: recorte?.contact_ids ?? [] },
@@ -238,6 +282,8 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
     setModeloChave("");
     setValores({});
     setSubindoImagem(null);
+    setMidia(null);
+    setSubindoMidia(false);
     aoFechar();
   }
 
@@ -336,7 +382,64 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
 
             {conexao?.modo === "freeform" && (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="corpo">{t("Mensagem")}</Label>
+                <Label>{t("Imagem ou vídeo (opcional)")}</Label>
+                {midia ? (
+                  <div className="flex items-center gap-3 rounded-lg border border-border p-2" data-testid="midia-do-disparo">
+                    {midia.preview_url ? (
+                      midia.kind === "image" ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={midia.preview_url} alt="" className="size-16 shrink-0 rounded-md object-cover" />
+                      ) : (
+                        <video src={midia.preview_url} className="size-16 shrink-0 rounded-md bg-black object-cover" muted />
+                      )
+                    ) : null}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm">{midia.nome}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {midia.kind === "image" ? t("Imagem") : t("Vídeo")} · {t("vai junto com o texto, como legenda")}
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={t("Remover imagem ou vídeo")}
+                      onClick={() => setMidia(null)}
+                    >
+                      <Trash size={16} aria-hidden />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="justify-start gap-2"
+                    disabled={subindoMidia}
+                    onClick={() => entradaDeMidia.current?.click()}
+                    data-testid="adicionar-midia-do-disparo"
+                  >
+                    <ImageSquare size={16} aria-hidden />
+                    {subindoMidia ? t("Enviando arquivo…") : t("Adicionar imagem ou vídeo")}
+                  </Button>
+                )}
+                <input
+                  ref={entradaDeMidia}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,video/mp4,video/3gpp"
+                  className="hidden"
+                  data-testid="arquivo-midia-do-disparo"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void subirMidia(f);
+                    e.target.value = "";
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {t("Imagem JPG, PNG ou WEBP até 5 MB, ou vídeo MP4 até 16 MB.")}
+                </p>
+                <Label htmlFor="corpo" className="mt-2">
+                  {midia ? t("Legenda") : t("Mensagem")}
+                </Label>
                 <Textarea
                   id="corpo"
                   rows={5}
@@ -520,6 +623,11 @@ export function NovoDisparoDialog({ aberto, aoFechar }: { aberto: boolean; aoFec
             {modelo && (
               <p className="text-sm">
                 {t("Pelo modelo {m}.").replace("{m}", `${modelo.name} (${modelo.language})`)}
+              </p>
+            )}
+            {midia && (
+              <p className="text-sm">
+                {midia.kind === "image" ? t("Com imagem, e o texto como legenda.") : t("Com vídeo, e o texto como legenda.")}
               </p>
             )}
             <p className="text-sm text-muted-foreground">

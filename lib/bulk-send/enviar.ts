@@ -83,6 +83,9 @@ export async function enviarUmDoDisparo(
       : temVariavelDeNome(disparo.body);
   const nome = usaNome ? await nomeDoContato(admin, disparo.organization_id, destinatario.contact_id) : null;
 
+  const temMidia =
+    disparo.mode === "freeform" && Boolean(disparo.media_storage_path && disparo.media_kind && disparo.media_mime);
+
   const entrada =
     disparo.mode === "template"
       ? {
@@ -96,7 +99,9 @@ export async function enviarUmDoDisparo(
         }
       : {
           conversation_id: conversationId,
-          type: "text",
+          // Com imagem/vídeo o tipo é o da mídia e o texto vira a legenda — uma
+          // mensagem só no WhatsApp do cliente, não duas.
+          type: temMidia ? disparo.media_kind! : "text",
           body: usaNome ? personalizarTexto(disparo.body ?? "", nome) : (disparo.body ?? ""),
         };
 
@@ -111,6 +116,11 @@ export async function enviarUmDoDisparo(
       requestId: `bulk_send:${disparo.id}`,
     },
     entrada as Parameters<typeof sendMessageHandler>[2],
+    // O arquivo da campanha é UM, e todas as mensagens apontam para ele — ver
+    // `OpcoesDeEnvio` em `app/api/v1/messages/_handler.ts`.
+    temMidia
+      ? { midiaCompartilhada: { path: disparo.media_storage_path!, mime: disparo.media_mime! } }
+      : {},
   );
 
   return mensagem as unknown as MensagemEnviada;

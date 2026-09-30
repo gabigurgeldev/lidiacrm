@@ -52,22 +52,30 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   // Filtro explícito de organization_id por doutrina (defense-in-depth).
   const { data: msg, error } = await supabase
     .from("messages")
-    .select("id, media_url, media_mime, media_storage_path, channel_session_id")
+    .select("id, media_url, media_mime, media_storage_path, channel_session_id, metadata")
     .eq("id", messageId)
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
   if (error) {
     return fail("internal_error", "Erro ao buscar mensagem.", 500, { requestId });
   }
-  if (!msg || (!msg.media_storage_path && !msg.media_url)) {
+  // O arquivo do DISPARO EM MASSA: um só por campanha, apontado pela metadata
+  // de cada mensagem (ver `OpcoesDeEnvio` no handler de envio). Só da pasta de
+  // disparos da PRÓPRIA organização — a assinatura usa a service role.
+  const bruto = (msg?.metadata as Record<string, unknown> | null)?.midia_do_disparo;
+  const midiaDoDisparo =
+    typeof bruto === "string" && bruto.startsWith(`${activeOrg.orgId}/disparos/`) ? bruto : null;
+
+  if (!msg || (!msg.media_storage_path && !msg.media_url && !midiaDoDisparo)) {
     return fail("not_found", "Mensagem sem mídia.", 404, { requestId });
   }
 
-  if (msg.media_storage_path) {
+  const caminhoAssinavel = msg.media_storage_path ?? midiaDoDisparo;
+  if (caminhoAssinavel) {
     const admin = createAdminClient();
     const { data: signed, error: signErr } = await admin.storage
       .from("whatsapp-media")
-      .createSignedUrl(msg.media_storage_path, SIGNED_URL_TTL_S);
+      .createSignedUrl(caminhoAssinavel, SIGNED_URL_TTL_S);
     if (!signErr && signed?.signedUrl) {
       const response = NextResponse.redirect(signed.signedUrl, 302);
       response.headers.set("X-Request-Id", requestId);

@@ -449,6 +449,8 @@ export const AUDIT_ACTIONS = [
   // `started`: agendar e disparar são intenções diferentes, e uma campanha
   // pode nascer e nunca sair.
   "bulk_send.created",
+  // A imagem ou o vídeo de um disparo subiu (migration 0219).
+  "bulk_send.media_uploaded",
   "bulk_send.started",
   "bulk_send.paused",
   "bulk_send.resumed",

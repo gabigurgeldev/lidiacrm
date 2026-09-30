@@ -106,6 +106,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       case "modo_incompativel":
         return fail("bulk_send_mode_incompativel", recusa.mensagem, 422, { requestId });
       case "modelo_invalido":
+      case "midia_invalida":
         return fail("validation_failed", recusa.mensagem, 422, { requestId });
       case "sem_destinatario":
         return fail("bulk_send_sem_destinatario", recusa.mensagem, 422, {

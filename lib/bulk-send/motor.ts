@@ -97,6 +97,10 @@ export interface DisparoEmVoo {
   provider: string;
   mode: "freeform" | "template";
   body: string | null;
+  /** Imagem ou vídeo da campanha (migration 0219). Nulos = só texto. */
+  media_storage_path?: string | null;
+  media_mime?: string | null;
+  media_kind?: "image" | "video" | null;
   template_name: string | null;
   template_language: string | null;
   template_values: Record<string, string>;
