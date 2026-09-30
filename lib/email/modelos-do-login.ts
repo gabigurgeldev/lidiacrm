@@ -62,7 +62,11 @@ export function assuntoDoLogin(tipo: TipoDoLogin, nomeDaMarca: string): string {
   }
 }
 
-export function modeloDoLogin(tipo: TipoDoLogin, marca: MarcaDeSaida, baseDoApp?: string | null): string {
+export function modeloDoLogin(
+  tipo: TipoDoLogin,
+  marca: MarcaDeSaida,
+  baseDoApp?: string | null,
+): string {
   const nome = escapeHtml(marca.nome);
   const comum = { marca, escaparUrlDoBotao: false as const, baseDoApp };
 
@@ -114,7 +118,9 @@ export function modeloDoLogin(tipo: TipoDoLogin, marca: MarcaDeSaida, baseDoApp?
         ...comum,
         previa: `Seu link de acesso ao ${marca.nome}.`,
         titulo: "Seu link de acesso",
-        corpoHtml: paragrafo(`Clique no botão abaixo para entrar no <strong>${nome}</strong> sem digitar senha.`),
+        corpoHtml: paragrafo(
+          `Clique no botão abaixo para entrar no <strong>${nome}</strong> sem digitar senha.`,
+        ),
         botao: { texto: "Entrar agora", url: LINK_PADRAO_DO_GOTRUE },
         observacaoHtml:
           "O link funciona uma única vez e expira em breve. Se não foi você que pediu, ignore este e-mail.",
@@ -139,7 +145,7 @@ export function modeloDoLogin(tipo: TipoDoLogin, marca: MarcaDeSaida, baseDoApp?
         titulo: "Seu código de verificação",
         corpoHtml:
           paragrafo(`Use o código abaixo para confirmar a operação no <strong>${nome}</strong>:`) +
-          `<p style="margin:20px 0;font-size:30px;font-weight:700;letter-spacing:0.25em;font-family:ui-monospace,Menlo,Consolas,monospace">{{ .Token }}</p>`,
+          `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0 4px"><tr><td align="center" style="background:#f4f5f4;border:1px dashed ${marca.accent};border-radius:12px;padding:18px 12px;font-size:32px;font-weight:800;letter-spacing:0.3em;font-family:ui-monospace,Menlo,Consolas,monospace">{{ .Token }}</td></tr></table>`,
         observacaoHtml: "O código expira em breve. Se não foi você, ignore este e-mail.",
         motivo: `Você recebeu este e-mail porque uma operação na sua conta do ${marca.nome} pediu confirmação.`,
       });

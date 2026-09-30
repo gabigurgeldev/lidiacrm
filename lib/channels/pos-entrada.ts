@@ -44,6 +44,7 @@ import { logger } from "@/lib/logger";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ehPedidoDeOptOut } from "@/lib/opt-out/deteccao";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
+import { depoisDaResposta } from "./depois-da-resposta";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -115,16 +116,20 @@ export async function aplicarEfeitosPosEntrada(
 ): Promise<void> {
   await aplicarOptOut(admin, entrada);
   await abrirDemanda(admin, entrada);
-  // A resposta do lead avança o follow-up AQUI. O despacho do agente (LLM)
-  // vem depois: no Hobby ele estoura o tempo da request e o próximo texto
-  // do fluxo ficava esperando o relógio.
-  await acelerarPipelineDeEventos(admin, {
-    organizationId: entrada.organizationId,
-    contactId: entrada.contactId,
-    messageId: entrada.messageId,
-    texto: entrada.texto,
+  // A resposta do lead avança o follow-up ANTES do despacho do agente (LLM):
+  // no Hobby o despacho estourava o tempo da request e o próximo texto do fluxo
+  // ficava esperando o relógio. Os dois vão para DEPOIS da resposta ao
+  // provedor, na mesma ordem — ver `depois-da-resposta.ts`. Opt-out e demanda
+  // seguem aqui, síncronos: são a ordem que protege quem pediu para sair.
+  await depoisDaResposta("pos-entrada", async () => {
+    await acelerarPipelineDeEventos(admin, {
+      organizationId: entrada.organizationId,
+      contactId: entrada.contactId,
+      messageId: entrada.messageId,
+      texto: entrada.texto,
+    });
+    await pedirDespachoDoAgente(admin, entrada);
   });
-  await pedirDespachoDoAgente(admin, entrada);
 }
 
 /**

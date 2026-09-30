@@ -1529,6 +1529,17 @@ esac
   printf '# mostra o link de aceite na tela e o export de LGPD fica pendente.\n'
   envq RESEND_API_KEY "${RESEND_API_KEY:-}"
   envq RESEND_FROM_EMAIL "${RESEND_FROM_EMAIL:-}"
+  # SMTP (Amazon SES ou outro) — preenchido, vence o Resend. Não é pergunta da
+  # instalação (cinco campos a mais para quem não usa); é preservado aqui pelo
+  # mesmo motivo do Resend acima: o .env é reescrito do zero, e chave que este
+  # script não grava some no próximo update.
+  printf '# E-mail por SMTP (Amazon SES: host email-smtp.<regiao>.amazonaws.com,\n'
+  printf '# porta 587, credenciais SMTP do SES). Preenchido, vence o Resend.\n'
+  envq EMAIL_SMTP_HOST "${EMAIL_SMTP_HOST:-}"
+  envq EMAIL_SMTP_PORT "${EMAIL_SMTP_PORT:-587}"
+  envq EMAIL_SMTP_USER "${EMAIL_SMTP_USER:-}"
+  envq EMAIL_SMTP_PASS "${EMAIL_SMTP_PASS:-}"
+  envq EMAIL_FROM "${EMAIL_FROM:-}"
   printf '# Qual provedor você escolheu na instalação. É o que faz a 2ª execução do\n'
   printf '# install.sh já vir com a sua escolha como padrão, em vez de re-adivinhar\n'
   printf '# pelas chaves presentes. A app não lê esta variável.\n'

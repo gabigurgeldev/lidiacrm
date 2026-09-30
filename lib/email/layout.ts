@@ -45,7 +45,10 @@ export function urlPublicaDoApp(bruta: string = env.NEXT_PUBLIC_APP_URL): string
  * Caminho relativo vira absoluto contra o app; qualquer outra coisa que não
  * seja http(s) é descartada.
  */
-export function logoDoEmail(logoUrl: string | null, base: string | null = urlPublicaDoApp()): string | null {
+export function logoDoEmail(
+  logoUrl: string | null,
+  base: string | null = urlPublicaDoApp(),
+): string | null {
   const bruto = (logoUrl ?? "").trim();
   if (bruto.length === 0) return null;
   if (/^https?:\/\//i.test(bruto)) return bruto;
@@ -78,8 +81,7 @@ export type OpcoesDoLayout = {
   baseDoApp?: string | null;
 };
 
-const FONTE =
-  "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const FONTE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export function layoutDeEmail(o: OpcoesDoLayout): string {
   const n = NEUTROS_DE_SAIDA;
@@ -94,29 +96,38 @@ export function layoutDeEmail(o: OpcoesDoLayout): string {
       : escapeHtml(o.botao.url)
     : "";
 
+  // O logo abre o cartão, centralizado — é a primeira coisa que o olho acha e o
+  // que diz de quem é o e-mail antes de qualquer palavra.
   const topo = logo
-    ? `<img src="${escapeHtml(logo)}" alt="${nome}" height="40" style="height:40px;width:auto;max-width:220px;border:0;display:block;outline:none">`
-    : `<span style="font-size:20px;font-weight:700;letter-spacing:-0.01em;color:${n.texto}">${nome}</span>`;
+    ? `<img src="${escapeHtml(logo)}" alt="${nome}" height="40" style="height:40px;width:auto;max-width:220px;border:0;display:inline-block;outline:none;text-decoration:none">`
+    : `<span style="font-family:${FONTE};font-size:22px;font-weight:800;letter-spacing:-0.02em;color:${n.texto}">${nome}</span>`;
 
+  // Botão "à prova de cliente": a cor vai no `td` (Outlook ignora o fundo do
+  // `a`) E no `a` (Gmail no celular ignora o do `td` em alguns casos). Centrado,
+  // largo, fácil de acertar com o polegar.
   const botao = o.botao
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 8px">
-        <tr><td align="center" bgcolor="${fundoBotao}" style="border-radius:10px;background:${fundoBotao}">
-          <a href="${urlBotao}" target="_blank" style="display:inline-block;padding:14px 28px;font-family:${FONTE};font-size:15px;font-weight:600;line-height:1;color:${frenteBotao};text-decoration:none;border-radius:10px">${escapeHtml(o.botao.texto)}</a>
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:32px auto 0">
+        <tr><td align="center" bgcolor="${fundoBotao}" style="border-radius:12px;background:${fundoBotao}">
+          <a href="${urlBotao}" target="_blank" class="botao" style="display:inline-block;padding:16px 40px;font-family:${FONTE};font-size:16px;font-weight:700;line-height:1;color:${frenteBotao};background:${fundoBotao};text-decoration:none;border-radius:12px">${escapeHtml(o.botao.texto)}</a>
         </td></tr>
       </table>
-      <p style="margin:16px 0 0;font-size:12px;line-height:1.6;color:${n.suave}">
-        Se o botão não abrir, copie e cole este endereço no navegador:<br>
-        <a href="${urlBotao}" target="_blank" style="color:${fundoBotao};word-break:break-all;text-decoration:underline">${urlBotao}</a>
-      </p>`
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 0">
+        <tr><td bgcolor="${n.fundo}" style="background:${n.fundo};border-radius:10px;padding:14px 16px;font-family:${FONTE};font-size:12px;line-height:1.6;color:${n.suave}">
+          Se o botão não funcionar, copie e cole este endereço no navegador:<br>
+          <a href="${urlBotao}" target="_blank" style="color:${n.texto};word-break:break-all;text-decoration:underline">${urlBotao}</a>
+        </td></tr>
+      </table>`
     : "";
 
   const observacao = o.observacaoHtml
-    ? `<p style="margin:24px 0 0;padding-top:20px;border-top:1px solid ${n.linha};font-size:13px;line-height:1.6;color:${n.suave}">${o.observacaoHtml}</p>`
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 0">
+        <tr><td style="border-left:3px solid ${o.marca.accent};padding:2px 0 2px 14px;font-family:${FONTE};font-size:13px;line-height:1.6;color:${n.suave}">${o.observacaoHtml}</td></tr>
+      </table>`
     : "";
 
   const site = base
     ? `<a href="${escapeHtml(base)}" target="_blank" style="color:${n.suave};text-decoration:underline">${escapeHtml(base.replace(/^https?:\/\//, ""))}</a>`
-    : nome;
+    : "";
 
   return `<!doctype html>
 <html lang="pt-BR">
@@ -126,27 +137,35 @@ export function layoutDeEmail(o: OpcoesDoLayout): string {
 <meta name="color-scheme" content="light">
 <meta name="supported-color-schemes" content="light">
 <title>${escapeHtml(o.titulo)}</title>
+<style>
+  @media (max-width:600px) {
+    .cartao-conteudo { padding:28px 22px 32px !important; }
+    .cartao-topo { padding:28px 22px 4px !important; }
+    .titulo { font-size:22px !important; }
+    .botao { display:block !important; padding:16px 20px !important; }
+  }
+</style>
 </head>
 <body style="margin:0;padding:0;background:${n.fundo};-webkit-text-size-adjust:100%">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${escapeHtml(o.previa)}</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">${escapeHtml(o.previa)}&#8203;&nbsp;&#8203;&nbsp;&#8203;&nbsp;&#8203;&nbsp;</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${n.fundo}" style="background:${n.fundo}">
-  <tr><td align="center" style="padding:32px 16px">
-    <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px">
-      <tr><td style="padding:0 8px 20px">${topo}</td></tr>
-      <tr><td bgcolor="#ffffff" style="background:#ffffff;border:1px solid ${n.linha};border-radius:14px;overflow:hidden">
+  <tr><td align="center" style="padding:40px 12px">
+    <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px">
+      <tr><td bgcolor="#ffffff" style="background:#ffffff;border:1px solid ${n.linha};border-radius:18px;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,40,0.04),0 8px 24px rgba(16,24,40,0.06)">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-          <tr><td height="4" bgcolor="${o.marca.accent}" style="height:4px;line-height:4px;font-size:0;background:${o.marca.accent}">&nbsp;</td></tr>
-          <tr><td style="padding:36px 36px 32px;font-family:${FONTE};color:${n.texto}">
-            <h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;font-weight:700;letter-spacing:-0.01em;color:${n.texto}">${escapeHtml(o.titulo)}</h1>
-            <div style="font-size:15px;line-height:1.65;color:${n.texto}">${o.corpoHtml}</div>
+          <tr><td height="6" bgcolor="${o.marca.accent}" style="height:6px;line-height:6px;font-size:0;background:${o.marca.accent}">&nbsp;</td></tr>
+          <tr><td align="center" class="cartao-topo" style="padding:36px 40px 4px">${topo}</td></tr>
+          <tr><td class="cartao-conteudo" style="padding:28px 40px 40px;font-family:${FONTE};color:${n.texto}">
+            <h1 class="titulo" style="margin:0 0 18px;font-size:26px;line-height:1.25;font-weight:800;letter-spacing:-0.02em;color:${n.texto};text-align:center">${escapeHtml(o.titulo)}</h1>
+            <div style="font-size:16px;line-height:1.7;color:${n.texto}">${o.corpoHtml}</div>
             ${botao}
             ${observacao}
           </td></tr>
         </table>
       </td></tr>
-      <tr><td style="padding:24px 8px 0;font-family:${FONTE};font-size:12px;line-height:1.6;color:${n.suave}">
-        ${escapeHtml(o.motivo)}<br>
-        ${nome} · ${site}
+      <tr><td align="center" style="padding:28px 24px 0;font-family:${FONTE};font-size:12px;line-height:1.7;color:${n.suave}">
+        <strong style="color:${n.texto};font-weight:700">${nome}</strong>${site ? ` · ${site}` : ""}<br>
+        ${escapeHtml(o.motivo)}
       </td></tr>
     </table>
   </td></tr>
@@ -157,5 +176,5 @@ export function layoutDeEmail(o: OpcoesDoLayout): string {
 
 /** Parágrafo do corpo, com o espaçamento da casca. `html` já escapado. */
 export function paragrafo(html: string): string {
-  return `<p style="margin:0 0 14px">${html}</p>`;
+  return `<p style="margin:0 0 16px">${html}</p>`;
 }

@@ -12,11 +12,42 @@
 import { z } from "zod";
 
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 
-export function urlBaseDoAsaas(ambiente: string = env.ASAAS_AMBIENTE): string {
-  return ambiente.trim().toLowerCase() === "producao"
-    ? "https://api.asaas.com/v3"
-    : "https://api-sandbox.asaas.com/v3";
+export type AmbienteDoAsaas = "producao" | "sandbox";
+
+/**
+ * Qual Asaas atender — e a CHAVE decide antes do rótulo.
+ *
+ * A chave diz de onde veio: `aact_prod_…` só existe na produção e `aact_hmlg_…`
+ * só no sandbox. Antes, só `ASAAS_AMBIENTE` exatamente igual a `producao`
+ * mandava para a produção; `produção`, `production` ou `prod` caíam no sandbox
+ * em silêncio, a chave de produção levava 401 lá, e a tela dizia "cartão
+ * recusado". Com a chave mandando, trocar a chave basta para virar o ambiente —
+ * e um rótulo contraditório vira só aviso no log.
+ */
+export function ambienteDoAsaas(
+  chave: string = env.ASAAS_API_KEY,
+  rotulo: string = env.ASAAS_AMBIENTE,
+): AmbienteDoAsaas {
+  const k = chave.trim().replace(/^\$/, "");
+  if (k.startsWith("aact_prod_")) return "producao";
+  if (k.startsWith("aact_hmlg_")) return "sandbox";
+  const r = rotulo.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return ["producao", "production", "prod"].includes(r) ? "producao" : "sandbox";
+}
+
+export function urlBaseDoAsaas(ambiente: AmbienteDoAsaas = ambienteDoAsaas()): string {
+  return ambiente === "producao" ? "https://api.asaas.com/v3" : "https://api-sandbox.asaas.com/v3";
+}
+
+/** Rótulo e chave dizem coisas diferentes? Só para o aviso — quem manda é a chave. */
+export function ambienteDivergente(
+  chave: string = env.ASAAS_API_KEY,
+  rotulo: string = env.ASAAS_AMBIENTE,
+): boolean {
+  if (!chave.trim()) return false;
+  return ambienteDoAsaas(chave, rotulo) !== ambienteDoAsaas("", rotulo);
 }
 
 /**
@@ -71,7 +102,12 @@ async function chamar<T>(
       cache: "no-store",
     });
   } catch (e) {
-    throw new AsaasErro(503, e instanceof Error && e.name === "AbortError" ? "Asaas não respondeu a tempo." : "Não consegui falar com o Asaas.");
+    throw new AsaasErro(
+      503,
+      e instanceof Error && e.name === "AbortError"
+        ? "Asaas não respondeu a tempo."
+        : "Não consegui falar com o Asaas.",
+    );
   } finally {
     clearTimeout(timer);
   }
@@ -84,10 +120,28 @@ async function chamar<T>(
     json = null;
   }
 
+  if (res.status === 401) {
+    // A chave do SERVIDOR foi recusada — não é o cartão nem o CPF de quem paga.
+    // Como 4xx, o checkout traduzia isto em "pagamento recusado" e a pessoa
+    // trocava de cartão à toa. 503 para a tela; o motivo real vai para o log.
+    logger.error("asaas: chave recusada (401)", {
+      ambiente: ambienteDoAsaas(),
+      rotulo_divergente: ambienteDivergente(),
+    });
+    throw new AsaasErro(
+      503,
+      "A cobrança está com um problema de configuração no servidor. Avise o suporte.",
+      "chave_recusada",
+    );
+  }
   if (!res.ok) {
     const e = errosSchema.safeParse(json);
     const primeiro = e.success ? e.data.errors?.[0] : undefined;
-    throw new AsaasErro(res.status, primeiro?.description ?? `Asaas respondeu ${res.status}.`, primeiro?.code ?? null);
+    throw new AsaasErro(
+      res.status,
+      primeiro?.description ?? `Asaas respondeu ${res.status}.`,
+      primeiro?.code ?? null,
+    );
   }
   const r = schema.safeParse(json);
   if (!r.success) throw new AsaasErro(502, "Resposta do Asaas em formato inesperado.");
@@ -154,7 +208,11 @@ const assinaturaSchema = z
 export type AssinaturaAsaas = z.infer<typeof assinaturaSchema>;
 
 const listaDePagamentos = z.object({ data: z.array(pagamentoSchema) }).passthrough();
-const qrSchema = z.object({ encodedImage: z.string(), payload: z.string(), expirationDate: z.string().nullable().optional() });
+const qrSchema = z.object({
+  encodedImage: z.string(),
+  payload: z.string(),
+  expirationDate: z.string().nullable().optional(),
+});
 export type QrPix = z.infer<typeof qrSchema>;
 
 function soDigitos(s: string) {
@@ -240,7 +298,10 @@ export async function criarAssinatura(p: {
   });
 }
 
-export async function mudarMetodoDaAssinatura(assinaturaId: string, metodo: "PIX" | "CREDIT_CARD"): Promise<void> {
+export async function mudarMetodoDaAssinatura(
+  assinaturaId: string,
+  metodo: "PIX" | "CREDIT_CARD",
+): Promise<void> {
   await chamar("PUT", `/subscriptions/${encodeURIComponent(assinaturaId)}`, assinaturaSchema, {
     billingType: metodo,
     updatePendingPayments: true,
@@ -253,11 +314,16 @@ export async function trocarCartao(
   titular: Titular,
   ip: string | null,
 ): Promise<AssinaturaAsaas> {
-  return chamar("PUT", `/subscriptions/${encodeURIComponent(assinaturaId)}/creditCard`, assinaturaSchema, {
-    creditCard: cartaoNoFio(cartao),
-    creditCardHolderInfo: titularNoFio(titular),
-    remoteIp: ip ?? undefined,
-  });
+  return chamar(
+    "PUT",
+    `/subscriptions/${encodeURIComponent(assinaturaId)}/creditCard`,
+    assinaturaSchema,
+    {
+      creditCard: cartaoNoFio(cartao),
+      creditCardHolderInfo: titularNoFio(titular),
+      remoteIp: ip ?? undefined,
+    },
+  );
 }
 
 export async function cancelarAssinatura(assinaturaId: string): Promise<void> {
@@ -265,7 +331,11 @@ export async function cancelarAssinatura(assinaturaId: string): Promise<void> {
 }
 
 export async function cobrancasDaAssinatura(assinaturaId: string): Promise<PagamentoAsaas[]> {
-  const r = await chamar("GET", `/subscriptions/${encodeURIComponent(assinaturaId)}/payments?limit=100`, listaDePagamentos);
+  const r = await chamar(
+    "GET",
+    `/subscriptions/${encodeURIComponent(assinaturaId)}/payments?limit=100`,
+    listaDePagamentos,
+  );
   return r.data;
 }
 
@@ -282,10 +352,15 @@ export async function pagarComCartao(
   cartao: CartaoDigitado,
   titular: Titular,
 ): Promise<PagamentoAsaas> {
-  return chamar("POST", `/payments/${encodeURIComponent(pagamentoId)}/payWithCreditCard`, pagamentoSchema, {
-    creditCard: cartaoNoFio(cartao),
-    creditCardHolderInfo: titularNoFio(titular),
-  });
+  return chamar(
+    "POST",
+    `/payments/${encodeURIComponent(pagamentoId)}/payWithCreditCard`,
+    pagamentoSchema,
+    {
+      creditCard: cartaoNoFio(cartao),
+      creditCardHolderInfo: titularNoFio(titular),
+    },
+  );
 }
 
 export const _paraTeste = { cartaoNoFio, titularNoFio };

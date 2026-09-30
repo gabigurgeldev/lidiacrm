@@ -90,7 +90,19 @@ export function useRefetchDeSeguranca<T>({
     assinaturaRef.current = assinatura;
   }, [assinatura]);
 
+  // O `queryKey` pela MESMA razão. Quem chama monta a chave como array literal
+  // (`["messages", id]`), e array literal é identidade nova a cada render. Com a
+  // chave nas dependências de `verificar`, o intervalo reiniciava a cada
+  // redesenho — e o inbox redesenha a cada 30s (relógio, contagens, conexões),
+  // antes dos 45s. O timer NUNCA disparava com a conversa aberta: com o
+  // realtime mudo, a mensagem do cliente só aparecia com F5 ou troca de aba.
+  const queryKeyRef = useRef(queryKey);
+  useEffect(() => {
+    queryKeyRef.current = queryKey;
+  }, [queryKey]);
+
   const verificar = useCallback(async () => {
+    const queryKey = queryKeyRef.current;
     const antes = assinaturaRef.current(qc.getQueryData<T>(queryKey));
 
     await qc.refetchQueries({ queryKey, exact: true });
@@ -122,7 +134,7 @@ export function useRefetchDeSeguranca<T>({
     });
     // `ultimaEntrega` é ref (identidade estável): entra na lista por higiene,
     // sem recriar o callback nem reiniciar o intervalo.
-  }, [qc, queryKey, ultimaEntrega]);
+  }, [qc, ultimaEntrega]);
 
   useEffect(() => {
     if (!enabled) return;

@@ -7,6 +7,8 @@ import { forgotPasswordSchema, type ForgotPasswordInput } from "@/lib/auth/schem
 import { audit, hashEmail } from "@/lib/audit";
 import { authRateLimited, AUTH_LIMITS } from "@/lib/auth/rate-limit";
 import { env } from "@/lib/env";
+import { enviarRecuperacaoPeloApp } from "@/lib/auth/email-de-recuperacao";
+import { isEmailConfigured } from "@/lib/email/resend";
 
 export type RequestPasswordResetResult =
   | { ok: true }
@@ -43,6 +45,30 @@ export async function requestPasswordReset(
   // oráculo de enumeração de conta. Issue #64.
   if (await authRateLimited("reset", parsed.data.email, AUTH_LIMITS.reset)) {
     return { ok: false, error: "rate_limited" };
+  }
+
+  // Com e-mail configurado no app (SES/SMTP ou Resend), o CRM manda o e-mail com
+  // a marca — ver `lib/auth/email-de-recuperacao.ts`. Só se isso falhar cai no
+  // envio do próprio Supabase: um e-mail feio ainda é melhor que nenhum.
+  if (isEmailConfigured()) {
+    const desfecho = await enviarRecuperacaoPeloApp(
+      parsed.data.email,
+      `${origin}/auth/confirm?type=recovery`,
+    );
+    if (desfecho !== "falhou") {
+      await audit({
+        action: "auth.password_reset_requested",
+        metadata: {
+          email_hash: hashEmail(parsed.data.email),
+          via: "app",
+          conta_existe: desfecho === "enviado",
+        },
+        requestId,
+        ip,
+        userAgent,
+      });
+      return { ok: true };
+    }
   }
 
   const supabase = await createClient();

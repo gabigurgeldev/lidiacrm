@@ -13,6 +13,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { audit } from "@/lib/audit";
 import { sincronizarSaudeDaConexao } from "@/lib/channels/health";
+import { depoisDaResposta } from "@/lib/channels/depois-da-resposta";
 import { aplicarEfeitosPosEntrada } from "@/lib/channels/pos-entrada";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
@@ -573,20 +574,16 @@ async function handleInbound(
     // pipeline (sem re-despachar o agente) destrava o match_reply.
     const existente = await mensagemIngeridaPorExternalId(admin, session.organization_id, p.id);
     if (existente) {
-      try {
-        await acelerarPipelineDeEventos(admin, {
+      // Depois da resposta: a reentrega é justamente o sintoma de ter demorado
+      // demais para responder — acelerar aqui dentro repetiria a causa.
+      await depoisDaResposta("waha.ingest dedup", () =>
+        acelerarPipelineDeEventos(admin, {
           organizationId: session.organization_id,
           contactId: existente.contact_id,
           messageId: existente.id,
           texto: existente.body,
-        });
-      } catch (err) {
-        logger.warn("waha.ingest: dedup nao reacelerou pipeline", {
-          organization_id: session.organization_id,
-          external_id: p.id,
-          detail: err instanceof Error ? err.message : String(err),
-        });
-      }
+        }),
+      );
     }
     return;
   }
