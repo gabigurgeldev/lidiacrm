@@ -64,9 +64,9 @@ export function useConexoesDaConta() {
  * chave certa. Uma tentativa, com prazo acima do do servidor, para a resposta
  * dele — sucesso ou motivo — chegar à tela.
  */
-export const PRAZO_DA_CONSULTA_MS = 90_000;
+export const PRAZO_DA_CONSULTA_MS = 130_000;
 /** Importar aponta o webhook de cada número escolhido, um depois do outro. */
-export const PRAZO_DA_IMPORTACAO_MS = 300_000;
+export const PRAZO_DA_IMPORTACAO_MS = 400_000;
 
 export function useDescobrirInstancias() {
   return useMutation({

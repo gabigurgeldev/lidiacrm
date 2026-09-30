@@ -27,8 +27,8 @@ import {
 describe("prazos da conexão pela conta", () => {
   beforeEach(() => post.mockClear());
 
-  it("o servidor espera mais que o provedor leva (medido ~33s)", () => {
-    expect(TIMEOUT_DA_GESTAO_MS).toBeGreaterThanOrEqual(45_000);
+  it("o servidor espera mais que o provedor leva (pior medido: 87s)", () => {
+    expect(TIMEOUT_DA_GESTAO_MS).toBeGreaterThan(87_000);
   });
 
   it("a tela espera mais que o servidor — senão desiste antes da resposta", () => {
@@ -56,5 +56,47 @@ describe("prazos da conexão pela conta", () => {
         semRepetir: true,
       },
     );
+  });
+});
+
+/**
+ * A frase diz de QUEM é o problema. "Verifique a conexão do servidor" com o
+ * provedor devolvendo 503 em 43s mandou o operador investigar uma VPS perfeita.
+ */
+describe("a frase do erro aponta para o lado certo", () => {
+  const consultar = async (fetchFalso: typeof fetch) => {
+    const original = globalThis.fetch;
+    globalThis.fetch = fetchFalso;
+    try {
+      const { validarContaStevo } = await import("@/lib/channels/stevo/instancias");
+      return await validarContaStevo({ apiKey: "k", baseUrl: "https://provedor.test" });
+    } finally {
+      globalThis.fetch = original;
+    }
+  };
+
+  it("provedor que não responde a tempo: 'está lento', não 'sua rede'", async () => {
+    const r = await consultar(async () => {
+      throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+    });
+    expect(r).toMatchObject({ ok: false });
+    expect(!r.ok && r.motivo).toMatch(/não respondeu em \d+s/);
+  });
+
+  it("503 do provedor: instável, e a chave NÃO foi recusada", async () => {
+    const r = await consultar(async () => new Response("{}", { status: 503 }));
+    expect(!r.ok && r.motivo).toMatch(/instável agora \(respondeu 503\).*chave não foi recusada/);
+  });
+
+  it("controle: erro de rede de verdade continua pedindo para olhar o servidor", async () => {
+    const r = await consultar(async () => {
+      throw new TypeError("fetch failed");
+    });
+    expect(!r.ok && r.motivo).toMatch(/verifique a conexão do servidor/);
+  });
+
+  it("controle: 401 continua sendo chave recusada", async () => {
+    const r = await consultar(async () => new Response("{}", { status: 401 }));
+    expect(!r.ok && r.motivo).toMatch(/chave de API recusada/);
   });
 });

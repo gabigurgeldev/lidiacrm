@@ -36,13 +36,14 @@ const TIMEOUT_MS = 15_000;
  * as que a pessoa espera com a tela aberta.
  *
  * Medido em 2026-09-30: `GET /v1/instances` levou 19s e 33s para responder, e
- * isso só para RECUSAR uma chave inválida (401). Com 15s o fetch abortava antes
+ * isso só para RECUSAR uma chave inválida (401); horas depois, 43s (503) e 87s
+ * (401) — daí os 100s, com folga sobre o pior visto. Com 15s o fetch abortava antes
  * de qualquer resposta: chave certa ou errada, a tela girava e caía em "não foi
  * possível falar com o provedor". O health check (`lerInstanciaStevo`) fica nos
  * 15s de propósito — ele roda em lote no cron, e ali "não deu para perguntar"
  * já é um desfecho que não sobrescreve o estado.
  */
-export const TIMEOUT_DA_GESTAO_MS = 60_000;
+export const TIMEOUT_DA_GESTAO_MS = 100_000;
 
 export interface StevoInstancia {
   id: string;
@@ -134,13 +135,28 @@ export async function validarContaStevo(input: {
       signal: AbortSignal.timeout(TIMEOUT_DA_GESTAO_MS),
       cache: "no-store",
     });
-  } catch {
+  } catch (err) {
     // Rede caída e chave errada pedem ações OPOSTAS — tentar de novo mais tarde
     // versus ir buscar outra chave —, e uma mensagem só para os dois manda o
     // operador para o caminho errado metade das vezes.
+    //
+    // E "o provedor não respondeu a tempo" não é "o seu servidor está sem rede":
+    // em 2026-09-30 o provedor levou 43–87s e devolveu 503, e a frase de rede
+    // mandava o operador investigar a VPS dele, que estava perfeita.
+    // `name` lido sem `instanceof Error`: o `DOMException` do abort nem sempre
+    // herda de `Error` (depende do runtime), e o teste de tipo erraria o caso.
+    const nome =
+      typeof err === "object" && err !== null ? String((err as { name?: unknown }).name ?? "") : "";
+    if (nome === "TimeoutError" || nome === "AbortError") {
+      return {
+        ok: false,
+        motivo: `o provedor não respondeu em ${TIMEOUT_DA_GESTAO_MS / 1000}s — ele está lento agora; tente de novo em alguns minutos`,
+      };
+    }
     return {
       ok: false,
-      motivo: "não foi possível falar com o provedor — verifique a conexão do servidor e tente de novo",
+      motivo:
+        "não foi possível falar com o provedor — verifique a conexão do servidor e tente de novo",
     };
   }
 
@@ -149,7 +165,10 @@ export async function validarContaStevo(input: {
   // escopo `instances:read` (precisa só habilitar o escopo no painel). Uma
   // mensagem só para os dois manda quem tem chave certa reeditá-la à toa.
   if (resposta.status === 401) {
-    return { ok: false, motivo: "chave de API recusada pelo provedor — confira se ela foi copiada inteira" };
+    return {
+      ok: false,
+      motivo: "chave de API recusada pelo provedor — confira se ela foi copiada inteira",
+    };
   }
   if (resposta.status === 403) {
     return {
@@ -158,21 +177,26 @@ export async function validarContaStevo(input: {
         "essa chave é válida, mas não tem permissão pra listar instâncias — no painel Stevo, crie ou edite a API Key com o escopo instances:read",
     };
   }
+  if (resposta.status >= 500) {
+    // 502/503/504: o provedor está fora do ar ou sobrecarregado. A chave pode
+    // estar certíssima — dizer só o número fazia o operador trocá-la à toa.
+    return {
+      ok: false,
+      motivo: `o provedor está instável agora (respondeu ${resposta.status}) — a chave não foi recusada; tente de novo em alguns minutos`,
+    };
+  }
   if (!resposta.ok) {
     return { ok: false, motivo: `o provedor respondeu ${resposta.status} ao listar as instâncias` };
   }
 
-  const corpo = (await resposta.json().catch(() => null)) as
-    | { data?: unknown }
-    | unknown[]
-    | null;
+  const corpo = (await resposta.json().catch(() => null)) as { data?: unknown } | unknown[] | null;
   // O envelope varia entre `{data: [...]}` e a lista crua conforme o endpoint.
   // Aceitar as duas formas custa duas linhas e evita que uma mudança de envelope
   // devolva "nenhuma instância" — que se lê como "a conta está vazia".
   const lista = Array.isArray(corpo)
     ? corpo
     : Array.isArray((corpo as { data?: unknown })?.data)
-      ? ((corpo as { data: unknown[] }).data)
+      ? (corpo as { data: unknown[] }).data
       : null;
 
   if (lista === null) {
@@ -349,7 +373,10 @@ export async function validarTokenDeEnvioOficial(input: {
     };
   }
   if (r.status === 429) {
-    return { ok: false, motivo: "o provedor pediu para esperar (limite de chamadas) — tente em 1 minuto" };
+    return {
+      ok: false,
+      motivo: "o provedor pediu para esperar (limite de chamadas) — tente em 1 minuto",
+    };
   }
   if (!r.ok) {
     return { ok: false, motivo: `o provedor respondeu ${r.status}` };
