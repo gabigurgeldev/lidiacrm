@@ -58,7 +58,7 @@ export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, children }: Ap
     */
     // `h-full`: quem dá a altura da janela é o contêiner do layout, que a
     // divide com os avisos do topo (ver `app/app/layout.tsx`).
-    <div className="casca-moldura flex h-full w-full overflow-hidden">
+    <div className="casca-moldura relative flex h-full w-full overflow-hidden">
       <div className="hidden h-full md:block">
         <Sidebar collapsed={sidebarCollapsed} gruposAbertosSalvos={gruposAbertosSalvos} />
       </div>

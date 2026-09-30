@@ -127,7 +127,7 @@ export function ConversationListItem({
       // entre conversas e a fileira de selos em cada item eram o que fazia a
       // lista parecer planilha.
       className={cn(
-        "group mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-surface-elevated/70",
+        "group relative mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors hover:bg-surface-elevated/70",
         isSelected && "bg-surface-elevated hover:bg-surface-elevated",
       )}
       aria-current={isSelected ? "true" : undefined}

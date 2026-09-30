@@ -342,7 +342,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
       // painel sumia à direita), e o painel de contato alto empurrava a página
       // para baixo, deixando meia tela em branco.
       className={cn(
-        "grid h-full w-full grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden md:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]",
+        "relative grid h-full w-full grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden md:grid-cols-[340px_minmax(0,1fr)] 2xl:grid-cols-[400px_minmax(0,1fr)]",
         perfilAberto &&
           selectedConversation &&
           "2xl:grid-cols-[400px_minmax(0,1fr)_400px]",
