@@ -53,6 +53,7 @@ beforeEach(() => {
   chaveMock = () => ({
     apiKey: "sk-da-organizacao",
     baseUrl: null,
+    provedor: "openai",
     viaGateway: false,
     origem: "credencial_da_organizacao",
     rotulo: "Chave principal",
@@ -79,6 +80,7 @@ describe("embedText", () => {
     chaveMock = () => ({
       apiKey: null,
       baseUrl: null,
+      provedor: "openai",
       viaGateway: true,
       origem: "gateway_da_instalacao",
       rotulo: null,
@@ -90,6 +92,41 @@ describe("embedText", () => {
     const arg = embedSpy.mock.calls[0]?.[0] as { model: unknown; headers?: Record<string, string> };
     expect(arg.model).toBe("openai/text-embedding-3-small");
     expect(arg.headers?.["X-AI-Gateway-Tenant-Id"]).toBe("org-1");
+  });
+
+  it("SEM gateway e com a OpenAI direta, o id vai SEM o fornecedor", async () => {
+    await embedText("oi", { organizationId: "org-1" });
+
+    const arg = embedSpy.mock.calls[0]?.[0] as { model: { modelId: string } };
+    expect(arg.model.modelId).toBe("text-embedding-3-small");
+  });
+
+  it("chave da OpenRouter: mesmo modelo, id COM o fornecedor e endpoint da OpenRouter", async () => {
+    // A organização cuja única chave é a da OpenRouter. Antes disto o id ia sem
+    // o `openai/` para um endpoint que só aceita o id completo, e o material
+    // nunca ficava pronto.
+    chaveMock = () => ({
+      apiKey: "sk-or-da-organizacao",
+      baseUrl: "https://openrouter.ai/api/v1",
+      provedor: "openrouter",
+      viaGateway: false,
+      origem: "credencial_openrouter_da_organizacao",
+      rotulo: "Produção",
+      avisos: [],
+    });
+
+    const r = await embedText("oi", { organizationId: "org-1" });
+
+    const arg = embedSpy.mock.calls[0]?.[0] as {
+      model: { modelId: string; config: { url: (o: { path: string; modelId: string }) => string } };
+    };
+    expect(typeof arg.model, "objeto = provider explícito, nunca o gateway").toBe("object");
+    expect(arg.model.modelId).toBe("openai/text-embedding-3-small");
+    expect(arg.model.config.url({ path: "/embeddings", modelId: arg.model.modelId })).toBe(
+      "https://openrouter.ai/api/v1/embeddings",
+    );
+    // O modelo gravado na versão do índice não muda: o acervo antigo continua válido.
+    expect(r.model).toBe("openai/text-embedding-3-small");
   });
 
   it("devolve a contagem de tokens que o SDK reporta", async () => {
@@ -115,6 +152,7 @@ describe("embedText", () => {
       return {
         apiKey: "sk-x",
         baseUrl: null,
+        provedor: "openai",
         viaGateway: false,
         origem: "credencial_da_organizacao",
         rotulo: "x",
@@ -125,6 +163,7 @@ describe("embedText", () => {
     const chave = {
       apiKey: "sk-x",
       baseUrl: null,
+      provedor: "openai" as const,
       viaGateway: false,
       origem: "credencial_da_organizacao" as const,
       rotulo: "x",

@@ -23,8 +23,9 @@ follow-ups, fluxos, disparos, regras automáticas). **Mensagens recebidas
 continuam sendo gravadas** — nada do cliente se perde; ao pagar, tudo volta.
 
 Organizações que já existiam quando a cobrança entrou ficaram **isentas**
-(migration 0217). Organizações criadas pelo Back Office de afiliados nascem
-isentas (o Back Office cobra por fora).
+(migration 0217). Organizações criadas pelo Back Office de afiliados
+(`POST /backoffice/tenants`) nascem em **teste**, como as do `/signup`, com o
+valor do plano que o Back Office mandou — e são cobradas pelo CRM.
 
 A regra inteira está em `lib/billing/acesso.ts` e é calculada das datas: não há
 cron que bloqueia — a data passa e o bloqueio acontece.

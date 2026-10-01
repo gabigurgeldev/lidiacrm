@@ -26,7 +26,7 @@ As respostas são JSON cru (sem o envelope `{ data }` da `/api/v1`): o contrato 
 | `POST /backoffice/tenants` | Cria a organização e convida o dono como `admin` |
 | `POST /backoffice/tenants/{id}/suspend` | `organizations.status = suspended` |
 | `POST /backoffice/tenants/{id}/reactivate` | Volta para `active` |
-| `PATCH /backoffice/tenants/{id}` | `{ plan, amount_cents }` — plano cobrado pela Gestalt |
+| `PATCH /backoffice/tenants/{id}` | `{ plan, amount_cents }` — plano cobrado pelo CRM; o valor novo vale enquanto a assinatura ainda não foi ao Asaas |
 
 `POST /backoffice/tenants` recebe
 `{ request_id, company_name, document, owner: { name, email, whatsapp }, plan, amount_cents, affiliate_code?, extra }`

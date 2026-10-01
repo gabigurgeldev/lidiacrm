@@ -43,7 +43,7 @@ export async function GET(): Promise<Response> {
     .from("ai_provider_credentials_safe")
     .select("id, label, api_key_last4, validated_at, validation_error, is_active")
     .eq("organization_id", activeOrg.orgId)
-    .eq("provider", "openai")
+    .in("provider", ["openai", "openrouter"])
     .order("created_at", { ascending: true });
 
   return ok(

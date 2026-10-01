@@ -28,9 +28,15 @@
  *  2. **Credencial OpenAI da organização** (`ai_provider_credentials`, ativa e
  *     validada). É o degrau que faz "cadastrei a chave na tela e funcionou"
  *     virar verdade sem exigir que ninguém entenda o que é um binding.
+ *  2b. **Credencial OpenRouter da organização** — quando ela não tem chave da
+ *     OpenAI. A OpenRouter serve o MESMO `openai/text-embedding-3-small` (1536
+ *     dimensões) pelo endpoint OpenAI-compatível, então o índice é o mesmo mapa
+ *     e nada precisa ser reindexado. Antes disto, uma organização cuja única
+ *     chave era a da OpenRouter subia material que nunca ficava pronto.
  *  3. **Gateway da Vercel** (`AI_GATEWAY_API_KEY`) — quando a instalação roteia
  *     tudo por ele.
  *  4. **Chave da instalação** (`OPENAI_API_KEY`) — o que o `install.sh` pede.
+ *  4b. **Chave OpenRouter da instalação** (`OPENROUTER_API_KEY`).
  *  5. Nada. E "nada" é uma resposta legítima que o chamador precisa saber
  *     mostrar, não um erro para engolir.
  *
@@ -47,6 +53,7 @@
  * com que modelo foi calculada (`ai_knowledge_versions.embedding_model`).
  */
 import { byteaToBuffer, decryptKey } from "@/lib/crypto/aes_gcm";
+import { OPENROUTER_BASE_URL } from "@/lib/ai/gateway";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -61,21 +68,34 @@ export const DIMENSOES_DO_EMBEDDING = 1536;
 export type OrigemDaChave =
   | "binding_do_ponto"
   | "credencial_da_organizacao"
+  | "credencial_openrouter_da_organizacao"
   | "gateway_da_instalacao"
-  | "chave_da_instalacao";
+  | "chave_da_instalacao"
+  | "chave_openrouter_da_instalacao";
 
 export const EXPLICACAO_DA_ORIGEM: Record<OrigemDaChave, string> = {
   binding_do_ponto: "Escolhida por você no painel de Provedores.",
   credencial_da_organizacao: "Usando a chave OpenAI cadastrada em Credenciais.",
+  credencial_openrouter_da_organizacao: "Usando a chave OpenRouter cadastrada em Credenciais.",
   gateway_da_instalacao: "Usando o gateway de IA configurado nesta instalação.",
   chave_da_instalacao: "Usando a chave que veio na instalação.",
+  chave_openrouter_da_instalacao: "Usando a chave OpenRouter que veio na instalação.",
 };
+
+/** Com quem a chamada fala — decide como o id do modelo é escrito. */
+export type ProvedorDeEmbedding = "openai" | "openrouter";
 
 export interface ChaveDeEmbedding {
   /** Plaintext. Vive só no escopo de quem chamou — nunca logada nem persistida. */
   apiKey: string | null;
   /** `null` = falar direto com a OpenAI. */
   baseUrl: string | null;
+  /**
+   * A OpenAI quer o id sem prefixo (`text-embedding-3-small`); a OpenRouter quer
+   * o id com o fornecedor (`openai/text-embedding-3-small`). O formato trocado
+   * é modelo inexistente para qualquer uma das duas.
+   */
+  provedor: ProvedorDeEmbedding;
   /** Quando true, a chamada vai pelo gateway (o SDK lê a chave do process.env). */
   viaGateway: boolean;
   origem: OrigemDaChave;
@@ -111,9 +131,13 @@ export async function resolverChaveDeEmbedding(
             `(${MODELO_DE_EMBEDDING}) — trocá-lo exigiria reindexar todo o material de uma vez.`,
         );
       }
+      const ehOpenRouter = credencial.provider === "openrouter";
       return {
         apiKey: credencial.apiKey,
-        baseUrl: binding.base_url,
+        // Chave da OpenRouter sem endpoint próprio iria para api.openai.com e
+        // voltaria 401: o binding sem `base_url` herda o endpoint do provedor.
+        baseUrl: binding.base_url ?? (ehOpenRouter ? OPENROUTER_BASE_URL : null),
+        provedor: ehOpenRouter ? "openrouter" : "openai",
         viaGateway: false,
         origem: "binding_do_ponto",
         rotulo: credencial.rotulo,
@@ -127,7 +151,7 @@ export async function resolverChaveDeEmbedding(
   }
 
   // 2 · A credencial OpenAI da organização, sem exigir binding nenhum.
-  const daOrg = await credencialOpenAiDaOrganizacao(organizationId);
+  const daOrg = await credencialDaOrganizacao(organizationId, "openai");
   if (daOrg) {
     if (daOrg.quantas > 1) {
       avisos.push(
@@ -138,9 +162,31 @@ export async function resolverChaveDeEmbedding(
     return {
       apiKey: daOrg.apiKey,
       baseUrl: null,
+      provedor: "openai",
       viaGateway: false,
       origem: "credencial_da_organizacao",
       rotulo: daOrg.rotulo,
+      avisos,
+    };
+  }
+
+  // 2b · A credencial OpenRouter da organização. Depois da OpenAI de propósito:
+  // quem tem as duas continua falando direto com a OpenAI, como antes.
+  const daOrgOpenRouter = await credencialDaOrganizacao(organizationId, "openrouter");
+  if (daOrgOpenRouter) {
+    if (daOrgOpenRouter.quantas > 1) {
+      avisos.push(
+        `Esta organização tem ${daOrgOpenRouter.quantas} chaves OpenRouter cadastradas e nenhuma escolhida ` +
+          `para a base de conhecimento. Usando "${daOrgOpenRouter.rotulo}".`,
+      );
+    }
+    return {
+      apiKey: daOrgOpenRouter.apiKey,
+      baseUrl: OPENROUTER_BASE_URL,
+      provedor: "openrouter",
+      viaGateway: false,
+      origem: "credencial_openrouter_da_organizacao",
+      rotulo: daOrgOpenRouter.rotulo,
       avisos,
     };
   }
@@ -150,6 +196,7 @@ export async function resolverChaveDeEmbedding(
     return {
       apiKey: null,
       baseUrl: env.AI_GATEWAY_BASE_URL || null,
+      provedor: "openai",
       viaGateway: true,
       origem: "gateway_da_instalacao",
       rotulo: null,
@@ -162,8 +209,22 @@ export async function resolverChaveDeEmbedding(
     return {
       apiKey: env.OPENAI_API_KEY,
       baseUrl: null,
+      provedor: "openai",
       viaGateway: false,
       origem: "chave_da_instalacao",
+      rotulo: null,
+      avisos,
+    };
+  }
+
+  // 4b · A chave da OpenRouter da instalação.
+  if (env.OPENROUTER_API_KEY) {
+    return {
+      apiKey: env.OPENROUTER_API_KEY,
+      baseUrl: env.OPENROUTER_BASE_URL || OPENROUTER_BASE_URL,
+      provedor: "openrouter",
+      viaGateway: false,
+      origem: "chave_openrouter_da_instalacao",
       rotulo: null,
       avisos,
     };
@@ -223,12 +284,12 @@ async function lerBindingDeEmbedding(
 async function decifrarCredencial(
   credentialId: string,
   organizationId: string,
-): Promise<{ apiKey: string; rotulo: string } | null> {
+): Promise<{ apiKey: string; rotulo: string; provider: string } | null> {
   try {
     const admin = createAdminClient();
     const { data } = await admin
       .from("ai_provider_credentials")
-      .select("label, api_key_encrypted, api_key_iv, api_key_tag")
+      .select("label, provider, api_key_encrypted, api_key_iv, api_key_tag")
       .eq("id", credentialId)
       .eq("organization_id", organizationId)
       .eq("is_active", true)
@@ -242,6 +303,7 @@ async function decifrarCredencial(
         tag: byteaToBuffer(data.api_key_tag),
       }),
       rotulo: String((data as { label?: string }).label ?? ""),
+      provider: String((data as { provider?: string }).provider ?? ""),
     };
   } catch {
     // Sem detalhe no log: qualquer eco aqui corre o risco de carregar material
@@ -251,15 +313,16 @@ async function decifrarCredencial(
 }
 
 /**
- * A credencial OpenAI ativa e validada da organização.
+ * A credencial ativa e validada da organização para aquele provedor.
  *
  * Desempate DETERMINÍSTICO pela mais antiga: com duas chaves e nenhuma escolha,
  * "a mais recente" faria o comportamento mudar sozinho no dia em que alguém
  * cadastrasse outra. A tela evita o caso oferecendo a escolha; aqui o que
  * importa é não variar.
  */
-async function credencialOpenAiDaOrganizacao(
+async function credencialDaOrganizacao(
   organizationId: string,
+  provider: ProvedorDeEmbedding,
 ): Promise<{ apiKey: string; rotulo: string; quantas: number } | null> {
   try {
     const admin = createAdminClient();
@@ -267,7 +330,7 @@ async function credencialOpenAiDaOrganizacao(
       .from("ai_provider_credentials")
       .select("id, label, api_key_encrypted, api_key_iv, api_key_tag")
       .eq("organization_id", organizationId)
-      .eq("provider", "openai")
+      .eq("provider", provider)
       .eq("is_active", true)
       .not("validated_at", "is", null)
       .order("created_at", { ascending: true });

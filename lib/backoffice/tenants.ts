@@ -136,9 +136,16 @@ export async function criarTenant(
     return { status: 500, body: { error: "link_insert_failed" } };
   }
 
-  // O Back Office cobra o cliente por fora: a org nasce ISENTA da assinatura
-  // do CRM, senão o cliente pagaria duas vezes (e seria bloqueado no dia 8).
-  await abrirAssinatura(admin, org.id, { isenta: true }).catch(() => undefined);
+  // A org nasce em TESTE e é cobrada pelo CRM (Asaas), como quem se cadastra
+  // pelo /signup. Até 2026-10-01 ela nascia ISENTA, na suposição de que o Back
+  // Office cobrava por fora — ele não cobra, e todo cliente vindo de afiliado
+  // ganhava acesso permanente de graça. O valor é o plano que o Back Office
+  // mandou (já com o desconto do afiliado); sem valor, vale o padrão da instalação.
+  // O pagamento volta ao Back Office pelos eventos de `lib/backoffice/saida.ts`,
+  // e a comissão segue vinculada pelo `external_tenant_id`.
+  await abrirAssinatura(admin, org.id, {
+    valorCentavos: pedido.amount_cents > 0 ? pedido.amount_cents : undefined,
+  }).catch(() => undefined);
 
   const convite = linkDoConvite(baseUrl, org.id, pedido.owner.email);
   const marca = await marcaDaSaida(org.id);
@@ -270,6 +277,24 @@ export async function alterarPlano(
     })
     .eq("organization_id", organizationId);
   if (error) return { status: 500, body: { error: "update_failed" } };
+  // O plano agora é COBRADO pelo CRM: o valor novo vale para a assinatura que
+  // ainda não foi ao Asaas (o checkout cria a assinatura lá com este valor).
+  // Assinatura já criada no Asaas mantém o valor de lá — mudar só o lado local
+  // faria a tela mostrar um preço e o boleto cobrar outro.
+  if (plano.amount_cents > 0) {
+    try {
+      await admin
+        .from("assinaturas")
+        .update({ valor_centavos: plano.amount_cents })
+        .eq("organization_id", organizationId)
+        .is("asaas_subscription_id", null);
+    } catch (e) {
+      logger.warn("backoffice.plano.valor_da_assinatura_nao_atualizado", {
+        organization_id: organizationId,
+        motivo: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
   void audit({
     action: "tenant.plan_changed_by_backoffice",
     organizationId,

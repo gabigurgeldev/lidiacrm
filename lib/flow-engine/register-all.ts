@@ -30,7 +30,7 @@ import {
   triggerMessageReceived,
   triggerWebhook,
 } from "./nodes/gatilhos-e-menu";
-import { logicEnd, logicIf, logicWait, triggerLeadCreated } from "./nodes/logica";
+import { logicEnd, logicIf, logicWait, triggerAiHandoff, triggerLeadCreated } from "./nodes/logica";
 import {
   flowCall,
   logicAwaitEvent,
@@ -46,6 +46,7 @@ let registrado = false;
 export function garantirNosRegistrados(): void {
   if (registrado) return;
   registrarNo(triggerLeadCreated);
+  registrarNo(triggerAiHandoff);
   registrarNo(triggerManual);
   registrarNo(triggerMessageReceived);
   registrarNo(triggerKeyword);
