@@ -28,6 +28,12 @@ export interface CrmEdgeConfig {
    * segue em texto e abre o aviso `voz_indisponivel`.
    */
   voz?: VozDoEnvio | null;
+  /**
+   * Sem serviço no ambiente, a voz da ORGANIZAÇÃO — o Grok pela chave da
+   * OpenRouter dela. Por tenant, porque a chave é de cada org (e quem paga a voz
+   * é ela). `null` = a org não tem chave. Nunca lança.
+   */
+  vozDaOrganizacao?: (organizationId: string) => Promise<VozDoEnvio | null>;
 }
 
 /** Falha de transporte da borda (Supabase/WAHA fora) — transiente, o job re-tenta. */

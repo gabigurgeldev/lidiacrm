@@ -120,7 +120,7 @@ function fakeCfg(voz: { synthesize?: ReturnType<typeof vi.fn> } | null) {
   const upload = vi.fn().mockResolvedValue({ error: null });
   const cfg = {
     supabase: { storage: { from: vi.fn(() => ({ upload })) } },
-    voz: voz ? { provider: { synthesize: voz.synthesize ?? vi.fn() }, maxChars: 800 } : null,
+    voz: voz ? { servico: "kokoro", provider: { synthesize: voz.synthesize ?? vi.fn() }, maxChars: 800 } : null,
   };
   return { cfg: cfg as never, upload };
 }

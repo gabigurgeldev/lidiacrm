@@ -17,6 +17,7 @@ import { ProposalsPanel } from "./ProposalsPanel";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
+import type { ServicoDeVoz } from "@/lib/ai/voz/vozes";
 
 interface Props {
   /** Funis da org, para a marcação de escopo do agente (spec 17 passo 3). */
@@ -35,8 +36,8 @@ interface Props {
   credentials: CredentialRow[];
   /** Provedores cuja chave veio na instalação — ver `AgentForm`. */
   provedoresDaInstalacao?: string[];
-  /** Serviço de voz instalado (`TTS_BASE_URL`) — ver `AgentForm`. */
-  vozInstalada?: boolean;
+  /** Por qual serviço a organização fala — ver `AgentForm`. */
+  servicoDeVoz?: ServicoDeVoz | null;
   channelSessions: ChannelSessionLite[];
   routerMembership?: { routerId: string; routerName: string } | null;
   readOnly?: boolean;
@@ -76,7 +77,7 @@ export function AgentTabs(props: Props) {
           draftObsoleto={props.draftObsoleto}
           credentials={props.credentials}
           provedoresDaInstalacao={props.provedoresDaInstalacao}
-          vozInstalada={props.vozInstalada}
+          servicoDeVoz={props.servicoDeVoz}
           channelSessions={props.channelSessions}
           funis={props.funis}
           cobertura={props.cobertura}

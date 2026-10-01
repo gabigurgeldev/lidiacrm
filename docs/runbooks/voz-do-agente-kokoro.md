@@ -1,10 +1,50 @@
 # Voz do agente — instalar o Kokoro no Easypanel
 
 O agente pode responder em **nota de voz** (Agente de IA › agente › *Estilo de
-resposta* › **Responder em áudio**). A voz é gerada por um modelo aberto que roda
-na sua VPS, sem custo por mensagem: o **Kokoro-82M**, servido pelo
+resposta* › **Responder em áudio**).
+
+## Antes de instalar: provavelmente você não precisa
+
+**Sem nada instalado, a voz já funciona** pela chave da OpenRouter de cada
+organização (IA › Credenciais), com o modelo `x-ai/grok-voice-tts-1.0`. Não roda
+nada na VPS, e cada organização paga a própria voz (US$ 15 por milhão de
+caracteres, ou ~US$ 0,005 por resposta de 300 caracteres). O mp3 que o Grok
+devolve vira nota de voz ogg/opus no worker, com `ffmpeg`. Vozes: Eve, Ara, Rex,
+Sal e Leo.
+
+Medido em produção em 2026-10-01, numa VPS de **2 núcleos**:
+
+| | 1 fala | 8 falas ao mesmo tempo (o pico do worker) |
+|---|---|---|
+| Grok pela OpenRouter | ~1,7s | todas prontas em ~3s |
+| Kokoro na VPS | ~9s (~20s a primeira) | ~70s para a última: passa do timeout e vira texto |
+
+Com o Kokoro de pé, a mesma VPS entrou em swap e o WAHA travou: o WhatsApp de
+todas as organizações caiu até o WAHA ser reiniciado. **Só instale o Kokoro numa
+VPS com folga de CPU e RAM** e se a voz sem custo por mensagem valer isso.
+Preenchido, o `TTS_BASE_URL` vale para TODAS as organizações e vence a OpenRouter.
+
+## Kokoro: a voz que roda na sua VPS
+
+O modelo aberto, sem custo por mensagem, é o **Kokoro-82M**, servido pelo
 [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) com uma API no
 formato da OpenAI (`POST /v1/audio/speech`).
+
+> **⚠️ Um App do Easypanel NÃO é alcançável pelo worker** (medido em
+> 2026-10-01): o `worker` do CRM está só nas redes internas do compose, não na
+> rede `easypanel` — o override que põe o `app` nela é regravado pelo Easypanel
+> a cada implantação. O que funcionou foi um contêiner na rede interna do CRM,
+> sem porta publicada:
+>
+> ```bash
+> docker run -d --name lidiacrm_kokoro --network lidiacrm_crm_internal \
+>   --network-alias kokoro --restart unless-stopped --memory 2g --cpu-shares 128 \
+>   ghcr.io/remsky/kokoro-fastapi-cpu:v0.9.0
+> ```
+>
+> com `TTS_BASE_URL=http://kokoro:8880`. `--cpu-shares 128` dá prioridade ao
+> WAHA quando os dois disputam CPU. Os passos 1 e 2 abaixo descrevem o caminho
+> pelo Easypanel, que só serve se o worker estiver na rede dele.
 
 O serviço **não** faz parte do `docker-compose.prod.yml`: ele pesa ~1–1,5 GB de
 RAM, e quem não usa voz não deve pagar isso. Sem ele, o toggle aparece

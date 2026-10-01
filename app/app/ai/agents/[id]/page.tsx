@@ -15,6 +15,7 @@ import type { FunilDaResposta } from "@/hooks/pipelines/usePipelines";
 import { coberturaDoFunil, type EtapaDoMapa } from "@/lib/leads/agent-mapping";
 import type { CoberturaPorFunil } from "./_components/FunisDoAgente";
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
+import { servicoDeVozDaOrganizacao } from "@/lib/ai/voz/servico-da-organizacao";
 import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
 
 export const dynamic = "force-dynamic";
@@ -166,7 +167,7 @@ export default async function AgentEditorPage({
         versions={versions}
         credentials={credentials}
         provedoresDaInstalacao={provedoresDaInstalacao()}
-        vozInstalada={lerAmbiente().voz}
+        servicoDeVoz={await servicoDeVozDaOrganizacao(supabase, activeOrg.orgId)}
         channelSessions={channelSessions}
         funis={funis}
         cobertura={cobertura}

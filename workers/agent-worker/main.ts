@@ -79,6 +79,7 @@ import { runDrainLoop } from '@/lib/agent-engine/edge/crm/drain';
 import { runEventLogDrainLoop } from '@/lib/event-log/drain-loop';
 import { runFlowEngineLoop } from '@/lib/flow-engine/loop';
 import { crmEdgeConfigFromEnv } from '@/lib/agent-engine/edge/crm/mcp-client';
+import { vozDaOrganizacaoPeloBanco } from '@/lib/agent-engine/edge/crm/voz-da-organizacao';
 import { enforceHolds, sessionHealthMetrics } from '@/lib/agent-engine/edge/crm/session-watchdog';
 import { runSessionWatchdogLoop } from '@/lib/agent-engine/edge/crm/session-reconciler';
 import { runHealthLoop } from '@/lib/agent-engine/health/circuit';
@@ -545,13 +546,21 @@ export async function main(): Promise<void> {
   const log = createLogger();
   const handlers = new Map<JobKind, JobHandler>();
   const turnDeps: FollowupTurnDeps = {
-    crmCfg: crmEdgeConfigFromEnv({
-      SUPABASE_URL: env.NEXT_PUBLIC_SUPABASE_URL,
-      SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
-      TTS_BASE_URL: env.TTS_BASE_URL,
-      TTS_TIMEOUT_MS: env.TTS_TIMEOUT_MS,
-      TTS_MAX_CHARS: env.TTS_MAX_CHARS,
-    }),
+    crmCfg: {
+      ...crmEdgeConfigFromEnv({
+        SUPABASE_URL: env.NEXT_PUBLIC_SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+        TTS_BASE_URL: env.TTS_BASE_URL,
+        TTS_TIMEOUT_MS: env.TTS_TIMEOUT_MS,
+        TTS_MAX_CHARS: env.TTS_MAX_CHARS,
+      }),
+      // Sem TTS_BASE_URL, cada organização fala pela própria chave da OpenRouter.
+      vozDaOrganizacao: vozDaOrganizacaoPeloBanco({
+        databaseUrl: env.SUPABASE_DB_URL,
+        llmCfg: llmEdgeConfigFromEnv(env),
+        tts: { TTS_TIMEOUT_MS: env.TTS_TIMEOUT_MS, TTS_MAX_CHARS: env.TTS_MAX_CHARS },
+      }),
+    },
     llmCfg: llmEdgeConfigFromEnv(env),
     knobs: {
       historyLimit: env.LEAD_CONTEXT_HISTORY_LIMIT,

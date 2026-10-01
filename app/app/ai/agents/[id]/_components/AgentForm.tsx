@@ -37,7 +37,15 @@ import Link from "next/link";
 
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
 import { PROVEDORES } from "@/lib/ai/pontos/provedores";
-import { ROTULO_DA_VOZ, VOZES_DO_AGENTE, VOZ_PADRAO, type VozDoAgente } from "@/lib/ai/voz/vozes";
+import {
+  ROTULO_DA_VOZ,
+  VOZES_DO_AGENTE,
+  VOZES_POR_SERVICO,
+  VOZ_PADRAO,
+  vozParaOServico,
+  type ServicoDeVoz,
+  type VozDoAgente,
+} from "@/lib/ai/voz/vozes";
 
 import { ModelPicker, useModelMeta } from "./ModelPicker";
 import { CHAVE_DA_INSTALACAO, CredentialPicker, findCredential } from "./CredentialPicker";
@@ -83,11 +91,12 @@ interface BaseProps {
   provedoresDaInstalacao?: string[];
   channelSessions: ChannelSessionLite[];
   /**
-   * O serviço de voz (TTS) está instalado nesta VPS (`TTS_BASE_URL`)? Sem ele o
-   * toggle "Responder em áudio" fica desabilitado, com o que falta instalar —
-   * um toggle que liga e não faz nada seria a falha-em-verde.
+   * Por qual serviço esta organização fala (`servicoDeVozDaOrganizacao`) —
+   * `null` = nenhum. Sem serviço o toggle "Responder em áudio" fica
+   * desabilitado, com o que falta — um toggle que liga e não faz nada seria a
+   * falha-em-verde. Com serviço, a lista de vozes é a DELE.
    */
-  vozInstalada?: boolean;
+  servicoDeVoz?: ServicoDeVoz | null;
   routerMembership?: { routerId: string; routerName: string } | null;
   readOnly?: boolean;
 }
@@ -188,8 +197,9 @@ const DEFAULT_TRIGGER: TriggerValue = {
 function buildState(args: {
   agent?: AgentRow;
   version: AgentVersionRow | null;
+  servicoDeVoz?: ServicoDeVoz | null;
 }): FormState {
-  const { agent, version } = args;
+  const { agent, version, servicoDeVoz } = args;
   return {
     name: agent?.name ?? "",
     description: agent?.description ?? "",
@@ -222,9 +232,13 @@ function buildState(args: {
     reply_as_audio: version?.reply_as_audio ?? false,
     // Voz fora do catálogo (vocabulário aberto no banco) abre na padrão em vez
     // de um Select em branco que o primeiro save trocaria em silêncio.
-    audio_voice: (VOZES_DO_AGENTE as readonly string[]).includes(version?.audio_voice ?? "")
-      ? (version?.audio_voice as VozDoAgente)
-      : VOZ_PADRAO,
+    // Com serviço, a voz é a do catálogo DELE (`pf_dora`, default da coluna,
+    // não existe no Grok).
+    audio_voice: servicoDeVoz
+      ? vozParaOServico(version?.audio_voice ?? "", servicoDeVoz)
+      : (VOZES_DO_AGENTE as readonly string[]).includes(version?.audio_voice ?? "")
+        ? (version?.audio_voice as VozDoAgente)
+        : VOZ_PADRAO,
     followup: version?.followup ?? DEFAULT_FOLLOWUP,
     operator_enabled: version?.operator_enabled ?? false,
     // O form usa "" onde o banco usa null — Select controlado não aceita null.
@@ -285,9 +299,9 @@ export function AgentForm(props: Props) {
       // O fallback existe para chamadores que ainda não a passam; sem ele, um
       // agente pausado abriria no texto padrão e o prompt "sumiria".
       const ref = props.base ?? props.draft ?? props.published;
-      return buildState({ agent: props.agent, version: ref });
+      return buildState({ agent: props.agent, version: ref, servicoDeVoz: props.servicoDeVoz });
     }
-    return buildState({ version: null });
+    return buildState({ version: null, servicoDeVoz: props.servicoDeVoz });
   }, [isEdit, props]);
 
   const [form, setForm] = React.useState<FormState>(baseline);
@@ -956,17 +970,17 @@ export function AgentForm(props: Props) {
                 onCheckedChange={(v) => patch({ reply_as_audio: v })}
                 // Sem serviço instalado só dá para DESLIGAR: quem tirou o serviço
                 // depois de ligar precisa conseguir sair do estado quebrado.
-                disabled={disabled || (!props.vozInstalada && !form.reply_as_audio)}
+                disabled={disabled || (!props.servicoDeVoz && !form.reply_as_audio)}
               />
               <Label htmlFor="reply_as_audio">{t("Responder em áudio (nota de voz)")}</Label>
             </div>
             <p className="text-xs text-muted-foreground">
-              {props.vozInstalada
+              {props.servicoDeVoz
                 ? t(
                     "Cada resposta do agente sai como áudio, com a voz escolhida abaixo. Mensagens com link ou muito longas continuam em texto. Se o serviço de voz falhar, o cliente recebe a resposta em texto e a Central de avisos mostra o motivo.",
                   )
                 : t(
-                    "O serviço de voz não está instalado nesta VPS. Peça a quem administra o servidor para instalar o Kokoro e preencher TTS_BASE_URL (passo a passo em docs/runbooks/voz-do-agente-kokoro.md).",
+                    "Para responder em áudio, cadastre a chave da OpenRouter em IA › Credenciais. A voz sai pela sua chave, sem nada rodando no servidor.",
                   )}
             </p>
             {form.reply_as_audio ? (
@@ -981,7 +995,7 @@ export function AgentForm(props: Props) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {VOZES_DO_AGENTE.map((voz) => (
+                    {(props.servicoDeVoz ? VOZES_POR_SERVICO[props.servicoDeVoz] : VOZES_DO_AGENTE).map((voz) => (
                       <SelectItem key={voz} value={voz}>
                         {ROTULO_DA_VOZ[voz]}
                       </SelectItem>

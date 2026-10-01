@@ -20,7 +20,9 @@ import { createHash } from 'node:crypto';
 
 import { ApiError } from '@/lib/api/types';
 import { sendMessageHandler } from '@/app/api/v1/messages/_handler';
+import { vozParaOServico } from '@/lib/ai/voz/vozes';
 import { MIME_DA_VOZ, prepararFalaParaVoz } from '@/lib/messaging/media/tts';
+import { paraNotaDeVoz } from '@/lib/messaging/media/voice-transcode';
 import type { Message } from '@/lib/types/messaging';
 
 import { insertInboxItem } from '../../db/repository';
@@ -194,23 +196,33 @@ async function prepararNotaDeVoz(
   input: SendMessageInput,
   idempotencyKey: string,
 ): Promise<NotaDeVoz> {
-  const voice = input.voice?.voiceId ?? '';
-  if (!cfg.voz) {
+  // A regra de `servicoDeVoz`: o serviço do ambiente vence; sem ele, a chave
+  // da OpenRouter da organização (o resolvedor nunca lança — sem chave, `null`).
+  const voz = cfg.voz ?? (await cfg.vozDaOrganizacao?.(input.tenantId)) ?? null;
+  // A voz pertence ao serviço: `pf_dora` (default da coluna) não existe no Grok.
+  const voice = voz ? vozParaOServico(input.voice?.voiceId ?? '', voz.servico) : (input.voice?.voiceId ?? '');
+  if (!voz) {
     await avisarVozIndisponivel(
       db,
       input.tenantId,
-      'o serviço de voz não está instalado nesta VPS (TTS_BASE_URL vazio)',
+      'nenhum serviço de voz disponível — cadastre a chave da OpenRouter em IA › Credenciais',
     );
     return { kind: 'texto', registro: { voice, fallback: 'servico_nao_configurado' } };
   }
 
-  const fala = prepararFalaParaVoz(input.body, cfg.voz.maxChars);
+  const fala = prepararFalaParaVoz(input.body, voz.maxChars);
   if (fala === null) {
     return { kind: 'texto', registro: { voice, fallback: 'texto_com_link_ou_longo' } };
   }
 
   try {
-    const { audio, mime } = await cfg.voz.provider.synthesize(fala, voice);
+    const sintetizado = await voz.provider.synthesize(fala, voice);
+    // O Grok entrega mp3, e canal `opus-only` recusa mp3 como nota de voz.
+    // Converter falhando LANÇA — e cai na saída de sempre: texto + aviso.
+    const { buffer: audio, mime } = await paraNotaDeVoz({
+      buffer: sintetizado.audio,
+      mime: sintetizado.mime,
+    });
     // Caminho determinístico pela key: o retry SOBRESCREVE em vez de deixar
     // órfão, e o prefixo org/conversa é o que o handler confere antes de assinar.
     const storagePath = `${input.tenantId}/${input.conversationId}/out-voz-${idempotencyKey}.ogg`;
@@ -243,9 +255,9 @@ async function avisarVozIndisponivel(db: Queryable, tenantId: string, motivo: st
         title: 'O agente não conseguiu responder em áudio',
         body:
           `Motivo: ${motivo}. As respostas estão saindo em texto enquanto isso. ` +
-          'Confira se o serviço de voz está no ar e se TTS_BASE_URL aponta para ele ' +
-          '(passo a passo em docs/runbooks/voz-do-agente-kokoro.md), ou desligue ' +
-          '"Responder em áudio" no agente.',
+          'A voz sai pela chave da OpenRouter da organização (IA › Credenciais) ou, se a ' +
+          'instalação tiver um serviço próprio, pelo TTS_BASE_URL (passo a passo em ' +
+          'docs/runbooks/voz-do-agente-kokoro.md). Ou desligue "Responder em áudio" no agente.',
       },
       'kind',
     );
