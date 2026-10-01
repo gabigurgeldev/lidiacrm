@@ -23,6 +23,7 @@ import { motivoDeVozNaoEnviavel } from "@/lib/channels/voz";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
 import { isMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
+import { videoJaPronto } from "@/lib/messaging/media/video-whatsapp";
 import {
   buildVcard,
   normalizePhoneForDisplay,
@@ -705,6 +706,8 @@ export async function sendMessageHandler(
             mime: mimeDaMidia ?? "application/octet-stream",
             filename,
             caption: input.body ?? null,
+            // Vídeo normalizado no upload (`.wa.mp4`) sai sem pedir conversão ao WAHA.
+            pronto: videoJaPronto(caminhoDaMidia),
           },
           // O id que a PLATAFORMA conhece, lido da linha citada agora — não uma
           // cópia guardada no envio, que poderia divergir da linha.

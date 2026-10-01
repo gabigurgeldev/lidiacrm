@@ -8,6 +8,13 @@ export interface OutboundMedia {
   mime: string;
   filename?: string | null;
   caption?: string | null;
+  /**
+   * O arquivo já está no formato do WhatsApp (`paraVideoDoWhatsApp`). Vídeo
+   * pronto vai com `convert: false`: o `convert: true` faz o WAHA reencodar o
+   * vídeo inteiro A CADA destinatário, e foi isso que derrubou o WhatsApp de
+   * todas as organizações num disparo com vídeo (2026-10-01).
+   */
+  pronto?: boolean;
 }
 
 export interface WahaSendPlan {
@@ -25,7 +32,7 @@ export function wahaSendPlanFor(kind: string, media: OutboundMedia): WahaSendPla
     case "video":
       return {
         endpoint: "sendVideo",
-        payload: { file, convert: true, ...(media.caption ? { caption: media.caption } : {}) },
+        payload: { file, convert: !media.pronto, ...(media.caption ? { caption: media.caption } : {}) },
       };
     case "audio":
       return { endpoint: "sendVoice", payload: { file, convert: true } };

@@ -21,6 +21,7 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { logger } from "@/lib/logger";
+import { paraVideoDoWhatsApp, SUFIXO_DE_VIDEO_PRONTO } from "@/lib/messaging/media/video-whatsapp";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -74,12 +75,34 @@ export async function POST(req: NextRequest): Promise<Response> {
   // Organização da SESSÃO, nunca do body — o caminho é o que `criarDisparo`
   // confere depois, e é o prefixo que o envio aceita assinar.
   const arquivoId = randomUUID();
-  const caminho = `${orgId}/disparos/${arquivoId}.${formato.ext}`;
+  const original = Buffer.from(await file.arrayBuffer());
+
+  // Vídeo é normalizado AQUI, uma vez — ver `lib/messaging/media/video-whatsapp.ts`.
+  // Sem isto o WAHA reencodava o vídeo inteiro a cada destinatário do disparo.
+  // Falhando, guarda o original como antes: o envio dele segue pedindo conversão.
+  let conteudo: Buffer = original;
+  let mimeGuardado = file.type;
+  let caminho = `${orgId}/disparos/${arquivoId}.${formato.ext}`;
+  if (formato.kind === "video") {
+    try {
+      const pronto = await paraVideoDoWhatsApp({ buffer: original });
+      if (pronto.buffer.length <= formato.max) {
+        conteudo = pronto.buffer;
+        mimeGuardado = pronto.mime;
+        caminho = `${orgId}/disparos/${arquivoId}${SUFIXO_DE_VIDEO_PRONTO}`;
+      }
+    } catch (err) {
+      logger.warn("[bulk-sends/media] não normalizei o vídeo; guardo o original", {
+        detail: err instanceof Error ? err.message : String(err),
+        requestId,
+      });
+    }
+  }
   const admin = createAdminClient();
 
   const { error: erroUp } = await admin.storage
     .from("whatsapp-media")
-    .upload(caminho, Buffer.from(await file.arrayBuffer()), { contentType: file.type, upsert: false });
+    .upload(caminho, conteudo, { contentType: mimeGuardado, upsert: false });
   if (erroUp) {
     logger.error("[bulk-sends/media] upload falhou", { detail: erroUp.message, requestId });
     return fail("internal_error", "Erro ao subir o arquivo.", 500, { requestId });
@@ -97,15 +120,22 @@ export async function POST(req: NextRequest): Promise<Response> {
     // `resource_id` é uuid: o id do arquivo, e o caminho inteiro vai no metadata.
     resourceId: arquivoId,
     requestId,
-    metadata: { kind: formato.kind, mime: file.type, bytes: file.size, storage_path: caminho },
+    metadata: {
+      kind: formato.kind,
+      mime: mimeGuardado,
+      bytes: conteudo.length,
+      bytes_originais: file.size,
+      storage_path: caminho,
+      pronto_para_whatsapp: caminho.endsWith(SUFIXO_DE_VIDEO_PRONTO),
+    },
   });
 
   return ok(
     {
       storage_path: caminho,
-      media_mime: file.type,
+      media_mime: mimeGuardado,
       media_kind: formato.kind,
-      media_size_bytes: file.size,
+      media_size_bytes: conteudo.length,
       preview_url: previa?.signedUrl ?? null,
     },
     { status: 201, requestId },
