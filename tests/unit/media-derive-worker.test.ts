@@ -117,6 +117,37 @@ describe("deriveMessageMedia", () => {
     expect(downloadMock).not.toHaveBeenCalled();
   });
 
+  it("org só com OpenRouter: o áudio é transcrito pela OpenRouter, não vira 'não consegui abrir'", async () => {
+    // A org da GESTALT SUPORTE em 2026-10-01: OpenRouter como provedor, nenhuma
+    // credencial da OpenAI e nenhuma OPENAI_API_KEY na instalação.
+    const { resolveOrgLlmConfig } = await import("@/lib/agent-engine/edge/llm/credentials");
+    const base = await vi.mocked(resolveOrgLlmConfig).getMockImplementation()!(
+      undefined as never, undefined as never, "org1",
+    );
+    vi.mocked(resolveOrgLlmConfig).mockImplementation(async (_db, _cfg, _org, override) => {
+      if (override?.provider === "openai") throw new Error("sem credencial openai");
+      return { ...base, provider: "openrouter", apiKey: "sk-or-org", defaultModel: "openai/gpt-6-luna-pro" };
+    });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ text: "quero o plano" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(deriveMediaText).mockImplementation(async (_tipo, buf, mime, deps) =>
+      deps.transcriber.transcribe(buf, mime),
+    );
+    try {
+      const r = await deriveMessageMedia(eventRow());
+      expect(r.status).toBe("ok");
+      expect(updateEqMock).toHaveBeenCalledWith(
+        expect.objectContaining({ media_derived_text: "quero o plano", media_derived_status: "ready" }),
+      );
+      const [url, init] = fetchMock.mock.calls[0]!;
+      expect(String(url)).toBe("https://openrouter.ai/api/v1/audio/transcriptions");
+      expect((init.headers as Record<string, string>).Authorization).toBe("Bearer sk-or-org");
+    } finally {
+      vi.unstubAllGlobals();
+      vi.mocked(resolveOrgLlmConfig).mockImplementation(async () => base);
+    }
+  });
+
   it("erro na derivação marca failed no último attempt", async () => {
     vi.mocked(deriveMediaText).mockRejectedValue(new Error("transcription_503"));
     const r = await deriveMessageMedia(eventRow(4));

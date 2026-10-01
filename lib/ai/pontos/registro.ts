@@ -389,7 +389,7 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     emissor: "lib/messaging/media/transcription.ts",
     fixo: {
       razao:
-        "Usa o padrão de transcrição da OpenAI, que é o formato que os serviços do mercado implementam. Aceita apontar para outro serviço compatível — inclusive um rodando na sua própria máquina — mas exige uma chave desse serviço, separada da chave do modelo de conversa.",
+        "Usa o padrão de transcrição da OpenAI, que é o formato que os serviços do mercado implementam. Funciona com a sua chave da OpenAI ou, se você não tiver uma, com a da OpenRouter — não depende do modelo de conversa escolhido.",
     },
     sintomaDeFalha:
       "O cliente manda áudio e o agente responde como se não tivesse recebido nada.",
