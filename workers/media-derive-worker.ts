@@ -16,7 +16,11 @@ import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { deriveMediaText, type DeriveDeps } from "@/lib/messaging/media/derive";
 import { TIPOS_DERIVAVEIS } from "@/lib/messaging/media/derivable";
 import { deriveVideoText } from "@/lib/messaging/media/video-derive";
-import { apiTranscriptionProvider } from "@/lib/messaging/media/transcription";
+import {
+  apiTranscriptionProvider,
+  escolherTranscricao,
+  type EscolhaDaTranscricao,
+} from "@/lib/messaging/media/transcription";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -131,28 +135,34 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       }
     }
 
-    // A transcrição é SEMPRE do Whisper (api.openai.com), então precisa de uma
-    // chave OpenAI — não da chave do provedor de chat da org. O comentário
+    // A transcrição usa o endpoint de transcrição da OpenAI (ou o da
+    // OpenRouter, que tem o mesmo formato), então precisa de uma chave de UM
+    // desses dois — nunca da chave de outro provedor de chat da org. O comentário
     // antigo já dizia isso ("senão exige credencial openai dedicada"), mas o
     // código passava `llm.apiKey` direto: numa org com Anthropic, a chave da
     // Anthropic era enviada para a OpenAI e voltava 401 em toda tentativa
     // (visto nesta VPS: media.derive_requested preso com transcription_401,
     // e o cliente ouvindo "não consigo ouvir áudio" com a chave certa no .env).
-    let openaiKey: string | null = null;
-    if (llm.provider === "openai") {
-      openaiKey = llm.apiKey;
-    } else {
+    //
+    // Sem chave da OpenAI, a da OpenRouter também serve: ela expõe o mesmo
+    // endpoint de transcrição (`escolherTranscricao`). A ordem de busca é a da
+    // escada — só se procura a da OpenRouter quando a da OpenAI faltou.
+    const chaveDo = async (provider: "openai" | "openrouter"): Promise<string | null> => {
+      if (llm.provider === provider) return llm.apiKey;
       try {
-        const oa = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id, {
-          provider: "openai",
-        });
-        openaiKey = oa.apiKey;
+        const r = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id, { provider });
+        return r.apiKey;
       } catch {
-        openaiKey = null; // sem credencial e sem OPENAI_API_KEY: áudio fica sem transcrição
+        return null; // sem credencial na org e sem a variável de ambiente
       }
-    }
+    };
+    const openaiKey = await chaveDo("openai");
+    const transcricao = escolherTranscricao({
+      openai: openaiKey,
+      openrouter: openaiKey ? null : await chaveDo("openrouter"),
+    });
 
-    const deps = buildDeriveDeps(llm, openaiKey, row.organization_id);
+    const deps = buildDeriveDeps(llm, transcricao, row.organization_id);
 
     const text = await deriveMediaText(msg.type, buffer, msg.media_mime ?? "application/octet-stream", deps);
     await admin.from("messages")
@@ -200,7 +210,7 @@ async function lerBindingDoPonto(
 
 function buildDeriveDeps(
   llm: { provider: string; apiKey: string; defaultModel: string | null },
-  openaiKey: string | null,
+  transcricao: EscolhaDaTranscricao | null,
   orgId: string,
 ): DeriveDeps {
   const registry = createDefaultRegistry();
@@ -250,18 +260,17 @@ function buildDeriveDeps(
     });
     return res.text;
   };
-  // Sem chave OpenAI não há como transcrever: devolver string vazia é honesto
-  // (o derivado fica vazio e o marcador "[áudio]" continua valendo) e evita o
-  // loop de 401 que retentava a cada drain.
-  const transcriber: DeriveDeps["transcriber"] = openaiKey
-    ? apiTranscriptionProvider({ apiKey: openaiKey })
+  // Sem chave da OpenAI nem da OpenRouter não há como transcrever, e mandar a
+  // chave de outro provedor só reabre o laço de 401 que retentava a cada drain.
+  const transcriber: DeriveDeps["transcriber"] = transcricao
+    ? apiTranscriptionProvider(transcricao.creds)
     : {
         transcribe: async () => {
           // Mesma razão da visão: devolver "" fazia o agente responder ao áudio
           // como se ele não existisse. O aviso é o que dá ao operador a chance
           // de cadastrar a chave — sem ele, o sintoma é indistinguível de "o
           // agente é ruim".
-          await avisarMidiaNaoLida(orgId, "áudio", "falta uma chave da OpenAI para transcrever");
+          await avisarMidiaNaoLida(orgId, "áudio", "falta uma chave da OpenAI ou da OpenRouter para transcrever");
           return MARCADOR_NAO_LIDA;
         },
       };

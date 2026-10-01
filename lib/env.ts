@@ -468,8 +468,9 @@ if (!env.OPENAI_API_KEY) {
   console.warn(
     "[env] OPENAI_API_KEY ausente — ela é o ÚLTIMO degrau da escada de chave da OpenAI " +
       "(preparo de material do acervo e transcrição de áudio). Se alguma organização já " +
-      "cadastrou a chave em IA › Credenciais, os dois seguem funcionando por ela; se não " +
-      "cadastrou nenhuma, ambos ficam parados até que alguém cadastre — pela tela ou aqui.",
+      "cadastrou a chave em IA › Credenciais, os dois seguem funcionando por ela, e uma " +
+      "chave da OpenRouter também serve para os dois; sem nenhuma delas, ambos ficam " +
+      "parados até que alguém cadastre — pela tela ou aqui.",
   );
 }
 if (!env.IMPERSONATE_COOKIE_SECRET || env.IMPERSONATE_COOKIE_SECRET.length < 32) {

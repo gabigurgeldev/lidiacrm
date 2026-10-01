@@ -28,9 +28,12 @@ import {
 import { PAPEIS, PONTOS_DE_IA, PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { PROVEDORES, ehProvedorSuportado } from "@/lib/ai/pontos/provedores";
 import { validarBinding } from "@/lib/ai/pontos/validar-binding";
+import { transcricaoParaATela } from "@/lib/messaging/media/transcription";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+
+const PONTO_DA_TRANSCRICAO = "transcricao_de_audio";
 
 interface ModeloDoCatalogo {
   provider: string;
@@ -101,6 +104,18 @@ export async function GET(): Promise<Response> {
   const modelos = (modelosRes.data ?? []) as ModeloDoCatalogo[];
   const capacidadePorModelo = new Map(modelos.map((m) => [`${m.provider}|${m.model_id}`, m]));
 
+  // As mesmas fontes que o worker de mídia consulta: credencial ativa E
+  // validada da organização (é o filtro de `resolveOrgLlmConfig`), ou a
+  // variável de ambiente da instalação.
+  const credsValidas = ((credsRes.data ?? []) as Array<{ provider: string; validated_at: string | null }>)
+    .filter((c) => c.validated_at !== null);
+  const temChave = (provider: string, variavel: string | undefined) =>
+    credsValidas.some((c) => c.provider === provider) || Boolean(variavel?.trim());
+  const chavesDeTranscricao = {
+    openai: temChave("openai", process.env.OPENAI_API_KEY),
+    openrouter: temChave("openrouter", process.env.OPENROUTER_API_KEY),
+  };
+
   const pontos = PONTOS_DE_IA.map((ponto) => {
     const decisao = decidirBinding({
       pontoId: ponto.id,
@@ -128,6 +143,31 @@ export async function GET(): Promise<Response> {
     });
     const chave = `${decisao.provider}|${decisao.modelId ?? ""}`;
     const capacidade = capacidadePorModelo.get(chave);
+    // A transcrição não escolhe modelo pela precedência acima: ela sobe uma
+    // escada de CHAVE (OpenAI, depois OpenRouter). Mostrar a `decisao` aqui
+    // anunciava o modelo de conversa num ponto que nunca o usa.
+    if (ponto.id === PONTO_DA_TRANSCRICAO) {
+      const t = transcricaoParaATela(chavesDeTranscricao);
+      return {
+        id: ponto.id,
+        rotulo: ponto.rotulo,
+        oQueFaz: ponto.oQueFaz,
+        papel: ponto.papel,
+        exige: ponto.exige,
+        sintomaDeFalha: ponto.sintomaDeFalha,
+        fixo: ponto.fixo ?? null,
+        mandadoPeloAgente: false,
+        efetivo: {
+          provider: t.provider,
+          modelId: t.modelId,
+          credentialId: null,
+          baseUrl: null,
+          origem: "escada_de_chave",
+          porQue: t.porQue,
+        },
+        avisos: t.aviso ? [t.aviso] : [],
+      };
+    }
     return {
       id: ponto.id,
       rotulo: ponto.rotulo,
