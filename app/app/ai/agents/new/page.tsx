@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
 
 import { lerAmbiente } from "@/lib/instalacao/ambiente";
+import { servicoDeVozDaOrganizacao } from "@/lib/ai/voz/servico-da-organizacao";
 
 import { AgentForm } from "../[id]/_components/AgentForm";
 
@@ -55,7 +56,7 @@ export default async function NewAgentPage() {
         mode="create"
         credentials={credentials}
         provedoresDaInstalacao={provedoresDaInstalacao()}
-        vozInstalada={lerAmbiente().voz}
+        servicoDeVoz={await servicoDeVozDaOrganizacao(supabase, activeOrg.orgId)}
         channelSessions={channelSessions}
       />
     </div>

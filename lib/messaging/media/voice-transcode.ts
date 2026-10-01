@@ -129,3 +129,41 @@ export async function transcodificarNotaDeVoz(
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
+
+/**
+ * Áudio sintetizado → nota de voz (ogg/opus). LANÇA quando não consegue.
+ *
+ * Diferente de `transcodificarNotaDeVoz`, aqui o codec MUDA (o Grok só entrega
+ * mp3), então é reencode com `libopus`, não troca de container. E falha é erro,
+ * não "segue com o original": um mp3 como nota de voz é recusado pelos canais
+ * `opus-only` (`lib/channels/voz.ts`), e quem chama já tem a saída certa para
+ * isso — mandar a resposta em TEXTO e abrir o aviso na Central.
+ *
+ * Os parâmetros são os de uma nota de voz do próprio WhatsApp: mono, 48 kHz,
+ * perfil `voip` e ~32 kbps — fala inteligível com arquivo pequeno.
+ */
+export async function paraNotaDeVoz(
+  input: { buffer: Buffer; mime: string },
+  deps: { run?: typeof runFfmpeg } = {},
+): Promise<{ buffer: Buffer; mime: string }> {
+  const base = input.mime.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (base === VOICE_MIME || base === "audio/opus") return { buffer: input.buffer, mime: VOICE_MIME };
+  if (input.buffer.length > MAX_BYTES) throw new Error("voz_grande_demais");
+
+  const executar = deps.run ?? runFfmpeg;
+  const dir = await mkdtemp(join(tmpdir(), "voz-"));
+  try {
+    const entrada = join(dir, "in.audio");
+    const saida = join(dir, "out.ogg");
+    await writeFile(entrada, input.buffer);
+    await executar(
+      ["-i", entrada, "-vn", "-ac", "1", "-ar", "48000", "-c:a", "libopus", "-b:a", "32k", "-application", "voip", "-f", "ogg", saida],
+      dir,
+    );
+    const buffer = await readFile(saida);
+    if (buffer.length === 0) throw new Error("voz_conversao_vazia");
+    return { buffer, mime: VOICE_MIME };
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
