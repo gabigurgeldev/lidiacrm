@@ -20,8 +20,10 @@ import { createHash } from 'node:crypto';
 
 import { ApiError } from '@/lib/api/types';
 import { sendMessageHandler } from '@/app/api/v1/messages/_handler';
+import { MIME_DA_VOZ, prepararFalaParaVoz } from '@/lib/messaging/media/tts';
 import type { Message } from '@/lib/types/messaging';
 
+import { insertInboxItem } from '../../db/repository';
 import type { Queryable } from '../../queue/queue';
 import { cancelJob, rescheduleJob, type JobRow } from '../../queue/queue';
 import { cancelPendingCronsForLead } from '../../cron/scheduler';
@@ -77,6 +79,12 @@ export interface SendMessageInput {
    * colidirem no ledger e o segundo virar `already_sent` sem ter saído.
    */
   template?: { name: string; language: string; values: Record<string, string> };
+  /**
+   * Presente = sai como NOTA DE VOZ (migration 0222). O `body` segue sendo a
+   * identidade da intenção (hash do ledger) e vira a transcrição da mensagem;
+   * falha na síntese manda o `body` em texto e abre `voz_indisponivel`.
+   */
+  voice?: { voiceId: string };
 }
 
 /** Fallback do ator ai_agent quando não há agente publicado (cfg.agentActorId). */
@@ -114,6 +122,10 @@ export async function sendTurnMessage(
     }
   }
 
+  // Voz (migration 0222): sintetiza DEPOIS do claim e do replay — o retry de
+  // uma mensagem que já saiu não paga outra síntese.
+  const voz = input.voice ? await prepararNotaDeVoz(db, cfg, input, idempotencyKey) : null;
+
   let message: Message;
   try {
     message = await sendMessageHandler(
@@ -132,9 +144,17 @@ export async function sendTurnMessage(
               template_language: input.template.language,
               template_values: input.template.values,
             }
-          : { type: 'text' as const }),
+          : voz?.kind === 'audio'
+            ? {
+                type: 'audio' as const,
+                media_storage_path: voz.storagePath,
+                media_mime: MIME_DA_VOZ,
+              }
+            : { type: 'text' as const }),
+        // Em áudio, o `body` vira a transcrição da nota de voz — é o que a
+        // conversa mostra e o que o próximo turno lê como histórico.
         body: input.body,
-        metadata: { idempotency_key: idempotencyKey },
+        metadata: { idempotency_key: idempotencyKey, ...(voz ? { voz: voz.registro } : {}) },
       },
     );
   } catch (err) {
@@ -154,6 +174,84 @@ export async function sendTurnMessage(
   }
 
   return reconcile(db, idempotencyKey, message.id, message.status);
+}
+
+type NotaDeVoz =
+  | { kind: 'audio'; storagePath: string; registro: { voice: string } }
+  | { kind: 'texto'; registro: { voice: string; fallback: string } };
+
+/**
+ * Sintetiza o `body` e sobe a nota de voz para o Storage — ou decide que a
+ * mensagem sai em TEXTO. Nunca lança: o lead não pode ficar sem resposta porque
+ * a voz falhou, então toda falha vira texto + aviso na Central.
+ *
+ * Link, e-mail ou mensagem longa demais vão em texto POR DESENHO (ninguém copia
+ * um endereço de um áudio) e não abrem aviso — não há nada quebrado.
+ */
+async function prepararNotaDeVoz(
+  db: Queryable,
+  cfg: CrmEdgeConfig,
+  input: SendMessageInput,
+  idempotencyKey: string,
+): Promise<NotaDeVoz> {
+  const voice = input.voice?.voiceId ?? '';
+  if (!cfg.voz) {
+    await avisarVozIndisponivel(
+      db,
+      input.tenantId,
+      'o serviço de voz não está instalado nesta VPS (TTS_BASE_URL vazio)',
+    );
+    return { kind: 'texto', registro: { voice, fallback: 'servico_nao_configurado' } };
+  }
+
+  const fala = prepararFalaParaVoz(input.body, cfg.voz.maxChars);
+  if (fala === null) {
+    return { kind: 'texto', registro: { voice, fallback: 'texto_com_link_ou_longo' } };
+  }
+
+  try {
+    const { audio, mime } = await cfg.voz.provider.synthesize(fala, voice);
+    // Caminho determinístico pela key: o retry SOBRESCREVE em vez de deixar
+    // órfão, e o prefixo org/conversa é o que o handler confere antes de assinar.
+    const storagePath = `${input.tenantId}/${input.conversationId}/out-voz-${idempotencyKey}.ogg`;
+    const { error } = await cfg.supabase.storage
+      .from('whatsapp-media')
+      .upload(storagePath, audio, { contentType: mime, upsert: true });
+    if (error) throw new Error(`storage_upload: ${error.message}`);
+    return { kind: 'audio', storagePath, registro: { voice } };
+  } catch (err) {
+    const motivo = err instanceof Error ? err.message : String(err);
+    await avisarVozIndisponivel(db, input.tenantId, `a síntese falhou (${motivo.slice(0, 120)})`);
+    return { kind: 'texto', registro: { voice, fallback: `falha_na_sintese: ${motivo.slice(0, 120)}` } };
+  }
+}
+
+/**
+ * O laço de retorno da voz: o operador fica sabendo que o áudio parou de sair.
+ * Um aviso aberto por organização (dedupe por kind) — alarme repetido a cada
+ * mensagem treinaria o dono a ignorar a Central. Falha ao avisar não derruba o
+ * envio: o motivo já fica em `messages.metadata.voz.fallback`.
+ */
+async function avisarVozIndisponivel(db: Queryable, tenantId: string, motivo: string): Promise<void> {
+  try {
+    await insertInboxItem(
+      db,
+      tenantId,
+      {
+        kind: 'voz_indisponivel',
+        severity: 'warn',
+        title: 'O agente não conseguiu responder em áudio',
+        body:
+          `Motivo: ${motivo}. As respostas estão saindo em texto enquanto isso. ` +
+          'Confira se o serviço de voz está no ar e se TTS_BASE_URL aponta para ele ' +
+          '(passo a passo em docs/runbooks/voz-do-agente-kokoro.md), ou desligue ' +
+          '"Responder em áudio" no agente.',
+      },
+      'kind',
+    );
+  } catch {
+    // O fallback para texto já aconteceu; o motivo fica na metadata da mensagem.
+  }
 }
 
 /** Mapeia o status da linha `messages` para o outcome + atualiza o ledger. */

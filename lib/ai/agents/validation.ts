@@ -11,6 +11,7 @@ import { z } from "zod";
 import { VALID_TOOL_IDS } from "@/lib/mcp/tools/catalog";
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
 import { IDS_DE_PROVEDOR } from "@/lib/ai/pontos/provedores";
+import { VOZES_DO_AGENTE, VOZ_PADRAO } from "@/lib/ai/voz/vozes";
 
 /**
  * Derivado de `lib/ai/pontos/provedores.ts` (a lista única desde a 0127). Como
@@ -115,6 +116,10 @@ const versionShapeSchema = z
     // pelo pacing anti-ban. Defaults espelham a migration 0059.
     split_messages: z.boolean().default(false),
     split_max_chars: z.number().int().min(80).max(4000).default(600),
+    // Responder em áudio (migration 0222) — nota de voz sintetizada pelo
+    // serviço de TTS do operador. Defaults espelham a migration.
+    reply_as_audio: z.boolean().default(false),
+    audio_voice: z.enum(VOZES_DO_AGENTE).default(VOZ_PADRAO),
     followup: followupConfigSchema,
     // ── Papel OPERADOR (spec 16 §3.2) ───────────────────────────────────────
     // Todos com `.default(...)`, e é o que mantém retrocompatível: agent e

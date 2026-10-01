@@ -37,6 +37,7 @@ import Link from "next/link";
 
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
 import { PROVEDORES } from "@/lib/ai/pontos/provedores";
+import { ROTULO_DA_VOZ, VOZES_DO_AGENTE, VOZ_PADRAO, type VozDoAgente } from "@/lib/ai/voz/vozes";
 
 import { ModelPicker, useModelMeta } from "./ModelPicker";
 import { CHAVE_DA_INSTALACAO, CredentialPicker, findCredential } from "./CredentialPicker";
@@ -81,6 +82,12 @@ interface BaseProps {
    */
   provedoresDaInstalacao?: string[];
   channelSessions: ChannelSessionLite[];
+  /**
+   * O serviço de voz (TTS) está instalado nesta VPS (`TTS_BASE_URL`)? Sem ele o
+   * toggle "Responder em áudio" fica desabilitado, com o que falta instalar —
+   * um toggle que liga e não faz nada seria a falha-em-verde.
+   */
+  vozInstalada?: boolean;
   routerMembership?: { routerId: string; routerName: string } | null;
   readOnly?: boolean;
 }
@@ -148,6 +155,8 @@ interface FormState {
   cases_enabled: boolean;
   split_messages: boolean;
   split_max_chars: number;
+  reply_as_audio: boolean;
+  audio_voice: VozDoAgente;
   followup: FollowupValue;
   // Papel OPERADOR (spec 16 §3.2) — o que mexe no sistema depois da conversa.
   operator_enabled: boolean;
@@ -210,6 +219,12 @@ function buildState(args: {
     cases_enabled: version?.cases_enabled ?? false,
     split_messages: version?.split_messages ?? false,
     split_max_chars: version?.split_max_chars ?? 600,
+    reply_as_audio: version?.reply_as_audio ?? false,
+    // Voz fora do catálogo (vocabulário aberto no banco) abre na padrão em vez
+    // de um Select em branco que o primeiro save trocaria em silêncio.
+    audio_voice: (VOZES_DO_AGENTE as readonly string[]).includes(version?.audio_voice ?? "")
+      ? (version?.audio_voice as VozDoAgente)
+      : VOZ_PADRAO,
     followup: version?.followup ?? DEFAULT_FOLLOWUP,
     operator_enabled: version?.operator_enabled ?? false,
     // O form usa "" onde o banco usa null — Select controlado não aceita null.
@@ -243,6 +258,8 @@ function toVersionPayload(s: FormState) {
     cases_enabled: s.cases_enabled,
     split_messages: s.split_messages,
     split_max_chars: s.split_max_chars,
+    reply_as_audio: s.reply_as_audio,
+    audio_voice: s.audio_voice,
     followup: s.followup,
     operator_enabled: s.operator_enabled,
     // "" (não escolheu) → null (herda o do Conversador). São o mesmo conceito em
@@ -928,6 +945,49 @@ export function AgentForm(props: Props) {
                 {validation.split_max_chars ? (
                   <p className="text-xs text-destructive">{validation.split_max_chars}</p>
                 ) : null}
+              </div>
+            ) : null}
+
+            {/* Responder em áudio (migration 0222) */}
+            <div className="flex items-center gap-2 border-t pt-3">
+              <Switch
+                id="reply_as_audio"
+                checked={form.reply_as_audio}
+                onCheckedChange={(v) => patch({ reply_as_audio: v })}
+                // Sem serviço instalado só dá para DESLIGAR: quem tirou o serviço
+                // depois de ligar precisa conseguir sair do estado quebrado.
+                disabled={disabled || (!props.vozInstalada && !form.reply_as_audio)}
+              />
+              <Label htmlFor="reply_as_audio">{t("Responder em áudio (nota de voz)")}</Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {props.vozInstalada
+                ? t(
+                    "Cada resposta do agente sai como áudio, com a voz escolhida abaixo. Mensagens com link ou muito longas continuam em texto. Se o serviço de voz falhar, o cliente recebe a resposta em texto e a Central de avisos mostra o motivo.",
+                  )
+                : t(
+                    "O serviço de voz não está instalado nesta VPS. Peça a quem administra o servidor para instalar o Kokoro e preencher TTS_BASE_URL (passo a passo em docs/runbooks/voz-do-agente-kokoro.md).",
+                  )}
+            </p>
+            {form.reply_as_audio ? (
+              <div className="space-y-1">
+                <Label htmlFor="audio_voice">{t("Voz")}</Label>
+                <Select
+                  value={form.audio_voice}
+                  onValueChange={(v) => patch({ audio_voice: v as VozDoAgente })}
+                  disabled={disabled}
+                >
+                  <SelectTrigger id="audio_voice">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VOZES_DO_AGENTE.map((voz) => (
+                      <SelectItem key={voz} value={voz}>
+                        {ROTULO_DA_VOZ[voz]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             ) : null}
           </Card>

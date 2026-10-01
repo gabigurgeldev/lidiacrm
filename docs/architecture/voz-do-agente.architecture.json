@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Voz do agente — responder em áudio",
+    "subtitle": "toggle por versão do agente; o envio sintetiza no serviço de TTS do operador e cai para texto + aviso quando a voz falha",
+    "output": "voz-do-agente.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "tela", "label": "Onde a pessoa está" },
+    { "id": "turno", "label": "Turno do agente" },
+    { "id": "envio", "label": "Envio" },
+    { "id": "externo", "label": "Serviço do operador" },
+    { "id": "dados", "label": "Banco e Storage" },
+    { "id": "retorno", "label": "Laço de retorno" }
+  ],
+  "mainPath": ["form", "versao", "config", "turno", "send", "tts", "storage", "handler", "conversa"],
+  "nodes": [
+    { "id": "form", "lane": "tela", "col": 0, "type": "component", "label": "AgentForm › Estilo de resposta", "sublabel": "Responder em áudio + Voz; desabilitado sem TTS_BASE_URL (lerAmbiente().voz)" },
+    { "id": "conversa", "lane": "tela", "col": 6, "type": "component", "label": "Conversa no inbox", "sublabel": "nota de voz com o texto como transcrição" },
+    { "id": "versao", "lane": "dados", "col": 1, "type": "table", "label": "ai_agent_versions.reply_as_audio / audio_voice", "sublabel": "migration 0222; imutável depois de publicada" },
+    { "id": "config", "lane": "turno", "col": 2, "type": "module", "label": "lib/agent-engine/agent/agent-config.ts", "sublabel": "replyAsAudio · audioVoice" },
+    { "id": "turno", "lane": "turno", "col": 3, "type": "module", "label": "inbound-turn.ts › send_message", "sublabel": "sem bolhas em áudio; instrução de escrever para ser ouvido" },
+    { "id": "send", "lane": "envio", "col": 4, "type": "module", "label": "lib/agent-engine/edge/crm/send-message.ts", "sublabel": "sintetiza DEPOIS do claim do ledger; link/longo vai em texto" },
+    { "id": "tts", "lane": "externo", "col": 4, "type": "service", "label": "Kokoro-FastAPI (TTS_BASE_URL)", "sublabel": "POST /v1/audio/speech · opus · lib/messaging/media/tts.ts" },
+    { "id": "storage", "lane": "dados", "col": 5, "type": "table", "label": "Storage whatsapp-media", "sublabel": "org/conversa/out-voz-<key>.ogg (upsert)" },
+    { "id": "handler", "lane": "envio", "col": 5, "type": "service", "label": "sendMessageHandler", "sublabel": "type audio + media_storage_path; guarda de formato do canal" },
+    { "id": "aviso", "lane": "retorno", "col": 4, "type": "component", "label": "Central de avisos · voz_indisponivel", "sublabel": "um aberto por organização; o lead recebeu texto" },
+    { "id": "metadata", "lane": "retorno", "col": 5, "type": "table", "label": "messages.metadata.voz", "sublabel": "voice e, quando caiu para texto, o fallback" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "form", "to": "versao", "label": "salva / publica a versão" },
+    { "id": "e2", "from": "versao", "to": "config", "label": "carrega a versão publicada" },
+    { "id": "e3", "from": "config", "to": "turno", "label": "replyAsAudio" },
+    { "id": "e4", "from": "turno", "to": "send", "label": "channel.send({ voice })" },
+    { "id": "e5", "from": "send", "to": "tts", "label": "sintetiza o texto pós-gates" },
+    { "id": "e6", "from": "send", "to": "storage", "label": "sobe a nota de voz" },
+    { "id": "e7", "from": "send", "to": "handler", "label": "audio ou texto" },
+    { "id": "e8", "from": "handler", "to": "conversa", "label": "mensagem na conversa" },
+    { "id": "e9", "from": "send", "to": "aviso", "label": "voz falhou: texto + aviso" },
+    { "id": "e10", "from": "send", "to": "metadata", "label": "registra a voz e o fallback" },
+    { "id": "e11", "from": "aviso", "to": "form", "label": "religar o serviço ou desligar o toggle" }
+  ]
+}

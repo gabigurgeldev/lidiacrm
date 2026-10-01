@@ -65,6 +65,9 @@ export const KIND_LABEL = {
   // Diz que a campanha PAROU (não "está lenta"): quem lê quer saber que
   // precisa agir, não que o disparo está "só devagar".
   disparo_travado: "Um disparo em massa travou e está esperando para continuar",
+  // (migration 0222) Diz o que o CLIENTE recebeu (texto, não áudio) — quem lê
+  // precisa saber que o atendimento seguiu, e que só a voz parou.
+  voz_indisponivel: "O agente parou de responder em áudio e está mandando texto",
   other: "Aviso do assistente",
 } as const satisfies Record<InboxKind, string>;
 

@@ -189,6 +189,12 @@ const schema = z.object({
   VERCEL_AI_GATEWAY_URL: z.string().optional().default(""),
   ANTHROPIC_API_KEY: z.string().optional().default(""),
   OPENAI_API_KEY: z.string().optional().default(""),
+  // Voz do agente (migration 0222): serviço de TTS do operador, dialeto OpenAI
+  // (`POST /v1/audio/speech`; ex.: Kokoro-FastAPI em http://kokoro:8880). Quem
+  // SINTETIZA é o worker (lib/agent-engine/env.ts lê a mesma variável); aqui a
+  // tela só pergunta se o serviço existe — vazio desabilita o toggle "Responder
+  // em áudio" com a explicação do que instalar.
+  TTS_BASE_URL: z.string().optional().default(""),
 
   // Fusão (Fase 4): DONO ÚNICO dos eventos ai_agent.dispatch_requested.
   // 'engine' (default) = o worker agent-engine é o único consumidor (o cron

@@ -206,6 +206,14 @@ const envSchema = z.object({
   FLYWHEEL_BATCH_LIMIT: z.coerce.number().int().positive().default(10),
   // Contenção de egress — hosts EXTRA além do Supabase/WAHA (CSV). Fail-closed.
   EGRESS_EXTRA_ALLOWED_HOSTS: z.string().optional(),
+  // Voz do agente (migration 0222) — serviço de TTS do operador, dialeto OpenAI
+  // (`POST /v1/audio/speech`; ex.: Kokoro-FastAPI em http://kokoro:8880).
+  // Vazio = não instalado: quem liga "responder em áudio" segue em texto e a
+  // Central recebe o aviso `voz_indisponivel`.
+  TTS_BASE_URL: z.string().optional().default(''),
+  TTS_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000).catch(30_000),
+  // Acima disto a mensagem vai em texto — áudio de minutos ninguém escuta.
+  TTS_MAX_CHARS: z.coerce.number().int().positive().default(800).catch(800),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -548,6 +548,9 @@ export async function main(): Promise<void> {
     crmCfg: crmEdgeConfigFromEnv({
       SUPABASE_URL: env.NEXT_PUBLIC_SUPABASE_URL,
       SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+      TTS_BASE_URL: env.TTS_BASE_URL,
+      TTS_TIMEOUT_MS: env.TTS_TIMEOUT_MS,
+      TTS_MAX_CHARS: env.TTS_MAX_CHARS,
     }),
     llmCfg: llmEdgeConfigFromEnv(env),
     knobs: {

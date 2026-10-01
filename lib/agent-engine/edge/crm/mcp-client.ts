@@ -12,6 +12,8 @@
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
+import { vozDoAmbiente, type VozDoEnvio } from '@/lib/messaging/media/tts';
+
 export interface CrmEdgeConfig {
   /** admin client (service role) — usado só pelas bordas que chamam handlers do app. */
   supabase: SupabaseClient;
@@ -20,6 +22,12 @@ export interface CrmEdgeConfig {
    * envio (audit/metadata do CRM). Ausente = id genérico do engine.
    */
   agentActorId?: string;
+  /**
+   * Serviço de voz do operador (`TTS_BASE_URL`) — o agente com "responder em
+   * áudio" ligado sintetiza por aqui. Ausente/null = não instalado: o envio
+   * segue em texto e abre o aviso `voz_indisponivel`.
+   */
+  voz?: VozDoEnvio | null;
 }
 
 /** Falha de transporte da borda (Supabase/WAHA fora) — transiente, o job re-tenta. */
@@ -33,10 +41,14 @@ export class CrmTransportError extends Error {
 export function crmEdgeConfigFromEnv(env: {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
+  TTS_BASE_URL?: string;
+  TTS_TIMEOUT_MS?: number;
+  TTS_MAX_CHARS?: number;
 }): CrmEdgeConfig {
   return {
     supabase: createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     }),
+    voz: vozDoAmbiente(env),
   };
 }
