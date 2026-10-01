@@ -69,7 +69,7 @@ vi.mock("@/lib/agent-engine/edge/llm/credentials", () => ({
   })),
 }));
 
-import { deriveMessageMedia } from "@/workers/media-derive-worker";
+import { deriveMessageMedia, MARCADOR_NAO_LIDA } from "@/workers/media-derive-worker";
 import { deriveMediaText } from "@/lib/messaging/media/derive";
 
 function eventRow(attempts = 0) {
@@ -145,6 +145,60 @@ describe("deriveMessageMedia", () => {
     } finally {
       vi.unstubAllGlobals();
       vi.mocked(resolveOrgLlmConfig).mockImplementation(async () => base);
+    }
+  });
+
+  it("padrão da org sem chave (anthropic) não derruba o áudio: transcreve pela OpenRouter", async () => {
+    // Exatamente a GESTALT SUPORTE em 2026-10-01: `settings.llm` aponta para
+    // anthropic/claude-sonnet-5, mas a única chave é da OpenRouter. O resolver
+    // SEM override lançava "org sem credencial LLM utilizável" e o evento
+    // morria em 5 tentativas antes de chegar à transcrição.
+    const { resolveOrgLlmConfig } = await import("@/lib/agent-engine/edge/llm/credentials");
+    const base = await vi.mocked(resolveOrgLlmConfig).getMockImplementation()!(
+      undefined as never, undefined as never, "org1",
+    );
+    vi.mocked(resolveOrgLlmConfig).mockImplementation(async (_db, _cfg, _org, override) => {
+      if (override?.provider === "openrouter") {
+        return { ...base, provider: "openrouter", apiKey: "sk-or-org", defaultModel: null };
+      }
+      throw new Error("org sem credencial LLM utilizável");
+    });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ text: "oi, tudo bem" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.mocked(deriveMediaText).mockImplementation(async (_tipo, buf, mime, deps) =>
+      deps.transcriber.transcribe(buf, mime),
+    );
+    try {
+      const r = await deriveMessageMedia(eventRow());
+      expect(r.status).toBe("ok");
+      expect(updateEqMock).toHaveBeenCalledWith(
+        expect.objectContaining({ media_derived_text: "oi, tudo bem", media_derived_status: "ready" }),
+      );
+      expect(String(fetchMock.mock.calls[0]![0])).toBe("https://openrouter.ai/api/v1/audio/transcriptions");
+    } finally {
+      vi.unstubAllGlobals();
+      vi.mocked(resolveOrgLlmConfig).mockImplementation(async () => base);
+    }
+  });
+
+  it("padrão da org sem chave e imagem sem modelo: devolve o marcador em vez de morrer", async () => {
+    const { resolveOrgLlmConfig } = await import("@/lib/agent-engine/edge/llm/credentials");
+    const base = await vi.mocked(resolveOrgLlmConfig).getMockImplementation()!(
+      undefined as never, undefined as never, "org1",
+    );
+    vi.mocked(resolveOrgLlmConfig).mockRejectedValue(new Error("org sem credencial LLM utilizável"));
+    messageRow.type = "image";
+    vi.mocked(deriveMediaText).mockImplementation(async (_tipo, buf, mime, deps) =>
+      deps.describeImage(buf, mime),
+    );
+    try {
+      const r = await deriveMessageMedia(eventRow());
+      expect(r.status).toBe("ok");
+      expect(updateEqMock).toHaveBeenCalledWith(
+        expect.objectContaining({ media_derived_text: MARCADOR_NAO_LIDA, media_derived_status: "ready" }),
+      );
+    } finally {
+      vi.mocked(resolveOrgLlmConfig).mockReset().mockImplementation(async () => base);
     }
   });
 

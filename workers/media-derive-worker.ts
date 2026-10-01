@@ -103,7 +103,25 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       openrouterApiKey: process.env.OPENROUTER_API_KEY,
       cacheTtl: "1h",
     };
-    let llm = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id);
+    // ─── O modelo padrão da organização NÃO é pré-requisito ──────────────────
+    //
+    // Ele só serve para descrever imagem. Enquanto esta linha lançava, uma org
+    // cujo padrão aponta para um provedor sem chave (medido em produção em
+    // 2026-10-01: padrão `anthropic/claude-sonnet-5`, só chave da OpenRouter)
+    // perdia TODA mídia — áudio inclusive, que nem usa esse modelo. Cinco
+    // tentativas, evento `dead`, `media_derived_status='failed'` e nenhum aviso
+    // na Central: o agente respondia ao áudio como se ele não existisse.
+    // Agora a falta de chave do padrão vira `null`, e quem precisava dele (a
+    // descrição de imagem) avisa por conta própria.
+    let llm: Awaited<ReturnType<typeof resolveOrgLlmConfig>> | null = null;
+    try {
+      llm = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id);
+    } catch (err) {
+      logger.warn("[media-derive] padrão da org sem credencial utilizável; seguindo sem ele", {
+        organization_id: row.organization_id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     // ─── O painel de provedores manda AQUI também ────────────────────────────
     //
@@ -148,7 +166,7 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
     // endpoint de transcrição (`escolherTranscricao`). A ordem de busca é a da
     // escada — só se procura a da OpenRouter quando a da OpenAI faltou.
     const chaveDo = async (provider: "openai" | "openrouter"): Promise<string | null> => {
-      if (llm.provider === provider) return llm.apiKey;
+      if (llm?.provider === provider) return llm.apiKey;
       try {
         const r = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id, { provider });
         return r.apiKey;
@@ -209,13 +227,25 @@ async function lerBindingDoPonto(
 }
 
 function buildDeriveDeps(
-  llm: { provider: string; apiKey: string; defaultModel: string | null },
+  llm: { provider: string; apiKey: string; defaultModel: string | null } | null,
   transcricao: EscolhaDaTranscricao | null,
   orgId: string,
 ): DeriveDeps {
   const registry = createDefaultRegistry();
-  const visionCapable = modelCapabilities(llm.provider, llm.defaultModel ?? "").image;
+  const visionCapable = llm ? modelCapabilities(llm.provider, llm.defaultModel ?? "").image : false;
   const describeImage: DeriveDeps["describeImage"] = async (buffer, mime) => {
+    // Sem modelo resolvido não há quem descreva a imagem — e isso é motivo
+    // para avisar, não para derrubar a derivação inteira (ver o `try` em volta
+    // do padrão da org, lá em cima).
+    if (!llm) {
+      await avisarMidiaNaoLida(
+        orgId,
+        "imagem",
+        "o modelo padrão da organização não tem chave cadastrada — escolha um modelo com chave para " +
+          "\"Ver a imagem do cliente\" em Agente de IA → Provedores",
+      );
+      return MARCADOR_NAO_LIDA;
+    }
     // ─── Falha VISÍVEL, não string vazia ────────────────────────────────────
     //
     // Antes daqui, modelo sem visão devolvia "" e pronto: o cliente mandava a
