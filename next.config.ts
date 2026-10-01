@@ -1,6 +1,8 @@
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
+import { LIMITE_DO_CORPO_DA_REQUISICAO } from "./lib/http/limite-do-corpo";
+
 /** Performance budget (EPIC-12 §S-12.05):
  *  - LCP < 2.5s p75
  *  - CLS < 0.1 p75
@@ -49,6 +51,23 @@ const nextConfig: NextConfig = {
   typedRoutes: true,
   experimental: {
     optimizePackageImports: ["@phosphor-icons/react", "lucide-react", "date-fns"],
+    /**
+     * Quanto do corpo da requisição o `proxy.ts` deixa passar.
+     *
+     * O padrão do Next é 10 MB, e o que passa disso é CORTADO, sem erro: a
+     * rota recebe um multipart truncado, `req.formData()` falha, e a tela
+     * mostra "Campo 'file' (multipart) obrigatório" para quem só escolheu um
+     * vídeo. Foi assim no disparo em produção (2026-10-01, log: "Request body
+     * exceeded 10MB for /api/v1/bulk-sends/media"), com o vídeo dentro dos
+     * 16 MB que a própria rota aceita. O mesmo corte pegava a mídia da
+     * conversa (até 50 MB) e o material do acervo (até 20 MB).
+     *
+     * O teto acompanha o MAIOR upload que alguma rota aceita, mais 1 MB para
+     * o envelope do multipart — a mesma folga que a rota de mídia da conversa
+     * já usa no seu guard de Content-Length. Cada rota continua conferindo o
+     * seu limite real depois do parse.
+     */
+    proxyClientMaxBodySize: LIMITE_DO_CORPO_DA_REQUISICAO,
   },
   images: {
     // O app não usa next/image de fato (só <img> raw); desligar o otimizador
