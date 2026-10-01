@@ -5778,8 +5778,8 @@ export const DICIONARIO: Traducoes = {
   "Os próximos 30 dias são o que está publicado hoje — meses adiante aparecem conforme a data se aproxima.": { es: "Los próximos 30 días son lo que está publicado hoy — los meses siguientes aparecen conforme la fecha se acerca." },
   "Conferindo a chave com a OpenAI — leva alguns segundos.": { es: "Verificando la clave con OpenAI — toma unos segundos." },
   "Pronto para preparar material.": { es: "Listo para preparar material." },
-  "Falta uma chave da OpenAI para o agente aprender o seu material": { es: "Falta una clave de OpenAI para que el agente aprenda tu material" },
-  "Preparar um documento para o agente encontrá-lo usa a OpenAI, mesmo que o resto do seu assistente rode em outro provedor. Sem ela você consegue cadastrar o material, mas ele fica esperando — e o agente segue sem saber o que está nele.": { es: "Preparar un documento para que el agente lo encuentre usa OpenAI, aunque el resto de tu asistente corra en otro proveedor. Sin ella puedes registrar el material, pero queda esperando — y el agente sigue sin saber qué hay en él." },
+  "Falta uma chave da OpenAI ou da OpenRouter para o agente aprender o seu material": { es: "Falta una clave de OpenAI o de OpenRouter para que el agente aprenda tu material" },
+  "Preparar um documento para o agente encontrá-lo usa uma chave da OpenAI ou da OpenRouter, mesmo que o resto do seu assistente rode em outro provedor. Sem ela você consegue cadastrar o material, mas ele fica esperando — e o agente segue sem saber o que está nele.": { es: "Preparar un documento para que el agente lo encuentre usa una clave de OpenAI o de OpenRouter, aunque el resto de tu asistente corra en otro proveedor. Sin ella puedes registrar el material, pero queda esperando — y el agente sigue sin saber qué hay en él." },
   "Como você quer chamar esta chave": { es: "Cómo quieres llamar a esta clave" },
   "Você pega em": { es: "La consigues en" },
   ". Ela é guardada cifrada e nunca aparece de volta na tela.": { es: ". Se guarda cifrada y nunca vuelve a aparecer en la pantalla." },
@@ -5795,7 +5795,7 @@ export const DICIONARIO: Traducoes = {
   "Que tipo de material é": { es: "Qué tipo de material es" },
   "PDF, Markdown ou texto, até 20 MB. Um PDF só de imagens escaneadas não tem letra nenhuma para ler — envie uma versão com texto selecionável.": { es: "PDF, Markdown o texto, hasta 20 MB. Un PDF solo de imágenes escaneadas no tiene ninguna letra para leer — envía una versión con texto seleccionable." },
   "…ou cole o texto aqui": { es: "…o pega el texto aquí" },
-  "Sem uma chave da OpenAI, o material fica guardado e esperando — o agente só passa a conhecê-lo depois que a chave for cadastrada.": { es: "Sin una clave de OpenAI, el material queda guardado y esperando — el agente solo pasa a conocerlo después de que la clave sea registrada." },
+  "Sem uma chave da OpenAI ou da OpenRouter, o material fica guardado e esperando — o agente só passa a conhecê-lo depois que a chave for cadastrada.": { es: "Sin una clave de OpenAI o de OpenRouter, el material queda guardado y esperando — el agente solo pasa a conocerlo después de que la clave sea registrada." },
   "São estes os trechos que ele procura antes de responder. Quando ele erra sobre este assunto, é aqui que se vê o porquê.": { es: "Estos son los fragmentos que busca antes de responder. Cuando se equivoca sobre este tema, aquí se ve por qué." },
   "Não consegui ler os trechos agora.": { es: "No pude leer los fragmentos ahora." },
   "Este material ainda não foi preparado — não há trecho nenhum para o agente encontrar.": { es: "Este material todavía no fue preparado — no hay ningún fragmento para que el agente encuentre." },
@@ -6376,7 +6376,7 @@ export const DICIONARIO: Traducoes = {
   "Envie um arquivo ou cole o conteúdo.": { es: "Envía un archivo o pega el contenido." },
   "Não consegui guardar o arquivo.": { es: "No pude guardar el archivo." },
   "Material cadastrado. Estou preparando — em instantes o agente já sabe.": { es: "Material cargado. Lo estoy preparando — en instantes el agente ya lo sabe." },
-  "Material cadastrado. Ele fica esperando a chave da OpenAI para ser preparado.": { es: "Material cargado. Queda esperando la clave de OpenAI para ser preparado." },
+  "Material cadastrado. Ele fica esperando uma chave da OpenAI ou da OpenRouter para ser preparado.": { es: "Material cargado. Queda esperando una clave de OpenAI o de OpenRouter para ser preparado." },
   "Ensinar algo novo ao agente": { es: "Enseñarle algo nuevo al agente" },
   "Nome do material": { es: "Nombre del material" },
   "Perguntas frequentes da loja": { es: "Preguntas frecuentes de la tienda" },
@@ -6399,6 +6399,8 @@ export const DICIONARIO: Traducoes = {
   "Usando a chave OpenAI cadastrada em Credenciais.": { es: "Usando la clave de OpenAI cargada en Credenciales." },
   "Usando o gateway de IA configurado nesta instalação.": { es: "Usando el gateway de IA configurado en esta instalación." },
   "Usando a chave que veio na instalação.": { es: "Usando la clave que vino con la instalación." },
+  "Usando a chave OpenRouter cadastrada em Credenciais.": { es: "Usando la clave de OpenRouter cargada en Credenciales." },
+  "Usando a chave OpenRouter que veio na instalação.": { es: "Usando la clave de OpenRouter que vino con la instalación." },
   "A chave escolhida no painel de Provedores para este ponto não está utilizável (desativada, apagada ou ainda não validada). Seguindo com a próxima chave disponível.": { es: "La clave elegida en el panel de Proveedores para este punto no es utilizable (desactivada, borrada o todavía sin validar). Seguimos con la siguiente clave disponible." },
 
   // ─── Acervo: a listagem (app/app/ai/knowledge/sources/_client.tsx) ───
@@ -6590,6 +6592,8 @@ export const DICIONARIO: Traducoes = {
       es: "Las versiones publicadas y el historial de ejecuciones de este flujo se van junto. No se puede deshacer. Un flujo con ejecución en curso no se borra — pausa y espera a que termine.",
     },
   "Este bloco não tem ajustes.": { es: "Este bloque no tiene ajustes." },
+  "Este fluxo começa sozinho toda vez que o agente de IA passa uma conversa para uma pessoa. Use {{contact.name}}, {{contact.phone_number}}, {{event.reason}} e {{event.summary}} na mensagem.":
+    { es: "Este flujo empieza solo cada vez que el agente de IA pasa una conversación a una persona. Usa {{contact.name}}, {{contact.phone_number}}, {{event.reason}} y {{event.summary}} en el mensaje." },
   "Este fluxo começa sozinho toda vez que um lead novo entra no funil.":
     { es: "Este flujo empieza solo cada vez que un lead nuevo entra al embudo." },
   "Esperar quantos minutos?": { es: "¿Esperar cuántos minutos?" },
@@ -6736,6 +6740,9 @@ export const DICIONARIO: Traducoes = {
   "Distribuição": { es: "Reparto" },
   "Avisos": { es: "Avisos" },
   "Quando um lead é criado": { es: "Cuando se crea un lead" },
+  "Quando a IA passar para uma pessoa": { es: "Cuando la IA pase a una persona" },
+  "Começa o fluxo toda vez que o agente de IA passa uma conversa para a equipe.":
+    { es: "Empieza el flujo cada vez que el agente de IA pasa una conversación al equipo." },
   "Começa o fluxo toda vez que um lead novo entra no funil.":
     { es: "Empieza el flujo cada vez que un lead nuevo entra al embudo." },
   "Decidir": { es: "Decidir" },

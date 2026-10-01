@@ -531,14 +531,14 @@ export async function processRagIndexer(row: EventRow): Promise<HandlerResult> {
       await marcarFonte(row.organization_id, fonte.id, {
         last_index_status: "sem_credencial",
         last_index_error:
-          "Falta uma chave da OpenAI para indexar. Cadastre uma em IA › Credenciais " +
-          "(ou defina OPENAI_API_KEY na instalação) e este material entra sozinho.",
+          "Falta uma chave da OpenAI ou da OpenRouter para indexar. Cadastre uma em IA › Credenciais " +
+          "(ou defina OPENAI_API_KEY ou OPENROUTER_API_KEY na instalação) e este material entra sozinho.",
       });
       await avisarNaCentral(
         row.organization_id,
         fonte,
         `"${fonte.name}" ainda não entrou na base de conhecimento`,
-        "Falta uma chave da OpenAI para preparar o material. Cadastre uma em IA › Credenciais " +
+        "Falta uma chave da OpenAI ou da OpenRouter para preparar o material. Cadastre uma em IA › Credenciais " +
           "e a indexação recomeça sozinha — nada do que você enviou foi perdido.",
       );
       // `retry` e não `skipped`: o drain conta `skipped` como sucesso e marca o

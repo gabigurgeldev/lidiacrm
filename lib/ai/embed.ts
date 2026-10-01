@@ -19,7 +19,7 @@ import {
   type ChaveDeEmbedding,
   type PontoDeEmbedding,
 } from "@/lib/ai/embeddings/chave";
-import { gatewayHeaders, type ModelId } from "@/lib/ai/gateway";
+import { gatewayHeaders, idNaOpenRouter, type ModelId } from "@/lib/ai/gateway";
 
 export interface EmbedOptions {
   organizationId: string;
@@ -49,8 +49,8 @@ export class SemChaveDeEmbeddingError extends Error {
   readonly code = "embedding_sem_chave";
   constructor(readonly organizationId: string) {
     super(
-      "Esta organização não tem chave da OpenAI para indexar nem consultar o material. " +
-        "Cadastre uma em Credenciais, ou defina OPENAI_API_KEY na instalação.",
+      "Esta organização não tem chave da OpenAI nem da OpenRouter para indexar e consultar o material. " +
+        "Cadastre uma em Credenciais, ou defina OPENAI_API_KEY ou OPENROUTER_API_KEY na instalação.",
     );
     this.name = "SemChaveDeEmbeddingError";
   }
@@ -76,12 +76,18 @@ export async function embedText(
   // barra aqui não cai no OpenAI direto — no AI SDK, id com barra é resolvido
   // pelo gateway da Vercel mesmo sem chave, entrando no plano anônimo, cujo teto
   // devolve `GatewayRateLimitError` e derruba a busca na base de conhecimento.
+  //
+  // A OpenAI direta quer o id SEM o fornecedor; a OpenRouter quer COM ele
+  // (`openai/text-embedding-3-small`) — é o mesmo modelo, servido pelo endpoint
+  // OpenAI-compatível dela, então os vetores continuam no mesmo mapa.
+  const idNoProvedor =
+    chave.provedor === "openrouter" ? idNaOpenRouter(modelId) : modelId.replace(/^openai\//, "");
   const resolvido = chave.viaGateway
     ? modelId
     : createOpenAI({
         apiKey: chave.apiKey ?? "",
         ...(chave.baseUrl ? { baseURL: chave.baseUrl } : {}),
-      }).textEmbeddingModel(modelId.replace(/^openai\//, ""));
+      }).textEmbeddingModel(idNoProvedor);
 
   const result = await embed({
     model: resolvido,

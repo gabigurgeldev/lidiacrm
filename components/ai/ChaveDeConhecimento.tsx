@@ -149,11 +149,11 @@ export function ChaveDeConhecimento({ estado, onChaveCadastrada }: Props) {
         <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning-fg" aria-hidden />
         <div className="space-y-1">
           <h3 className="text-sm font-medium">
-            {t("Falta uma chave da OpenAI para o agente aprender o seu material")}
+            {t("Falta uma chave da OpenAI ou da OpenRouter para o agente aprender o seu material")}
           </h3>
           <p className="text-xs text-text-muted">
             {t(
-              "Preparar um documento para o agente encontrá-lo usa a OpenAI, mesmo que o resto do seu assistente rode em outro provedor. Sem ela você consegue cadastrar o material, mas ele fica esperando — e o agente segue sem saber o que está nele.",
+              "Preparar um documento para o agente encontrá-lo usa uma chave da OpenAI ou da OpenRouter, mesmo que o resto do seu assistente rode em outro provedor. Sem ela você consegue cadastrar o material, mas ele fica esperando — e o agente segue sem saber o que está nele.",
             )}
           </p>
         </div>
