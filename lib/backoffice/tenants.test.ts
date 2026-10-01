@@ -13,6 +13,8 @@ import {
 } from "./tenants";
 
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
+const abrirAssinaturaSpy = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock("@/lib/billing/servico", () => ({ abrirAssinatura: abrirAssinaturaSpy }));
 vi.mock("@/lib/branding/saida", () => ({ marcaDaSaida: vi.fn(async () => ({ nome: "CRM" })) }));
 vi.mock("@/lib/email/templates/invite", () => ({
   buildInviteEmail: vi.fn(() => ({ subject: "convite", html: "<p>convite</p>", text: "convite" })),
@@ -227,6 +229,30 @@ describe("tenants do Back Office", () => {
       organization_id: org.id,
       role: "admin",
     });
+  });
+
+  it("a empresa do Back Office nasce em TESTE e cobrada pelo CRM, com o valor do plano — nunca isenta", async () => {
+    abrirAssinaturaSpy.mockClear();
+    const r = await criarTenant(db.client, pedido(), "https://crm.exemplo.com");
+    const orgId = (r.body as { external_tenant_id: string }).external_tenant_id;
+
+    expect(abrirAssinaturaSpy).toHaveBeenCalledTimes(1);
+    const [, idDaOrg, opcoes] = abrirAssinaturaSpy.mock.calls[0] as unknown as [unknown, string, { isenta?: boolean; valorCentavos?: number }];
+    expect(idDaOrg).toBe(orgId);
+    // Isenta = acesso permanente de graça. Era o defeito: todo cliente de afiliado nascia assim.
+    expect(opcoes.isenta, "a empresa do Back Office nasceu isenta da cobrança").not.toBe(true);
+    expect(opcoes.valorCentavos).toBe(29700);
+  });
+
+  it("plano sem valor cai no valor padrão da instalação", async () => {
+    abrirAssinaturaSpy.mockClear();
+    await criarTenant(
+      db.client,
+      pedido({ request_id: "9b2f1c3e-5d4a-4e6f-8a7b-1c2d3e4f5a6b", amount_cents: 0 }),
+      "https://crm.exemplo.com",
+    );
+    const [, , opcoes] = abrirAssinaturaSpy.mock.calls[0] as unknown as [unknown, string, { valorCentavos?: number }];
+    expect(opcoes.valorCentavos).toBeUndefined();
   });
 
   it("mesmo request_id não abre segunda empresa", async () => {
