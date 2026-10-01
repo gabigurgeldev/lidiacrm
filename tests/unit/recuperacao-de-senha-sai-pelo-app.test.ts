@@ -44,7 +44,7 @@ describe("recuperação de senha pelo app", () => {
     });
     expect(await enviarRecuperacaoPeloApp("ana@exemplo.com", REDIRECT)).toBe("enviado");
 
-    const args = sendEmail.mock.calls[0]![0] as { html: string; to: string; subject: string };
+    const args = (sendEmail.mock.calls[0] as unknown[])[0] as { html: string; to: string; subject: string };
     expect(args.to).toBe("ana@exemplo.com");
     expect(args.subject).toContain("Gestalt CRM");
     expect(args.html).toContain(`href="${REDIRECT.replace("&", "&amp;")}&amp;token_hash=abc123"`);
