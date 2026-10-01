@@ -67,6 +67,8 @@ describe("VERSION_COLUMNS de ai_agent_versions", () => {
       expect(columns).toContain("cases_enabled");
       expect(columns).toContain("split_messages");
       expect(columns).toContain("split_max_chars");
+      expect(columns).toContain("reply_as_audio");
+      expect(columns).toContain("audio_voice");
     }
   });
 });
@@ -102,5 +104,19 @@ describe("versionCreateSchema aceita as flags por-agente que a tela edita", () =
     const parsed = versionCreateSchema.safeParse(base);
     expect(parsed.success && parsed.data.split_messages).toBe(false);
     expect(parsed.success && parsed.data.split_max_chars).toBe(600);
+  });
+
+  it("preserva reply_as_audio/audio_voice no parse, com defaults da migration 0222", () => {
+    const ligado = versionCreateSchema.safeParse({ ...base, reply_as_audio: true, audio_voice: "pm_alex" });
+    expect(ligado.success && ligado.data.reply_as_audio).toBe(true);
+    expect(ligado.success && ligado.data.audio_voice).toBe("pm_alex");
+
+    const omitido = versionCreateSchema.safeParse(base);
+    expect(omitido.success && omitido.data.reply_as_audio).toBe(false);
+    expect(omitido.success && omitido.data.audio_voice).toBe("pf_dora");
+  });
+
+  it("recusa voz fora do catálogo", () => {
+    expect(versionCreateSchema.safeParse({ ...base, audio_voice: "xx_inexistente" }).success).toBe(false);
   });
 });

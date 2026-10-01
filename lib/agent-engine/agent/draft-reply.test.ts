@@ -39,6 +39,8 @@ const AGENT: PublishedAgentConfig = {
   handoffToolEnabled: false,
   splitMessages: false,
   splitMaxChars: 400,
+  replyAsAudio: false,
+  audioVoice: 'pf_dora',
   multimodalInput: false,
   casesEnabled: false,
   toolIds: [],

@@ -1921,7 +1921,9 @@ async function executarTurnoDoAgente(
             // disclosure via inject); é ELE que vai ao canal, não o `body` capturado da tool.
             send: (finalBody: string) =>
               sendInBubbles(finalBody, {
-                enabled: agentConfig?.splitMessages ?? false,
+                // Em áudio a resposta sai INTEIRA numa nota de voz: fatiar em
+                // bolhas viraria uma rajada de áudios de 5 segundos.
+                enabled: (agentConfig?.splitMessages ?? false) && !(agentConfig?.replyAsAudio ?? false),
                 maxChars: agentConfig?.splitMaxChars ?? 600,
                 sleep: deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
                 jitter: () => 1200 + Math.floor(Math.random() * 800), // piso no throttle anti-ban (1.2s) — bolhas são mensagens físicas
@@ -1934,6 +1936,7 @@ async function executarTurnoDoAgente(
                     seq,
                     conversationId: input.conversationId,
                     body: bubble,
+                    ...(agentConfig?.replyAsAudio ? { voice: { voiceId: agentConfig.audioVoice } } : {}),
                   });
                 },
               }),
@@ -2565,9 +2568,15 @@ async function executarTurnoDoAgente(
   // Sufixos por-lead (situacionais, voláteis — depois do prefixo cacheável F2-17): corpos de
   // skill casadas (F3-09) + hint do classificador (F3-11) + instrução de split (F4-xx, quando
   // split_messages está on — Onda 4). Vazios são omitidos.
-  const splitHint = (agentConfig?.splitMessages ?? false)
-    ? 'Responda em mensagens curtas e naturais, uma ideia por mensagem — como uma pessoa digitando no WhatsApp. Prefira várias mensagens curtas a um texto único e longo.'
-    : '';
+  // Responder em áudio (migration 0222) VENCE o split: cada send_message vira uma
+  // nota de voz, então o texto tem de ser escrito para ser OUVIDO. Link e e-mail
+  // saem em texto de qualquer jeito (send-message.ts), por isso a instrução de
+  // mandá-los numa mensagem à parte — o resto da resposta continua em áudio.
+  const splitHint = (agentConfig?.replyAsAudio ?? false)
+    ? 'Suas mensagens são enviadas ao cliente como ÁUDIO (nota de voz). Escreva como quem fala: frases curtas e naturais, sem listas, sem negrito, sem emojis e sem símbolos. Se precisar mandar um link ou e-mail, envie-o numa mensagem separada, só com ele.'
+    : (agentConfig?.splitMessages ?? false)
+      ? 'Responda em mensagens curtas e naturais, uma ideia por mensagem — como uma pessoa digitando no WhatsApp. Prefira várias mensagens curtas a um texto único e longo.'
+      : '';
   // Spec 15: o `case_id` real do caso 'awaiting_lead' desta conversa, se houver — sem
   // isso o modelo nunca consegue chamar provide_case_update quando o lead simplesmente
   // responde (o caminho comum; case_reply_turn só cobre a AÇÃO do humano). Sufixo

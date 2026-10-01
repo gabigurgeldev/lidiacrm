@@ -36,6 +36,18 @@ export interface ChannelSendInput {
     /** Valor por slot, chaveado por `slotKey` — a mesma chave da tela. */
     values: Record<string, string>;
   };
+  /**
+   * Presente = o agente responde em ÁUDIO (migration 0222): o `body` é
+   * sintetizado e sai como nota de voz, com o texto guardado como transcrição.
+   *
+   * Opcional pelo mesmo motivo de `template`: adapter que ignore o campo envia o
+   * `body` em texto — que é exatamente o fallback quando a síntese falha. A
+   * identidade da intenção continua sendo o TEXTO (é ele que os gates avaliaram).
+   */
+  voice?: {
+    /** id da voz no serviço de TTS (`lib/ai/voz/vozes.ts`). */
+    voiceId: string;
+  };
 }
 
 /**

@@ -36,6 +36,11 @@ export interface AmbienteDaInstalacao {
   /** Envio de e-mail configurado — falso em toda instalação pelo kit hoje. */
   email: boolean;
   /**
+   * Serviço de voz (TTS, migration 0222) apontado em `TTS_BASE_URL`? Sem ele o
+   * toggle "Responder em áudio" do agente fica desabilitado.
+   */
+  voz: boolean;
+  /**
    * O transporte de WhatsApp está apontado e com chave?
    *
    * ⚠️ O CAMPO TINHA O NOME DO PROVEDOR, e a leitura vivia aqui. A doutrina de
@@ -75,6 +80,7 @@ export function lerAmbiente(source: FonteDeAmbiente = process.env): AmbienteDaIn
     chavesDeProvedor,
     gateway: preenchida(source, "AI_GATEWAY_API_KEY"),
     email: preenchida(source, "RESEND_API_KEY"),
+    voz: preenchida(source, "TTS_BASE_URL"),
     transporteDeWhatsapp: lerTransporteDeWhatsapp(source),
   };
 }

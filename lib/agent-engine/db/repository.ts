@@ -12,6 +12,8 @@
  */
 import type pg from 'pg';
 
+import type { Queryable } from '../queue/queue';
+
 /**
  * O vocabulário dos avisos do runtime. Espelha o CHECK de
  * `agent_inbox_items.kind` — e o espelho é MECÂNICO: o invariante
@@ -64,6 +66,11 @@ export type InboxKind =
   // janela de horário). Sem isto a campanha trava em silêncio — o operador só
   // saberia abrindo o disparo e reparando que nada saiu.
   | 'disparo_travado'
+  // (migration 0222) O agente está configurado para responder em áudio e a
+  // síntese falhou (serviço de voz fora, timeout, não instalado). O lead
+  // recebeu a resposta em TEXTO; o aviso conta ao operador por que o áudio
+  // parou de sair.
+  | 'voz_indisponivel'
   | 'other';
 
 export interface InboxItemRow {
@@ -124,7 +131,7 @@ export type InboxDedupe = 'kind' | 'kind_e_ref';
  * desfecho normal, não erro.
  */
 export async function insertInboxItem(
-  db: pg.Pool,
+  db: Queryable,
   tenantId: string | null, // null = plataforma (ex.: infra)
   input: { kind: InboxKind; title: string; severity?: InboxItemRow['severity']; body?: string; refKind?: string; refId?: string },
   dedupe?: InboxDedupe,

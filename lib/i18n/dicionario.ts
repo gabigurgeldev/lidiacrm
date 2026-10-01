@@ -581,6 +581,14 @@ export const DICIONARIO: Traducoes = {
     es: "En vez de un solo bloque, la respuesta sale en burbujas separadas, espaciadas con el mismo ritmo anti-bloqueo del envío. Al agente también se le indica que escriba en párrafos cortos.",
   },
   "Tamanho máximo por bolha (80–4000)": { es: "Tamaño máximo por burbuja (80–4000)" },
+  "Responder em áudio (nota de voz)": { es: "Responder con audio (nota de voz)" },
+  "Cada resposta do agente sai como áudio, com a voz escolhida abaixo. Mensagens com link ou muito longas continuam em texto. Se o serviço de voz falhar, o cliente recebe a resposta em texto e a Central de avisos mostra o motivo.": {
+    es: "Cada respuesta del agente sale como audio, con la voz elegida abajo. Los mensajes con enlace o muy largos siguen en texto. Si el servicio de voz falla, el cliente recibe la respuesta en texto y la Central de avisos muestra el motivo.",
+  },
+  "O serviço de voz não está instalado nesta VPS. Peça a quem administra o servidor para instalar o Kokoro e preencher TTS_BASE_URL (passo a passo em docs/runbooks/voz-do-agente-kokoro.md).": {
+    es: "El servicio de voz no está instalado en este VPS. Pide a quien administra el servidor que instale Kokoro y complete TTS_BASE_URL (paso a paso en docs/runbooks/voz-do-agente-kokoro.md).",
+  },
+  Voz: { es: "Voz" },
   "O que o agente pode fazer": { es: "Lo que el agente puede hacer" },
   "Ligue por jornada de trabalho. O agente só consegue fazer o que estiver ligado aqui — e o que estiver ligado, ele fará sozinho durante o atendimento.": {
     es: "Actívalo según la jornada de trabajo. El agente solo puede hacer lo que esté activado aquí — y lo que esté activado, lo hará solo durante la atención.",

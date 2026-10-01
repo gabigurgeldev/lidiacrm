@@ -359,6 +359,7 @@ export type Database = {
       ai_agent_versions: {
         Row: {
           agent_id: string
+          audio_voice: string
           cases_enabled: boolean
           channel_session_id: string
           cost_budget_cents: number
@@ -381,6 +382,7 @@ export type Database = {
           pipeline_ids: string[]
           provider: string
           published_at: string | null
+          reply_as_audio: boolean
           split_max_chars: number
           split_messages: boolean
           status: string
@@ -394,6 +396,7 @@ export type Database = {
         }
         Insert: {
           agent_id: string
+          audio_voice?: string
           cases_enabled?: boolean
           channel_session_id: string
           cost_budget_cents?: number
@@ -416,6 +419,7 @@ export type Database = {
           pipeline_ids?: string[]
           provider: string
           published_at?: string | null
+          reply_as_audio?: boolean
           split_max_chars?: number
           split_messages?: boolean
           status?: string
@@ -429,6 +433,7 @@ export type Database = {
         }
         Update: {
           agent_id?: string
+          audio_voice?: string
           cases_enabled?: boolean
           channel_session_id?: string
           cost_budget_cents?: number
@@ -451,6 +456,7 @@ export type Database = {
           pipeline_ids?: string[]
           provider?: string
           published_at?: string | null
+          reply_as_audio?: boolean
           split_max_chars?: number
           split_messages?: boolean
           status?: string

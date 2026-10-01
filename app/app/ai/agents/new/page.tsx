@@ -55,6 +55,7 @@ export default async function NewAgentPage() {
         mode="create"
         credentials={credentials}
         provedoresDaInstalacao={provedoresDaInstalacao()}
+        vozInstalada={lerAmbiente().voz}
         channelSessions={channelSessions}
       />
     </div>
