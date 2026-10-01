@@ -32,6 +32,33 @@ export const triggerLeadCreated: FlowNodeDefinition<Record<string, never>> = {
   execute: async () => ({ kind: "advance", branch_id: "else" }),
 };
 
+// ───────────────────────────── trigger.ai_handoff ────────────────────────────
+
+/**
+ * O bloco de início por "a IA passou a conversa para uma pessoa".
+ *
+ * O evento `agent.handoff_requested` é gravado por `performHumanHandoff`
+ * (`lib/agent-engine/agent/human-handoff.ts`) uma vez por EPISÓDIO de passagem —
+ * pedido do cliente, ferramenta do agente, teto de gasto ou suspeita de opt-out.
+ * O payload traz `reason`, `summary`, `conversation_id` e `lead_avisado`, que o
+ * fluxo lê como `{{event.reason}}`, `{{event.summary}}`…; o contato chega pelos
+ * fatos (`{{contact.name}}`, `{{contact.phone_number}}`).
+ *
+ * O uso que motivou: avisar o dono no WhatsApp pessoal com quem é, o número e o
+ * contexto, para ele assumir pelo CRM sem precisar estar olhando a Central.
+ */
+export const triggerAiHandoff: FlowNodeDefinition<Record<string, never>> = {
+  type: "trigger.ai_handoff",
+  version: 1,
+  category: "trigger",
+  rotulo: "Quando a IA passar para uma pessoa",
+  descricao: "Começa o fluxo toda vez que o agente de IA passa uma conversa para a equipe.",
+  eventos: ["agent.handoff_requested"],
+  configSchema: z.strictObject({}),
+  branches: () => [ramoPadrao("Começa aqui")],
+  execute: async () => ({ kind: "advance", branch_id: "else" }),
+};
+
 // ──────────────────────────────── logic.if ───────────────────────────────────
 
 const saidaSchema = z.strictObject({

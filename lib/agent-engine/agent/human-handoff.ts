@@ -166,7 +166,7 @@ export async function performHumanHandoff(
 
   // (d) inbox de escalação com o resumo da conversa. Dedup por episódio ABERTO (mesmo padrão
   // do escalateJailbreakPromise): 2× no mesmo handoff aberto → 1 item.
-  await db.query(
+  const inbox = await db.query(
     `insert into agent_inbox_items (organization_id, kind, severity, title, body, ref_kind, ref_id)
      select $1, 'handoff', 'critical', $2, $3, 'contact', $4
      where not exists (
@@ -192,6 +192,7 @@ export async function performHumanHandoff(
   //
   // Try/catch porque a timeline não pode derrubar a operação que ela descreve —
   // mesma disciplina fire-and-forget do emissor da API.
+  let leadDoNegocio: string | null = null;
   try {
     const roteou = await emitAgentActivityForContact({
       pool: db,
@@ -203,13 +204,57 @@ export async function performHumanHandoff(
       reason: 'Atendimento passado para uma pessoa',
       payload: { conversation_id: ids.conversationId },
     });
-    if (!roteou.routed) {
+    if (roteou.routed) {
+      leadDoNegocio = roteou.leadId;
+    } else {
       opts.log.warn('handoff: atividade não roteada para um negócio', { reason: roteou.reason });
     }
   } catch (err) {
     opts.log.warn('handoff: atividade da passagem não foi gravada', {
       error: err instanceof Error ? err.message.slice(0, 200) : 'erro desconhecido',
     });
+  }
+
+  // (f) A passagem no BARRAMENTO, para fluxo poder reagir (gatilho
+  // `trigger.ai_handoff` — "Quando a IA passar para uma pessoa"). Sem isto o dono
+  // só descobria a passagem abrindo a Central; não havia como ser avisado no
+  // WhatsApp pessoal, que é onde ele está quando não está no CRM.
+  //
+  // Só no EPISÓDIO NOVO (o insert do inbox entrou): esta função é at-least-once,
+  // e um evento por re-execução dispararia o mesmo aviso de novo a cada retry.
+  //
+  // Tipo próprio, e não `ai.handoff_triggered`: aquele já tem consumidores
+  // (follow-up, contadores de uso e de evolução) que contariam esta passagem
+  // em dobro — a evolução já a conta pelo inbox.
+  //
+  // `summary` leva o resumo da conversa para a mensagem do aviso. É o mesmo
+  // nível de dado que `message.received` já carrega (o texto da mensagem).
+  if ((inbox.rowCount ?? 0) > 0) {
+    try {
+      await db.query(
+        `insert into event_log (organization_id, event_type, entity_kind, entity_id, payload, metadata)
+         values ($1, 'agent.handoff_requested', $2, $3, $4, $5)`,
+        [
+          ids.tenantId,
+          leadDoNegocio ? 'crm_lead' : 'contact',
+          leadDoNegocio ?? ids.leadId,
+          JSON.stringify({
+            contact_id: ids.leadId,
+            conversation_id: ids.conversationId,
+            lead_id: leadDoNegocio,
+            reason: opts.reason,
+            summary: opts.conversationSummary,
+            lead_avisado: opts.avisoAoLead?.avisado ?? null,
+          }),
+          JSON.stringify({ source_module: 'human-handoff', source_id: ids.conversationId }),
+        ],
+      );
+    } catch (err) {
+      // O barramento não pode desfazer a passagem: ela já aconteceu e está no inbox.
+      opts.log.warn('handoff: evento da passagem não foi gravado', {
+        error: err instanceof Error ? err.message.slice(0, 200) : 'erro desconhecido',
+      });
+    }
   }
 
   // PII fora do log: só ids/motivo — nunca o resumo da conversa (regra dura 8).

@@ -24,6 +24,7 @@ import { LogicWaitForm } from "./forms/LogicWaitForm";
 import { NotifyInternalForm } from "./forms/NotifyInternalForm";
 import { RoutingRedistributeForm } from "./forms/RoutingRedistributeForm";
 import { RoutingRoundRobinForm } from "./forms/RoutingRoundRobinForm";
+import { TriggerAiHandoffForm } from "./forms/TriggerAiHandoffForm";
 import { TriggerLeadCreatedForm } from "./forms/TriggerLeadCreatedForm";
 import { WhatsappBulkSendForm } from "./forms/WhatsappBulkSendForm";
 import { WhatsappNotifyUserForm } from "./forms/WhatsappNotifyUserForm";
@@ -60,6 +61,7 @@ import type { PropsDoFormulario } from "./forms/shared";
  */
 export const FORMULARIO_DO_TIPO: Record<string, ComponentType<PropsDoFormulario>> = {
   "trigger.lead_created": TriggerLeadCreatedForm,
+  "trigger.ai_handoff": TriggerAiHandoffForm,
   "trigger.message_received": TriggerMessageReceivedForm,
   "trigger.keyword": TriggerKeywordForm,
   "trigger.webhook": TriggerWebhookForm,

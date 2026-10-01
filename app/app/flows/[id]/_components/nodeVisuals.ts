@@ -16,6 +16,7 @@ import {
   FlowArrow,
   Funnel,
   GitBranch,
+  Headset,
   ListChecks,
   ListNumbers,
   Robot,
@@ -72,6 +73,7 @@ export interface VisualDoNo {
 
 export const ICONE_DO_TIPO: Partial<Record<string, PhosphorIcon>> = {
   "trigger.lead_created": Play,
+  "trigger.ai_handoff": Headset,
   "trigger.manual": FlowArrow,
   "trigger.message_received": ChatCircle,
   "trigger.keyword": Tag,
