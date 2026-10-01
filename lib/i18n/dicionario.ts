@@ -2137,8 +2137,8 @@ export const DICIONARIO: Traducoes = {
   "Transforma o áudio que o cliente mandou em texto que o agente lê.": {
     es: "Transforma el audio que envió el cliente en texto que el agente lee.",
   },
-  "Usa o padrão de transcrição da OpenAI, que é o formato que os serviços do mercado implementam. Aceita apontar para outro serviço compatível — inclusive um rodando na sua própria máquina — mas exige uma chave desse serviço, separada da chave do modelo de conversa.": {
-    es: "Usa el estándar de transcripción de OpenAI, que es el formato que implementan los servicios del mercado. Acepta apuntar a otro servicio compatible — incluso uno corriendo en tu propia máquina — pero exige una clave de ese servicio, separada de la clave del modelo de conversación.",
+  "Usa o padrão de transcrição da OpenAI, que é o formato que os serviços do mercado implementam. Funciona com a sua chave da OpenAI ou, se você não tiver uma, com a da OpenRouter — não depende do modelo de conversa escolhido.": {
+    es: "Usa el estándar de transcripción de OpenAI, que es el formato que implementan los servicios del mercado. Funciona con tu clave de OpenAI o, si no tienes una, con la de OpenRouter — no depende del modelo de conversación elegido.",
   },
   "O cliente manda áudio e o agente responde como se não tivesse recebido nada.": {
     es: "El cliente manda audio y el agente responde como si no hubiera recibido nada.",
@@ -2236,6 +2236,11 @@ export const DICIONARIO: Traducoes = {
   "Herdado de quem disparou a chamada — o agente publicado, ou o roteador de intenção.": {
     es: "Heredado de quien disparó la llamada — el agente publicado, o el enrutador de intención.",
   },
+  "Usando sua chave da OpenAI.": { es: "Usando tu clave de OpenAI." },
+  "Usando sua chave da OpenRouter (não há chave da OpenAI cadastrada).": {
+    es: "Usando tu clave de OpenRouter (no hay clave de OpenAI registrada).",
+  },
+  "Sem chave para transcrever.": { es: "Sin clave para transcribir." },
   "Usando o padrão da organização.": {
     es: "Usando el valor predeterminado de la organización.",
   },
