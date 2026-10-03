@@ -141,6 +141,10 @@ export function SignupForm({
       }
       if (res.error === "rate_limited") {
         setServerError(t("Muitas tentativas. Aguarde alguns minutos."));
+      } else if (res.error === "already_registered") {
+        setServerError(
+          t("Este e-mail já tem conta. Entre com sua senha ou use \"Esqueci minha senha\" na tela de login."),
+        );
       } else if (res.error === "validation_error" && res.details?.codigo_indicacao) {
         setError("codigo_indicacao", { message: "Código de indicação inválido" });
       } else if (res.error === "validation_error") {

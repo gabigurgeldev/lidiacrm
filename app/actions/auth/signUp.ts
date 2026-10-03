@@ -22,7 +22,7 @@ export type SignUpResult =
   | { ok: true }
   | {
       ok: false;
-      error: "validation_error" | "rate_limited" | "signup_failed";
+      error: "validation_error" | "rate_limited" | "already_registered" | "signup_failed";
       details?: Record<string, unknown>;
     };
 
@@ -31,7 +31,7 @@ export type SignUpResult =
  * confirmação. O tenant só é provisionado quando o link é confirmado em
  * /auth/confirm (evita orgs órfãs de cadastros nunca confirmados).
  *
- * Anti-enumeração: e-mail já cadastrado recebe a MESMA resposta de sucesso —
+ * Anti-enumeração (confirmação LIGADA): e-mail já cadastrado recebe a MESMA resposta de sucesso —
  * o GoTrue devolve um usuário ofuscado (identities vazio) sem erro, e nós não
  * diferenciamos. Rate limit de envio de e-mail é do próprio GoTrue.
  */
@@ -121,6 +121,20 @@ export async function signUp(
 
   if (error) {
     if (error.status === 429) return { ok: false, error: "rate_limited" };
+    // Com a confirmação de e-mail desligada (autoconfirm), o GoTrue NÃO ofusca
+    // o e-mail repetido: responde 422 "User already registered". Tratar isso
+    // como falha genérica deixava quem já tem conta preso em "Não foi possível
+    // criar a conta", sem saber que bastava entrar.
+    if (error.code === "user_already_exists" || /already registered/i.test(error.message)) {
+      await audit({
+        action: "auth.signup_failed",
+        metadata: { email_hash: hashEmail(parsed.data.email), reason: "already_registered" },
+        requestId,
+        ip,
+        userAgent,
+      });
+      return { ok: false, error: "already_registered" };
+    }
     await audit({
       action: "auth.signup_failed",
       metadata: {

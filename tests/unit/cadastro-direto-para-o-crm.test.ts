@@ -99,6 +99,17 @@ describe("ação de cadastro", () => {
     expect(mocks.ensureTenantForUser).toHaveBeenCalledWith(user);
   });
 
+  it("e-mail que já tem conta volta como already_registered, não como falha genérica", async () => {
+    mocks.signUp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { status: 422, code: "user_already_exists", message: "User already registered" },
+    });
+    const { signUp } = await import("@/app/actions/auth/signUp");
+
+    expect(await signUp(VALIDO)).toEqual({ ok: false, error: "already_registered" });
+    expect(mocks.ensureTenantForUser).not.toHaveBeenCalled();
+  });
+
   it("convidado com confirmação desligada vai para a tela de aceite, sem abrir empresa", async () => {
     mocks.signUp.mockResolvedValue({
       data: { user: { id: "u2" }, session: { access_token: "x" } },

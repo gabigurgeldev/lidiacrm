@@ -5527,6 +5527,9 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível criar a conta. Tente novamente.": {
     es: "No se pudo crear la cuenta. Intenta de nuevo.",
   },
+  'Este e-mail já tem conta. Entre com sua senha ou use "Esqueci minha senha" na tela de login.': {
+    es: 'Este correo ya tiene cuenta. Entra con tu contraseña o usa "Olvidé mi contraseña" en la pantalla de inicio de sesión.',
+  },
   "Confirme seu e-mail": { es: "Confirma tu correo" },
   "Enviamos um link de confirmação para": { es: "Enviamos un enlace de confirmación a" },
   "Abra o e-mail e clique no link para ativar sua conta.": {
