@@ -125,7 +125,7 @@ export default async function AgentEditorPage({
     supabase
       .from("ai_api_integrations")
       .select(
-        "id, nome, identidade_modo, identidade_endpoint_id, ultimo_teste_ok, circuito_aberto_ate, endpoints:ai_api_endpoints(id, slug, titulo, modo, exige_identidade, ativo)",
+        "id, nome, identidade_modo, identidade_endpoint_id, ultimo_teste_ok, circuito_aberto_ate, endpoints:ai_api_endpoints!ai_api_endpoints_integration_id_fkey(id, slug, titulo, modo, exige_identidade, ativo)",
       )
       .eq("organization_id", activeOrg.orgId)
       .is("arquivada_em", null)

@@ -27,7 +27,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   const admin = createAdminClient();
   let q = admin
     .from("ai_api_integrations")
-    .select(`${COLUNAS_DA_INTEGRACAO}, ai_api_endpoints(id, modo, ativo)`)
+    .select(`${COLUNAS_DA_INTEGRACAO}, ai_api_endpoints!ai_api_endpoints_integration_id_fkey(id, modo, ativo)`)
     .eq("organization_id", authz.org.orgId);
   if (!incluirArquivadas) q = q.is("arquivada_em", null);
   const { data, error } = await q.order("created_at", { ascending: true });
