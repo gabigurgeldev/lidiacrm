@@ -37,9 +37,8 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
-import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
+import { reiniciarSessaoDoCanal } from "@/lib/channels/reconectar";
 import { createClient } from "@/lib/supabase/server";
-import { getWahaClient, wahaFriendlyError } from "@/lib/waha/client";
 
 export const dynamic = "force-dynamic";
 
@@ -69,89 +68,21 @@ export async function POST(
   if (!authz.ok) return authz.response;
   const { user, org: activeOrg } = authz;
 
+  // A regra (arquivado, oficial sem sessão, transporte ausente) mora em
+  // `lib/channels/reconectar.ts`, compartilhada com o agente de suporte.
   const supabase = await createClient();
-  const buscar = (colunas: string) =>
-    supabase
-      .from("channel_sessions")
-      .select(colunas)
-      .eq("organization_id", activeOrg.orgId)
-      .eq("id", id)
-      .maybeSingle();
-  // Tolerante à coluna ausente: num clone sem a migration 0106 nada está
-  // arquivado, e exigir a coluna aqui derrubaria a reconexão inteira — que é o
-  // socorro de quem está com o número fora do ar.
-  const { data: sessionRaw } = await queryTolerantToMissingArchived(
-    () => buscar(`id, waha_session_name, ${ARCHIVED_AT}`),
-    () => buscar("id, waha_session_name"),
-  );
-  const session = sessionRaw as {
-    id: string;
-    waha_session_name: string | null;
-    archived_at?: string | null;
-  } | null;
-  if (!session) return fail("not_found", "Canal não encontrado.", 404, { requestId });
-  if (session.archived_at) {
-    return fail(
-      "channel_archived",
-      "Este número foi excluído da Central de Conexões — reconectar não o traz de volta. Conecte um número para voltar a atender.",
-      409,
-      { requestId },
-    );
-  }
-  // O nome da sessão é NULL no canal oficial, e o CHECK
-  // `channel_sessions_provider_ref_check` garante que só nele. Afirmar `string`
-  // aqui (era um cast) não fazia o valor existir: mandava `null` para o
-  // transporte, que pedia `/api/sessions/null/stop` e devolvia erro de serviço —
-  // culpando o WhatsApp por uma pergunta que nunca fez sentido.
-  const nomeSessao = session.waha_session_name;
-  if (!nomeSessao) {
-    return fail(
-      "channel_without_session",
-      "Este canal é o oficial (API da plataforma): ele não tem sessão de WhatsApp para reiniciar. Se parou de entregar, atualize a credencial na tela do canal oficial.",
-      422,
-      { requestId },
-    );
-  }
+  const r = await reiniciarSessaoDoCanal(supabase, { organizationId: activeOrg.orgId, channelSessionId: id, forcar: force });
+  if (!r.ok) return fail(r.codigo, r.mensagem, r.http, { requestId });
 
-  const waha = getWahaClient();
-  if (!waha) {
-    return fail(
-      "waha_not_configured",
-      "O WhatsApp (WAHA) não está configurado neste ambiente: faltam WAHA_API_BASE_URL e/ou WAHA_API_KEY. Configure-as e tente de novo.",
-      503,
-      { requestId },
-    );
-  }
+  void audit({
+    action: "channel.reconnected",
+    actorUserId: user.id,
+    organizationId: activeOrg.orgId,
+    resourceType: "channel_session",
+    resourceId: id,
+    requestId,
+    metadata: { waha_session_name: r.nomeSessao, force },
+  });
 
-  try {
-    await waha.stopSession(nomeSessao);
-    // Só no modo forçado: descartar a credencial é irreversível — obriga a
-    // reescanear o QR mesmo que ela ainda estivesse boa.
-    if (force) await waha.logoutSession(nomeSessao);
-    const remote = (await waha.startSession(nomeSessao)) as { status?: string };
-    const nextStatus = remote.status ?? "STARTING";
-    await supabase
-      .from("channel_sessions")
-      .update({
-        status: "STARTING",
-        last_status_change_at: new Date().toISOString(),
-        consecutive_health_fails: 0,
-      })
-      .eq("organization_id", activeOrg.orgId)
-      .eq("id", id);
-
-    void audit({
-      action: "channel.reconnected",
-      actorUserId: user.id,
-      organizationId: activeOrg.orgId,
-      resourceType: "channel_session",
-      resourceId: id,
-      requestId,
-      metadata: { waha_session_name: nomeSessao, force },
-    });
-
-    return ok({ id, status: nextStatus, force }, { requestId });
-  } catch (err) {
-    return fail("waha_error", wahaFriendlyError(err), 502, { requestId });
-  }
+  return ok({ id, status: r.status, force }, { requestId });
 }

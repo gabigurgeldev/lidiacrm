@@ -19341,6 +19341,37 @@ revoke execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uui
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid)
   to service_role;
 
+-- ---- Contrato de Suporte v1: contas por e-mail (migration 0224) ----
+--
+-- Organizações que um e-mail administra (admin/manager, vínculo aceito). Só
+-- service_role: chamada por lib/suporte/rota.ts depois do HMAC.
+create or replace function public.fn_suporte_contas_por_email(p_email text)
+returns table (organization_id uuid, nome text, papel text)
+language sql
+stable
+security definer
+set search_path = public, auth, pg_temp
+as $$
+  select o.id, coalesce(o.display_name, o.legal_name, o.slug), uo.role
+    from auth.users u
+    join public.user_organizations uo on uo.user_id = u.id
+    join public.organizations o on o.id = uo.organization_id
+   where lower(u.email) = lower(trim(p_email))
+     and uo.accepted_at is not null
+     and uo.revoked_at is null
+     and uo.role in ('admin', 'manager')
+   order by o.created_at, o.id
+   limit 20;
+$$;
+
+revoke execute on function public.fn_suporte_contas_por_email(text) from public, anon, authenticated;
+grant execute on function public.fn_suporte_contas_por_email(text) to service_role;
+
+comment on function public.fn_suporte_contas_por_email(text) is
+  'Contrato de Suporte v1: organizações que um e-mail administra (admin/manager, vínculo aceito). Só service_role — chamada por lib/suporte/rota.ts depois do HMAC.';
+
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

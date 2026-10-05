@@ -23,6 +23,14 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/api/v1/system/agent/qualquer")).toBe(false);
   });
 
+  it("libera o Contrato de Suporte v1 (HMAC na rota) e só debaixo de /suporte/v1/", () => {
+    expect(isPublicPath("/suporte/v1/saude")).toBe(true);
+    expect(isPublicPath("/suporte/v1/contas/abc/diagnostico")).toBe(true);
+    expect(isPublicPath("/suporte")).toBe(false);
+    expect(isPublicPath("/suporte/v2/saude")).toBe(false);
+    expect(isPublicPath("/app/suporte/v1/saude")).toBe(false);
+  });
+
   it("não libera a rota de pedido de atualização (exige sessão do dono)", () => {
     expect(isPublicPath("/api/v1/system/update")).toBe(false);
   });

@@ -285,6 +285,13 @@ const schema = z.object({
    */
   BACKOFFICE_OUTBOUND_SECRET: z.string().optional().default(""),
   /**
+   * Contrato de Suporte v1 (`docs/integracoes/contrato-de-suporte-v1.md`): o
+   * agente de suporte da Gestalt consulta e corrige contas DESTA instalação por
+   * `/suporte/v1/*`, com HMAC deste segredo. Vazio = desligado (503). Nenhuma
+   * instalação de cliente precisa preencher.
+   */
+  SUPORTE_V1_SECRET: z.string().optional().default(""),
+  /**
    * O caminho de volta: CRM → Back Office (`lib/backoffice/saida.ts`). URL base
    * do Back Office (sem `/api`) e a chave de API do produto gerada lá. Com as
    * duas preenchidas, o cadastro aceita código de indicação (com o desconto do
