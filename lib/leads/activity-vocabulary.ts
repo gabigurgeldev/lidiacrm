@@ -100,7 +100,16 @@ export type ActivityType =
   | "conversation_claimed"
   | "conversation_transferred"
   | "conversation_released"
-  | "conversation_ai_paused";
+  | "conversation_ai_paused"
+  /**
+   * Integrações via API (migration 0223). O cliente provou que é dono da conta
+   * num sistema externo, e uma correção que ele confirmou rodou (ou falhou).
+   * Consulta de leitura NÃO entra aqui: vive em ai_api_chamadas, para a linha
+   * do tempo do lead seguir legível.
+   */
+  | "api_identidade_verificada"
+  | "api_acao_executada"
+  | "api_acao_falhou";
 
 export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   lead_created: "Entrou pelo WhatsApp",
@@ -190,6 +199,9 @@ export const ACTIVITY_LABELS: Record<ActivityType, string> = {
   // arquivos e o controle NEGATIVO de `handoff-por-orcamento.test.ts` usa
   // literalmente "Voltar para a IA" como a sabotagem que deve reprovar.
   conversation_ai_paused: "Pausou o automático",
+  api_identidade_verificada: "Confirmou a conta pelo código do e-mail",
+  api_acao_executada: "Correção aplicada no sistema, com o SIM do cliente",
+  api_acao_falhou: "Correção confirmada pelo cliente não foi aplicada",
 };
 
 /** Quando o tipo é legado/desconhecido, a linha ainda é honesta — sem jargão. */

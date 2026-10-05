@@ -29,6 +29,8 @@ export interface AgentVersionRow {
   operator_tool_ids: string[];
   pipeline_ids: string[];
   knowledge_source_ids: string[];
+  /** Integrações via API (0223). Opcional: linha anterior à migration não traz. */
+  api_endpoint_ids?: string[] | null;
   split_messages: boolean;
   split_max_chars: number;
   reply_as_audio: boolean;

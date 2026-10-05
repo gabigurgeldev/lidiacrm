@@ -391,6 +391,17 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     // "Ver tudo em IA", igual a Credenciais, Conhecimento, Memória e Skills.
   },
   {
+    // Migration 0223. Fora da sidebar pelo mesmo motivo de Provedores: é
+    // configuração de poucas vezes, e a dobra em 900px é medida pelo e2e.
+    href: "/app/ai/integracoes",
+    label: "Integrações via API",
+    description: "Sistemas seus que o agente consulta — e as correções que ele aplica depois que o cliente confirma.",
+    icon: PlugsConnected,
+    group: "ia",
+    section: "Montar o agente",
+    minRole: "manager",
+  },
+  {
     href: "/app/ai/knowledge/sources",
     label: "Conhecimento",
     description: "Os materiais que o agente consulta antes de responder sobre o seu negócio.",

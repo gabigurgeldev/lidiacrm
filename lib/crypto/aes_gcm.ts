@@ -9,7 +9,7 @@
  * Plaintext NUNCA deve ser logado, persistido ou retornado em response — apenas
  * o `last4` é exposto via view `ai_provider_credentials_safe`.
  */
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 
 import { env } from "@/lib/env";
 
@@ -98,6 +98,19 @@ export function chaveDeCifragemUtilizavel(): { ok: true } | { ok: false; erro: s
     }
     return { ok: false, erro: "falha inesperada ao ler AI_CRED_AES_KEY", comoCorrigir: "Veja o log do app." };
   }
+}
+
+/**
+ * Chave DERIVADA da `AI_CRED_AES_KEY` para um propósito nomeado (HKDF-SHA256).
+ *
+ * Para HMAC de valores curtos que não podem ser guardados em claro nem
+ * invertidos por força bruta — ex.: o código de 6 dígitos da verificação de
+ * identidade das Integrações via API. Um SHA-256 puro de 6 dígitos se inverte
+ * em milissegundos; com chave secreta, quem lê o banco não tem o que testar.
+ * O rótulo separa os propósitos: a chave do código não serve para nada mais.
+ */
+export function derivarChave(rotulo: string): Buffer {
+  return Buffer.from(hkdfSync("sha256", getKey(), Buffer.alloc(0), rotulo, KEY_LENGTH_BYTES));
 }
 
 export interface EncryptedSecret {

@@ -18,6 +18,10 @@ export const PUBLIC_PATHS: RegExp[] = [
   // Back Office de afiliados → CRM. Sem sessão: a auth é HMAC do corpo com
   // BACKOFFICE_OUTBOUND_SECRET, conferida dentro de cada rota (lib/backoffice/rota.ts).
   /^\/backoffice\//,
+  // Contrato de Suporte v1 (agente de suporte → este CRM). Sem sessão: a auth é
+  // HMAC de método+caminho+corpo com SUPORTE_V1_SECRET, conferida dentro de cada
+  // rota (lib/suporte/rota.ts). Ancorado em /suporte/v1/ — nada mais de carona.
+  /^\/suporte\/v1\//,
   // Heartbeat do agente do host (bearer INTERNAL_SECRET/INTERNAL_CRON_SECRET,
   // checado dentro da própria rota) — sem cookie de sessão, igual /cron/.
   /^\/api\/v1\/system\/agent$/,

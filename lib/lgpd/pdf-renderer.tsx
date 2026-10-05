@@ -356,6 +356,22 @@ export function LgpdExportPdf({ data, unsignedWarning }: Props): React.ReactElem
           </View>
         ) : null}
 
+        {/* `?? []`: export gerado antes da 0223 não tem o campo. */}
+        {(data.api_actions ?? []).length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Correções propostas pelo atendimento automático</Text>
+            {(data.api_actions ?? []).map((a) => (
+              <View key={a.id} style={styles.itemBlock}>
+                <Text>{a.resumo.slice(0, 500)}</Text>
+                <Text style={styles.small}>
+                  {fmtDate(a.created_at)} · {a.status}
+                  {a.resultado ? ` · ${a.resultado.slice(0, 300)}` : ""}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         {/* Audit */}
         {data.audit_log_extract.length > 0 ? (
           <View style={styles.section}>

@@ -515,6 +515,30 @@ export const AUDIT_ACTIONS = [
   "backoffice.saida_run",
   "aniversario.config_changed",
   "aniversario.rodada",
+  // ── Integrações via API (migration 0223) ─────────────────────────────────
+  // Configuração (quem decide para onde o agente manda dado de cliente) e
+  // execução (o que o agente fez numa conta de outro sistema, e com qual SIM).
+  // Nenhum carrega o segredo, o código de verificação nem o e-mail em claro.
+  "ai_api.integration_created",
+  "ai_api.integration_updated",
+  "ai_api.integration_archived",
+  "ai_api.secret_rotated",
+  "ai_api.endpoint_created",
+  "ai_api.endpoint_updated",
+  "ai_api.endpoint_deleted",
+  "ai_api.endpoint_tested",
+  "ai_api.catalog_imported",
+  "ai_api.identity_challenge_sent",
+  "ai_api.identity_verified",
+  "ai_api.identity_locked",
+  "ai_api.action_proposed",
+  "ai_api.action_executed",
+  "ai_api.action_failed",
+  "ai_api.action_cancelled",
+  // ── Contrato de Suporte v1 (este CRM consultado pelo agente de suporte) ──
+  "suporte.identidade_buscada",
+  "suporte.leitura",
+  "suporte.acao_executada",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

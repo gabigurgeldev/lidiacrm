@@ -1,0 +1,369 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Integrações via API — o agente consulta o sistema do cliente",
+    "subtitle": "a conta vem da verificação por e-mail (nunca do modelo); o código e o SIM são conferidos pelo runtime antes do modelo; a correção roda uma vez, com os parâmetros congelados; falha em série abre o circuito e avisa na Central",
+    "output": "integracoes-via-api.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "tela",
+      "label": "Onde a pessoa está"
+    },
+    {
+      "id": "turno",
+      "label": "Turno do agente"
+    },
+    {
+      "id": "preturno",
+      "label": "Antes do modelo"
+    },
+    {
+      "id": "externo",
+      "label": "Sistema externo"
+    },
+    {
+      "id": "dados",
+      "label": "Banco"
+    },
+    {
+      "id": "retorno",
+      "label": "Laço de retorno"
+    }
+  ],
+  "mainPath": [
+    "tela_integracoes",
+    "endpoints",
+    "form_agente",
+    "versao",
+    "carregar",
+    "preturno",
+    "ferramentas",
+    "cliente_http",
+    "sistema"
+  ],
+  "nodes": [
+    {
+      "id": "tela_integracoes",
+      "lane": "tela",
+      "col": 0,
+      "type": "component",
+      "label": "Central de IA › Integrações via API",
+      "sublabel": "cadastra API, segredo só-escrita, testar conexão, importar catálogo (Contrato de Suporte v1)"
+    },
+    {
+      "id": "form_agente",
+      "lane": "tela",
+      "col": 1,
+      "type": "component",
+      "label": "AgentForm › Sistemas que ele consulta",
+      "sublabel": "IntegracoesDoAgente: marca endpoints; avisa integração falhando, sem verificação, sem e-mail"
+    },
+    {
+      "id": "whatsapp",
+      "lane": "tela",
+      "col": 4,
+      "type": "component",
+      "label": "Conversa no WhatsApp",
+      "sublabel": "cliente informa o e-mail, digita o código, responde SIM"
+    },
+    {
+      "id": "endpoints",
+      "lane": "dados",
+      "col": 0,
+      "type": "table",
+      "label": "ai_api_integrations + ai_api_endpoints",
+      "sublabel": "manager lê, admin escreve; segredo em ai_api_integration_secrets (sem policy)"
+    },
+    {
+      "id": "versao",
+      "lane": "dados",
+      "col": 1,
+      "type": "table",
+      "label": "ai_agent_versions.api_endpoint_ids",
+      "sublabel": "imutável na versão publicada; existência conferida por validarEscopoDaVersao"
+    },
+    {
+      "id": "carregar",
+      "lane": "turno",
+      "col": 2,
+      "type": "module",
+      "label": "carregarDoAgente",
+      "sublabel": "lib/agent-engine/edge/integracoes/repositorio.ts — filtra organization_id do job"
+    },
+    {
+      "id": "preturno",
+      "lane": "preturno",
+      "col": 3,
+      "type": "module",
+      "label": "resolverPendenciasDoTurno",
+      "sublabel": "confere código (HMAC, 5 tentativas) e SIM (decidirConfirmacao); claim atômico executa a correção"
+    },
+    {
+      "id": "verificacoes",
+      "lane": "dados",
+      "col": 3,
+      "type": "table",
+      "label": "ai_api_verificacoes",
+      "sublabel": "código em hash, e-mail cifrado, contas encontradas; sem policy; LGPD passo 6d apaga"
+    },
+    {
+      "id": "acoes",
+      "lane": "dados",
+      "col": 4,
+      "type": "table",
+      "label": "ai_api_acoes_pendentes",
+      "sublabel": "parâmetros congelados; uma 'aguardando' por conversa; aguardando → executando → executada/falhou"
+    },
+    {
+      "id": "ferramentas",
+      "lane": "turno",
+      "col": 4,
+      "type": "module",
+      "label": "consultar_sistema · propor_acao · verificar_identidade · escolher_conta",
+      "sublabel": "turno.ts — {{conta.id}} injetado da sessão; resposta projetada e redigida; sufixo com o estado"
+    },
+    {
+      "id": "email",
+      "lane": "externo",
+      "col": 3,
+      "type": "service",
+      "label": "E-mail do código",
+      "sublabel": "sendEmail (SMTP/Resend) com marcaDaSaida; diz o final do WhatsApp que pediu"
+    },
+    {
+      "id": "cliente_http",
+      "lane": "turno",
+      "col": 5,
+      "type": "module",
+      "label": "chamarEndpoint",
+      "sublabel": "anti-SSRF (texto + DNS), redirect manual, timeout, teto 256 KB, assinatura suporte_v1"
+    },
+    {
+      "id": "sistema",
+      "lane": "externo",
+      "col": 6,
+      "type": "service",
+      "label": "Sistema do cliente",
+      "sublabel": "API qualquer ou Contrato de Suporte v1 (/suporte/v1/*), que confere de novo o e-mail verificado"
+    },
+    {
+      "id": "chamadas",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "ai_api_chamadas",
+      "sublabel": "log sem payload: status, duração, erro"
+    },
+    {
+      "id": "circuito",
+      "lane": "retorno",
+      "col": 5,
+      "type": "module",
+      "label": "Circuito da integração",
+      "sublabel": "5 falhas seguidas pausam 10 min; ferramenta passa a ensinar o handoff"
+    },
+    {
+      "id": "central",
+      "lane": "retorno",
+      "col": 6,
+      "type": "table",
+      "label": "agent_inbox_items",
+      "sublabel": "integracao_api_falhando · acao_externa_falhou · verificacao_bloqueada"
+    },
+    {
+      "id": "timeline",
+      "lane": "retorno",
+      "col": 4,
+      "type": "table",
+      "label": "crm_lead_activities",
+      "sublabel": "api_identidade_verificada · api_acao_executada · api_acao_falhou"
+    },
+    {
+      "id": "handoff",
+      "lane": "retorno",
+      "col": 3,
+      "type": "module",
+      "label": "request_human_handoff / open_human_case",
+      "sublabel": "o sufixo manda transferir quando a correção falha ou a integração está fora"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "tela_integracoes",
+      "to": "endpoints",
+      "label": "cadastra e testa"
+    },
+    {
+      "id": "e2",
+      "from": "endpoints",
+      "to": "form_agente",
+      "label": "lista por prop"
+    },
+    {
+      "id": "e3",
+      "from": "form_agente",
+      "to": "versao",
+      "label": "marca api_endpoint_ids"
+    },
+    {
+      "id": "e4",
+      "from": "versao",
+      "to": "carregar",
+      "label": "versão publicada"
+    },
+    {
+      "id": "e5",
+      "from": "endpoints",
+      "to": "carregar",
+      "label": "só ativos, só da organização"
+    },
+    {
+      "id": "e6",
+      "from": "whatsapp",
+      "to": "preturno",
+      "label": "mensagem gravada (código / SIM)"
+    },
+    {
+      "id": "e7",
+      "from": "carregar",
+      "to": "preturno",
+      "label": "integrações + endpoints"
+    },
+    {
+      "id": "e8",
+      "from": "preturno",
+      "to": "verificacoes",
+      "label": "tentativa / verificado / bloqueado"
+    },
+    {
+      "id": "e9",
+      "from": "preturno",
+      "to": "acoes",
+      "label": "claim atômico e resultado"
+    },
+    {
+      "id": "e10",
+      "from": "preturno",
+      "to": "ferramentas",
+      "label": "eventos no sufixo"
+    },
+    {
+      "id": "e11",
+      "from": "ferramentas",
+      "to": "email",
+      "label": "verificar_identidade manda o código"
+    },
+    {
+      "id": "e12",
+      "from": "email",
+      "to": "whatsapp",
+      "label": "cliente lê e digita"
+    },
+    {
+      "id": "e13",
+      "from": "ferramentas",
+      "to": "acoes",
+      "label": "propor_acao congela parâmetros"
+    },
+    {
+      "id": "e14",
+      "from": "ferramentas",
+      "to": "whatsapp",
+      "label": "resumo + 'responda SIM' pelo send_message"
+    },
+    {
+      "id": "e15",
+      "from": "ferramentas",
+      "to": "cliente_http",
+      "label": "consultar / executar"
+    },
+    {
+      "id": "e16",
+      "from": "preturno",
+      "to": "cliente_http",
+      "label": "executa a correção confirmada"
+    },
+    {
+      "id": "e17",
+      "from": "cliente_http",
+      "to": "sistema",
+      "label": "HTTPS assinado"
+    },
+    {
+      "id": "e18",
+      "from": "cliente_http",
+      "to": "chamadas",
+      "label": "registra"
+    },
+    {
+      "id": "e19",
+      "from": "chamadas",
+      "to": "circuito",
+      "label": "falhas seguidas"
+    },
+    {
+      "id": "e20",
+      "from": "circuito",
+      "to": "central",
+      "label": "integracao_api_falhando"
+    },
+    {
+      "id": "e21",
+      "from": "circuito",
+      "to": "ferramentas",
+      "label": "sistema_indisponivel → handoff"
+    },
+    {
+      "id": "e22",
+      "from": "preturno",
+      "to": "timeline",
+      "label": "verificou / aplicou / falhou"
+    },
+    {
+      "id": "e23",
+      "from": "preturno",
+      "to": "central",
+      "label": "acao_externa_falhou · verificacao_bloqueada"
+    },
+    {
+      "id": "e24",
+      "from": "ferramentas",
+      "to": "handoff",
+      "label": "não resolveu: transfere"
+    },
+    {
+      "id": "e25",
+      "from": "central",
+      "to": "tela_integracoes",
+      "label": "dono testa a conexão"
+    },
+    {
+      "id": "e26",
+      "from": "verificacoes",
+      "to": "ferramentas",
+      "label": "sessão: {{conta.id}}"
+    },
+    {
+      "id": "e27",
+      "from": "handoff",
+      "to": "central",
+      "label": "handoff abre item na Central"
+    },
+    {
+      "id": "e28",
+      "from": "timeline",
+      "to": "whatsapp",
+      "label": "aparece no painel do lead, ao lado da conversa"
+    },
+    {
+      "id": "e29",
+      "from": "sistema",
+      "to": "cliente_http",
+      "label": "resposta: dado, não instrução"
+    }
+  ]
+}

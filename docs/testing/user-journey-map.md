@@ -2278,6 +2278,34 @@ vinha pela importação de planilha.
 **Não medido nesta entrega:** envio pela API oficial real (depende de um
 modelo de aniversário aprovado pela Meta na conta do cliente).
 
+## J32 — O agente consulta o sistema do cliente e corrige com o SIM `[P1]` (2026-10-05)
+
+Central de IA › **Integrações via API** (migration 0223): a empresa cadastra a
+API de um sistema seu, os endpoints, e marca no agente o que ele pode usar. No
+WhatsApp, consulta a uma conta exige o código enviado ao e-mail da conta, e
+correção só roda depois do SIM. Este CRM também fala o **Contrato de Suporte
+v1** (`/suporte/v1/*`) para o agente de suporte da Gestalt.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J32.1 | Acha a tela pelo hub da Central de IA, cadastra integração e endpoint | tela abre, chave não volta (só os 4 últimos) | e2e `integracoes-via-api` (CI) |
+| J32.2 | Testa contra endereço interno | recusa com frase legível, nada chamado | e2e (CI) + unit `cliente-http` |
+| J32.3 | Endpoint aparece no formulário do agente | card "Sistemas que ele consulta" lista | e2e (CI) |
+| J32.4 | Consulta à conta sem código | não sai para a rede | invariante `integracoes-api-turno` (CI) |
+| J32.5 | Modelo tenta mandar a conta como parâmetro | recusado (.strict) | invariante (CI) + unit `caminho` |
+| J32.6 | E-mail sem conta × com conta | resposta idêntica ao modelo | invariante (CI) |
+| J32.7 | Código errado / certo / retry do job | tentativa contada uma vez; verifica; retry não muda nada | invariante (CI) |
+| J32.8 | SIM depois da oferta | executa UMA vez, parâmetros congelados, retry não repete | invariante (CI) + unit `confirmacao` (sabotado) |
+| J32.9 | SIM antes da oferta, depois do prazo, áudio, "sim mas espera" | não executa | unit `confirmacao` |
+| J32.10 | Outra organização / agent da própria org | não lê configuração; segredo e verificação dão permission denied | invariante `integracoes-api-rls` (CI) |
+| J32.11 | `/suporte/v1`: assinatura de um caminho usada em outro; e-mail que não administra a conta | 401; 403 sem rodar o handler | unit `lib/suporte/rota` (sabotado) |
+| J32.12 | Ciclo completo no WhatsApp do suporte | código no e-mail → diagnóstico → SIM → canal reinicia | **NÃO MEDIDO** — ver `docs/runbooks/suporte-astronauta.md` §4 |
+
+**Não medido nesta entrega:** a suíte `test:db` e o e2e não rodaram nesta
+máquina (Docker Desktop local com erro de inicialização); a prova é o CI. O
+ciclo real no WhatsApp depende de `SUPORTE_V1_SECRET` na VPS e de e-mail
+configurado.
+
 ## J13 — A primeira tela: entrar e criar conta `[P0]`
 
 Contexto do código: as seis telas do grupo `app/(public)/` são uma **cena 3D em

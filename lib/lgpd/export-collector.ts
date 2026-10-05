@@ -153,6 +153,19 @@ export interface ScheduledMessageRow {
   sent_at: string | null;
 }
 
+/**
+ * Correção num sistema externo que o agente propôs ao titular (Integrações via
+ * API, migration 0223): o resumo que ele leu e o que aconteceu. Os parâmetros
+ * técnicos ficam de fora — o que interessa à pessoa é o que lhe foi perguntado.
+ */
+export interface ApiActionRow {
+  id: string;
+  resumo: string;
+  status: string;
+  resultado: string | null;
+  created_at: string;
+}
+
 export interface AuditRow {
   id: string;
   action: string;
@@ -188,6 +201,7 @@ export interface ExportPayload {
   webhook_captures: CaptureRow[];
   flow_executions: FlowExecutionRow[];
   scheduled_messages: ScheduledMessageRow[];
+  api_actions: ApiActionRow[];
   audit_log_extract: AuditRow[];
 }
 
@@ -636,6 +650,26 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     }
   }
 
+  // Correções propostas pelo agente via Integrações via API (migration 0223).
+  let api_actions: ApiActionRow[] = [];
+  if (contactId) {
+    const { data, error } = await admin
+      .from("ai_api_acoes_pendentes")
+      .select("id, resumo, status, resultado, created_at")
+      .eq("organization_id", organizationId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) {
+      logger.warn("[lgpd-export-worker] api actions load failed", {
+        request_id: requestId,
+        error: error.message,
+      });
+    } else if (data) {
+      api_actions = data;
+    }
+  }
+
   let webhook_captures: CaptureRow[] = [];
   if (contactId) {
     const { data, error } = await admin
@@ -703,6 +737,7 @@ export async function collectExportData(args: CollectArgs): Promise<ExportPayloa
     webhook_captures,
     flow_executions,
     scheduled_messages,
+    api_actions,
     audit_log_extract,
   };
 }
@@ -732,6 +767,7 @@ function emptyPayload(
     webhook_captures: [],
     flow_executions: [],
     scheduled_messages: [],
+    api_actions: [],
     audit_log_extract: [],
   };
 }

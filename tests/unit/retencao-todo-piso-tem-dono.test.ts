@@ -44,6 +44,7 @@ const DONO_NO_SQL: Record<string, string> = {
   FILA: "fn_podar_fila_de_jobs",
   AUDITORIA: "fn_expurgar_auditoria_vencida",
   ESPELHO_AGENDA: "fn_expurgar_espelho_da_agenda",
+  INTEGRACOES_API: "fn_expurgar_integracoes_api",
 };
 
 /**

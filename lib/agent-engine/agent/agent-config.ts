@@ -51,6 +51,11 @@ export interface PublishedAgentConfig {
    */
   knowledgeSourceIds: string[];
   /**
+   * Endpoints de Integrações via API (`ai_agent_versions.api_endpoint_ids`,
+   * migration 0223). Vazio = o agente não consulta sistema externo nenhum.
+   */
+  apiEndpointIds: string[];
+  /**
    * LEGADO: a KB ativa do agente (`ai_agents.active_kb_version_id`).
    *
    * Só é usada quando `knowledgeSourceIds` vem vazio — o clone que ainda não
@@ -121,6 +126,7 @@ interface Row {
   operator_tool_ids: string[] | null;
   pipeline_ids: string[] | null;
   knowledge_source_ids: string[] | null;
+  api_endpoint_ids: string[] | null;
   trigger_config: unknown;
   version_created_by: string | null;
   agent_created_by: string | null;
@@ -152,6 +158,7 @@ const SELECT_AGENT_CONFIG_COLUMNS = `a.id as agent_id,
             v.operator_tool_ids,
             v.pipeline_ids,
             v.knowledge_source_ids,
+            v.api_endpoint_ids,
             v.trigger_config,
             v.created_by as version_created_by,
             a.created_by as agent_created_by`;
@@ -195,6 +202,7 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     // `?? []` cobre o clone sem a 0181: sem a coluna, o agente cai no ponteiro
     // legado abaixo em vez de ficar sem material nenhum.
     knowledgeSourceIds: r.knowledge_source_ids ?? [],
+    apiEndpointIds: r.api_endpoint_ids ?? [],
     activeKbVersionId: r.active_kb_version_id,
     ragTopK,
     ragSimilarityThreshold,

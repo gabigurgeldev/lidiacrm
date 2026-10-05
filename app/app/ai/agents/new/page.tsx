@@ -10,6 +10,8 @@ import { lerAmbiente } from "@/lib/instalacao/ambiente";
 import { servicoDeVozDaOrganizacao } from "@/lib/ai/voz/servico-da-organizacao";
 
 import { AgentForm } from "../[id]/_components/AgentForm";
+import type { IntegracaoDoAcervo } from "../[id]/_components/IntegracoesDoAgente";
+import { isEmailConfigured } from "@/lib/email/resend";
 
 export const dynamic = "force-dynamic";
 
@@ -40,12 +42,23 @@ export default async function NewAgentPage() {
   }
 
   const supabase = await createClient();
-  const [credentialsRes, channelSessions] = await Promise.all([
+  const [credentialsRes, channelSessions, integracoesRes] = await Promise.all([
     supabase
       .from("ai_provider_credentials_safe")
       .select(CREDENTIAL_COLUMNS)
       .eq("organization_id", activeOrg.orgId),
     listSelectableChannels(supabase, activeOrg.orgId),
+    // Integrações via API (0223): sem a lista, o card diria "nenhuma integração"
+    // para quem já cadastrou — o estado vazio mentiria no agente novo.
+    supabase
+      .from("ai_api_integrations")
+      .select(
+        "id, nome, identidade_modo, identidade_endpoint_id, ultimo_teste_ok, circuito_aberto_ate, endpoints:ai_api_endpoints(id, slug, titulo, modo, exige_identidade, ativo)",
+      )
+      .eq("organization_id", activeOrg.orgId)
+      .is("arquivada_em", null)
+      .eq("ativo", true)
+      .order("created_at", { ascending: true }),
   ]);
 
   const credentials = (credentialsRes.data ?? []) as unknown as CredentialRow[];
@@ -58,6 +71,8 @@ export default async function NewAgentPage() {
         provedoresDaInstalacao={provedoresDaInstalacao()}
         servicoDeVoz={await servicoDeVozDaOrganizacao(supabase, activeOrg.orgId)}
         channelSessions={channelSessions}
+        integracoes={(integracoesRes.data ?? []) as unknown as IntegracaoDoAcervo[]}
+        emailConfigurado={isEmailConfigured()}
       />
     </div>
   );

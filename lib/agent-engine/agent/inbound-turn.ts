@@ -130,6 +130,14 @@ import {
   type JailbreakLevel,
 } from '../guardrails/jailbreak/classifier';
 import { camadaLigada, lerCamadasDaOrg } from '../guardrails/camadas-da-org';
+import { emailEstaConfigurado, enviarEmailDoCodigo } from '../edge/integracoes/email';
+import { carregarDoAgente } from '../edge/integracoes/repositorio';
+import {
+  montarFerramentasDeIntegracao,
+  resolverPendenciasDoTurno,
+  type ContextoDoTurno,
+  type EnviarEmail,
+} from '../edge/integracoes/turno';
 
 /**
  * Superfície ESTÁTICA das tools do agente (description + inputSchema) — parte do
@@ -668,6 +676,17 @@ export interface InboundTurnDeps {
    * anti-ban observável no artefato de trace de forma determinística.
    */
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Seams das Integrações via API (migration 0223) — só os testes passam. A
+   * produção chama a rede de verdade, resolve DNS de verdade e manda o e-mail
+   * do código pelo transporte da instalação.
+   */
+  integracoes?: {
+    fetchImpl?: typeof fetch;
+    conferirDestino?: (hostname: string) => Promise<void>;
+    enviarEmail?: EnviarEmail;
+    emailConfigurado?: () => boolean;
+  };
 }
 
 /** Checkpoint mais recente do lead — a memória que atravessa sessões. */
@@ -914,6 +933,12 @@ export interface AgentTurnInput {
   channelSessionId: string;
   /** conversa do CRM — destino do send_message. */
   conversationId: string;
+  /**
+   * A mensagem do cliente que disparou ESTE turno — só no `inbound_turn`. É o
+   * que liga as Integrações via API (migration 0223): conferir código e SIM só
+   * faz sentido quando o cliente acabou de falar. Follow-up e caso não passam.
+   */
+  inboundMessageId?: string;
   /** monta a abertura APÓS o ritual de leitura (inbound vs. bloco temporal do follow-up). */
   buildOpening: (ritual: {
     previous: LeadCheckpointRow | null;
@@ -2421,6 +2446,72 @@ async function executarTurnoDoAgente(
     }
   }
 
+  // INTEGRAÇÕES VIA API (migration 0223) — só no turno que responde o cliente.
+  //
+  // O pré-turno roda AQUI, antes do modelo: confere o código de verificação e o
+  // SIM de uma correção a partir das mensagens gravadas, e executa a correção
+  // confirmada. O modelo só recebe o resultado (sufixo) e as quatro ferramentas.
+  // Falha aqui é privilégio perdido, não turno perdido: o cliente continua sendo
+  // atendido, e o aviso vai para a Central.
+  const readOnlyDeIntegracao: string[] = [];
+  let sufixoDeIntegracao = '';
+  if (input.inboundMessageId !== undefined && agentConfig !== null && agentConfig.apiEndpointIds.length > 0) {
+    try {
+      const carregado = await carregarDoAgente(pool, tenantId, agentConfig.apiEndpointIds);
+      if (carregado.ausentes > 0) {
+        runLog.warn('endpoints de integração marcados na tela não carregaram', { ausentes: carregado.ausentes });
+      }
+      if (carregado.endpoints.length > 0) {
+        const ctxInteg: ContextoDoTurno = {
+          db: pool,
+          tenantId,
+          conversationId: input.conversationId,
+          contactId: leadId,
+          agentId: agentConfig.agentId,
+          agora: clock,
+          log: runLog,
+          integracoes: carregado.integracoes,
+          endpoints: carregado.endpoints,
+          enviarEmail: deps.integracoes?.enviarEmail ?? enviarEmailDoCodigo,
+          emailConfigurado: deps.integracoes?.emailConfigurado ?? emailEstaConfigurado,
+          ...(deps.integracoes?.fetchImpl ? { fetchImpl: deps.integracoes.fetchImpl } : {}),
+          ...(deps.integracoes?.conferirDestino ? { conferirDestino: deps.integracoes.conferirDestino } : {}),
+        };
+        const eventos = await resolverPendenciasDoTurno(ctxInteg);
+        // A oferta de confirmação sai pelo MESMO send_message do modelo: mesma
+        // cadeia de guardrails, mesmo `seq`, mesmo teto de envios por turno.
+        const enviarAoCliente = async (
+          corpo: string,
+        ): Promise<{ enviada: boolean; messageId: string | null; erro?: string }> => {
+          // O `execute` do send_message só lê `body`; as opções do SDK vão vazias.
+          const envio = rawTools.send_message?.execute as
+            | ((input: { body: string }, options: unknown) => Promise<unknown>)
+            | undefined;
+          if (!envio) return { enviada: false, messageId: null, erro: 'envio_indisponivel' };
+          const r = (await envio({ body: corpo }, { toolCallId: 'propor_acao', messages: [], context: undefined })) as
+            | { ok: true; status?: string; message_id?: string }
+            | { ok: false; error?: { code?: string } };
+          if (r.ok && r.status === 'enviada') return { enviada: true, messageId: r.message_id ?? null };
+          return { enviada: false, messageId: null, erro: r.ok ? (r.status ?? 'nao_enviada') : r.error?.code };
+        };
+        const integ = await montarFerramentasDeIntegracao(ctxInteg, eventos, enviarAoCliente);
+        for (const [name, t] of Object.entries(integ.tools)) {
+          if (!(name in rawTools)) rawTools[name] = t;
+        }
+        readOnlyDeIntegracao.push(...integ.readOnly);
+        sufixoDeIntegracao = integ.sufixo;
+        runLog.info('integrações via API montadas no turno', {
+          endpoints: carregado.endpoints.length,
+          eventos: eventos.map((e) => e.tipo),
+        });
+      }
+    } catch (err) {
+      const detalhe = (err instanceof Error ? err.message : String(err)).slice(0, 200);
+      runLog.error('integrações via API não montadas — turno segue sem elas', { error: detalhe });
+      await avisarCapacidadesAusentes(pool, tenantId, input.conversationId, `integrações via API: ${detalhe}`, runLog);
+    }
+  }
+
   // 2B-tools: tools do catálogo MCP habilitadas NA TELA entram no run (audit +
   // role/scope da ponte nativa; envio e handoff do catálogo são bloqueados —
   // ver edge/crm/mcp-tools.ts). As 8 tools do engine têm precedência de nome.
@@ -2492,7 +2583,9 @@ async function executarTurnoDoAgente(
   // entre runs por construção (mesma garantia de isolamento do resto do run).
   const tools = wrapToolsWithBreaker(rawTools, {
     thresholds: deps.knobs.breaker,
-    readOnlyTools: READ_ONLY_TOOLS,
+    // `consultar_sistema` é leitura; `propor_acao`, `verificar_identidade` e
+    // `escolher_conta` mandam mensagem/e-mail ou gravam — ficam de fora.
+    readOnlyTools: [...READ_ONLY_TOOLS, ...readOnlyDeIntegracao],
     log: runLog, // os warns dos gates do breaker saem carimbados com o run
   });
 
@@ -2592,7 +2685,13 @@ async function executarTurnoDoAgente(
         `Se a mensagem dele responde a isso, chame provide_case_update com este case_id e a informação recebida — ` +
         `NÃO diga que já repassou/avisou o responsável sem chamar a tool.`
       : '';
-  const openingSuffixes = [matchedSkillsBlock, stageHintBlock, splitHint, caseAwaitingLeadBlock].filter(
+  const openingSuffixes = [
+    matchedSkillsBlock,
+    stageHintBlock,
+    splitHint,
+    caseAwaitingLeadBlock,
+    sufixoDeIntegracao,
+  ].filter(
     (b) => b !== '',
   );
   const openingText =
@@ -2943,6 +3042,7 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
     await runAgentTurn(deps, job, pool, ctx, {
       channelSessionId: payload.channel_session_id,
       conversationId: payload.conversation_id,
+      inboundMessageId: payload.inbound_message_id,
       buildOpening: ({ previous, leadState, context, notesIndexBlock, projeta, entregues }) =>
         buildOpeningMessage(previous, leadState, context, notesIndexBlock, projeta, entregues),
     });

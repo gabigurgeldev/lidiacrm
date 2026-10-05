@@ -66,6 +66,7 @@ function payload(patch: Partial<ExportPayload> = {}): ExportPayload {
     appointments: [],
     webhook_captures: [],
     scheduled_messages: [],
+    api_actions: [],
     flow_executions: [],
     audit_log_extract: [],
     ...patch,

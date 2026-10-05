@@ -124,6 +124,7 @@ o contrato de governança para agentes de IA externos.
 | **Operação visível** (`HANDOFF-operacao-visivel.md`) | F1, F2(i), F2(ii), F3 ✅ localhost com evidência Playwright | prova na VPS após publicar (cada feature exige prova dupla: localhost **e** VPS) |
 | **Casos humanos** (`docs/handoffs/HANDOFF-casos-humanos.md`) | Waves 1–6 ✅ e revisadas; Wave 7 (prova E2E) relatada PARCIAL — interrompida por limite de API, não por bug | **A CONFIRMAR** se fechou: o HANDOFF saiu da raiz para `docs/handoffs/`, o que normalmente sinaliza épico encerrado |
 | **Inbox multimodal** (`docs/handoffs/HANDOFF-inbox-multimodal.md`) | Ondas 0–3.1 ✅ com prova real (WhatsApp real, mídia real) | **A CONFIRMAR** o estado das ondas 4–6. **Bloqueios externos que valem revalidar:** chave Google era de gateway (gemini real inacessível) e credencial Anthropic era placeholder (`last4 1234`) — o agente multimodal foi provado só em OpenAI/gpt-4o |
+| **Integrações via API + Contrato de Suporte v1** (2026-10-05) | Recurso genérico na Central de IA; este CRM fala o contrato (`/suporte/v1`) | ligar no Astronauta em produção (`docs/runbooks/suporte-astronauta.md`); merge dos PRs do contrato nos outros 5 sistemas (Back Office, Votaris, SOT, FIMEI, ZapTrace — todos só leitura) e `SUPORTE_V1_SECRET` em cada um |
 | **Fase FG / Vendaval** | Não iniciada | O gatilho era a aprovação de G6, que existe (`G6.approved`). O README **não lista mais** a Fase FG em "Próximo" — **A CONFIRMAR** se saiu de escopo ou foi absorvida |
 
 ### Próximo no roadmap (não iniciado — CONFIRMADO no README)

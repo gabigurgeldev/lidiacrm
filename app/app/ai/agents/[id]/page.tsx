@@ -10,6 +10,8 @@ import type { CredentialRow } from "@/hooks/ai/useCredentials";
 
 import { AgentEditorClient } from "./_client";
 import type { MaterialDoAcervo } from "./_components/BasesDoAgente";
+import type { IntegracaoDoAcervo } from "./_components/IntegracoesDoAgente";
+import { isEmailConfigured } from "@/lib/email/resend";
 import { AgentTabs } from "./_components/AgentTabs";
 import type { FunilDaResposta } from "@/hooks/pipelines/usePipelines";
 import { coberturaDoFunil, type EtapaDoMapa } from "@/lib/leads/agent-mapping";
@@ -24,7 +26,7 @@ const AGENT_COLUMNS =
   "id, organization_id, name, description, model, system_prompt, is_active, is_default, kind, priority, published_version_id, archived_at, config, guardrails, active_kb_version_id, created_at, updated_at";
 
 const VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, reply_as_audio, audio_voice, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, reply_as_audio, audio_voice, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,api_endpoint_ids";
 
 const CREDENTIAL_COLUMNS =
   "id, organization_id, provider, label, api_key_last4, validated_at, validation_error, models_available, is_active, created_by, created_at, updated_at";
@@ -81,7 +83,7 @@ export default async function AgentEditorPage({
   }
 
   // mcp_agent: busca versions + lookups.
-  const [versionsRes, credentialsRes, channelSessions, routerMemberRes, funisRes, acervoRes] =
+  const [versionsRes, credentialsRes, channelSessions, routerMemberRes, funisRes, acervoRes, integracoesRes] =
     await Promise.all([
     supabase
       .from("ai_agent_versions")
@@ -119,11 +121,22 @@ export default async function AgentEditorPage({
       .eq("organization_id", activeOrg.orgId)
       .eq("is_active", true)
       .order("created_at", { ascending: true }),
+    // Integrações via API (0223) com os endpoints, pelo mesmo motivo do acervo.
+    supabase
+      .from("ai_api_integrations")
+      .select(
+        "id, nome, identidade_modo, identidade_endpoint_id, ultimo_teste_ok, circuito_aberto_ate, endpoints:ai_api_endpoints(id, slug, titulo, modo, exige_identidade, ativo)",
+      )
+      .eq("organization_id", activeOrg.orgId)
+      .is("arquivada_em", null)
+      .eq("ativo", true)
+      .order("created_at", { ascending: true }),
   ]);
 
   const versions = (versionsRes.data ?? []) as unknown as AgentVersionRow[];
   const funis = (funisRes.data ?? []) as unknown as FunilDaResposta[];
   const materiais = (acervoRes.data ?? []) as unknown as MaterialDoAcervo[];
+  const integracoes = (integracoesRes.data ?? []) as unknown as IntegracaoDoAcervo[];
 
   // Quanto de cada funil o assistente sabe percorrer (spec 17 passo 4). Vem
   // junto com a página porque a lacuna precisa aparecer no MESMO lugar em que o
@@ -172,6 +185,8 @@ export default async function AgentEditorPage({
         funis={funis}
         cobertura={cobertura}
         materiais={materiais}
+        integracoes={integracoes}
+        emailConfigurado={isEmailConfigured()}
         routerMembership={routerMembership}
         readOnly={readOnly}
       />

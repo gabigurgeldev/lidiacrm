@@ -20,11 +20,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export interface EscopoDaVersao {
   pipeline_ids?: string[];
   knowledge_source_ids?: string[];
+  api_endpoint_ids?: string[];
 }
 
 export type ResultadoDoEscopo =
   | { ok: true }
-  | { ok: false; campo: "pipeline_ids" | "knowledge_source_ids"; ausentes: string[] };
+  | { ok: false; campo: "pipeline_ids" | "knowledge_source_ids" | "api_endpoint_ids"; ausentes: string[] };
 
 /**
  * Confere que todo id do escopo existe NESTA organização.
@@ -66,11 +67,30 @@ export async function validarEscopoDaVersao(
     if (ausentes.length > 0) return { ok: false, campo: "knowledge_source_ids", ausentes };
   }
 
+  const endpoints = escopo.api_endpoint_ids ?? [];
+  if (endpoints.length > 0) {
+    // Endpoint desligado, ou de integração arquivada, é a mesma configuração
+    // muda: o worker não o carrega, e o agente nunca consulta.
+    const { data } = await supabase
+      .from("ai_api_endpoints")
+      .select("id, ai_api_integrations!inner(arquivada_em)")
+      .eq("organization_id", organizationId)
+      .eq("ativo", true)
+      .is("ai_api_integrations.arquivada_em", null)
+      .in("id", endpoints);
+    const achados = new Set(((data ?? []) as Array<{ id: string }>).map((r) => r.id));
+    const ausentes = endpoints.filter((id) => !achados.has(id));
+    if (ausentes.length > 0) return { ok: false, campo: "api_endpoint_ids", ausentes };
+  }
+
   return { ok: true };
 }
 
 /** Frase para quem lê na tela — nunca o id cru sem contexto. */
 export function mensagemDoEscopo(r: Extract<ResultadoDoEscopo, { ok: false }>): string {
+  if (r.campo === "api_endpoint_ids") {
+    return `Um dos endpoints de integração marcados não existe mais, foi desligado ou a integração foi arquivada (${r.ausentes.length}). Recarregue a página e marque de novo.`;
+  }
   return r.campo === "pipeline_ids"
     ? `Um dos funis marcados não existe mais nesta organização (${r.ausentes.length}). Recarregue a página e marque de novo.`
     : `Um dos materiais marcados não existe mais, ou foi arquivado (${r.ausentes.length}). Recarregue a página e marque de novo.`;
