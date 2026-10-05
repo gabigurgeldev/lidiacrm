@@ -104,6 +104,24 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "agente da A não desmarca nem apaga a da B (com controle positivo na A), que o " +
       "viewer lê mas não escreve, e que a cascata LGPD apaga o texto.",
   },
+  ...(
+    [
+      "ai_api_integrations",
+      "ai_api_integration_secrets",
+      "ai_api_endpoints",
+      "ai_api_verificacoes",
+      "ai_api_acoes_pendentes",
+      "ai_api_chamadas",
+    ] as const
+  ).map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/integracoes-api-rls.test.ts prova a leitura cross-org (manager da A " +
+      "não vê a B, com o pedido da tabela inteira), que o agent da própria org não lê a " +
+      "configuração, que só o admin escreve e só na própria org, que segredo e verificação " +
+      "dão permission denied até ao admin, e que ninguém confirma ação pela anon key. Fica " +
+      "fora de TABLES porque a leitura é de manager e o usuário semeado lá é agent.",
+  })),
   ...(["flow_executions", "flow_execution_frames", "flow_execution_joins"] as const).map(
     (tabela) => ({
       tabela,

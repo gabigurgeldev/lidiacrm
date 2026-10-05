@@ -410,6 +410,8 @@ export async function criarDesafio(
     emailMascarado: string;
     codigoHash: string | null;
     expiraEm: Date;
+    /** Relógio do TURNO, não o do banco: o código digitado é comparado com ele. */
+    criadoEm: Date;
     contas: ContaEncontrada[];
   },
 ): Promise<string> {
@@ -423,8 +425,8 @@ export async function criarDesafio(
   await db.query(
     `insert into ai_api_verificacoes
        (id, organization_id, conversation_id, contact_id, email_hash, email_mascarado,
-        email_encrypted, email_iv, email_tag, codigo_hash, codigo_expira_em, contas)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        email_encrypted, email_iv, email_tag, codigo_hash, codigo_expira_em, contas, created_at)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
     [
       id,
       input.tenantId,
@@ -438,6 +440,7 @@ export async function criarDesafio(
       input.codigoHash,
       input.expiraEm,
       JSON.stringify(input.contas),
+      input.criadoEm,
     ],
   );
   return id;
@@ -608,11 +611,13 @@ export async function marcarOfertaEnviada(
   tenantId: string,
   acaoId: string,
   messageId: string | null,
+  quando: Date,
 ): Promise<void> {
+  // O instante vem do relógio do TURNO: o SIM do cliente é comparado com ele.
   await db.query(
-    `update ai_api_acoes_pendentes set oferta_message_id = $3, oferta_enviada_em = now(), updated_at = now()
+    `update ai_api_acoes_pendentes set oferta_message_id = $3, oferta_enviada_em = $4, updated_at = now()
       where organization_id = $1 and id = $2`,
-    [tenantId, acaoId, messageId],
+    [tenantId, acaoId, messageId, quando],
   );
 }
 

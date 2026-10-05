@@ -603,7 +603,7 @@ export async function montarFerramentasDeIntegracao(
             `O pedido de confirmação não chegou ao cliente (${envio.erro ?? 'canal'}). Não diga que vai corrigir; tente de novo mais tarde ou transfira.`,
           );
         }
-        await marcarOfertaEnviada(ctx.db, ctx.tenantId, acaoId, envio.messageId);
+        await marcarOfertaEnviada(ctx.db, ctx.tenantId, acaoId, envio.messageId, ctx.agora());
         await auditar(ctx.db, ctx.tenantId, 'ai_api.action_proposed', 'ai_api_acao', acaoId, {
           endpoint_id: par.e.id,
           integration_id: par.i.id,
@@ -674,6 +674,7 @@ export async function montarFerramentasDeIntegracao(
           emailMascarado: mascarado,
           codigoHash: codigo ? hashDoCodigo(id, codigo) : null,
           expiraEm: new Date(ctx.agora().getTime() + VALIDADE_DO_CODIGO_MS),
+          criadoEm: ctx.agora(),
           contas,
         });
         if (codigo) {
