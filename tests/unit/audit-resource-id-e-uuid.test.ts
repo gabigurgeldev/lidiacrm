@@ -54,6 +54,10 @@ const RAIZ = process.cwd();
 const EXCECOES: Record<string, string> = {
   "pid": "parâmetro de rota /proposals/[pid] — é o uuid da proposta, o nome curto vem do path",
   "vid": "parâmetro de rota /versions/[vid] — uuid da versão",
+  "eid":
+    "parâmetro de rota /integracoes/[id]/endpoints/[eid] — uuid do endpoint, validado por UUID_RX antes do audit",
+  "string | null":
+    "falso positivo do parser: ANOTAÇÃO DE TIPO do parâmetro de `auditar()` em lib/agent-engine/edge/integracoes/repositorio.ts; todo chamador passa o uuid da verificação ou da ação",
   "String(lead.id)": "uuid do lead, convertido porque a origem é jsonb do webhook",
   "string | null | undefined":
     "falso positivo do parser: é uma ANOTAÇÃO DE TIPO num componente, não uma chamada de audit",
