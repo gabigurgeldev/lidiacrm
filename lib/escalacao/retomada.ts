@@ -165,6 +165,29 @@ export async function devolverAtendimentoAoAgente(
       });
       return { ok: false, erro: "assignment_conflict", detalhe: contatoErr.message };
     }
+
+    // (3b) O aviso da passagem na Central também é fim de episódio. A passagem
+    // só abre item novo — e só emite `agent.handoff_requested`, o gatilho do
+    // fluxo "Quando a IA passar para uma pessoa" — quando NÃO há item `open`
+    // para o contato (`human-handoff.ts`, dedup por contato). Sem fechar aqui, o
+    // cliente que volta para a IA e pede ajuda de novo amanhã é passado para a
+    // equipe em silêncio: nenhum item novo, nenhum evento, nenhum aviso no
+    // WhatsApp do dono. Não é fatal: a devolução já aconteceu, e o item ainda
+    // pode ser fechado à mão na Central.
+    const { error: inboxErr } = await supabase
+      .from("agent_inbox_items")
+      .update({ status: "resolved" })
+      .eq("organization_id", organizationId)
+      .eq("kind", "handoff")
+      .eq("ref_kind", "contact")
+      .eq("ref_id", conv.contact_id)
+      .eq("status", "open");
+    if (inboxErr) {
+      logger.warn("[escalacao.retomada] aviso da passagem não foi fechado", {
+        conversation_id: input.conversationId,
+        error: inboxErr.message,
+      });
+    }
   }
 
   // (4) Sinal durável de fim do episódio. AWAITED, não fire-and-forget, pela
