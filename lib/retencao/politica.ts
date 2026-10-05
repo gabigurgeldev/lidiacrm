@@ -87,6 +87,20 @@ export const RETENCAO_CAPTACAO_DIAS_PADRAO = 365;
  */
 export const RETENCAO_CAPTACAO_DIAS_PISO = 30;
 
+/**
+ * Integrações via API (migration 0223): o log de chamadas (`ai_api_chamadas`).
+ *
+ * Noventa dias bastam para a tela de Atividade e para entender um circuito que
+ * abriu; o log não tem payload, mas cresce a cada consulta do agente. A mesma
+ * função apaga as VERIFICAÇÕES com mais de 30 dias — fixo no corpo, não
+ * ajustável: elas guardam o e-mail cifrado de quem pediu o código, e a sessão
+ * mais longa dura 24 horas. Guardar mais não serve a ninguém.
+ *
+ * Sem knob de ambiente: o piso e o padrão moram em `fn_expurgar_integracoes_api`.
+ */
+export const RETENCAO_INTEGRACOES_API_DIAS_PADRAO = 90;
+export const RETENCAO_INTEGRACOES_API_DIAS_PISO = 30;
+
 export interface RetencaoInterpretada {
   /** Dias a pedir ao banco. Nunca abaixo do piso, nunca `NaN`. */
   readonly dias: number;

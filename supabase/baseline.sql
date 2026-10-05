@@ -19372,6 +19372,55 @@ comment on function public.fn_suporte_contas_por_email(text) is
 
 notify pgrst, 'reload schema';
 
+-- ---- retenção das Integrações via API (migration 0225) ----
+--
+-- Quinta poda do data-retention: ai_api_chamadas (padrão 90, piso 30 no corpo)
+-- e ai_api_verificacoes com mais de 30 dias (e-mail cifrado). Só service_role.
+create or replace function public.fn_expurgar_integracoes_api(
+  p_retencao_dias int default null,
+  p_limite int default null
+) returns int
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_dias int := greatest(coalesce(p_retencao_dias, 90), 30);
+  v_limite int := least(greatest(coalesce(p_limite, 1000), 1), 10000);
+  v_chamadas int;
+  v_verificacoes int;
+begin
+  with vencidas as (
+    select c.id
+      from public.ai_api_chamadas c
+     where c.created_at < now() - make_interval(days => v_dias)
+     order by c.created_at
+     limit v_limite
+  )
+  delete from public.ai_api_chamadas c
+   using vencidas v
+   where c.id = v.id;
+  get diagnostics v_chamadas = row_count;
+
+  with vencidas as (
+    select x.id
+      from public.ai_api_verificacoes x
+     where x.created_at < now() - interval '30 days'
+     order by x.created_at
+     limit v_limite
+  )
+  delete from public.ai_api_verificacoes x
+   using vencidas v
+   where x.id = v.id;
+  get diagnostics v_verificacoes = row_count;
+
+  return v_chamadas + v_verificacoes;
+end;
+$$;
+
+revoke execute on function public.fn_expurgar_integracoes_api(int, int) from public, anon, authenticated;
+grant  execute on function public.fn_expurgar_integracoes_api(int, int) to service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
