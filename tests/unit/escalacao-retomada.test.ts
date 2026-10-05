@@ -37,6 +37,8 @@ interface Captura {
   updates: Escrita[];
   inserts: Escrita[];
   rpc: Array<{ fn: string; args: Record<string, unknown> }>;
+  /** Filtros `.eq` de cada UPDATE, por tabela — o QUE a escrita alcança. */
+  filtrosDeUpdate: Array<{ tabela: string; coluna: string; valor: unknown }>;
 }
 
 interface CenarioBanco {
@@ -50,6 +52,7 @@ interface CenarioBanco {
   checkpointAnterior?: Record<string, unknown> | null;
   negocios?: Array<Record<string, unknown>>;
   erroDoEmitEvent?: { message: string } | null;
+  erroNoAvisoDaCentral?: { message: string } | null;
 }
 
 /**
@@ -63,7 +66,10 @@ function fazerSupabase(cenario: CenarioBanco, cap: Captura) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const chain: any = {
       select: () => chain,
-      eq: () => chain,
+      eq: (coluna: string, valor: unknown) => {
+        if (ehUpdate) cap.filtrosDeUpdate.push({ tabela, coluna, valor });
+        return chain;
+      },
       is: () => chain,
       in: () => chain,
       order: () => chain,
@@ -100,7 +106,9 @@ function fazerSupabase(cenario: CenarioBanco, cap: Captura) {
           conversation_notes: cenario.notas ?? [],
           crm_leads: cenario.negocios ?? [],
         };
-        return Promise.resolve({ data: listas[tabela] ?? [], error: null }).then(res);
+        const erro =
+          ehUpdate && tabela === "agent_inbox_items" ? (cenario.erroNoAvisoDaCentral ?? null) : null;
+        return Promise.resolve({ data: listas[tabela] ?? [], error: erro }).then(res);
       },
     };
     return chain;
@@ -166,7 +174,7 @@ function cenarioComAtendimentoHumano(over: Partial<CenarioBanco> = {}): CenarioB
 }
 
 function novaCaptura(): Captura {
-  return { updates: [], inserts: [], rpc: [] };
+  return { updates: [], inserts: [], rpc: [], filtrosDeUpdate: [] };
 }
 
 async function retomar(cenario: CenarioBanco, cap: Captura, actor: Actor = USUARIO) {
@@ -193,6 +201,40 @@ describe("devolver o atendimento ao agente", () => {
       noContato,
       "sem esta escrita o agente continua morto nos três guards (worker nativo, harness e before-send)",
     ).toEqual([{ tabela: "contacts", valores: { force_human: false } }]);
+  });
+
+  it("fecha o aviso da passagem na Central — senão a próxima passagem do cliente não avisa ninguém", async () => {
+    const cap = novaCaptura();
+    const res = await retomar(cenarioComAtendimentoHumano(), cap);
+
+    expect(res.ok).toBe(true);
+    expect(cap.updates.filter((u) => u.tabela === "agent_inbox_items")).toEqual([
+      { tabela: "agent_inbox_items", valores: { status: "resolved" } },
+    ]);
+    // Só o aviso de PASSAGEM deste contato, ainda aberto: fechar outro tipo de
+    // aviso (orçamento, canal caído) esconderia problema que segue de pé.
+    const filtros = Object.fromEntries(
+      cap.filtrosDeUpdate
+        .filter((f) => f.tabela === "agent_inbox_items")
+        .map((f) => [f.coluna, f.valor]),
+    );
+    expect(filtros).toEqual({
+      organization_id: ORG,
+      kind: "handoff",
+      ref_kind: "contact",
+      ref_id: CONTATO,
+      status: "open",
+    });
+  });
+
+  it("falha ao fechar o aviso não desfaz a devolução", async () => {
+    const cap = novaCaptura();
+    const res = await retomar(
+      cenarioComAtendimentoHumano({ erroNoAvisoDaCentral: { message: "boom" } }),
+      cap,
+    );
+    expect(res.ok).toBe(true);
+    expect(cap.rpc.some((r) => r.fn === "emit_event")).toBe(true);
   });
 
   it("devolve o comando da conversa: silêncio some, marca de passagem some, dono vira a IA", async () => {
