@@ -68,6 +68,12 @@ export const KIND_LABEL = {
   // (migration 0222) Diz o que o CLIENTE recebeu (texto, não áudio) — quem lê
   // precisa saber que o atendimento seguiu, e que só a voz parou.
   voz_indisponivel: "O agente parou de responder em áudio e está mandando texto",
+  // (migration 0223) Integrações via API. Cada frase diz o que o cliente viveu:
+  // o agente parou de consultar, a correção prometida não aconteceu, alguém
+  // errou o código da conta várias vezes.
+  integracao_api_falhando: "Uma integração via API está falhando e o agente parou de consultá-la",
+  acao_externa_falhou: "O cliente confirmou uma correção e ela não foi aplicada",
+  verificacao_bloqueada: "Alguém errou o código de verificação de uma conta várias vezes",
   other: "Aviso do assistente",
 } as const satisfies Record<InboxKind, string>;
 

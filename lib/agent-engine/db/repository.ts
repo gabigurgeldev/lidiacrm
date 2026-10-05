@@ -71,6 +71,12 @@ export type InboxKind =
   // recebeu a resposta em TEXTO; o aviso conta ao operador por que o áudio
   // parou de sair.
   | 'voz_indisponivel'
+  // (migration 0223) Integrações via API. A API falhou em série e o circuito
+  // pausou; o cliente disse SIM e a correção não rodou; código de verificação
+  // errado demais na mesma conversa.
+  | 'integracao_api_falhando'
+  | 'acao_externa_falhou'
+  | 'verificacao_bloqueada'
   | 'other';
 
 export interface InboxItemRow {
