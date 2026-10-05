@@ -5,14 +5,20 @@ O agente de suporte roda no tenant **GESTALT SUPORTE** desta instalação e usa
 WhatsApp. Cada sistema da Gestalt fala o **Contrato de Suporte v1**
 (`docs/integracoes/contrato-de-suporte-v1.md`).
 
-| Sistema | Onde mora o lado servidor | Estado |
-|---|---|---|
-| Gestalt CRM (esta instalação) | `app/suporte/v1/*` neste repo | implementado |
-| Back Office | repo `PROJETOS GESTALT/BACKOFFICE` | a fazer |
-| Votaris Hub | repo `PROJETOS GESTALT/VOTARIS/votarishub` | a fazer |
-| SOT | repo `PROJETOS DE PARCERIA/SOT/SOT` | a fazer |
-| FIMEI | repo `PROJETOS GESTALT/FIMEI/controle-financeiro` | a fazer |
-| ZapTrace | repo `PROJETOS DE PARCERIA/ZAPTRACE/zaptrace` | a fazer |
+| Sistema | Endereço base da integração | O que o agente faz | Onde o segredo vai |
+|---|---|---|---|
+| Gestalt CRM | `https://gestaltcrm.com.br/suporte/v1` | diagnóstico + `reconectar_canal`, `reindexar_material` | `.env` do `crm` na VPS (ver §2) |
+| Back Office | `https://<domínio do Back Office>/suporte/v1` | só diagnóstico (afiliado/fornecedor: cadastro, Pix, saldos, saques, produtos) | `.env` do Back Office |
+| Votaris Hub | `https://<PUBLIC_APP_URL>/suporte/v1` | só diagnóstico (módulos, domínio, WhatsApp, fila) | variáveis do Worker/Easypanel |
+| SOT | `https://<PUBLIC_APP_URL>/suporte/v1` | só diagnóstico (assinatura, plano, módulo, membros, quadros) | variáveis do Worker/Easypanel |
+| FinMEI | `https://<domínio do FinMEI>/suporte/v1` | só diagnóstico (assinatura, bloqueio, WhatsApp verificado) | variáveis da Vercel |
+| Radar de Vendas (ZapTrace) | `https://<APP_URL>/api/suporte/v1` | só diagnóstico (números, última mensagem, última análise) | `.env` do Radar |
+
+Todos implementados e na `main` de cada repositório (2026-10-05). Só o CRM tem correção: nos
+outros, tudo que daria para "consertar" é dinheiro, acesso ou ler QR Code — decisão de pessoa.
+Um segredo **diferente por sistema** (`openssl rand -hex 32`): o mesmo valor vai no sistema
+(`SUPORTE_V1_SECRET`) e na integração do tenant GESTALT SUPORTE. Sem o segredo, o sistema
+responde 503 e nada fica exposto.
 
 ## 1. Pré-requisitos na VPS
 
@@ -24,8 +30,17 @@ WhatsApp. Cada sistema da Gestalt fala o **Contrato de Suporte v1**
 ## 2. Gestalt CRM como sistema consultado
 
 1. Gere o segredo: `openssl rand -hex 32`.
-2. No `.env` da VPS: `SUPORTE_V1_SECRET=<segredo>`. Reinicie **app** (com os
-   dois arquivos de compose, ver `docs/runbooks/deploy.md`).
+2. No `.env` do `crm` **no disco da VPS**: `SUPORTE_V1_SECRET=<segredo>`. Na instalação
+   EasyPanel da Gestalt o arquivo é `/etc/easypanel/projects/lidiacrm/crm/code/deploy/easypanel/.env`
+   — "Implantar" no painel **não** regrava esse arquivo, então variável salva só no painel
+   pode nunca chegar ao contêiner. Recrie app e worker a partir desse diretório:
+
+   ```bash
+   docker compose -p lidiacrm_crm --project-directory . -f docker-compose.yml -f docker-compose.override.yml up -d --no-deps app worker
+   ```
+
+   Confira: `curl -s -o /dev/null -w '%{http_code}' https://gestaltcrm.com.br/suporte/v1/saude`
+   responde `401` (segredo configurado, assinatura ausente). `503` = o segredo não chegou.
 3. Prove de dentro do container **worker** que ele alcança o domínio público
    (o agente chama a própria instalação pelo endereço público; endereço interno
    é recusado pela guarda anti-SSRF):
@@ -57,6 +72,17 @@ WhatsApp. Cada sistema da Gestalt fala o **Contrato de Suporte v1**
    > de responder. Se o diagnóstico sugerir uma correção, explique e use
    > propor_acao — nunca diga que corrigiu antes de receber o resultado. Se não
    > resolver, ou se o cliente não conseguir verificar, transfira para a equipe.
+
+## 3b. Os outros cinco sistemas
+
+Para cada linha da tabela do topo: gere um segredo, ponha `SUPORTE_V1_SECRET` no
+sistema, publique/reinicie, confira que `<endereço base>/saude` sem assinatura responde
+`401`, e repita o §3 com o nome e o endereço base daquele sistema. Os cinco não têm
+correção, então o "Importar catálogo" cria só `buscar_conta` e `diagnostico` — marque o
+diagnóstico de cada um no Astronauta.
+
+O mesmo e-mail pode ter conta em mais de um sistema: a verificação é UMA por conversa e
+busca em todos; se um sistema achar mais de uma conta, o agente pergunta qual.
 
 ## 4. Prova de ponta a ponta (obrigatória a cada sistema ligado)
 
