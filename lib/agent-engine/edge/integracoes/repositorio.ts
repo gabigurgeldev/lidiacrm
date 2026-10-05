@@ -323,15 +323,29 @@ function emailDaLinha(r: LinhaDeVerificacao): string | null {
   }
 }
 
-async function ultimaVerificacao(db: Queryable, tenantId: string, conversationId: string): Promise<LinhaDeVerificacao | null> {
+/**
+ * A verificação mais recente da conversa NO STATUS pedido.
+ *
+ * Filtrar pelo status, e não pegar "a última" e olhar o status depois: um
+ * desafio novo substitui o anterior no MESMO instante do relógio do turno, e
+ * com `created_at` empatado o desempate por `id` (uuid aleatório) às vezes
+ * devolvia o substituído — e o código certo, digitado em seguida, não achava
+ * desafio nenhum. Medido no invariante `integracoes-api-turno`.
+ */
+async function ultimaVerificacao(
+  db: Queryable,
+  tenantId: string,
+  conversationId: string,
+  status: 'pendente' | 'verificado',
+): Promise<LinhaDeVerificacao | null> {
   const { rows } = await db.query<LinhaDeVerificacao>(
     `select id, status, email_mascarado, email_encrypted, email_iv, email_tag, codigo_hash, tentativas,
             codigo_expira_em, valido_ate, created_at, ultima_mensagem_tentada_id, contas, selecionadas
        from ai_api_verificacoes
-      where organization_id = $1 and conversation_id = $2
+      where organization_id = $1 and conversation_id = $2 and status = $3
       order by created_at desc, id desc
       limit 1`,
-    [tenantId, conversationId],
+    [tenantId, conversationId, status],
   );
   return rows[0] ?? null;
 }
@@ -343,7 +357,7 @@ export async function sessaoDaConversa(
   conversationId: string,
   agora: Date,
 ): Promise<SessaoVerificada | null> {
-  const r = await ultimaVerificacao(db, tenantId, conversationId);
+  const r = await ultimaVerificacao(db, tenantId, conversationId, 'verificado');
   if (!r || r.status !== 'verificado' || !r.valido_ate || r.valido_ate.getTime() <= agora.getTime()) return null;
   return {
     id: r.id,
@@ -360,7 +374,7 @@ export async function desafioDaConversa(
   tenantId: string,
   conversationId: string,
 ): Promise<DesafioPendente | null> {
-  const r = await ultimaVerificacao(db, tenantId, conversationId);
+  const r = await ultimaVerificacao(db, tenantId, conversationId, 'pendente');
   if (!r || r.status !== 'pendente') return null;
   return {
     id: r.id,
