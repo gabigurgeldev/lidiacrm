@@ -73,7 +73,7 @@ export async function validarEscopoDaVersao(
     // muda: o worker não o carrega, e o agente nunca consulta.
     const { data } = await supabase
       .from("ai_api_endpoints")
-      .select("id, ai_api_integrations!inner(arquivada_em)")
+      .select("id, ai_api_integrations!ai_api_endpoints_integration_id_fkey!inner(arquivada_em)")
       .eq("organization_id", organizationId)
       .eq("ativo", true)
       .is("ai_api_integrations.arquivada_em", null)

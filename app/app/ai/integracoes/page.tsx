@@ -29,7 +29,7 @@ export default async function IntegracoesPage() {
   const supabase = await createClient();
   const { data } = await supabase
     .from("ai_api_integrations")
-    .select(`${COLUNAS_DA_INTEGRACAO}, endpoints:ai_api_endpoints(id, modo, ativo)`)
+    .select(`${COLUNAS_DA_INTEGRACAO}, endpoints:ai_api_endpoints!ai_api_endpoints_integration_id_fkey(id, modo, ativo)`)
     .eq("organization_id", activeOrg.orgId)
     .is("arquivada_em", null)
     .order("created_at", { ascending: true });
