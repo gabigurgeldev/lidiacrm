@@ -45,9 +45,17 @@ responde 503 e nada fica exposto.
    (o agente chama a própria instalação pelo endereço público; endereço interno
    é recusado pela guarda anti-SSRF):
 
+   Do MESMO diretório do passo 2 e com o MESMO projeto e arquivos de compose — na
+   instalação EasyPanel o projeto é `lidiacrm_crm` e o compose é o `docker-compose.yml`
+   dali, não o `docker-compose.prod.yml` do repositório (com ele o `exec` não acha o
+   serviço):
+
    ```bash
-   docker compose -f docker-compose.prod.yml exec worker node -e "fetch('https://gestaltcrm.com.br/suporte/v1/saude').then(r=>console.log(r.status))"
+   docker compose -p lidiacrm_crm --project-directory . -f docker-compose.yml -f docker-compose.override.yml exec worker node -e "fetch('https://gestaltcrm.com.br/suporte/v1/saude').then(r=>console.log(r.status))"
    ```
+
+   Numa instalação pelo kit (sem painel), o equivalente é
+   `docker compose -f docker-compose.prod.yml --env-file .env exec worker node -e "…"`.
 
    Esperado: `401` (chegou e recusou a assinatura). `fetch failed` = hairpin
    NAT bloqueado — resolver antes de seguir.
