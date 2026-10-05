@@ -57,6 +57,7 @@ import { FollowupFlowPicker } from "./FollowupFlowPicker";
 import { PainelDoOperador } from "./PainelDoOperador";
 import { PainelDeSeguranca } from "./PainelDeSeguranca";
 import { BasesDoAgente, type MaterialDoAcervo } from "./BasesDoAgente";
+import { IntegracoesDoAgente, type IntegracaoDoAcervo } from "./IntegracoesDoAgente";
 import { FunisDoAgente, type CoberturaPorFunil } from "./FunisDoAgente";
 import { PublishConfirmDialog } from "./PublishConfirmDialog";
 import {
@@ -141,6 +142,10 @@ type Props = (EditProps | CreateProps) & {
    * algo importante.
    */
   materiais?: MaterialDoAcervo[];
+  /** Integrações via API da organização (0223), com os endpoints — por prop, pelo mesmo motivo. */
+  integracoes?: IntegracaoDoAcervo[];
+  /** O envio de e-mail está configurado? A verificação por código depende dele. */
+  emailConfigurado?: boolean;
 };
 
 interface FormState {
@@ -174,6 +179,7 @@ interface FormState {
   operator_tool_ids: string[];
   pipeline_ids: string[];
   knowledge_source_ids: string[];
+  api_endpoint_ids: string[];
 }
 
 interface FollowupValue {
@@ -249,6 +255,8 @@ function buildState(args: {
     pipeline_ids: version?.pipeline_ids ?? [],
     // `?? []` = nenhum material. Mesma direção segura: agir de menos.
     knowledge_source_ids: version?.knowledge_source_ids ?? [],
+    // `?? []` = nenhum sistema externo. Mesma direção segura.
+    api_endpoint_ids: version?.api_endpoint_ids ?? [],
   };
 }
 
@@ -282,6 +290,7 @@ function toVersionPayload(s: FormState) {
     operator_tool_ids: s.operator_tool_ids,
     pipeline_ids: s.pipeline_ids,
     knowledge_source_ids: s.knowledge_source_ids,
+    api_endpoint_ids: s.api_endpoint_ids,
   };
 }
 
@@ -289,6 +298,7 @@ export function AgentForm(props: Props) {
   const t = useT();
   const funis = props.funis ?? [];
   const materiais = props.materiais ?? [];
+  const integracoes = props.integracoes ?? [];
   const router = useRouter();
   const isEdit = props.mode === "edit";
   const readOnly = props.readOnly ?? false;
@@ -1029,6 +1039,15 @@ export function AgentForm(props: Props) {
             materiais={materiais}
             value={form.knowledge_source_ids}
             onChange={(ids) => patch({ knowledge_source_ids: ids })}
+            disabled={disabled}
+          />
+
+          {/* Os sistemas externos que ele consulta (Integrações via API, 0223) */}
+          <IntegracoesDoAgente
+            integracoes={integracoes}
+            emailConfigurado={props.emailConfigurado ?? false}
+            value={form.api_endpoint_ids}
+            onChange={(ids) => patch({ api_endpoint_ids: ids })}
             disabled={disabled}
           />
 

@@ -36,7 +36,7 @@ import { VALID_TOOL_IDS } from "@/lib/mcp/tools";
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, reply_as_audio, audio_voice, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, reply_as_audio, audio_voice, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,api_endpoint_ids";
 
 type ActionResult<T = void> =
   | { ok: true; data?: T }
@@ -94,6 +94,7 @@ export async function saveAgentDraftAction(
   const escopo = await validarEscopoDaVersao(admin, activeOrg.orgId, {
     pipeline_ids: v.pipeline_ids,
     knowledge_source_ids: v.knowledge_source_ids,
+    api_endpoint_ids: v.api_endpoint_ids,
   });
   if (!escopo.ok) {
     return { ok: false, error: "validation_failed", message: mensagemDoEscopo(escopo) };
@@ -187,6 +188,7 @@ export async function saveAgentDraftAction(
         operator_tool_ids: v.operator_tool_ids,
         pipeline_ids: v.pipeline_ids,
         knowledge_source_ids: v.knowledge_source_ids,
+        api_endpoint_ids: v.api_endpoint_ids,
         split_messages: v.split_messages,
         split_max_chars: v.split_max_chars,
         reply_as_audio: v.reply_as_audio,
@@ -377,6 +379,7 @@ export async function revertToVersionAction(
     operator_tool_ids: string[];
     pipeline_ids: string[];
     knowledge_source_ids: string[];
+    api_endpoint_ids: string[] | null;
     split_messages: boolean;
     split_max_chars: number;
     reply_as_audio: boolean;
@@ -427,6 +430,7 @@ export async function revertToVersionAction(
         // que aquela versão consultava é publicar uma configuração inventada.
         pipeline_ids: src.pipeline_ids,
         knowledge_source_ids: src.knowledge_source_ids ?? [],
+        api_endpoint_ids: src.api_endpoint_ids ?? [],
         split_messages: src.split_messages,
         split_max_chars: src.split_max_chars,
         reply_as_audio: src.reply_as_audio,
@@ -586,6 +590,7 @@ export async function createMcpAgentAction(
     operator_tool_ids: v.operator_tool_ids,
     pipeline_ids: v.pipeline_ids,
     knowledge_source_ids: v.knowledge_source_ids,
+    api_endpoint_ids: v.api_endpoint_ids,
     status: "draft",
     created_by: authUser.id,
   });

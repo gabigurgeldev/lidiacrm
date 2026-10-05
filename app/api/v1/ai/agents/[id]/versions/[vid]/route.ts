@@ -13,11 +13,12 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { versionPatchSchema } from "@/lib/ai/agents/validation";
+import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 
 export const dynamic = "force-dynamic";
 
 const VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, reply_as_audio, audio_voice, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, reply_as_audio, audio_voice, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,api_endpoint_ids";
 
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -118,6 +119,18 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
   if (patch.reply_as_audio !== undefined) update.reply_as_audio = patch.reply_as_audio;
   if (patch.audio_voice !== undefined) update.audio_voice = patch.audio_voice;
   if (patch.followup !== undefined) update.followup = patch.followup;
+  if (patch.api_endpoint_ids !== undefined) {
+    const escopo = await validarEscopoDaVersao(admin, activeOrg.orgId, {
+      api_endpoint_ids: patch.api_endpoint_ids,
+    });
+    if (!escopo.ok) {
+      return fail("validation_failed", mensagemDoEscopo(escopo), 422, {
+        requestId,
+        details: { campo: escopo.campo, ausentes: escopo.ausentes },
+      });
+    }
+    update.api_endpoint_ids = patch.api_endpoint_ids;
+  }
 
   const { data, error } = await admin
     .from("ai_agent_versions")

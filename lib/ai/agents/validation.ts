@@ -12,6 +12,7 @@ import { VALID_TOOL_IDS } from "@/lib/mcp/tools/catalog";
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
 import { IDS_DE_PROVEDOR } from "@/lib/ai/pontos/provedores";
 import { VOZES_DO_AGENTE, VOZ_PADRAO } from "@/lib/ai/voz/vozes";
+import { TETO_ENDPOINTS_POR_AGENTE } from "@/lib/ai/integracoes/schema";
 
 /**
  * Derivado de `lib/ai/pontos/provedores.ts` (a lista única desde a 0127). Como
@@ -168,6 +169,15 @@ const versionShapeSchema = z
      * organização é o servidor.
      */
     knowledge_source_ids: z.array(z.string().uuid()).default([]),
+    /**
+     * Endpoints de Integrações via API (0223). Vazio = NENHUM. Existência e
+     * organização conferidas no servidor (`validarEscopoDaVersao`), pelo mesmo
+     * motivo dos dois campos acima.
+     */
+    api_endpoint_ids: z
+      .array(z.string().uuid())
+      .max(TETO_ENDPOINTS_POR_AGENTE, `No máximo ${TETO_ENDPOINTS_POR_AGENTE} endpoints por agente.`)
+      .default([]),
   })
   .strict();
 
