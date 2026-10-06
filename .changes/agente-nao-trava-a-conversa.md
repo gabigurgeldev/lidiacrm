@@ -13,17 +13,16 @@ minutos depois.
 
 Agora:
 
-- **Toda chamada de IA tem tempo máximo** (turno 2 min, classificadores 20 s,
-  resumo 90 s). Estourou, ela é interrompida e aparece em Execuções como
-  "tempo esgotado", com a sugestão de um modelo mais rápido.
+- **Toda chamada de IA tem tempo máximo** — turno 2 min, classificadores 20 s,
+  resumo 90 s. Estourou, ela é interrompida e aparece em Execuções como "tempo
+  esgotado", com a sugestão de um modelo mais rápido.
 - **O resumo depois da resposta não segura mais a conversa.** Se falhar, a
   conversa segue; perde-se só o resumo daquele turno.
 - **Os dois classificadores rodam ao mesmo tempo** e, se um falhar, o turno
-  continua sem ele — antes um esperava o outro, e qualquer falha derrubava a
+  continua sem ele. Antes um esperava o outro, e qualquer falha derrubava a
   resposta inteira.
-- **A espera pela vez de enviar, o envio ao provedor e a conversão do áudio
-  também têm prazo**, e uma tentativa antiga que "acorda" atrasada não mexe mais
-  na tentativa nova.
+- **Esperar a vez de enviar, enviar ao provedor e converter o áudio têm prazo.**
+  Uma tentativa antiga que "acorda" atrasada não mexe mais na tentativa nova.
 - **Mensagem nova é vista mais rápido:** o worker ocioso procurava trabalho a
   cada 15 s; agora a cada 3 s.
 
