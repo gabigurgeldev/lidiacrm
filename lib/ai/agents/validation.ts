@@ -120,6 +120,8 @@ const versionShapeSchema = z
     // Responder em áudio (migration 0222) — nota de voz sintetizada pelo
     // serviço de TTS do operador. Defaults espelham a migration.
     reply_as_audio: z.boolean().default(false),
+    // Com reply_as_audio ligado: só responde em áudio quando o cliente mandou áudio (0226).
+    reply_as_audio_mirror: z.boolean().default(false),
     audio_voice: z.enum(VOZES_DO_AGENTE).default(VOZ_PADRAO),
     followup: followupConfigSchema,
     // ── Papel OPERADOR (spec 16 §3.2) ───────────────────────────────────────

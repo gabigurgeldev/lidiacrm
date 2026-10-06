@@ -37,6 +37,11 @@ export interface PublishedAgentConfig {
    * sintetizada pelo TTS do operador. Sem serviço configurado, segue texto.
    */
   replyAsAudio: boolean;
+  /**
+   * Com `replyAsAudio`: `true` = só responde em áudio quando o cliente mandou
+   * áudio desde a última resposta (texto recebe texto). Migration 0226.
+   */
+  replyAsAudioMirror: boolean;
   /** voz da síntese (`lib/ai/voz/vozes.ts`). */
   audioVoice: string;
   /** input multimodal (imagem/áudio/pdf) habilitado no turno (Onda 3). */
@@ -115,6 +120,7 @@ interface Row {
   split_messages: boolean;
   split_max_chars: number;
   reply_as_audio: boolean;
+  reply_as_audio_mirror: boolean | null;
   audio_voice: string;
   multimodal_input: boolean;
   cases_enabled: boolean;
@@ -147,6 +153,7 @@ const SELECT_AGENT_CONFIG_COLUMNS = `a.id as agent_id,
             v.split_messages,
             v.split_max_chars,
             v.reply_as_audio,
+            v.reply_as_audio_mirror,
             v.audio_voice,
             v.multimodal_input,
             v.cases_enabled,
@@ -195,6 +202,7 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     splitMessages: r.split_messages,
     splitMaxChars: r.split_max_chars,
     replyAsAudio: r.reply_as_audio ?? false,
+    replyAsAudioMirror: r.reply_as_audio_mirror ?? false,
     audioVoice: r.audio_voice ?? 'pf_dora',
     multimodalInput: r.multimodal_input,
     casesEnabled: r.cases_enabled,

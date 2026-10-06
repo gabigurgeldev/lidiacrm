@@ -91,6 +91,7 @@ function buildFieldChanges(a: AgentVersionRow, b: AgentVersionRow): FieldChange[
     ["split_messages", "split_messages"],
     ["split_max_chars", "split_max_chars"],
     ["reply_as_audio", "reply_as_audio"],
+    ["reply_as_audio_mirror", "reply_as_audio_mirror"],
     ["audio_voice", "audio_voice"],
   ];
   return fields

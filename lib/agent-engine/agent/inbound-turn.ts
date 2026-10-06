@@ -40,6 +40,7 @@ import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
 // applySendOutcome é disposição de FILA (cancel/reschedule + cache de opt-out), não
 // egress de canal — o envio em si vai pelo adapter (ChannelAdapter). Ver F2-25.
 import { applySendOutcome } from '../edge/crm/send-message';
+import { clienteMandouAudioDesdeAUltimaResposta, decidirRespostaEmAudio } from './resposta-em-audio';
 import {
   LlmBudgetExceededError,
   normalizarErro,
@@ -1592,6 +1593,16 @@ async function executarTurnoDoAgente(
   // correlacionar tentativa de promessa fora de tabela com o sinal de jailbreak — a
   // detecção NÃO depende do gate estar na cadeia default (a ordem final é da F4-08).
   const promiseTable = (await loadPromiseTable(pool, tenantId))?.table ?? null;
+  // Áudio ou texto NESTE turno (0222 + 0226): com o espelho ligado, só responde em
+  // áudio quem falou em áudio. A consulta só roda quando o espelho importa.
+  const responderEmAudio = decidirRespostaEmAudio({
+    replyAsAudio: agentConfig?.replyAsAudio ?? false,
+    espelhar: agentConfig?.replyAsAudioMirror ?? false,
+    clienteMandouAudio:
+      (agentConfig?.replyAsAudio ?? false) && (agentConfig?.replyAsAudioMirror ?? false)
+        ? await clienteMandouAudioDesdeAUltimaResposta(pool, tenantId, input.conversationId)
+        : false,
+  });
   // Gate 5 da cadeia (F4-02/F4-08): closure do classificador semântico com tenant/lead/job da
   // ROW do job fechados dentro (regra dura nº 1) — resolvido pelo seam agnóstico. undefined =
   // camada off (gate no-op). CUSTO: uma chamada de modelo POR ENVIO quando ligada.
@@ -1949,7 +1960,7 @@ async function executarTurnoDoAgente(
               sendInBubbles(finalBody, {
                 // Em áudio a resposta sai INTEIRA numa nota de voz: fatiar em
                 // bolhas viraria uma rajada de áudios de 5 segundos.
-                enabled: (agentConfig?.splitMessages ?? false) && !(agentConfig?.replyAsAudio ?? false),
+                enabled: (agentConfig?.splitMessages ?? false) && !responderEmAudio,
                 maxChars: agentConfig?.splitMaxChars ?? 600,
                 sleep: deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
                 jitter: () => 1200 + Math.floor(Math.random() * 800), // piso no throttle anti-ban (1.2s) — bolhas são mensagens físicas
@@ -1962,7 +1973,7 @@ async function executarTurnoDoAgente(
                     seq,
                     conversationId: input.conversationId,
                     body: bubble,
-                    ...(agentConfig?.replyAsAudio ? { voice: { voiceId: agentConfig.audioVoice } } : {}),
+                    ...(responderEmAudio && agentConfig ? { voice: { voiceId: agentConfig.audioVoice } } : {}),
                   });
                 },
               }),
@@ -2685,7 +2696,7 @@ async function executarTurnoDoAgente(
   // nota de voz, então o texto tem de ser escrito para ser OUVIDO. Link e e-mail
   // saem em texto de qualquer jeito (send-message.ts), por isso a instrução de
   // mandá-los numa mensagem à parte — o resto da resposta continua em áudio.
-  const splitHint = (agentConfig?.replyAsAudio ?? false)
+  const splitHint = responderEmAudio
     ? 'Suas mensagens são enviadas ao cliente como ÁUDIO (nota de voz). Escreva como quem fala: frases curtas e naturais, sem listas, sem negrito, sem emojis e sem símbolos. Se precisar mandar um link ou e-mail, envie-o numa mensagem separada, só com ele.'
     : (agentConfig?.splitMessages ?? false)
       ? 'Responda em mensagens curtas e naturais, uma ideia por mensagem — como uma pessoa digitando no WhatsApp. Prefira várias mensagens curtas a um texto único e longo.'

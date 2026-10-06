@@ -170,6 +170,7 @@ interface FormState {
   split_messages: boolean;
   split_max_chars: number;
   reply_as_audio: boolean;
+  reply_as_audio_mirror: boolean;
   audio_voice: VozDoAgente;
   followup: FollowupValue;
   // Papel OPERADOR (spec 16 §3.2) — o que mexe no sistema depois da conversa.
@@ -236,6 +237,7 @@ function buildState(args: {
     split_messages: version?.split_messages ?? false,
     split_max_chars: version?.split_max_chars ?? 600,
     reply_as_audio: version?.reply_as_audio ?? false,
+    reply_as_audio_mirror: version?.reply_as_audio_mirror ?? false,
     // Voz fora do catálogo (vocabulário aberto no banco) abre na padrão em vez
     // de um Select em branco que o primeiro save trocaria em silêncio.
     // Com serviço, a voz é a do catálogo DELE (`pf_dora`, default da coluna,
@@ -281,6 +283,7 @@ function toVersionPayload(s: FormState) {
     split_messages: s.split_messages,
     split_max_chars: s.split_max_chars,
     reply_as_audio: s.reply_as_audio,
+    reply_as_audio_mirror: s.reply_as_audio_mirror,
     audio_voice: s.audio_voice,
     followup: s.followup,
     operator_enabled: s.operator_enabled,
@@ -993,6 +996,25 @@ export function AgentForm(props: Props) {
                     "Para responder em áudio, cadastre a chave da OpenRouter em IA › Credenciais. A voz sai pela sua chave, sem nada rodando no servidor.",
                   )}
             </p>
+            {form.reply_as_audio ? (
+              <div className="space-y-1">
+                {/* Espelho (migration 0226): texto recebe texto, áudio recebe áudio. */}
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="reply_as_audio_mirror"
+                    checked={form.reply_as_audio_mirror}
+                    onCheckedChange={(v) => patch({ reply_as_audio_mirror: v })}
+                    disabled={disabled}
+                  />
+                  <Label htmlFor="reply_as_audio_mirror">{t("Só quando o cliente mandar áudio")}</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    "Ligado: quem escreve recebe texto, quem manda áudio recebe áudio. Desligado: toda resposta sai em áudio.",
+                  )}
+                </p>
+              </div>
+            ) : null}
             {form.reply_as_audio ? (
               <div className="space-y-1">
                 <Label htmlFor="audio_voice">{t("Voz")}</Label>
