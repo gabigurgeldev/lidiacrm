@@ -159,6 +159,29 @@ describe("mensagem que ENTRA", () => {
     );
   });
 
+  it("⭐ mídia com link pede o download ao worker — sem isso o áudio nunca é ouvido", async () => {
+    const { client, rpcs } = makeDb();
+    await ingestStevoInbound(client as never, {
+      organizationId: ORG,
+      channelSessionId: SESSAO,
+      payload: entrada({ text: undefined, type: "audio", url: "https://hel1.your-objectstorage.com/a.ogg" }),
+    });
+    const pedido = rpcs.find((x) => x.nome === "emit_event");
+    expect(pedido?.args).toMatchObject({
+      p_event_type: "media.persist_requested",
+      p_entity_id: "msg-1",
+      p_organization_id: ORG,
+      p_payload: { message_id: "msg-1", conversation_id: "conversa-1" },
+    });
+    expect(aplicarEfeitosPosEntrada).toHaveBeenCalled();
+  });
+
+  it("texto puro não pede download", async () => {
+    const { client, rpcs } = makeDb();
+    await ingestStevoInbound(client as never, { organizationId: ORG, channelSessionId: SESSAO, payload: entrada() });
+    expect(rpcs.some((x) => x.nome === "emit_event")).toBe(false);
+  });
+
   it("carimba a conversa como ENTRADA — é o que abre a janela de 24h", async () => {
     const { client, rpcs } = makeDb();
     await ingestStevoInbound(client as never, {

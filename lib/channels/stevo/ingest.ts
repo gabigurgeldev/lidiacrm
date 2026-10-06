@@ -40,6 +40,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 import { encontrarContatoPorTelefone } from "@/lib/channels/contato-por-telefone";
+import { logger } from "@/lib/logger";
 
 import { aplicarEfeitosPosEntrada } from "../pos-entrada";
 import { lerEventoStevo } from "./webhook";
@@ -195,6 +196,15 @@ export async function ingestStevoInbound(
 
   const messageId = (inserida as { id: string } | null)?.id ?? "";
 
+  // Mídia com link: o worker de mídia baixa, guarda no Storage e transcreve o
+  // áudio. Sem este evento a linha ficava com `media_url` e sem bytes para
+  // sempre, e o agente nunca ouvia o áudio do cliente. Antes dos efeitos de
+  // entrada, como no Zernio: o turno espera a transcrição, então o pedido tem
+  // de existir quando o despacho acontece.
+  if (evento.midiaUrl && messageId) {
+    await pedirPersistenciaDaMidia(admin, orgId, conversationId as string, messageId);
+  }
+
   // Só o que ENTROU dispara os efeitos: opt-out, demanda e agente reagem à fala
   // do cliente. Rodá-los sobre a nossa própria mensagem faria o agente responder
   // ao operador — e um "pare de me mandar" digitado pelo atendente bloquearia o
@@ -213,4 +223,30 @@ export async function ingestStevoInbound(
   }
 
   return { status: "ingested", messageId, conversationId: conversationId as string };
+}
+
+/**
+ * Pede ao worker de mídia que baixe e guarde o anexo (e transcreva, se áudio).
+ *
+ * Best-effort, como no Zernio (`../zernio/ingest.ts`): a mensagem já está
+ * gravada e visível. Derrubar a ingestão aqui devolveria erro ao provedor, que
+ * reenviaria tudo — trocaria uma mídia faltando por uma tempestade de reentregas.
+ */
+async function pedirPersistenciaDaMidia(
+  admin: SupabaseClient,
+  organizationId: string,
+  conversationId: string,
+  messageId: string,
+): Promise<void> {
+  const { error } = await admin.rpc("emit_event" as never, {
+    p_event_type: "media.persist_requested",
+    p_entity_kind: "message",
+    p_entity_id: messageId,
+    p_payload: { message_id: messageId, conversation_id: conversationId },
+    p_metadata: { source: "stevo_webhook" },
+    p_organization_id: organizationId,
+  } as never);
+  if (error) {
+    logger.warn("[stevo] emit media.persist_requested falhou", { messageId, detail: error.message });
+  }
 }
