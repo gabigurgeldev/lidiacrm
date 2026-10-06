@@ -380,6 +380,30 @@ export async function startWorker(
     cacheHitAlertMinRuns: env.CACHE_HIT_ALERT_MIN_RUNS,
   };
 
+  // Prazo de UM job: um minuto antes de o reaper o devolver à fila. Medido em
+  // produção (2026-10-06): sem prazo, um turno pendurado ficava `running` até o
+  // visibility timeout, era reaberto, e a tentativa antiga seguia viva (zumbi)
+  // segurando lock e conexão. Estourado, o job falha AQUI, com motivo, e a cerca
+  // de tentativa (`tentativa` em completeJob/failJob) impede a zumbi de mexer na
+  // tentativa seguinte quando acordar.
+  const prazoDoJobMs = Math.max(60_000, env.QUEUE_VISIBILITY_TIMEOUT_MS - 60_000);
+  const comPrazo = async (p: Promise<void>, kind: string): Promise<void> => {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        p,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`prazo do job estourado (${Math.round(prazoDoJobMs / 1000)}s, kind=${kind})`)),
+            prazoDoJobMs,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
   const runJob = async (job: JobRow): Promise<void> => {
     try {
       const handler = handlers.get(job.kind);
@@ -396,8 +420,8 @@ export async function startWorker(
         log.info('job pulado: assinatura bloqueada', { job_id: job.id, kind: job.kind, tenant_id: job.organization_id });
         return;
       }
-      await handler(job, pool, { workerId });
-      await completeJob(pool, job.id, workerId);
+      await comPrazo(handler(job, pool, { workerId }), job.kind);
+      await completeJob(pool, job.id, workerId, undefined, job.attempts);
       log.info('job concluído', { job_id: job.id, kind: job.kind });
       try {
         const wrote = await recordRunMetrics(pool, job);
@@ -430,7 +454,7 @@ export async function startWorker(
         if (terminal) {
           await cancelJob(pool, job.id, workerId, errMsg(err));
         } else {
-          await failJob(pool, job.id, workerId, err);
+          await failJob(pool, job.id, workerId, err, job.attempts);
         }
       } catch (failErr) {
         log.error('disposição do job indisponível — lease expira via reaper', {

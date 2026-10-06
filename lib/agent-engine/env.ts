@@ -106,7 +106,12 @@ const envSchema = z.object({
   // Drain do event_log (mesmo banco pós-fusão) — lote, ritmo e backoff ocioso.
   CRM_DRAIN_BATCH_SIZE: z.coerce.number().int().positive().default(20),
   CRM_DRAIN_INTERVAL_MS: z.coerce.number().int().positive().default(2_000),
-  CRM_DRAIN_IDLE_INTERVAL_MS: z.coerce.number().int().positive().default(15_000),
+  // Ocioso = a última passada não achou nada. Era 15 s, e isso era o atraso
+  // MÍNIMO de toda primeira mensagem de uma conversa parada: medido em produção
+  // (2026-10-06), o cliente esperava até 15 s só para o worker VER a mensagem,
+  // antes do debounce e do modelo. 3 s custa uma consulta leve a mais por
+  // segundo-e-pouco num worker sem trabalho.
+  CRM_DRAIN_IDLE_INTERVAL_MS: z.coerce.number().int().positive().default(3_000),
   // Evento 'processing' órfão (crash do worker) volta a 'pending' após isto.
   CRM_EVENT_REAP_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
   // Drain dos HANDLERS do event_log (mídia, branding, follow-up…), à parte do
@@ -143,6 +148,14 @@ const envSchema = z.object({
   FOLLOWUP_MAX_AHEAD_MS: z.coerce.number().int().positive().default(RETORNO_MAX_AHEAD_MS_PADRAO),
   // TTL do prefixo estável de prompt cache (doutrina: 1h).
   LLM_CACHE_TTL: z.enum(['5m', '1h']).default('1h'),
+  // Teto de tempo de UMA chamada de modelo (todos os passos e retries). Ausente
+  // = defaults do seam (`TEMPO_MAXIMO_PADRAO_MS`, edge/llm/run-model-call.ts):
+  // 120 s turno, 20 s classificador, 90 s resumo/checkpoint. Sem teto, uma
+  // chamada que o provedor nunca respondia prendia o job até o visibility
+  // timeout, e a fila do contato inteira junto.
+  LLM_TIMEOUT_MS: z.coerce.number().int().min(1000).optional(),
+  LLM_TIMEOUT_CLASSIFICADOR_MS: z.coerce.number().int().min(1000).optional(),
+  LLM_TIMEOUT_RESUMO_MS: z.coerce.number().int().min(1000).optional(),
   // Payload curado da tool get_lead_context.
   LEAD_CONTEXT_HISTORY_LIMIT: z.coerce.number().int().positive().default(20),
   LEAD_CONTEXT_MAX_TOKENS: z.coerce.number().int().positive().default(1_000),

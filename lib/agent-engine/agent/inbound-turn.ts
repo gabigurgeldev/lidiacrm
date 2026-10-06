@@ -42,6 +42,7 @@ import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
 import { applySendOutcome } from '../edge/crm/send-message';
 import {
   LlmBudgetExceededError,
+  normalizarErro,
   runModelCall,
   tool,
   type LlmEdgeConfig,
@@ -2596,47 +2597,66 @@ async function executarTurnoDoAgente(
   const currentStage: LeadStage = leadState?.stage ?? 'new';
   let stageSuggestion: LeadStage | null = null;
   let stageHintBlock = '';
-  if (deps.knobs.stageClassifier !== undefined) {
-    stageSuggestion = await classifyStage(
-      pool,
-      deps.llmCfg,
-      { tenantId, leadId, jobId: job.id },
-      {
-        context: effectiveContext,
-        currentStage,
-        ...argsAux(deps.knobs.stageClassifier.model),
-      },
-      { registry: deps.registry, log: runLog },
-    );
-    if (stageSuggestion !== null) {
-      stageHintBlock = renderStageHint(stageSuggestion, currentStage);
-    }
-  }
+  let jailbreakLevel: JailbreakLevel = 'none';
 
   // F4-04: classifier ADVISÓRIO anti-jailbreak sobre a mensagem INBOUND do lead (o
   // skillSignal já é a última inbound). Roda pelo seam agnóstico (modelo BARATO, budget
   // checado nele). NÃO veta o inbound — só FLAGRA o turno no trace; flag/level não são PII
   // (a mensagem/reason nunca vão a log). A correlação com promessa fora de tabela escala no fim.
-  let jailbreakLevel: JailbreakLevel = 'none';
-  if (camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined)) {
-    const verdict = await classifyJailbreak(
-      pool,
-      deps.llmCfg,
-      { tenantId, leadId, jobId: job.id },
-      {
-        message: skillSignal,
-        // Knob ausente + organização ligando = roda com o modelo padrão dela,
-        // que é a convenção já usada pelo stageClassifier.
-        ...argsAux(deps.knobs.jailbreak?.model),
-      },
-      { registry: deps.registry, log: runLog },
-    );
-    jailbreakLevel = verdict.level;
-    if (verdict.flag) {
+  //
+  // OS DOIS AUXILIARES RODAM JUNTOS, e a falha de um deles não derruba o turno.
+  // Medido em produção (2026-10-06): em fila, um esperava o outro (10-15 s só de
+  // classificador, antes de o modelo do agente começar), e uma exceção de
+  // qualquer um — provedor lento, timeout do seam — derrubava o turno inteiro,
+  // que a fila re-tentava rodando TUDO de novo. Nenhum dos dois é necessário
+  // para responder: um é dica no prompt, o outro só é lido depois do turno.
+  // Orçamento esgotado continua subindo — é o handoff de `runAgentTurn`.
+  const naoFatal = <T>(nome: string, seFalhar: T) => (err: unknown): T => {
+    if (err instanceof LlmBudgetExceededError) throw err;
+    runLog.warn(`${nome}: auxiliar falhou — turno segue sem ele`, normalizarErro(err));
+    return seFalhar;
+  };
+  const [sugestao, veredito] = await Promise.all([
+    deps.knobs.stageClassifier !== undefined
+      ? classifyStage(
+          pool,
+          deps.llmCfg,
+          { tenantId, leadId, jobId: job.id },
+          {
+            context: effectiveContext,
+            currentStage,
+            ...argsAux(deps.knobs.stageClassifier.model),
+          },
+          { registry: deps.registry, log: runLog },
+        ).catch(naoFatal<LeadStage | null>('stage-classifier', null))
+      : Promise.resolve(null),
+    camadaLigada(camadas.jailbreak, deps.knobs.jailbreak !== undefined)
+      ? classifyJailbreak(
+          pool,
+          deps.llmCfg,
+          { tenantId, leadId, jobId: job.id },
+          {
+            message: skillSignal,
+            // Knob ausente + organização ligando = roda com o modelo padrão dela,
+            // que é a convenção já usada pelo stageClassifier.
+            ...argsAux(deps.knobs.jailbreak?.model),
+          },
+          { registry: deps.registry, log: runLog },
+        ).catch(naoFatal<Awaited<ReturnType<typeof classifyJailbreak>> | null>('jailbreak', null))
+      : Promise.resolve(null),
+  ]);
+
+  stageSuggestion = sugestao;
+  if (stageSuggestion !== null) {
+    stageHintBlock = renderStageHint(stageSuggestion, currentStage);
+  }
+  if (veredito !== null) {
+    jailbreakLevel = veredito.level;
+    if (veredito.flag) {
       // trace do turno: só flag/level (não PII) — a mensagem e o reason nunca são logados.
       runLog.warn('jailbreak: sinal detectado na mensagem do lead', {
         jailbreak_flag: true,
-        jailbreak_level: verdict.level,
+        jailbreak_level: veredito.level,
       });
     }
   }
@@ -2780,161 +2800,179 @@ async function executarTurnoDoAgente(
   // turno. Aqui o lead já recebeu resposta, mas a conversa ficaria sem
   // checkpoint e sem dono, e o próximo inbound cairia no mesmo bloqueio, agora
   // sem nada tendo mudado no meio.
-  const closing = await runModelCall(
-    pool,
-    deps.llmCfg,
-    {
-      tenantId,
-      leadId,
-      jobId: job.id,
-      purpose: 'checkpoint',
-      ...(agentConfig !== null
-        ? {
-            model: agentConfig.model,
-            llmOverride: { provider: agentConfig.provider, credentialId: agentConfig.credentialId },
-          }
-        : {}),
-      system,
-      messages: [
-        // prune: o checkpoint reusa a abertura só como texto — a mídia nativa (cara) já
-        // fez seu trabalho na 1ª chamada e não precisa ir de novo.
-        ...openingTextOnly,
-        ...responseMessages,
-        { role: 'user', content: CHECKPOINT_INSTRUCTION },
-      ],
-    },
-    { registry: deps.registry, log: runLog },
-  );
-  const content = parseCheckpointText(closing.result.text);
-
-  // Wave 3 (2.4): o checkpoint anterior é lido ANTES de gravar o novo — a
-  // timeline recebe o DIFF, nunca o snapshot. Emitir a cada turno encheria a
-  // tela com "a IA pensou" e enterraria a única linha que muda o que alguém
-  // faria a seguir.
-  const checkpointAnterior = await latestCheckpoint(pool, tenantId, leadId);
-  await insertCheckpoint(pool, { tenantId, leadId, jobId: job.id, content });
-
-  // ── O TURNO DO OPERADOR (spec 16 §3.2) ─────────────────────────────────────
   //
-  // Enfileirado AQUI, pelo RUNTIME, logo depois de o checkpoint existir — nunca
-  // por decisão do modelo. Um Conversador que "chama" o Operador devolveria o
-  // problema inteiro: voltaria a depender de o modelo lembrar, e o turno em que
-  // ele não achasse necessário seria um lead parado no funil, em silêncio.
-  //
-  // Depois do checkpoint porque a declaração É o insumo do Operador; enfileirar
-  // antes criaria uma corrida em que ele leria o checkpoint do turno ANTERIOR e
-  // agiria sobre um turno que não é o seu.
-  //
-  // Fire-and-forget: falha ao enfileirar NÃO derruba um turno que já respondeu
-  // ao cliente. O `sourceEventId` é o job do Conversador, então o retry da fila
-  // não gera um segundo Operador para o mesmo turno.
-  const disparo = decidirSeEnfileiraOperador({
-    temAgentePublicado: agentConfig !== null,
-    papelLigado: agentConfig?.operatorEnabled ?? false,
-  });
-  if (!disparo.enfileira) {
-    runLog.info('turno do operador não enfileirado', { porque: disparo.porque });
-  } else {
-    try {
-      const { deduped } = await enqueueJob(pool, tenantId, {
-        kind: 'operator_turn',
+  // MELHOR-ESFORÇO desde 2026-10-06. Medido em produção: este checkpoint não
+  // voltou (provedor pendurado, sem timeout), o job ficou `running` até o
+  // visibility timeout reabri-lo — 5 vezes, ~52 min — e a fila serial do
+  // contato segurou a mensagem seguinte do cliente por 65 minutos. A resposta
+  // JÁ saiu quando chegamos aqui: perder o resumo deste turno custa memória,
+  // perder o job custa o cliente. Falhou (inclusive pelo teto de tempo do
+  // seam), registra e segue para `completeJob`. Orçamento esgotado continua
+  // subindo: é o handoff de `runAgentTurn`, descrito acima.
+  let closing: Awaited<ReturnType<typeof runModelCall>> | null = null;
+  try {
+    closing = await runModelCall(
+      pool,
+      deps.llmCfg,
+      {
+        tenantId,
         leadId,
-        sourceEventId: job.id,
-        payload: {
-          conversation_id: input.conversationId,
-          origin_job_id: job.id,
-          agent_id: agentConfig?.agentId ?? null,
-        },
-      });
-      runLog.info('turno do operador enfileirado', { deduped });
-    } catch (err) {
-      runLog.error('turno do operador NÃO foi enfileirado (o turno segue)', {
-        error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
-      });
-      // O CATCH TINHA A DOUTRINA CERTA E A CONCLUSÃO ERRADA.
-      //
-      // "O aviso não pode derrubar o turno que já respondeu ao cliente" está certo.
-      // "Então basta um log" não: o enfileiramento é o ÚNICO mecanismo que garante o
-      // disparo do papel, e falhar aqui significa que a promessa que o Conversador
-      // acabou de fazer não terá dono e ninguém vai saber.
-      //
-      // É a mesma lição que este arquivo já aplicou no catch das capacidades MCP,
-      // onde o comentário diz que a versão anterior "dizia 'o humano vê o log'. Não
-      // vê." Lição aplicada numa ocorrência e não na irmã.
-      //
-      // Só quando HÁ promessa: sem ela o Operador teria decidido "nada a fazer", e
-      // item sem ação é ruído — ruído ensina a ignorar a Central.
-      const promessas = promessasEmAberto(content.declaracao ?? null);
-      if (promessas.length > 0) {
-        try {
-          await insertInboxItem(
-            pool,
-            tenantId,
-            {
-              kind: 'promise_unfulfilled',
-              severity: 'warn',
-              title: 'Um retorno prometido a um cliente ficou sem dono',
-              body:
-                'O assistente prometeu algo a esta pessoa nesta conversa e o passo que registra ' +
-                'o cumprimento não chegou a ser agendado. Abra a conversa, veja o que foi ' +
-                'combinado e cumpra você mesmo.',
-              refKind: 'conversation',
-              refId: input.conversationId,
-            },
-            'kind_e_ref',
-          );
-        } catch (erroDoAviso) {
-          runLog.error('aviso de promessa sem dono não foi gravado', {
-            error: (erroDoAviso instanceof Error ? erroDoAviso.message : String(erroDoAviso)).slice(0, 120),
-          });
+        jobId: job.id,
+        purpose: 'checkpoint',
+        ...(agentConfig !== null
+          ? {
+              model: agentConfig.model,
+              llmOverride: { provider: agentConfig.provider, credentialId: agentConfig.credentialId },
+            }
+          : {}),
+        system,
+        messages: [
+          // prune: o checkpoint reusa a abertura só como texto — a mídia nativa (cara) já
+          // fez seu trabalho na 1ª chamada e não precisa ir de novo.
+          ...openingTextOnly,
+          ...responseMessages,
+          { role: 'user', content: CHECKPOINT_INSTRUCTION },
+        ],
+      },
+      { registry: deps.registry, log: runLog },
+    );
+  } catch (err) {
+    if (err instanceof LlmBudgetExceededError) throw err;
+    runLog.warn('checkpoint do turno não foi gravado — a resposta já saiu, o job segue', normalizarErro(err));
+  }
+
+  if (closing !== null) {
+    const content = parseCheckpointText(closing.result.text);
+
+    // Wave 3 (2.4): o checkpoint anterior é lido ANTES de gravar o novo — a
+    // timeline recebe o DIFF, nunca o snapshot. Emitir a cada turno encheria a
+    // tela com "a IA pensou" e enterraria a única linha que muda o que alguém
+    // faria a seguir.
+    const checkpointAnterior = await latestCheckpoint(pool, tenantId, leadId);
+    await insertCheckpoint(pool, { tenantId, leadId, jobId: job.id, content });
+
+    // ── O TURNO DO OPERADOR (spec 16 §3.2) ─────────────────────────────────────
+    //
+    // Enfileirado AQUI, pelo RUNTIME, logo depois de o checkpoint existir — nunca
+    // por decisão do modelo. Um Conversador que "chama" o Operador devolveria o
+    // problema inteiro: voltaria a depender de o modelo lembrar, e o turno em que
+    // ele não achasse necessário seria um lead parado no funil, em silêncio.
+    //
+    // Depois do checkpoint porque a declaração É o insumo do Operador; enfileirar
+    // antes criaria uma corrida em que ele leria o checkpoint do turno ANTERIOR e
+    // agiria sobre um turno que não é o seu.
+    //
+    // Fire-and-forget: falha ao enfileirar NÃO derruba um turno que já respondeu
+    // ao cliente. O `sourceEventId` é o job do Conversador, então o retry da fila
+    // não gera um segundo Operador para o mesmo turno.
+    const disparo = decidirSeEnfileiraOperador({
+      temAgentePublicado: agentConfig !== null,
+      papelLigado: agentConfig?.operatorEnabled ?? false,
+    });
+    if (!disparo.enfileira) {
+      runLog.info('turno do operador não enfileirado', { porque: disparo.porque });
+    } else {
+      try {
+        const { deduped } = await enqueueJob(pool, tenantId, {
+          kind: 'operator_turn',
+          leadId,
+          sourceEventId: job.id,
+          payload: {
+            conversation_id: input.conversationId,
+            origin_job_id: job.id,
+            agent_id: agentConfig?.agentId ?? null,
+          },
+        });
+        runLog.info('turno do operador enfileirado', { deduped });
+      } catch (err) {
+        runLog.error('turno do operador NÃO foi enfileirado (o turno segue)', {
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
+        });
+        // O CATCH TINHA A DOUTRINA CERTA E A CONCLUSÃO ERRADA.
+        //
+        // "O aviso não pode derrubar o turno que já respondeu ao cliente" está certo.
+        // "Então basta um log" não: o enfileiramento é o ÚNICO mecanismo que garante o
+        // disparo do papel, e falhar aqui significa que a promessa que o Conversador
+        // acabou de fazer não terá dono e ninguém vai saber.
+        //
+        // É a mesma lição que este arquivo já aplicou no catch das capacidades MCP,
+        // onde o comentário diz que a versão anterior "dizia 'o humano vê o log'. Não
+        // vê." Lição aplicada numa ocorrência e não na irmã.
+        //
+        // Só quando HÁ promessa: sem ela o Operador teria decidido "nada a fazer", e
+        // item sem ação é ruído — ruído ensina a ignorar a Central.
+        const promessas = promessasEmAberto(content.declaracao ?? null);
+        if (promessas.length > 0) {
+          try {
+            await insertInboxItem(
+              pool,
+              tenantId,
+              {
+                kind: 'promise_unfulfilled',
+                severity: 'warn',
+                title: 'Um retorno prometido a um cliente ficou sem dono',
+                body:
+                  'O assistente prometeu algo a esta pessoa nesta conversa e o passo que registra ' +
+                  'o cumprimento não chegou a ser agendado. Abra a conversa, veja o que foi ' +
+                  'combinado e cumpra você mesmo.',
+                refKind: 'conversation',
+                refId: input.conversationId,
+              },
+              'kind_e_ref',
+            );
+          } catch (erroDoAviso) {
+            runLog.error('aviso de promessa sem dono não foi gravado', {
+              error: (erroDoAviso instanceof Error ? erroDoAviso.message : String(erroDoAviso)).slice(0, 120),
+            });
+          }
         }
       }
     }
-  }
 
-  const mudanca = diffCheckpoint(
-    checkpointAnterior
-      ? {
-          commitments: (checkpointAnterior.commitments ?? []) as string[],
-          objections: (checkpointAnterior.objections ?? []) as string[],
-          next_action: checkpointAnterior.next_action ?? null,
-          rolling_summary: checkpointAnterior.rolling_summary ?? null,
+    const mudanca = diffCheckpoint(
+      checkpointAnterior
+        ? {
+            commitments: (checkpointAnterior.commitments ?? []) as string[],
+            objections: (checkpointAnterior.objections ?? []) as string[],
+            next_action: checkpointAnterior.next_action ?? null,
+            rolling_summary: checkpointAnterior.rolling_summary ?? null,
+          }
+        : null,
+      content,
+    );
+
+    if (mudanca.emit) {
+      try {
+        const r = await emitAgentActivityForContact({
+          pool,
+          organizationId: tenantId,
+          contactId: leadId,
+          type: "ai_turn",
+          sourceModule: "agent",
+          sourceId: job.id,
+          // O lastro é a chamada de modelo que PRODUZIU este checkpoint
+          // (llm_calls.id). Sem ele a linha entraria como 'system' e perderia a
+          // autoria justamente no evento mais "de IA" que existe.
+          ...(closing.callId ? { evidence: { llm_call_ids: [closing.callId] } } : {}),
+          ...(agentConfig?.agentId ? { agentId: agentConfig.agentId } : {}),
+          reason: mudanca.reason,
+          payload: {
+            added_commitments: mudanca.addedCommitments,
+            added_objections: mudanca.addedObjections,
+            next_action_changed: mudanca.nextActionChanged,
+          },
+        });
+        if (!r.routed) {
+          runLog.info('checkpoint sem negócio para pendurar: registrado no event_log', {
+            reason: r.reason,
+          });
         }
-      : null,
-    content,
-  );
-
-  if (mudanca.emit) {
-    try {
-      const r = await emitAgentActivityForContact({
-        pool,
-        organizationId: tenantId,
-        contactId: leadId,
-        type: "ai_turn",
-        sourceModule: "agent",
-        sourceId: job.id,
-        // O lastro é a chamada de modelo que PRODUZIU este checkpoint
-        // (llm_calls.id). Sem ele a linha entraria como 'system' e perderia a
-        // autoria justamente no evento mais "de IA" que existe.
-        ...(closing.callId ? { evidence: { llm_call_ids: [closing.callId] } } : {}),
-        ...(agentConfig?.agentId ? { agentId: agentConfig.agentId } : {}),
-        reason: mudanca.reason,
-        payload: {
-          added_commitments: mudanca.addedCommitments,
-          added_objections: mudanca.addedObjections,
-          next_action_changed: mudanca.nextActionChanged,
-        },
-      });
-      if (!r.routed) {
-        runLog.info('checkpoint sem negócio para pendurar: registrado no event_log', {
-          reason: r.reason,
+      } catch (err) {
+        // A timeline do turno não pode derrubar o turno.
+        runLog.error('falha ao registrar atividade de checkpoint (segue)', {
+          error: err instanceof Error ? err.name : 'unknown',
         });
       }
-    } catch (err) {
-      // A timeline do turno não pode derrubar o turno.
-      runLog.error('falha ao registrar atividade de checkpoint (segue)', {
-        error: err instanceof Error ? err.name : 'unknown',
-      });
     }
   }
 

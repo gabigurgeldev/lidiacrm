@@ -36,6 +36,8 @@ const O_QUE_FAZER: Record<string, string> = {
     "O provedor recusou por limite de uso ou saldo. Verifique o faturamento na conta do provedor.",
   provedor_indisponivel:
     "O provedor está fora do ar ou demorou demais. Costuma se resolver sozinho; se persistir, troque de provedor nesse ponto.",
+  tempo_esgotado:
+    "A resposta do modelo passou do tempo máximo e foi interrompida para não travar a conversa. Se acontece sempre neste ponto, escolha um modelo mais rápido (sem raciocínio longo) no painel de Provedores.",
   modelo_sem_ferramentas:
     "O modelo escolhido não sabe usar as ferramentas do CRM. Troque por um que saiba, no painel de Provedores.",
   // A única linha desta tabela em que o produto parou de propósito. Ela existe

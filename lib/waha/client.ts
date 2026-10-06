@@ -353,6 +353,7 @@ export class WahaClient {
     replyTo?: string | null,
   ): Promise<unknown> {
     const res = await fetch(`${this.baseUrl}/api/sendText`, {
+      signal: AbortSignal.timeout(60_000),
       method: "POST",
       headers: {
         "X-Api-Key": this.apiKey,
@@ -418,6 +419,7 @@ export class WahaClient {
     plan: { endpoint: string; payload: Record<string, unknown> },
   ): Promise<unknown> {
     const res = await fetch(`${this.baseUrl}/api/${plan.endpoint}`, {
+      signal: AbortSignal.timeout(60_000),
       method: "POST",
       headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
       body: JSON.stringify({ session, chatId, ...plan.payload }),
