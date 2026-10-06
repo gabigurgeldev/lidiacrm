@@ -30,7 +30,12 @@ export function createPool(
   const raw = process.env.DB_POOL_MAX;
   const parsed = raw === undefined ? Number.NaN : Number.parseInt(raw, 10);
   const max = Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
-  const pool = new pg.Pool({ connectionString: databaseUrl, max });
+  // Pedir conexão tem prazo: sem ele, `pool.connect()` com o pool esgotado
+  // esperava para sempre, e o job pendurado só era visto no visibility timeout
+  // (10 min). 30 s é folga larga para espera legítima — inclusive nos testes,
+  // que rodam com teto baixo de conexões — e transforma o esgotamento em erro
+  // com nome, que a fila re-tenta.
+  const pool = new pg.Pool({ connectionString: databaseUrl, max, connectionTimeoutMillis: 30_000 });
   const handler =
     onError ??
     ((err: Error): void => {

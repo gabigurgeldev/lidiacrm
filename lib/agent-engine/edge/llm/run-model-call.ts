@@ -82,6 +82,63 @@ export class LlmModelNotEnabledError extends Error {
   }
 }
 
+/**
+ * A chamada passou do tempo máximo do seu `purpose` e foi ABORTADA por nós.
+ *
+ * Até existir este teto, uma chamada que o provedor nunca respondia prendia o
+ * job inteiro: medido em produção (2026-10-06), o `checkpoint` de um turno não
+ * voltou, o job ficou `running`, foi reaberto a cada 10 min pelo visibility
+ * timeout até morrer na 5ª tentativa — e, como a fila é serial por contato, a
+ * mensagem seguinte do cliente esperou 65 minutos. Sem linha em `llm_calls`,
+ * porque a chamada nunca terminava nem falhava.
+ */
+export class LlmTempoEsgotadoError extends Error {
+  override readonly name = 'llm_tempo_esgotado';
+  constructor(
+    readonly purpose: string,
+    readonly limiteMs: number,
+    options?: { cause?: unknown },
+  ) {
+    super(`chamada de modelo (${purpose}) passou de ${Math.round(limiteMs / 1000)}s e foi abortada`, options);
+  }
+}
+
+/**
+ * Classificadores devolvem uma palavra ou um veredito curto: 20 s é folga
+ * generosa para um modelo sem raciocínio, e o que passa disso é provedor
+ * travado ou modelo pensando demais para a tarefa.
+ */
+const PURPOSES_CLASSIFICADORES = new Set([
+  'stage_classifier',
+  'jailbreak_detect',
+  'promise_semantic',
+  'intent_router',
+  'followup_classify',
+  'classify',
+]);
+/** Resumos rodam DEPOIS da resposta: não atrasam o cliente, mas seguram o job. */
+const PURPOSES_RESUMO = new Set(['checkpoint', 'compaction', 'flush']);
+
+export const TEMPO_MAXIMO_PADRAO_MS = {
+  classificador: 20_000,
+  resumo: 90_000,
+  /** Turnos com ferramentas (vários passos): agente, operador, follow-up. */
+  padrao: 120_000,
+} as const;
+
+/**
+ * Teto de tempo da chamada inteira (todos os passos e retries do SDK), por
+ * `purpose`. Ajustável pelo operador via env (`LLM_TIMEOUT_*_MS`, lidos em
+ * `llmEdgeConfigFromEnv`); o default vive aqui para valer também em quem monta
+ * a config na mão (testes, worker de mídia).
+ */
+export function tempoMaximoDaChamadaMs(purpose: string, cfg: Pick<LlmEdgeConfig, 'tempoMaximoMs'>): number {
+  const t = cfg.tempoMaximoMs ?? {};
+  if (PURPOSES_CLASSIFICADORES.has(purpose)) return t.classificador ?? TEMPO_MAXIMO_PADRAO_MS.classificador;
+  if (PURPOSES_RESUMO.has(purpose)) return t.resumo ?? TEMPO_MAXIMO_PADRAO_MS.resumo;
+  return t.padrao ?? TEMPO_MAXIMO_PADRAO_MS.padrao;
+}
+
 // Whitelist de params da org (jsonb livre no DB → só o que o seam entende passa).
 const paramsSchema = z
   .object({
@@ -400,6 +457,8 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   });
 
   const startedAt = Date.now();
+  const limiteMs = tempoMaximoDaChamadaMs(purpose, cfg);
+  const prazo = AbortSignal.timeout(limiteMs);
   let result: Awaited<ReturnType<typeof generateText>>;
   try {
     // `system` aceita SystemModelMessage (com providerOptions de cache) — igual
@@ -417,8 +476,16 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       topP,
       topK,
       maxOutputTokens,
+      // O prazo cobre a chamada INTEIRA — passos de ferramenta e retries do SDK
+      // inclusive. Classificador tenta uma vez a mais, não duas: o retry dele
+      // é o turno seguinte.
+      abortSignal: prazo,
+      ...(PURPOSES_CLASSIFICADORES.has(purpose) ? { maxRetries: 1 } : {}),
     });
-  } catch (err) {
+  } catch (errOriginal) {
+    // Aborto pelo NOSSO prazo vira erro tipado: o SDK embrulha o DOMException
+    // de jeitos diferentes por versão, e é o sinal que diz com certeza quem parou.
+    const err = prazo.aborted ? new LlmTempoEsgotadoError(purpose, limiteMs, { cause: errOriginal }) : errOriginal;
     // ─── A LINHA QUE FALTAVA ────────────────────────────────────────────────
     //
     // Até aqui o INSERT em llm_calls vivia só DEPOIS desta chamada, sem `try`
@@ -559,6 +626,10 @@ export function normalizarErro(err: unknown): {
   // classificar esta falha" no caso mais bem explicado do produto.
   if (err instanceof LlmBudgetExceededError) {
     return { error_code: 'orcamento_esgotado', error_message: redigirMensagemDoProvedor(bruto), http_status: null };
+  }
+  // Também é recusa NOSSA (o prazo do seam), casada pela classe pelo mesmo motivo.
+  if (err instanceof LlmTempoEsgotadoError) {
+    return { error_code: 'tempo_esgotado', error_message: redigirMensagemDoProvedor(bruto), http_status: null };
   }
 
   let codigo = 'erro_desconhecido';

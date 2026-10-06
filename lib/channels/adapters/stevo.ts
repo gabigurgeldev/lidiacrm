@@ -59,6 +59,15 @@ import { fetchFotoDePerfilStevo } from "../stevo/perfil";
 import { baixarMidiaStevo } from "../stevo/midia";
 import type { FetchedMedia } from "@/lib/messaging/media/types";
 
+/**
+ * Prazo de UM envio ao provedor. O envio roda dentro do lock por número
+ * (`lib/agent-engine/guardrails/before-send.ts`): sem prazo, um provedor que não
+ * respondia travava todo envio daquele número. Largo de propósito (60 s) — um
+ * envio abortado que na verdade saiu pode virar mensagem em dobro na nova
+ * tentativa, então o corte é só para o provedor que de fato não responde.
+ */
+const PRAZO_DE_ENVIO_MS = 60_000;
+
 /** E.164 em dígitos, sem `+` e sem sufixo de domínio — é o que o `to` espera. */
 function digitos(bruto: string): string {
   return bruto.replace(/\D/g, "");
@@ -81,6 +90,7 @@ async function enviarPeloGateway(
   token: string,
 ): Promise<{ externalId: string | null }> {
   const res = await fetch(`${stevoBaseUrlOficial()}/v1/messages`, {
+    signal: AbortSignal.timeout(PRAZO_DE_ENVIO_MS),
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -142,6 +152,7 @@ async function enviarTemplatePeloGateway(
 ): Promise<{ externalId: string | null }> {
   const { components } = input;
   const res = await fetch(`${stevoBaseUrlOficial()}/v1/messages`, {
+    signal: AbortSignal.timeout(PRAZO_DE_ENVIO_MS),
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -199,6 +210,7 @@ async function saudePeloGateway(token: string): Promise<ChannelHealth> {
   let res: Response;
   try {
     res = await fetch(`${stevoBaseUrlOficial()}/v1/health`, {
+      signal: AbortSignal.timeout(15_000),
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch {
@@ -386,6 +398,7 @@ export const stevoAdapter: ChannelAdapter = {
     const res = await fetch(
       `${creds.baseUrl}/v1/instances/${encodeURIComponent(creds.instanceId)}/messages`,
       {
+        signal: AbortSignal.timeout(PRAZO_DE_ENVIO_MS),
         method: "POST",
         headers: {
           Authorization: `Bearer ${creds.apiKey}`,

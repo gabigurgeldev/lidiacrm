@@ -63,19 +63,35 @@ export interface Transcodificacao {
   convertido: boolean;
 }
 
-/** Roda ffmpeg; rejeita se sair diferente de zero. Injetável para teste. */
+/**
+ * Uma nota de voz de WhatsApp converte em menos de um segundo. Passar de 30 s é
+ * ffmpeg travado — e esta conversão roda DENTRO do lock de envio do número
+ * (`before-send.ts`), então travar aqui travava todo envio daquele número.
+ */
+const FFMPEG_TEMPO_MAXIMO_MS = 30_000;
+
+/** Roda ffmpeg; rejeita se sair diferente de zero ou passar do prazo. Injetável para teste. */
 async function runFfmpeg(args: string[], cwd: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const proc = spawn("ffmpeg", ["-nostdin", "-y", ...args], { cwd });
     let erro = "";
+    const prazo = setTimeout(() => {
+      proc.kill("SIGKILL");
+      reject(new Error(`ffmpeg_timeout: passou de ${FFMPEG_TEMPO_MAXIMO_MS / 1000}s`));
+    }, FFMPEG_TEMPO_MAXIMO_MS);
     proc.stderr?.on("data", (d: Buffer) => {
       // Só o fim interessa: ffmpeg escreve muito e o erro vem por último.
       erro = (erro + d.toString()).slice(-500);
     });
-    proc.on("error", (err) => reject(new Error(`ffmpeg_spawn_failed: ${err.message}`)));
-    proc.on("close", (code) =>
-      code === 0 ? resolve() : reject(new Error(`ffmpeg_exit_${code}: ${erro}`)),
-    );
+    proc.on("error", (err) => {
+      clearTimeout(prazo);
+      reject(new Error(`ffmpeg_spawn_failed: ${err.message}`));
+    });
+    proc.on("close", (code) => {
+      clearTimeout(prazo);
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg_exit_${code}: ${erro}`));
+    });
   });
 }
 

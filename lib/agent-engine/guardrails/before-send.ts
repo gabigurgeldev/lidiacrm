@@ -716,6 +716,13 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
   const client = await args.pool.connect();
   try {
     await client.query('begin');
+    // Esperar a vez tem PRAZO. Sem ele, uma tentativa pendurada que segurava o
+    // lock (provedor de IA ou de envio sem resposta) deixava todo envio daquele
+    // número esperando para sempre — e cada espera prendia um cliente do pool.
+    // Medido em produção (2026-10-06): tentativas reabertas paravam exatamente
+    // aqui. Estourou, o pg recusa com 55P03; o envio falha limpo e a fila tenta
+    // de novo, em vez de pendurar.
+    await client.query("set local lock_timeout = '20s'");
     // Serialização por número: dois workers no MESMO channel_session esperam a vez.
     await client.query('select pg_advisory_xact_lock(hashtext($1))', [args.channelSessionId]);
 

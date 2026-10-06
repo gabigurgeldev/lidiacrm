@@ -67,6 +67,19 @@ export interface LlmEdgeConfig {
    * exatamente onde a IA gasta.
    */
   budgetEnforcement?: ChaveDeOrcamento;
+  /**
+   * Teto de tempo por chamada de modelo, por família de `purpose` (knobs
+   * `LLM_TIMEOUT_MS`, `LLM_TIMEOUT_CLASSIFICADOR_MS`, `LLM_TIMEOUT_RESUMO_MS`).
+   * Ausente = os defaults de `TEMPO_MAXIMO_PADRAO_MS` em `run-model-call.ts`.
+   */
+  tempoMaximoMs?: { padrao?: number; classificador?: number; resumo?: number };
+}
+
+function msPositivo(bruto: string | number | undefined, nome: string): number | undefined {
+  if (bruto === undefined || (typeof bruto === 'string' && bruto.trim() === '')) return undefined;
+  const n = Number(bruto);
+  if (!Number.isInteger(n) || n < 1000) throw new Error(`${nome} inválido — milissegundos inteiros, mínimo 1000`);
+  return n;
 }
 
 /**
@@ -85,11 +98,17 @@ export function llmEdgeConfigFromEnv(env: {
   OPENROUTER_API_KEY?: string;
   LLM_CACHE_TTL?: string;
   AI_BUDGET_ENFORCEMENT?: string;
+  LLM_TIMEOUT_MS?: string | number;
+  LLM_TIMEOUT_CLASSIFICADOR_MS?: string | number;
+  LLM_TIMEOUT_RESUMO_MS?: string | number;
 }): LlmEdgeConfig {
   const ttl = env.LLM_CACHE_TTL ?? '1h';
   if (ttl !== '5m' && ttl !== '1h') {
     throw new Error("LLM_CACHE_TTL inválido — use '5m' ou '1h' (default 1h)");
   }
+  const padrao = msPositivo(env.LLM_TIMEOUT_MS, 'LLM_TIMEOUT_MS');
+  const classificador = msPositivo(env.LLM_TIMEOUT_CLASSIFICADOR_MS, 'LLM_TIMEOUT_CLASSIFICADOR_MS');
+  const resumo = msPositivo(env.LLM_TIMEOUT_RESUMO_MS, 'LLM_TIMEOUT_RESUMO_MS');
   return {
     ...(env.ANTHROPIC_API_KEY ? { anthropicApiKey: env.ANTHROPIC_API_KEY } : {}),
     ...(env.OPENAI_API_KEY ? { openaiApiKey: env.OPENAI_API_KEY } : {}),
@@ -100,6 +119,15 @@ export function llmEdgeConfigFromEnv(env: {
     // opcional que some faria o seam ter de repetir o default, e dois defaults
     // é como um dos dois fica para trás.
     budgetEnforcement: normalizarChaveDeOrcamento(env.AI_BUDGET_ENFORCEMENT),
+    ...(padrao !== undefined || classificador !== undefined || resumo !== undefined
+      ? {
+          tempoMaximoMs: {
+            ...(padrao !== undefined ? { padrao } : {}),
+            ...(classificador !== undefined ? { classificador } : {}),
+            ...(resumo !== undefined ? { resumo } : {}),
+          },
+        }
+      : {}),
   };
 }
 

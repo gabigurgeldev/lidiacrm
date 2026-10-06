@@ -235,6 +235,14 @@ export async function completeJob<T = void>(
   jobId: string,
   workerId: string,
   inSameCommit?: (tx: PoolClient) => Promise<T>,
+  /**
+   * `attempts` da linha devolvida pelo claim — a CERCA da tentativa. O
+   * `workerId` é por processo, então sozinho não distingue a tentativa N da
+   * N+1 re-claimada pelo MESMO worker depois do visibility timeout: a zumbi
+   * que acordasse concluiria (ou falharia) o job por cima da tentativa viva.
+   * Ausente = comportamento antigo (só o lease do worker).
+   */
+  tentativa?: number,
 ): Promise<T> {
   const client = await pool.connect();
   try {
@@ -242,8 +250,9 @@ export async function completeJob<T = void>(
     const result = (inSameCommit ? await inSameCommit(client) : undefined) as T;
     const done = await client.query(
       `update job_queue set status = 'done', locked_by = null, locked_at = null
-       where id = $1 and status = 'running' and locked_by = $2`,
-      [jobId, workerId],
+       where id = $1 and status = 'running' and locked_by = $2
+         and ($3::int is null or attempts = $3)`,
+      [jobId, workerId, tentativa ?? null],
     );
     if (done.rowCount !== 1) {
       throw new Error(
@@ -270,6 +279,8 @@ export async function failJob(
   jobId: string,
   workerId: string,
   error: unknown,
+  /** Cerca da tentativa — ver `completeJob`. */
+  tentativa?: number,
 ): Promise<JobRow | null> {
   const { rows } = await db.query<JobRow>(
     `with updated as (
@@ -277,6 +288,7 @@ export async function failJob(
        set status = case when attempts >= max_attempts then 'dead' else 'pending' end,
            locked_by = null, locked_at = null, last_error = $3
        where id = $1 and status = 'running' and locked_by = $2
+         and ($4::int is null or attempts = $4)
        returning *
      ),
      alert as (
@@ -295,7 +307,7 @@ export async function failJob(
        where status = 'dead'
      )
      select * from updated`,
-    [jobId, workerId, normalizeError(error)],
+    [jobId, workerId, normalizeError(error), tentativa ?? null],
   );
   return rows[0] ?? null;
 }
