@@ -383,6 +383,7 @@ export type Database = {
           provider: string
           published_at: string | null
           reply_as_audio: boolean
+          reply_as_audio_mirror: boolean
           split_max_chars: number
           split_messages: boolean
           status: string
@@ -420,6 +421,7 @@ export type Database = {
           provider: string
           published_at?: string | null
           reply_as_audio?: boolean
+          reply_as_audio_mirror?: boolean
           split_max_chars?: number
           split_messages?: boolean
           status?: string
@@ -457,6 +459,7 @@ export type Database = {
           provider?: string
           published_at?: string | null
           reply_as_audio?: boolean
+          reply_as_audio_mirror?: boolean
           split_max_chars?: number
           split_messages?: boolean
           status?: string

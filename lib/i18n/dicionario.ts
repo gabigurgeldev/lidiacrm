@@ -582,6 +582,8 @@ export const DICIONARIO: Traducoes = {
   },
   "Tamanho máximo por bolha (80–4000)": { es: "Tamaño máximo por burbuja (80–4000)" },
   "Responder em áudio (nota de voz)": { es: "Responder con audio (nota de voz)" },
+  "Só quando o cliente mandar áudio": { es: "Solo cuando el cliente envíe audio" },
+  "Ligado: quem escreve recebe texto, quem manda áudio recebe áudio. Desligado: toda resposta sai em áudio.": { es: "Activado: quien escribe recibe texto, quien envía audio recibe audio. Desactivado: toda respuesta sale en audio." },
   "Cada resposta do agente sai como áudio, com a voz escolhida abaixo. Mensagens com link ou muito longas continuam em texto. Se o serviço de voz falhar, o cliente recebe a resposta em texto e a Central de avisos mostra o motivo.": {
     es: "Cada respuesta del agente sale como audio, con la voz elegida abajo. Los mensajes con enlace o muy largos siguen en texto. Si el servicio de voz falla, el cliente recibe la respuesta en texto y la Central de avisos muestra el motivo.",
   },

@@ -22,6 +22,7 @@ function fakeConfig(agentId: string): PublishedAgentConfig {
     splitMessages: false,
     splitMaxChars: 900,
     replyAsAudio: false,
+    replyAsAudioMirror: false,
     audioVoice: 'pf_dora',
     multimodalInput: false,
     casesEnabled: false,
