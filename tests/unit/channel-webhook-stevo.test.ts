@@ -197,6 +197,77 @@ describe("Cloud API oficial — MEDIDO em produção (não é chute)", () => {
   });
 });
 
+describe("mídia da conta Oficial — MEDIDO em produção (2026-10-06)", () => {
+  // Forma medida de um áudio e de um vídeo sem legenda que chegaram e foram
+  // DESCARTADOS como `sem_conteudo_reconhecivel`: a Stevo põe o link resolvido
+  // na RAIZ do envelope (`stevo.media`), ao lado de `entry`, com o mesmo id do
+  // bloco da mensagem. O bloco da mensagem tem `url` também — o da Meta, que
+  // exige token e não serve. Valores abaixo são fictícios; a FORMA é a medida.
+  function midiaOficial(tipo: "audio" | "video" | "image", stevoId = "1234567890123456") {
+    return {
+      object: "whatsapp_business_account",
+      entry: [
+        {
+          id: "WABA_ID",
+          changes: [
+            {
+              field: "messages",
+              value: {
+                messaging_product: "whatsapp",
+                metadata: { display_phone_number: "559400000001", phone_number_id: "123" },
+                contacts: [{ profile: { name: "Cliente" }, wa_id: "5594999998888" }],
+                messages: [
+                  {
+                    from: "5594999998888",
+                    id: "wamid.MIDIA",
+                    timestamp: "1791240900",
+                    type: tipo,
+                    [tipo]: {
+                      id: "1234567890123456",
+                      url: "https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1",
+                      sha256: "abc",
+                      mime_type: tipo === "audio" ? "audio/ogg; codecs=opus" : tipo === "video" ? "video/mp4" : "image/jpeg",
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+      stevo: {
+        media: {
+          id: stevoId,
+          url: `https://hel1.your-objectstorage.com/stevo/media/x/${tipo}.bin`,
+          type: tipo,
+          file_size: 20900,
+          mime_type: tipo === "audio" ? "audio/ogg" : tipo === "video" ? "video/mp4" : "image/jpeg",
+          download_path: "media/x/arquivo",
+        },
+        instance: "instancia-1234",
+      },
+    };
+  }
+
+  it.each(["audio", "video", "image"] as const)(
+    "⭐ %s sem legenda ENTRA, com o link da Stevo (não o da Meta) e o tipo certo",
+    (tipo) => {
+      const e = lerEventoStevo(midiaOficial(tipo));
+      expect(e.tipo).toBe("mensagem");
+      if (e.tipo !== "mensagem") return;
+      expect(e.tipoDeMensagem).toBe(tipo);
+      expect(e.midiaUrl).toBe(`https://hel1.your-objectstorage.com/stevo/media/x/${tipo}.bin`);
+      expect(e.midiaMime).toMatch(tipo === "audio" ? /^audio\/ogg/ : tipo === "video" ? /^video\/mp4/ : /^image\/jpeg/);
+      expect(e.texto).toBeNull();
+    },
+  );
+
+  it("link da Stevo de OUTRA mídia (id diferente) não é emprestado — volta a ser ignorado", () => {
+    const e = lerEventoStevo(midiaOficial("audio", "9999999999999999"));
+    expect(e.tipo === "ignorado" && e.motivo).toBe("sem_conteudo_reconhecivel");
+  });
+});
+
 describe("nome do cliente — medido em produção (2026-09-29)", () => {
   function envelope(value: Record<string, unknown>) {
     return {

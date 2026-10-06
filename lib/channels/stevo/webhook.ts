@@ -208,12 +208,18 @@ function lerEventoCloudApiOficial(bruto: Record<string, unknown>): EventoStevo {
   const corpoTexto = mensagem.text as { body?: unknown } | undefined;
   const texto = typeof corpoTexto?.body === "string" ? corpoTexto.body : null;
 
-  // Mídia: NÃO MEDIDO ainda (nenhuma mensagem com anexo chegou pra confirmar).
-  // A doc da Stevo diz que mídia chega com `stevo.media` já resolvido — chuto
-  // esse caminho como fallback defensivo; se errar, midiaUrl fica null e a
-  // mensagem ainda assim é ingerida (texto/legenda, se houver).
+  // Mídia — MEDIDO em produção (2026-10-06, áudio e vídeo sem legenda): a Stevo
+  // resolve a mídia e manda o link na RAIZ do envelope, ao lado de `entry`:
+  //   { object, entry: [...], stevo: { media: { id, url, type, mime_type,
+  //     file_size, download_path }, instance } }
+  // `stevo.media.id` é o MESMO id do bloco da mensagem (`mensagem[tipo].id`).
+  // O bloco da mensagem também tem `url`, mas é o link da Meta, que exige o
+  // token da conta — inútil aqui. Até esta correção o parser procurava
+  // `stevo.media` DENTRO da mensagem, e todo áudio/vídeo/imagem sem legenda
+  // caía em `sem_conteudo_reconhecivel`: o cliente mandava áudio e ninguém via.
+  // O caminho antigo fica como fallback (a doc da Stevo nunca descreveu isto).
   const midia = tipo ? (mensagem[tipo] as Record<string, unknown> | undefined) : undefined;
-  const stevoMedia = (mensagem as { stevo?: { media?: { url?: unknown } } }).stevo?.media;
+  const stevoMedia = midiaDaStevo(bruto, mensagem, midia);
   const midiaUrl = typeof stevoMedia?.url === "string" ? stevoMedia.url : null;
 
   if (!texto && !midiaUrl && !midia?.caption) {
@@ -237,10 +243,36 @@ function lerEventoCloudApiOficial(bruto: Record<string, unknown>): EventoStevo {
     nome,
     texto: texto ?? (typeof midia?.caption === "string" ? midia.caption : null),
     midiaUrl,
-    midiaMime: typeof midia?.mime_type === "string" ? midia.mime_type : null,
+    midiaMime:
+      typeof midia?.mime_type === "string"
+        ? midia.mime_type
+        : typeof stevoMedia?.mime_type === "string"
+          ? stevoMedia.mime_type
+          : null,
     tipoDeMensagem: tipoDeMensagem({ type: tipo ?? "" }, Boolean(midiaUrl)),
     enviadaEm,
   };
+}
+
+/**
+ * A mídia já resolvida pela Stevo para ESTA mensagem. Na raiz do envelope
+ * (medido); só vale quando o id bate com o da mídia da mensagem — um envelope
+ * com várias mensagens nunca empresta o link de uma para a outra. Sem id no
+ * bloco da mensagem, aceita (a Cloud API sempre manda; é só defesa).
+ */
+function midiaDaStevo(
+  bruto: Record<string, unknown>,
+  mensagem: Record<string, unknown>,
+  midia: Record<string, unknown> | undefined,
+): { url?: unknown; mime_type?: unknown } | undefined {
+  type Midia = { id?: unknown; url?: unknown; mime_type?: unknown };
+  const daRaiz = (bruto as { stevo?: { media?: Midia } }).stevo?.media;
+  const daMensagem = (mensagem as { stevo?: { media?: Midia } }).stevo?.media;
+  const candidata = daRaiz ?? daMensagem;
+  if (!candidata || typeof candidata !== "object") return undefined;
+  const idDaMensagem = typeof midia?.id === "string" ? midia.id : null;
+  if (idDaMensagem && typeof candidata.id === "string" && candidata.id !== idDaMensagem) return undefined;
+  return candidata;
 }
 
 export function lerEventoStevo(bruto: unknown): EventoStevo {

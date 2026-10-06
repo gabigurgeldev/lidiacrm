@@ -56,6 +56,8 @@ import { corpoDeEnvioStevo, idDaRespostaStevo } from "../stevo/envelope";
 import { lerInstanciaStevo } from "../stevo/instancias";
 import { stevoTemplateOps } from "../stevo/templates";
 import { fetchFotoDePerfilStevo } from "../stevo/perfil";
+import { baixarMidiaStevo } from "../stevo/midia";
+import type { FetchedMedia } from "@/lib/messaging/media/types";
 
 /** E.164 em dígitos, sem `+` e sem sufixo de domínio — é o que o `to` espera. */
 function digitos(bruto: string): string {
@@ -473,6 +475,18 @@ export const stevoAdapter: ChannelAdapter = {
    * documentado, então `fetchFotoDePerfilStevo` tenta o endpoint mais plausível
    * e degrada para `null` sem lançar. Ver `../stevo/perfil.ts`.
    */
+  /**
+   * Mídia de entrada: o link já vem resolvido pela Stevo no webhook
+   * (`stevo.media.url`, medido). Público e sem credencial — ver `../stevo/midia.ts`.
+   */
+  async fetchInboundMedia(input: ChannelTenantScope & {
+    sessionRef: string;
+    url: string;
+    hintMime?: string | null;
+  }): Promise<FetchedMedia> {
+    return baixarMidiaStevo(input.url, input.hintMime);
+  },
+
   async fetchProfilePictureUrl(
     input: ChannelTenantScope & { sessionRef: string; recipient: string },
   ): Promise<string | null> {
