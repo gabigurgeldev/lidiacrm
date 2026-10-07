@@ -171,6 +171,7 @@ interface FormState {
   split_max_chars: number;
   reply_as_audio: boolean;
   reply_as_audio_mirror: boolean;
+  human_request_try_first: boolean;
   audio_voice: VozDoAgente;
   followup: FollowupValue;
   // Papel OPERADOR (spec 16 §3.2) — o que mexe no sistema depois da conversa.
@@ -238,6 +239,7 @@ function buildState(args: {
     split_max_chars: version?.split_max_chars ?? 600,
     reply_as_audio: version?.reply_as_audio ?? false,
     reply_as_audio_mirror: version?.reply_as_audio_mirror ?? false,
+    human_request_try_first: version?.human_request_try_first ?? false,
     // Voz fora do catálogo (vocabulário aberto no banco) abre na padrão em vez
     // de um Select em branco que o primeiro save trocaria em silêncio.
     // Com serviço, a voz é a do catálogo DELE (`pf_dora`, default da coluna,
@@ -284,6 +286,7 @@ function toVersionPayload(s: FormState) {
     split_max_chars: s.split_max_chars,
     reply_as_audio: s.reply_as_audio,
     reply_as_audio_mirror: s.reply_as_audio_mirror,
+    human_request_try_first: s.human_request_try_first,
     audio_voice: s.audio_voice,
     followup: s.followup,
     operator_enabled: s.operator_enabled,
@@ -1097,6 +1100,27 @@ export function AgentForm(props: Props) {
                 {t("Deixar o agente chamar uma pessoa quando perceber que não é caso dele")}
               </Label>
             </div>
+            {form.handoff_tool_enabled ? (
+              <div className="space-y-1">
+                {/* Migration 0227: uma chance de resolver antes de passar. */}
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="human_request_try_first"
+                    checked={form.human_request_try_first}
+                    onCheckedChange={(v) => patch({ human_request_try_first: v })}
+                    disabled={disabled}
+                  />
+                  <Label htmlFor="human_request_try_first">
+                    {t("Quando o cliente pedir uma pessoa, tentar resolver uma vez antes")}
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    "Ligado: o agente oferece ajuda uma vez; se o cliente insistir, passa na hora. Desligado: passa assim que o cliente pede. Na API oficial da Meta, o pedido de pessoa deve ser atendido sem demora — prefira desligado lá.",
+                  )}
+                </p>
+              </div>
+            ) : null}
             <HandoffKeywordsInput
               value={form.handoff_keywords}
               onChange={(v) => patch({ handoff_keywords: v })}

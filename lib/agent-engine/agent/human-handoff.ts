@@ -26,7 +26,9 @@ import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { ehOptOutProvavel } from '@/lib/opt-out/deteccao';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 
+import type { LeadContextMessage } from '../edge/crm/get-lead-context';
 import type { Logger } from '../obs/logger';
+import { matchesHandoffKeyword } from './agent-config';
 import { cancelPendingCronsForLead } from '../cron/scheduler';
 import { findForbiddenKey, zodIssuesSummary } from './lead-state';
 import { renderDeclaracaoParaHumano, type DeclaracaoDoTurno } from './declaracao';
@@ -64,6 +66,59 @@ export function detectHumanHandoffRequest(message: string): boolean {
   return HUMAN_HANDOFF_PATTERNS.some((re) => re.test(normalized));
 }
 
+
+export type DecisaoDoPedidoDeHumano = 'escalar_agora' | 'tentar_uma_vez' | 'nada';
+
+/**
+ * O que fazer quando o cliente PEDE uma pessoa (migration 0227).
+ *
+ * Padrão (`tentarAntes=false`) = o de sempre: pedido explícito escala antes do
+ * modelo. Com `tentarAntes`, o agente ganha UMA chance: oferece resolver ele
+ * mesmo, e se o cliente insistir a passagem é DETERMINÍSTICA — não depende de o
+ * modelo obedecer. "Insistir" = já houve um pedido do cliente seguido de uma
+ * resposta nossa no histórico do contexto, e ele pediu de novo.
+ *
+ * Sem a ferramenta `request_human_handoff` o modelo não teria como passar a
+ * conversa depois, então `tentarAntes` sem ela cai no comportamento padrão.
+ *
+ * O pedido vale pelo padrão fixo (`detectHumanHandoffRequest`) E pelas
+ * palavras-chave do agente — as duas são "o cliente pediu uma pessoa".
+ */
+export function decidirPedidoDeHumano(p: {
+  mensagens: readonly LeadContextMessage[];
+  palavras: readonly string[];
+  tentarAntes: boolean;
+  ferramentaLigada: boolean;
+}): DecisaoDoPedidoDeHumano {
+  const pediu = (texto: string): boolean =>
+    detectHumanHandoffRequest(texto) || matchesHandoffKeyword(texto, p.palavras);
+
+  let ultimaEntrada = '';
+  let ultimaSaida = -1;
+  for (let i = p.mensagens.length - 1; i >= 0; i -= 1) {
+    const m = p.mensagens[i];
+    if (m === undefined) continue;
+    if (ultimaEntrada === '' && m.direction === 'inbound') ultimaEntrada = m.body;
+    if (m.direction === 'outbound') {
+      ultimaSaida = i;
+      break;
+    }
+  }
+  if (!pediu(ultimaEntrada)) return 'nada';
+  if (!p.tentarAntes || !p.ferramentaLigada) return 'escalar_agora';
+
+  const jaPediuAntesERecebeuResposta = p.mensagens
+    .slice(0, Math.max(ultimaSaida, 0))
+    .some((m) => m.direction === 'inbound' && pediu(m.body));
+  return jaPediuAntesERecebeuResposta ? 'escalar_agora' : 'tentar_uma_vez';
+}
+
+/** A instrução que acompanha a chance única de `decidirPedidoDeHumano`. */
+export const DICA_DO_PEDIDO_DE_HUMANO =
+  'O cliente pediu para falar com uma pessoa. Antes de passar, ofereça UMA vez resolver você mesmo: ' +
+  'diga em uma frase que consegue ajudar agora e já mostre o primeiro passo concreto. Se ele insistir em ' +
+  'falar com uma pessoa, ou se o problema for um erro do sistema que ele não consegue resolver sozinho, ' +
+  'avise que vai chamar a equipe e use request_human_handoff.';
 
 /**
  * True se a última mensagem do lead SUGERE opt-out. A regra mora em
