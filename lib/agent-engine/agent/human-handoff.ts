@@ -22,6 +22,7 @@
 import { z } from 'zod';
 import type pg from 'pg';
 
+import { deveAnunciarPassagem, payloadDoAnuncio } from '@/lib/escalacao/anuncio-da-passagem';
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
 import { ehOptOutProvavel } from '@/lib/opt-out/deteccao';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
@@ -102,6 +103,41 @@ export async function isLeadInHandoff(db: pg.Pool, tenantId: string, leadId: str
   return rows[0]?.handoff === true;
 }
 
+/**
+ * O estado de passagem do contato ANTES de uma nova passagem, e o último aviso
+ * dado ao dono sobre ele. Diferente de `isLeadInHandoff` de propósito: aqui só
+ * o silêncio `infinity` conta — os 5 min de silêncio da resposta manual não são
+ * passagem, e contá-los calaria o aviso de quem escalou logo após o humano falar.
+ */
+export async function lerEstadoAnteriorDaPassagem(
+  db: pg.Pool,
+  tenantId: string,
+  contactId: string,
+): Promise<{ estavaEmPassagem: boolean; ultimoAnuncioEm: Date | null }> {
+  const { rows } = await db.query<{ em_passagem: boolean | null; ultimo_anuncio: Date | string | null }>(
+    `select (
+       select c.force_human or exists (
+         select 1 from conversations v
+         where v.organization_id = $1 and v.contact_id = c.id
+           and v.bot_silenced_until = 'infinity'::timestamptz
+       )
+       from contacts c where c.organization_id = $1 and c.id = $2
+     ) as em_passagem,
+     (
+       select max(e.created_at) from event_log e
+       where e.organization_id = $1 and e.event_type = 'agent.handoff_requested'
+         and e.payload->>'contact_id' = $2::text
+     ) as ultimo_anuncio`,
+    [tenantId, contactId],
+  );
+  const r = rows[0];
+  const ultimo = r?.ultimo_anuncio ?? null;
+  return {
+    estavaEmPassagem: r?.em_passagem === true,
+    ultimoAnuncioEm: ultimo === null ? null : new Date(ultimo),
+  };
+}
+
 export interface HandoffIds {
   tenantId: string;
   leadId: string;
@@ -136,6 +172,11 @@ export async function performHumanHandoff(
     log: Logger;
   },
 ): Promise<void> {
+  // (0) O estado ANTES desta chamada decide se a passagem é um episódio novo — e
+  // portanto se o dono é avisado (ver `deveAnunciarPassagem`). Lido antes de (a),
+  // que é justamente o que o muda.
+  const anterior = await lerEstadoAnteriorDaPassagem(db, ids.tenantId, ids.leadId);
+
   // (a) FONTE DA VERDADE: force_human no contato — irrevogável pelo agente (regra dura 2).
   await db.query(`update contacts set force_human = true where organization_id = $1 and id = $2`, [
     ids.tenantId,
@@ -166,6 +207,19 @@ export async function performHumanHandoff(
 
   // (d) inbox de escalação com o resumo da conversa. Dedup por episódio ABERTO (mesmo padrão
   // do escalateJailbreakPromise): 2× no mesmo handoff aberto → 1 item.
+  //
+  // Item aberto de um episódio que JÁ ACABOU (o contato não estava em passagem) é
+  // resíduo — devolução feita antes de `retomada.ts` fechar o item, ou fechado por
+  // fora. Ele é encerrado aqui para o episódio novo ganhar o próprio cartão, com o
+  // resumo de agora, e não ficar escondido atrás do cartão velho.
+  if (!anterior.estavaEmPassagem) {
+    await db.query(
+      `update agent_inbox_items set status = 'resolved'
+        where organization_id = $1 and kind = 'handoff' and ref_kind = 'contact'
+          and ref_id = $2 and status = 'open'`,
+      [ids.tenantId, ids.leadId],
+    );
+  }
   const inbox = await db.query(
     `insert into agent_inbox_items (organization_id, kind, severity, title, body, ref_kind, ref_id)
      select $1, 'handoff', 'critical', $2, $3, 'contact', $4
@@ -220,8 +274,10 @@ export async function performHumanHandoff(
   // só descobria a passagem abrindo a Central; não havia como ser avisado no
   // WhatsApp pessoal, que é onde ele está quando não está no CRM.
   //
-  // Só no EPISÓDIO NOVO (o insert do inbox entrou): esta função é at-least-once,
-  // e um evento por re-execução dispararia o mesmo aviso de novo a cada retry.
+  // Só no EPISÓDIO NOVO: esta função é at-least-once, e um evento por
+  // re-execução dispararia o mesmo aviso de novo a cada retry. Episódio novo
+  // NÃO é mais "o insert do inbox entrou": um item esquecido aberto calava toda
+  // passagem seguinte do mesmo cliente (ver `lib/escalacao/anuncio-da-passagem.ts`).
   //
   // Tipo próprio, e não `ai.handoff_triggered`: aquele já tem consumidores
   // (follow-up, contadores de uso e de evolução) que contariam esta passagem
@@ -229,7 +285,13 @@ export async function performHumanHandoff(
   //
   // `summary` leva o resumo da conversa para a mensagem do aviso. É o mesmo
   // nível de dado que `message.received` já carrega (o texto da mensagem).
-  if ((inbox.rowCount ?? 0) > 0) {
+  const anunciar = deveAnunciarPassagem({
+    estavaEmPassagem: anterior.estavaEmPassagem,
+    itemDaCentralNasceu: (inbox.rowCount ?? 0) > 0,
+    ultimoAnuncioEm: anterior.ultimoAnuncioEm,
+    agora: new Date(),
+  });
+  if (anunciar) {
     try {
       await db.query(
         `insert into event_log (organization_id, event_type, entity_kind, entity_id, payload, metadata)
@@ -238,14 +300,16 @@ export async function performHumanHandoff(
           ids.tenantId,
           leadDoNegocio ? 'crm_lead' : 'contact',
           leadDoNegocio ?? ids.leadId,
-          JSON.stringify({
-            contact_id: ids.leadId,
-            conversation_id: ids.conversationId,
-            lead_id: leadDoNegocio,
-            reason: opts.reason,
-            summary: opts.conversationSummary,
-            lead_avisado: opts.avisoAoLead?.avisado ?? null,
-          }),
+          JSON.stringify(
+            payloadDoAnuncio({
+              contactId: ids.leadId,
+              conversationId: ids.conversationId,
+              leadId: leadDoNegocio,
+              reason: opts.reason,
+              summary: opts.conversationSummary,
+              leadAvisado: opts.avisoAoLead?.avisado ?? null,
+            }),
+          ),
           JSON.stringify({ source_module: 'human-handoff', source_id: ids.conversationId }),
         ],
       );
