@@ -625,6 +625,25 @@ async function buildContext(input: BuildContextInput): Promise<GuardDecision> {
     const since = Date.now() - new Date(c.last_handoff_at).getTime();
     if (since < HANDOFF_RECENT_GUARD_MS) return skip("handoff_recent");
   }
+  // Fluxo de triagem no comando (migration 0228) — mesma pergunta de
+  // `lib/agent-engine/agent/fluxo-no-comando.ts`, na versão supabase-js: viva,
+  // ou armada por esta mensagem. Falha de leitura NÃO cala a IA: sem saber se
+  // há fluxo, o cliente ficar sem resposta é pior que uma resposta a mais.
+  try {
+    const { data: fluxos } = await admin
+      .from("flow_executions")
+      .select("id")
+      .eq("organization_id", input.organizationId)
+      .eq("contact_id", c.contacts.id)
+      .eq("silencia_ia", true)
+      .or(`status.in.(pending,running,waiting),input->>message_id.eq.${input.messageId}`)
+      .limit(1);
+    if ((fluxos ?? []).length > 0) return skip("flow_running");
+  } catch (err) {
+    logger.warn("[ai-response-worker] fluxo no comando não foi lido — seguindo", {
+      error: err instanceof Error ? err.message.slice(0, 200) : String(err),
+    });
+  }
 
   // Inbound message body (the trigger payload doesn't carry it).
   const { data: msg, error: msgErr } = await admin

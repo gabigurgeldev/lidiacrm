@@ -48,6 +48,8 @@ export type SkipReason =
   | "budget_exceeded"
   | "silenced_post_handoff"
   | "handoff_recent"
+  /** Um fluxo de triagem com "silenciar a IA" está conversando com o cliente (migration 0228). */
+  | "flow_running"
   | "conversation_not_found"
   | "empty_inbound_body"
   | "duplicate_outbound"

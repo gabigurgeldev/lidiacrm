@@ -22,6 +22,7 @@ import {
   type FrentePatch,
   type FrenteRow,
 } from "./frentes";
+import { VAR_DO_EVENTO } from "./acordar-por-evento";
 import { analisarGrafo, arestaDoRamo, flowGraphSchema, noPorId } from "./graph-schema";
 import { exigirNo } from "./registry";
 import { ehDesfechoEsperado } from "./desfecho-esperado";
@@ -763,6 +764,13 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
         },
         idempotency_key: `${p.frente.id}:${nodeId}:evento:${passos}`,
       });
+      // ⚠️ A espera NOVA nasce sem o evento da espera ANTERIOR. O acordador
+      // escreve o payload em `vars.evento` e nada o apagava: um segundo menu
+      // (ou `logic.await_event`) que vencesse pelo PRAZO encontrava o evento
+      // velho, lia "chegou resposta" e seguia pelo caminho do primeiro menu.
+      // Com três perguntas em sequência numa triagem, isso é o caso comum.
+      const { [VAR_DO_EVENTO]: _eventoAnterior, ...semEvento } = locais;
+      locais = semEvento;
       await deps.db.atualizarFrente(p.frente.id, execucao.organization_id, {
         node_id: nodeId,
         status: "waiting",

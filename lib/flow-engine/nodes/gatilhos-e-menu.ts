@@ -55,8 +55,31 @@ const VAR_DO_EVENTO = "evento";
  */
 const canalDoGatilho = z.string().uuid().nullable().default(null);
 
+/**
+ * Os campos de TRIAGEM (migration 0228). Todos com default igual ao
+ * comportamento de antes, para todo fluxo já publicado continuar igual.
+ *
+ * Quem aplica `quando`, `pular_se_pessoa_atende` é o matcher, antes de criar a
+ * execução (`lib/flow-engine/gatilho-de-conversa.ts`) — pela mesma razão do
+ * canal: pela via do `execute`, cada mensagem de uma conversa em andamento
+ * viraria uma execução nascida morta. `uma_por_contato` e `silenciar_ia` viram
+ * colunas da execução, lidas pelo índice único e pelo gate da IA.
+ */
 export const triggerMessageReceivedConfigSchema = z.strictObject({
   canal_id: canalDoGatilho,
+  /**
+   * `toda_mensagem` = o de sempre. `conversa_nova_ou_retorno` = só a primeira
+   * mensagem do cliente, ou a que chega depois de `horas_de_silencio` sem
+   * mensagem nenhuma (em qualquer sentido) com ele.
+   */
+  quando: z.enum(["toda_mensagem", "conversa_nova_ou_retorno"]).default("toda_mensagem"),
+  horas_de_silencio: z.number().int().min(1).max(720).default(24),
+  /** No máximo uma execução viva deste fluxo por cliente. */
+  uma_por_contato: z.boolean().default(false),
+  /** O agente de IA não responde ao cliente enquanto a execução estiver viva. */
+  silenciar_ia: z.boolean().default(false),
+  /** Não começa se uma pessoa da equipe está com a conversa. */
+  pular_se_pessoa_atende: z.boolean().default(false),
 });
 export type TriggerMessageReceivedConfig = z.infer<typeof triggerMessageReceivedConfigSchema>;
 
