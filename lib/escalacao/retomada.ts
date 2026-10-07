@@ -259,6 +259,32 @@ async function gravarCheckpointDeRetomada(
   contactId: string,
   continuidade: ContinuidadeHumana,
 ): Promise<void> {
+  await acrescentarAoResumoDoLead(
+    supabase,
+    organizationId,
+    contactId,
+    continuidade.resumo,
+    continuidade.pendenciaComOCliente,
+  );
+}
+
+/**
+ * ACRESCENTA um texto ao "Resumo acumulado" do lead (`lead_checkpoints`), que o
+ * agente lê na abertura de todo turno. Nunca substitui: sobrescrever apagaria o
+ * histórico da conversa justamente para contar um pedaço dela.
+ *
+ * Exportada porque há dois escritores com a mesma necessidade: a devolução
+ * depois de uma pessoa atender (o que ela fez) e a entrega de um fluxo de
+ * triagem (o que o cliente respondeu). Duas cópias divergiriam no primeiro
+ * campo novo do checkpoint.
+ */
+export async function acrescentarAoResumoDoLead(
+  supabase: SupabaseClient,
+  organizationId: string,
+  contactId: string,
+  texto: string,
+  proximaAcao?: string | null,
+): Promise<void> {
   const { data: anteriorData } = await supabase
     .from("lead_checkpoints")
     .select("commitments, objections, next_action, rolling_summary")
@@ -282,9 +308,8 @@ async function gravarCheckpointDeRetomada(
     job_id: null,
     commitments: anterior?.commitments ?? [],
     objections: anterior?.objections ?? [],
-    next_action: continuidade.pendenciaComOCliente ?? anterior?.next_action ?? null,
-    rolling_summary:
-      acumulado === "" ? continuidade.resumo : `${acumulado}\n\n${continuidade.resumo}`,
+    next_action: proximaAcao ?? anterior?.next_action ?? null,
+    rolling_summary: acumulado === "" ? texto : `${acumulado}\n\n${texto}`,
   });
   if (error) {
     // Sem o checkpoint o agente volta CEGO — isso é degradação de verdade, e

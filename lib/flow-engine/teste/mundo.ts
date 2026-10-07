@@ -93,6 +93,10 @@ export interface Mundo {
   desfechoDoDisparo: { kind: "criado"; disparoId: string; vaoReceber: number; comecou: boolean } | { kind: "recusado"; motivo: string };
   /** O texto inteiro de cada mensagem, por id — o que `textoDaMensagem` devolve. */
   textosDasMensagens: Map<string, string>;
+  /** O que `devolverAoAgente` recebeu — contexto e se pediu turno imediato. */
+  entregasAoAgente: Array<{ contactId: string; contexto: string; iniciarAtendimento: boolean }>;
+  /** Simula uma pessoa no comando da conversa (passagem durante a execução). */
+  pessoaNoComando: boolean;
   /** O que `atualizarNomeDoContato` gravou. */
   nomesGravados: Array<{ contactId: string; nome: string }>;
   enviadosAoCliente: Array<{
@@ -176,6 +180,8 @@ export function mundoNovo(): Mundo {
     desfechoDoDisparo: { kind: "criado", disparoId: "disparo-1", vaoReceber: 3, comecou: false },
     enviadosAoCliente: [],
     textosDasMensagens: new Map(),
+    entregasAoAgente: [],
+    pessoaNoComando: false,
     nomesGravados: [],
     avisos: [],
     elegiveis: [
@@ -430,8 +436,12 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
       },
       houveRespostaDoDono: async () => mundo.donoRespondeu,
       telefoneDoUsuario: async ({ userId }) => mundo.telefonesDaEquipe.get(userId) ?? null,
-      devolverAoAgente: async ({ contactId }) => {
+      devolverAoAgente: async ({ contactId, contexto, iniciarAtendimento, naoTirarDePessoa }) => {
         if (mundo.semConversaParaAgente) return { ok: false as const, motivo: "sem_conversa" };
+        if (naoTirarDePessoa === true && mundo.pessoaNoComando) {
+          return { ok: false as const, motivo: "pessoa_no_comando" };
+        }
+        mundo.entregasAoAgente.push({ contactId, contexto: contexto ?? "", iniciarAtendimento: iniciarAtendimento === true });
         const jaEstava = mundo.devolvidasAoAgente.includes(contactId);
         mundo.devolvidasAoAgente.push(contactId);
         return { ok: true as const, jaEstavaComOAgente: jaEstava };

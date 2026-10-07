@@ -141,8 +141,26 @@ function semNinguem(
 
 // ─────────────────────── crm.handoff_to_agent ────────────────────────────────
 
-export const entregarAoAgenteConfigSchema = z.strictObject({});
+export const entregarAoAgenteConfigSchema = z.strictObject({
+  /**
+   * O que a IA precisa saber ao assumir — normalmente o que a triagem
+   * coletou: "Nome: {{vars.nome}} / Sistema: {{vars.sistema}} / Problema:
+   * {{vars.problema}}". Vai para o "Resumo acumulado" que o agente lê em todo
+   * turno. Vazio = o de sempre (não acrescenta nada).
+   */
+  contexto: z.string().max(4000).default(""),
+  /** A IA responde AGORA, sem esperar o cliente mandar outra mensagem. */
+  iniciar_atendimento: z.boolean().default(false),
+  /**
+   * Não tira a conversa de uma pessoa: se alguém assumiu, ou se a conversa foi
+   * passada para a equipe durante este fluxo, segue por "Uma pessoa já
+   * assumiu" em vez de devolver à IA.
+   */
+  nao_tirar_de_pessoa: z.boolean().default(false),
+});
 export type EntregarAoAgenteConfig = z.infer<typeof entregarAoAgenteConfigSchema>;
+
+export const RAMO_PESSOA_NO_COMANDO = "pessoa_no_comando";
 
 /**
  * ⚠️ ESTE BLOCO SOLTA UMA TRAVA QUE O AGENTE NÃO PODE SOLTAR SOZINHO.
@@ -171,14 +189,27 @@ export const crmHandoffToAgent: FlowNodeDefinition<EntregarAoAgenteConfig> = {
   configSchema: entregarAoAgenteConfigSchema,
   branches: (): ReturnType<FlowNodeDefinition["branches"]> => [
     ramoDeExcecao("sem_conversa", "Sem conversa aberta"),
+    ramoDeExcecao(RAMO_PESSOA_NO_COMANDO, "Uma pessoa já assumiu"),
     ramoPadrao("Depois de entregar"),
   ],
-  execute: async (ctx): Promise<NodeExecutionResult> => {
+  execute: async (ctx, config): Promise<NodeExecutionResult> => {
     const contato = ctx.fatos.contact;
     if (contato === null) return { kind: "advance", branch_id: "sem_conversa" };
 
-    const r = await ctx.crm.devolverAoAgente({ contactId: contato.id });
-    if (!r.ok) return { kind: "advance", branch_id: "sem_conversa", vars: { ia_erro: r.motivo } };
+    const contexto = ctx.render(config.contexto).trim();
+    const r = await ctx.crm.devolverAoAgente({
+      contactId: contato.id,
+      ...(contexto !== "" ? { contexto } : {}),
+      ...(config.iniciar_atendimento ? { iniciarAtendimento: true } : {}),
+      ...(config.nao_tirar_de_pessoa ? { naoTirarDePessoa: true } : {}),
+    });
+    if (!r.ok) {
+      return {
+        kind: "advance",
+        branch_id: r.motivo === RAMO_PESSOA_NO_COMANDO ? RAMO_PESSOA_NO_COMANDO : "sem_conversa",
+        vars: { ia_erro: r.motivo },
+      };
+    }
 
     return {
       kind: "advance",

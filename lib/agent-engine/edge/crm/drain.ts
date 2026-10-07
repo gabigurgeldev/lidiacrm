@@ -27,6 +27,13 @@ const dispatchPayloadSchema = z
     contact_id: z.string().uuid(),
     channel_session_id: z.string().uuid(),
     inbound_message_id: z.string().uuid(),
+    /**
+     * Um fluxo de triagem entregou a conversa (`crm.handoff_to_agent` com
+     * "começar o atendimento"). O turno responde JÁ — sem o debounce — e
+     * ignora o "fluxo no comando", porque foi o próprio fluxo que o chamou.
+     */
+    entregue_por_fluxo: z.string().uuid().optional(),
+    imediato: z.boolean().optional(),
   })
   .passthrough();
 
@@ -278,7 +285,26 @@ async function processEvent(
 
   // Coalescência: já existe job PENDING futuro deste contato → esta mensagem
   // entra de carona (o turno lê o histórico completo). Evento vira done.
-  if (knobs.debounceMs > 0) {
+  //
+  // ⚠️ A entrega de um fluxo NÃO pode só pegar carona: o job pendente é o da
+  // última resposta do cliente ao fluxo, e ele será pulado pelo "fluxo no
+  // comando" (a mensagem chegou durante a triagem). Sem marcar o job, a IA
+  // nunca falaria — a carona carrega a marca e antecipa o relógio.
+  if (p.entregue_por_fluxo !== undefined) {
+    const { rows: marcados } = await pool.query<{ id: string }>(
+      `update job_queue
+          set payload = payload || jsonb_build_object('entregue_por_fluxo', $3::text),
+              run_after = least(run_after, now())
+        where organization_id = $1 and contact_id = $2
+          and kind = 'inbound_turn' and status = 'pending'
+        returning id`,
+      [event.organization_id, p.contact_id, p.entregue_por_fluxo],
+    );
+    if (marcados[0]) {
+      log.info('drain: entrega do fluxo marcou o job pendente', { event_id: event.id, job_id: marcados[0].id });
+      return 'processado';
+    }
+  } else if (knobs.debounceMs > 0) {
     const { rows: pendingRows } = await pool.query<{ id: string }>(
       `select id from job_queue
        where organization_id = $1 and contact_id = $2
@@ -295,7 +321,8 @@ async function processEvent(
     }
   }
 
-  const runAfter = knobs.debounceMs > 0 ? new Date(Date.now() + knobs.debounceMs) : undefined;
+  const runAfter =
+    knobs.debounceMs > 0 && p.imediato !== true ? new Date(Date.now() + knobs.debounceMs) : undefined;
   const { job, deduped } = await enqueueJob(pool, event.organization_id, {
     kind: 'inbound_turn',
     leadId: p.contact_id,
@@ -306,6 +333,7 @@ async function processEvent(
       channel_session_id: p.channel_session_id,
       inbound_message_id: p.inbound_message_id,
       crm_event_id: event.id,
+      ...(p.entregue_por_fluxo !== undefined ? { entregue_por_fluxo: p.entregue_por_fluxo } : {}),
     },
     ...(runAfter !== undefined ? { runAfter } : {}),
   });
