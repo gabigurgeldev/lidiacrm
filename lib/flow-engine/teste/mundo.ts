@@ -91,6 +91,10 @@ export interface Mundo {
   semConversaParaAgente: boolean;
   /** O que a porta de disparo devolve — o teste troca para exercitar recusa. */
   desfechoDoDisparo: { kind: "criado"; disparoId: string; vaoReceber: number; comecou: boolean } | { kind: "recusado"; motivo: string };
+  /** O texto inteiro de cada mensagem, por id — o que `textoDaMensagem` devolve. */
+  textosDasMensagens: Map<string, string>;
+  /** O que `atualizarNomeDoContato` gravou. */
+  nomesGravados: Array<{ contactId: string; nome: string }>;
   enviadosAoCliente: Array<{
     contactId: string;
     tipo: string;
@@ -171,6 +175,8 @@ export function mundoNovo(): Mundo {
     semConversaParaAgente: false,
     desfechoDoDisparo: { kind: "criado", disparoId: "disparo-1", vaoReceber: 3, comecou: false },
     enviadosAoCliente: [],
+    textosDasMensagens: new Map(),
+    nomesGravados: [],
     avisos: [],
     elegiveis: [
       { userId: "user-antigo", lastAssignedAt: Date.parse("2026-08-01T00:00:00Z"), currentLoad: 1 },
@@ -429,6 +435,10 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
         const jaEstava = mundo.devolvidasAoAgente.includes(contactId);
         mundo.devolvidasAoAgente.push(contactId);
         return { ok: true as const, jaEstavaComOAgente: jaEstava };
+      },
+      textoDaMensagem: async ({ messageId }) => mundo.textosDasMensagens.get(messageId) ?? null,
+      atualizarNomeDoContato: async ({ contactId, nome }) => {
+        mundo.nomesGravados.push({ contactId, nome });
       },
     },
     roteamento: {

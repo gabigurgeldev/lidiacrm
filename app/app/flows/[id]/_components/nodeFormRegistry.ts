@@ -3,6 +3,8 @@ import type { ComponentType } from "react";
 import { CrmHandoffToAgentForm } from "./forms/CrmHandoffToAgentForm";
 import { LogicBusinessHoursForm } from "./forms/LogicBusinessHoursForm";
 import { LogicChoiceMenuForm } from "./forms/LogicChoiceMenuForm";
+import { LogicAskForm } from "./forms/LogicAskForm";
+import { CrmUpdateContactForm } from "./forms/CrmUpdateContactForm";
 import { RoutingFixedOrderForm } from "./forms/RoutingFixedOrderForm";
 import { RoutingRandomForm } from "./forms/RoutingRandomForm";
 import { TriggerKeywordForm } from "./forms/TriggerKeywordForm";
@@ -74,6 +76,8 @@ export const FORMULARIO_DO_TIPO: Record<string, ComponentType<PropsDoFormulario>
   "logic.loop": LogicLoopForm,
   "logic.await_event": LogicAwaitEventForm,
   "logic.choice_menu": LogicChoiceMenuForm,
+  "logic.ask": LogicAskForm,
+  "crm.update_contact": CrmUpdateContactForm,
   "logic.split": LogicSplitForm,
   "flow.call": FlowCallForm,
   "crm.add_tag": CrmAddTagForm,

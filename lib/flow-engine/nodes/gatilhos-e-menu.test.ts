@@ -140,6 +140,9 @@ describe("logic.choice_menu com o payload REAL", () => {
     ],
     modo: "exata" as const,
     prazo_ms: 10 * 60_000,
+    canal_id: null,
+    aceitar_numero: false,
+    guardar_em: null,
   };
 
   it("⭐ reconhece a opção que veio em `body_preview`", async () => {

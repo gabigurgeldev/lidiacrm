@@ -9,8 +9,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useT } from "@/hooks/i18n/useT";
 
+import { CampoComVariavel } from "./CampoComVariavel";
+import { SeletorDeCanal } from "./SeletorDeCanal";
 import { Campo, Dica, Secao, type PropsDoFormulario } from "./shared";
 
 interface Opcao {
@@ -49,12 +52,42 @@ export function LogicChoiceMenuForm({ config, aoMudarConfig }: PropsDoFormulario
   return (
     <div className="flex flex-col gap-4">
       <Secao>
-        <Campo rotulo={t("Como funciona")}>
-          <p className="text-xs leading-snug text-muted-foreground">
-            {t(
-              "Este bloco só ESPERA a resposta. A pergunta com as opções sai de um bloco de mensagem antes dele.",
+        <Campo rotulo={t("Pergunta (opcional)")}>
+          <CampoComVariavel
+            multilinha
+            linhas={3}
+            maxLength={1000}
+            valor={String(config.pergunta ?? "")}
+            aoMudar={(v) => mudar({ pergunta: v })}
+            testid="campo-pergunta-do-menu"
+          />
+          <Dica
+            texto={t(
+              "Com pergunta, este bloco manda a pergunta e espera. Sem pergunta, só espera — a pergunta sai de um bloco de mensagem antes dele.",
             )}
-          </p>
+          />
+        </Campo>
+        <div className="flex items-center gap-2">
+          <Switch
+            id="menu-aceitar-numero"
+            checked={config.aceitar_numero === true}
+            onCheckedChange={(v) => mudar({ aceitar_numero: v })}
+          />
+          <label htmlFor="menu-aceitar-numero" className="text-sm">
+            {t("Numerar as opções (1️⃣ 2️⃣ 3️⃣) e aceitar o número")}
+          </label>
+        </div>
+        <Campo rotulo={t("Guardar a escolha em (opcional)")}>
+          <Input
+            value={String(config.guardar_em ?? "")}
+            maxLength={40}
+            placeholder="sistema"
+            onChange={(e) => {
+              const v = e.target.value.toLowerCase().replace(/[^a-z0-9_]/gu, "_");
+              mudar({ guardar_em: v === "" ? null : v });
+            }}
+            data-testid="campo-guardar-escolha"
+          />
         </Campo>
         <Campo rotulo={t("Esperar por quantas horas?")}>
           <Input
@@ -90,6 +123,18 @@ export function LogicChoiceMenuForm({ config, aoMudarConfig }: PropsDoFormulario
           />
         </Campo>
       </Secao>
+
+      {String(config.pergunta ?? "").trim() !== "" ? (
+        <div className="space-y-1.5">
+          <p className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t("Por onde enviar")}
+          </p>
+          <SeletorDeCanal
+            valor={(config.canal_id as string | null) ?? null}
+            aoEscolher={(id) => mudar({ canal_id: id })}
+          />
+        </div>
+      ) : null}
 
       <div className="space-y-1.5">
         <p className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">

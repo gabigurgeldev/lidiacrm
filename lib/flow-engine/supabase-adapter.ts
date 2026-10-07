@@ -681,6 +681,28 @@ export function criarPortas(
         return devolverAoAgenteDoFluxo(admin, orgId, { contactId, exec });
       },
 
+      async textoDaMensagem({ messageId }) {
+        const { data } = await admin
+          .from("messages")
+          .select("body, media_derived_text")
+          .eq("organization_id", orgId)
+          .eq("id", messageId)
+          .maybeSingle();
+        const m = data as { body: string | null; media_derived_text: string | null } | null;
+        if (m === null) return null;
+        const corpo = (m.body ?? "").trim();
+        return corpo !== "" ? corpo : (m.media_derived_text ?? "").trim();
+      },
+
+      async atualizarNomeDoContato({ contactId, nome }) {
+        const { error } = await admin
+          .from("contacts")
+          .update({ display_name: nome, name: nome })
+          .eq("organization_id", orgId)
+          .eq("id", contactId);
+        if (error) throw new Error(`contato não atualizado: ${error.message}`);
+      },
+
       async telefoneDoUsuario({ userId }) {
         // Reusa `carregarDono`: ela já sabe que o telefone de aviso mora em
         // `attendant_availability.notification_phone`, e uma segunda consulta

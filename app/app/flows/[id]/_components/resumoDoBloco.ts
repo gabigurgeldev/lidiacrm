@@ -281,6 +281,12 @@ export function resumoDoBloco(
       if (nomes.length === 0) return { chave: "Sem opção escrita" };
       return { chave: "Espera a escolha: {opcoes}", valores: { opcoes: encurtar(nomes.join(", ")) } };
     }
+    case "logic.ask": {
+      const v = texto(config, "variavel");
+      return v === null ? null : { chave: "Pergunta e guarda em {variavel}", valores: { variavel: v } };
+    }
+    case "crm.update_contact":
+      return { chave: "Grava o nome do cliente" };
     case "flow.call": {
       const id = texto(config, "fluxo_id");
       return id === null || id === NAO_ESCOLHIDO

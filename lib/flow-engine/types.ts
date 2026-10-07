@@ -342,6 +342,25 @@ export interface PortaDoCrm {
   devolverAoAgente(input: {
     contactId: string;
   }): Promise<{ ok: true; jaEstavaComOAgente: boolean } | { ok: false; motivo: string }>;
+
+  /**
+   * O TEXTO INTEIRO de uma mensagem que o cliente mandou — corpo, ou o texto
+   * derivado (transcrição do áudio, leitura da imagem) quando não há corpo.
+   *
+   * Existe porque o payload do evento que acorda a frente traz só
+   * `body_preview`, cortado em 280 caracteres pelo gatilho do banco: a
+   * descrição do problema do cliente — a resposta que mais importa numa
+   * triagem — chegava pela metade. `null` quando a mensagem não é desta
+   * organização ou não existe.
+   */
+  textoDaMensagem(input: { messageId: string }): Promise<string | null>;
+
+  /**
+   * Grava o nome que o cliente DISSE. Vai para `display_name` (a coluna que a
+   * tela mostra e que o agente lê primeiro) e para `name`: o `display_name`
+   * de quem chega pelo WhatsApp é o apelido do perfil, que raramente é o nome.
+   */
+  atualizarNomeDoContato(input: { contactId: string; nome: string }): Promise<void>;
 }
 
 export type DesfechoDeEnvio =
