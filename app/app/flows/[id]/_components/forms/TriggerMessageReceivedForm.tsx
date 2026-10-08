@@ -75,9 +75,33 @@ export function TriggerMessageReceivedForm({ config, aoMudarConfig }: PropsDoFor
             <SelectItem value="conversa_nova_ou_retorno">
               {t("Só no começo da conversa (primeira mensagem, ou volta depois de um tempo)")}
             </SelectItem>
+            <SelectItem value="cliente_esperando_equipe">
+              {t("Só quando o cliente está esperando a equipe (já foi passado para uma pessoa)")}
+            </SelectItem>
           </SelectContent>
         </Select>
       </Campo>
+
+      {quando === "cliente_esperando_equipe" ? (
+        <Campo rotulo={t("Avisar no máximo a cada quantos minutos, por cliente")}>
+          <Input
+            type="number"
+            min={1}
+            max={1440}
+            value={(config.intervalo_de_aviso_min as number | undefined) ?? 30}
+            onChange={(e) => {
+              const n = Number.parseInt(e.target.value, 10);
+              if (Number.isFinite(n)) mudar({ intervalo_de_aviso_min: Math.min(1440, Math.max(1, n)) });
+            }}
+            data-testid="campo-gatilho-intervalo"
+          />
+          <Dica
+            texto={t(
+              "Use com o bloco \"Avisar o vendedor no WhatsApp\": quem foi passado para a equipe e escreve de novo não fica falando sozinho. Um cliente que manda várias mensagens seguidas gera um aviso só.",
+            )}
+          />
+        </Campo>
+      ) : null}
 
       {quando === "conversa_nova_ou_retorno" ? (
         <Campo rotulo={t("Horas sem conversa para contar como volta")}>

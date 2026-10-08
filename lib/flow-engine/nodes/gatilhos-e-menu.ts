@@ -79,8 +79,17 @@ export const triggerMessageReceivedConfigSchema = z.strictObject({
    * mensagem do cliente, ou a que chega depois de `horas_de_silencio` sem
    * mensagem nenhuma (em qualquer sentido) com ele.
    */
-  quando: z.enum(["toda_mensagem", "conversa_nova_ou_retorno"]).default("toda_mensagem"),
+  quando: z
+    .enum(["toda_mensagem", "conversa_nova_ou_retorno", "cliente_esperando_equipe"])
+    .default("toda_mensagem"),
   horas_de_silencio: z.number().int().min(1).max(720).default(24),
+  /**
+   * Com `cliente_esperando_equipe`: o fluxo só começa quando o cliente que JÁ
+   * foi passado para a equipe (e ainda não foi devolvido à IA) escreve de novo
+   * — e no máximo uma vez a cada tantos minutos por cliente, para um cliente
+   * aflito que manda dez mensagens não virar dez avisos.
+   */
+  intervalo_de_aviso_min: z.number().int().min(1).max(1440).default(30),
   /** No máximo uma execução viva deste fluxo por cliente. */
   uma_por_contato: z.boolean().default(false),
   /** O agente de IA não responde ao cliente enquanto a execução estiver viva. */

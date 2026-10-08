@@ -21,7 +21,41 @@ import { logger } from "@/lib/logger";
 
 import { triggerMessageReceivedConfigSchema, type TriggerMessageReceivedConfig } from "./nodes/gatilhos-e-menu";
 
-export type DecisaoDeArmar = { armar: true } | { armar: false; motivo: "conversa_em_andamento" | "pessoa_atendendo" };
+export type DecisaoDeArmar =
+  | { armar: true }
+  | {
+      armar: false;
+      motivo: "conversa_em_andamento" | "pessoa_atendendo" | "cliente_nao_espera" | "avisado_ha_pouco";
+    };
+
+/**
+ * `cliente_esperando_equipe`: o cliente foi passado para a equipe e escreveu de
+ * novo. Sem isto, ele falava para o vazio — a IA está calada (passagem) e o
+ * aviso ao dono só sai numa passagem NOVA, que não acontece com a IA calada.
+ * Medido em produção (2026-10-08): passado às 18:51, o cliente escreveu "Oi" no
+ * dia seguinte e ninguém respondeu nem soube.
+ */
+export function decidirAvisoDeEspera(p: {
+  config: TriggerMessageReceivedConfig;
+  /** `force_human` no contato, ou silêncio `infinity` nesta conversa. */
+  esperaAEquipe: boolean;
+  pessoaAtendendo: boolean;
+  /** Última execução DESTE fluxo para o contato, se houver. */
+  ultimoAvisoEm: Date | null;
+  agora: Date;
+}): DecisaoDeArmar {
+  if (!p.esperaAEquipe) return { armar: false, motivo: "cliente_nao_espera" };
+  if (p.config.pular_se_pessoa_atende && p.pessoaAtendendo) {
+    return { armar: false, motivo: "pessoa_atendendo" };
+  }
+  if (
+    p.ultimoAvisoEm !== null &&
+    p.agora.getTime() - p.ultimoAvisoEm.getTime() < p.config.intervalo_de_aviso_min * 60_000
+  ) {
+    return { armar: false, motivo: "avisado_ha_pouco" };
+  }
+  return { armar: true };
+}
 
 export function decidirArmar(p: {
   config: TriggerMessageReceivedConfig;
@@ -58,6 +92,7 @@ export async function precondicoesDaConversa(
   admin: SupabaseClient,
   p: {
     organizationId: string;
+    flowId: string;
     contactId: string | null;
     conversationId: string | null;
     messageId: string | null;
@@ -65,7 +100,15 @@ export async function precondicoesDaConversa(
     config: TriggerMessageReceivedConfig;
   },
 ): Promise<DecisaoDeArmar> {
-  if (!precisaOlharAConversa(p.config) || p.contactId === null) return { armar: true };
+  if (!precisaOlharAConversa(p.config) || p.contactId === null) {
+    // Aviso de espera sem contato não tem a quem se referir.
+    return p.config.quando === "cliente_esperando_equipe" && p.contactId === null
+      ? { armar: false, motivo: "cliente_nao_espera" }
+      : { armar: true };
+  }
+  if (p.config.quando === "cliente_esperando_equipe") {
+    return avisoDeEspera(admin, { ...p, contactId: p.contactId });
+  }
 
   try {
     // "Conversa em andamento" é NESTA conversa — a do número em que o cliente
@@ -116,5 +159,70 @@ export async function precondicoesDaConversa(
       error: err instanceof Error ? err.message.slice(0, 200) : String(err),
     });
     return { armar: true };
+  }
+}
+
+/**
+ * A leitura do aviso de espera. Falha FECHADA, ao contrário da triagem: na
+ * dúvida, avisar o dono a cada mensagem de cada cliente é spam no celular dele.
+ */
+async function avisoDeEspera(
+  admin: SupabaseClient,
+  p: {
+    organizationId: string;
+    flowId: string;
+    contactId: string;
+    conversationId: string | null;
+    chegouEm: Date;
+    config: TriggerMessageReceivedConfig;
+  },
+): Promise<DecisaoDeArmar> {
+  try {
+    const [contato, conversa, ultima] = await Promise.all([
+      admin
+        .from("contacts")
+        .select("force_human")
+        .eq("organization_id", p.organizationId)
+        .eq("id", p.contactId)
+        .maybeSingle(),
+      p.conversationId === null
+        ? Promise.resolve({ data: null, error: null })
+        : admin
+            .from("conversations")
+            .select("status, assignee_kind, bot_silenced_until")
+            .eq("organization_id", p.organizationId)
+            .eq("id", p.conversationId)
+            .maybeSingle(),
+      admin
+        .from("flow_executions")
+        .select("started_at")
+        .eq("organization_id", p.organizationId)
+        .eq("flow_id", p.flowId)
+        .eq("contact_id", p.contactId)
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const c = conversa.data as {
+      status?: string;
+      assignee_kind?: string | null;
+      bot_silenced_until?: string | null;
+    } | null;
+    // `infinity` volta do PostgREST como o texto "infinity".
+    const silencioDePassagem = c !== null && c.bot_silenced_until === "infinity";
+    const forceHuman = (contato.data as { force_human?: boolean } | null)?.force_human === true;
+    const ultimoAviso = (ultima.data as { started_at?: string } | null)?.started_at ?? null;
+    return decidirAvisoDeEspera({
+      config: p.config,
+      esperaAEquipe: forceHuman || silencioDePassagem,
+      pessoaAtendendo: c !== null && (c.assignee_kind === "user" || c.status === "claimed"),
+      ultimoAvisoEm: ultimoAviso === null ? null : new Date(ultimoAviso),
+      agora: p.chegouEm,
+    });
+  } catch (err) {
+    logger.warn("flow-engine: espera do cliente não foi lida — sem aviso", {
+      error: err instanceof Error ? err.message.slice(0, 200) : String(err),
+    });
+    return { armar: false, motivo: "cliente_nao_espera" };
   }
 }
