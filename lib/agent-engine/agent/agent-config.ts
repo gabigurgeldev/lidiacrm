@@ -30,6 +30,12 @@ export interface PublishedAgentConfig {
   historyTokenWindow: number;
   handoffKeywords: string[];
   handoffToolEnabled: boolean;
+  /**
+   * Pedido explícito de uma pessoa (migration 0227): `true` = o agente oferece
+   * UMA vez resolver antes de passar; se o cliente insistir, passa. `false` =
+   * passa na hora (o padrão de sempre). Regra em `decidirPedidoDeHumano`.
+   */
+  humanRequestTryFirst: boolean;
   splitMessages: boolean;
   splitMaxChars: number;
   /**
@@ -117,6 +123,7 @@ interface Row {
   history_token_window: number;
   handoff_keywords: string[] | null;
   handoff_tool_enabled: boolean;
+  human_request_try_first: boolean | null;
   split_messages: boolean;
   split_max_chars: number;
   reply_as_audio: boolean;
@@ -150,6 +157,7 @@ const SELECT_AGENT_CONFIG_COLUMNS = `a.id as agent_id,
             v.history_token_window,
             v.handoff_keywords,
             v.handoff_tool_enabled,
+            v.human_request_try_first,
             v.split_messages,
             v.split_max_chars,
             v.reply_as_audio,
@@ -199,6 +207,7 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     historyTokenWindow: r.history_token_window,
     handoffKeywords: (r.handoff_keywords ?? []).map((k) => k.toLowerCase().trim()).filter((k) => k !== ''),
     handoffToolEnabled: r.handoff_tool_enabled,
+    humanRequestTryFirst: r.human_request_try_first ?? false,
     splitMessages: r.split_messages,
     splitMaxChars: r.split_max_chars,
     replyAsAudio: r.reply_as_audio ?? false,

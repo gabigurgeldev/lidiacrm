@@ -41,6 +41,7 @@ const AGENT: PublishedAgentConfig = {
   splitMaxChars: 400,
   replyAsAudio: false,
   replyAsAudioMirror: false,
+  humanRequestTryFirst: false,
   audioVoice: 'pf_dora',
   multimodalInput: false,
   casesEnabled: false,

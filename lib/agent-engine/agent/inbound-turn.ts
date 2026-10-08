@@ -68,7 +68,8 @@ import {
   applyRequestHumanHandoff,
   buildHandoffSummary,
   detectAmbiguousOptOut,
-  detectHumanHandoffRequest,
+  decidirPedidoDeHumano,
+  DICA_DO_PEDIDO_DE_HUMANO,
   isLeadInHandoff,
   performHumanHandoff,
 } from './human-handoff';
@@ -85,7 +86,6 @@ import { DECLARACAO_INSTRUCTION, declaracaoDoTurnoSchema, promessasEmAberto, typ
 import { projetarContexto, projetarRetornoDeTool, turnoProjeta, type ContextoProjetado } from './projecao';
 import { capacidadesEntreguesAoOperador, catalogoEntregueAoOperador } from './entrega-de-capacidade';
 import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memory';
-import { matchesHandoffKeyword } from './agent-config';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
@@ -1433,11 +1433,17 @@ async function executarTurnoDoAgente(
   // e o gate 1 da cadeia (`stopGate`) lê `(is_blocked or force_human)` DIRETO da
   // fonte, sob o lock, a cada tentativa de envio. Avisar depois seria avisar
   // ninguém: a própria trava que a passagem acabou de armar veta a mensagem.
-  const inboundSignal = latestInboundSignal(openingContext.context.messages);
-  if (
-    detectHumanHandoffRequest(inboundSignal) ||
-    (agentConfig !== null && matchesHandoffKeyword(inboundSignal, agentConfig.handoffKeywords))
-  ) {
+  //
+  // Migration 0227: o agente pode ganhar UMA chance antes de passar
+  // (`humanRequestTryFirst`). A decisão — inclusive a de "o cliente insistiu,
+  // passa agora" — é determinística (`decidirPedidoDeHumano`).
+  const pedidoDeHumano = decidirPedidoDeHumano({
+    mensagens: openingContext.context.messages,
+    palavras: agentConfig?.handoffKeywords ?? [],
+    tentarAntes: agentConfig?.humanRequestTryFirst ?? false,
+    ferramentaLigada: agentConfig?.handoffToolEnabled ?? true,
+  });
+  if (pedidoDeHumano === 'escalar_agora') {
     const aviso = await avisarLeadDaEscalacao(pool, avisoDaEscalacao.ids, {
       ...avisoDaEscalacao.base,
       motivo: 'pediu_humano',
@@ -2719,6 +2725,7 @@ async function executarTurnoDoAgente(
   const openingSuffixes = [
     matchedSkillsBlock,
     stageHintBlock,
+    pedidoDeHumano === 'tentar_uma_vez' ? DICA_DO_PEDIDO_DE_HUMANO : '',
     splitHint,
     caseAwaitingLeadBlock,
     sufixoDeIntegracao,

@@ -35,6 +35,7 @@ export interface AgentVersionRow {
   split_max_chars: number;
   reply_as_audio: boolean;
   reply_as_audio_mirror: boolean;
+  human_request_try_first: boolean;
   audio_voice: string;
   followup: { enabled: boolean; flow_pointer_ids: string[] };
   status: "draft" | "published" | "superseded" | "archived";
