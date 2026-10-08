@@ -239,9 +239,22 @@ Evidência: `.superpowers/evidence/ia-360-w3/`.
 | J8.11 | O aviso respeita o motivo | quem pediu para PARAR recebe confirmação da parada, não oferta de atendente | FAIL(BUG-06) → PASS |
 | J8.12 | O aviso respeita a equipe real | conta sem ninguém configurado não recebe promessa de contato | FAIL(BUG-06) → PASS |
 | J8.13 | A passagem por SENTIMENTO abre item na Central | `triggerHandoff` não abria nenhum — cliente sem resposta E time sem sinal | FAIL(BUG-07) → PASS |
+| J8.14 | **A SEGUNDA passagem do mesmo cliente avisa o dono** | escalado → devolvido → escalado de novo: segundo `agent.handoff_requested`, segundo WhatsApp ao dono, cartão novo na Central. Também pela passagem por sentimento | FAIL(BUG-08) → PASS (unit); prova pela tela pendente em produção |
 
 Bugs desta jornada estão detalhados em `HANDOFF-ia-360.md` (BUG-01 a BUG-05) e em
 `HANDOFF-handoff-avisa-o-lead.md` (BUG-06, BUG-07).
+
+### BUG-08 — a passagem repetida do mesmo cliente não avisava o dono (2026-10-07)
+
+Relatado pelo dono da Gestalt Support: "se for o mesmo cliente, não chega o
+alerta". Causa: `performHumanHandoff` só gravava `agent.handoff_requested`
+quando o INSERT do cartão na Central entrava, e o insert deduplica por "já há
+cartão `open` deste contato". Um cartão esquecido aberto calava toda passagem
+seguinte. `triggerHandoff` (sentimento, MCP) nunca gravava o evento e ocupava a
+mesma chave. Conserto: aviso por EPISÓDIO (`lib/escalacao/anuncio-da-passagem.ts`),
+cartão vencido encerrado pela própria passagem, os dois motores emitindo.
+Guardas: `tests/unit/anuncio-da-passagem.test.ts`,
+`tests/unit/handoff-emite-evento-do-fluxo.test.ts`.
 
 ### BUG-06 — a passagem para humano era MUDA (2026-08-26)
 
