@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   decidirArmar,
+  decidirAvisoDeEspera,
   lerConfigDoGatilhoDeMensagem,
   precisaOlharAConversa,
   precondicoesDaConversa,
@@ -55,6 +56,7 @@ describe("precondicoesDaConversa — o recorte é a CONVERSA, não o contato", (
     const { admin, filtrosDeMensagem } = adminFalso();
     const r = await precondicoesDaConversa(admin, {
       organizationId: "org-1",
+      flowId: "flow-1",
       contactId: "ct-1",
       conversationId: "conv-suporte",
       messageId: "msg-1",
@@ -119,5 +121,38 @@ describe("decidirArmar", () => {
     expect(decidirArmar({ config: sempre, ultimaMensagemAntes: new Date(agora.getTime() - 1_000), agora, pessoaAtendendo: true })).toEqual({
       armar: true,
     });
+  });
+});
+
+describe("decidirAvisoDeEspera — cliente passado para a equipe escreveu de novo", () => {
+  const agora = new Date("2026-10-08T12:00:00Z");
+  const cfg = lerConfigDoGatilhoDeMensagem({ quando: "cliente_esperando_equipe", intervalo_de_aviso_min: 30 });
+  const base = { config: cfg, pessoaAtendendo: false, agora };
+
+  it("⭐ cliente em espera escreve → avisa", () => {
+    expect(decidirAvisoDeEspera({ ...base, esperaAEquipe: true, ultimoAvisoEm: null })).toEqual({ armar: true });
+  });
+
+  it("cliente atendido pela IA → não é aviso de espera", () => {
+    expect(decidirAvisoDeEspera({ ...base, esperaAEquipe: false, ultimoAvisoEm: null })).toMatchObject({
+      armar: false,
+      motivo: "cliente_nao_espera",
+    });
+  });
+
+  it("dez mensagens seguidas → um aviso só dentro do intervalo", () => {
+    const ha5min = new Date(agora.getTime() - 5 * 60_000);
+    expect(decidirAvisoDeEspera({ ...base, esperaAEquipe: true, ultimoAvisoEm: ha5min })).toMatchObject({
+      motivo: "avisado_ha_pouco",
+    });
+    const ha31min = new Date(agora.getTime() - 31 * 60_000);
+    expect(decidirAvisoDeEspera({ ...base, esperaAEquipe: true, ultimoAvisoEm: ha31min }).armar).toBe(true);
+  });
+
+  it("com pular_se_pessoa_atende, quem assumiu não é avisado de novo", () => {
+    const c = lerConfigDoGatilhoDeMensagem({ quando: "cliente_esperando_equipe", pular_se_pessoa_atende: true });
+    expect(
+      decidirAvisoDeEspera({ config: c, esperaAEquipe: true, pessoaAtendendo: true, ultimoAvisoEm: null, agora }).armar,
+    ).toBe(false);
   });
 });

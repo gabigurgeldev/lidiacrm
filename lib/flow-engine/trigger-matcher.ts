@@ -182,6 +182,7 @@ export async function armarFluxosParaEvento(
     if (triagem !== null) {
       const decisao = await precondicoesDaConversa(admin, {
         organizationId: fluxo.organization_id,
+        flowId: fluxo.id,
         contactId,
         conversationId: typeof row.payload?.conversation_id === "string" ? row.payload.conversation_id : null,
         messageId: typeof row.payload?.message_id === "string" ? row.payload.message_id : null,
