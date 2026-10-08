@@ -19,6 +19,16 @@
  */
 import type pg from 'pg';
 
+/**
+ * A abertura do turno que um fluxo de triagem CHAMOU. O que a triagem coletou
+ * está no "Resumo acumulado" (o bloco de entrega grava lá) — esta linha só
+ * diz ao modelo que ele tem a vez agora e que as perguntas já foram feitas.
+ */
+export const DICA_DA_ENTREGA_DO_FLUXO =
+  'Este atendimento acabou de ser entregue a você por uma triagem automática; o que o cliente ' +
+  'respondeu nela está no Resumo acumulado. Responda AGORA, cumprimentando pelo nome, sem repetir ' +
+  'perguntas que a triagem já fez, e vá direto ao problema que ele descreveu.';
+
 export async function fluxoNoComando(
   db: pg.Pool,
   tenantId: string,

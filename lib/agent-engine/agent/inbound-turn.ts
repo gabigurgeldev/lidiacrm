@@ -82,7 +82,7 @@ import {
   type StageClassifierKnobs,
 } from './stage-classifier';
 import { loadPlaybook } from './playbook';
-import { fluxoNoComando } from './fluxo-no-comando';
+import { DICA_DA_ENTREGA_DO_FLUXO, fluxoNoComando } from './fluxo-no-comando';
 import { DECLARACAO_INSTRUCTION, declaracaoDoTurnoSchema, promessasEmAberto, type DeclaracaoDoTurno } from './declaracao';
 import { projetarContexto, projetarRetornoDeTool, turnoProjeta, type ContextoProjetado } from './projecao';
 import { capacidadesEntreguesAoOperador, catalogoEntregueAoOperador } from './entrega-de-capacidade';
@@ -338,6 +338,7 @@ const inboundTurnPayloadSchema = z
     channel_session_id: z.string().uuid(),
     inbound_message_id: z.string().uuid(),
     crm_event_id: z.string().uuid(),
+    entregue_por_fluxo: z.string().uuid().optional(),
   })
   .passthrough();
 
@@ -942,6 +943,12 @@ export interface AgentTurnInput {
    * faz sentido quando o cliente acabou de falar. Follow-up e caso não passam.
    */
   inboundMessageId?: string;
+  /**
+   * Execução de fluxo que ENTREGOU esta conversa ao agente (migration 0228 +
+   * `crm.handoff_to_agent` com "começar o atendimento"). Presente = o turno não
+   * é calado pelo "fluxo no comando" e abre sabendo que há uma triagem.
+   */
+  entreguePorFluxo?: string;
   /** monta a abertura APÓS o ritual de leitura (inbound vs. bloco temporal do follow-up). */
   buildOpening: (ritual: {
     previous: LeadCheckpointRow | null;
@@ -1156,7 +1163,7 @@ async function executarTurnoDoAgente(
   // Migration 0228: um fluxo de triagem está conversando com o cliente (gatilho
   // com "silenciar a IA"). Só a resposta a MENSAGEM é calada — follow-up e caso
   // seguem: não são resposta ao que o cliente acabou de dizer ao fluxo.
-  if (job.kind === 'inbound_turn') {
+  if (job.kind === 'inbound_turn' && input.entreguePorFluxo === undefined) {
     // Falha de leitura NÃO cala o agente: sem saber se há fluxo, o cliente sem
     // resposta é pior que uma resposta a mais.
     const fluxo = await fluxoNoComando(pool, tenantId, leadId, input.inboundMessageId ?? null).catch(
@@ -2746,6 +2753,7 @@ async function executarTurnoDoAgente(
   const openingSuffixes = [
     matchedSkillsBlock,
     stageHintBlock,
+    input.entreguePorFluxo !== undefined ? DICA_DA_ENTREGA_DO_FLUXO : '',
     pedidoDeHumano === 'tentar_uma_vez' ? DICA_DO_PEDIDO_DE_HUMANO : '',
     splitHint,
     caseAwaitingLeadBlock,
@@ -3120,6 +3128,7 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       channelSessionId: payload.channel_session_id,
       conversationId: payload.conversation_id,
       inboundMessageId: payload.inbound_message_id,
+      ...(payload.entregue_por_fluxo !== undefined ? { entreguePorFluxo: payload.entregue_por_fluxo } : {}),
       buildOpening: ({ previous, leadState, context, notesIndexBlock, projeta, entregues }) =>
         buildOpeningMessage(previous, leadState, context, notesIndexBlock, projeta, entregues),
     });

@@ -16,7 +16,7 @@ import { desfechoDoEnvio, type MensagemEnviada } from "@/lib/automation/desfecho
 import { acharOuCriarContato } from "@/lib/automation/contato-do-aviso";
 import { conexaoParaOContato, ensureConversation } from "@/lib/automation/start-conversation";
 import { criarDisparo } from "@/lib/bulk-send/criar-disparo";
-import { devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
+import { acrescentarAoResumoDoLead, devolverAtendimentoAoAgente } from "@/lib/escalacao/retomada";
 import { logger } from "@/lib/logger";
 import { selectFixedOrder } from "@/lib/routing/decide";
 import type { RoutingCandidate } from "@/lib/routing/decide";
@@ -677,8 +677,14 @@ export function criarPortas(
         return (count ?? 0) > 0;
       },
 
-      async devolverAoAgente({ contactId }) {
-        return devolverAoAgenteDoFluxo(admin, orgId, { contactId, exec });
+      async devolverAoAgente({ contactId, contexto, iniciarAtendimento, naoTirarDePessoa }) {
+        return devolverAoAgenteDoFluxo(admin, orgId, {
+          contactId,
+          exec,
+          ...(contexto !== undefined ? { contexto } : {}),
+          iniciarAtendimento: iniciarAtendimento === true,
+          naoTirarDePessoa: naoTirarDePessoa === true,
+        });
       },
 
       async textoDaMensagem({ messageId }) {
@@ -890,19 +896,48 @@ async function caminhoMenosUsado(
 async function devolverAoAgenteDoFluxo(
   admin: SupabaseClient,
   orgId: string,
-  input: { contactId: string; exec: FlowExecutionRow },
+  input: {
+    contactId: string;
+    exec: FlowExecutionRow;
+    contexto?: string;
+    iniciarAtendimento?: boolean;
+    naoTirarDePessoa?: boolean;
+  },
 ): Promise<{ ok: true; jaEstavaComOAgente: boolean } | { ok: false; motivo: string }> {
-  const { data } = await admin
+  // A conversa em que o fluxo NASCEU, quando o gatilho a gravou (0228) — e não
+  // a mais recente do contato, que pode ser outra conexão.
+  let conversa = admin
     .from("conversations")
-    .select("id")
+    .select("id, assignee_kind, last_handoff_at, channel_session_id")
     .eq("organization_id", orgId)
-    .eq("contact_id", input.contactId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .eq("contact_id", input.contactId);
+  conversa =
+    input.exec.conversation_id !== null
+      ? conversa.eq("id", input.exec.conversation_id)
+      : conversa.order("created_at", { ascending: false }).limit(1);
+  const { data } = await conversa.maybeSingle();
 
-  const conversationId = (data as { id: string } | null)?.id ?? null;
-  if (conversationId === null) return { ok: false, motivo: "sem_conversa" };
+  const conv = data as {
+    id: string;
+    assignee_kind: string | null;
+    last_handoff_at: string | null;
+    channel_session_id: string | null;
+  } | null;
+  if (conv === null) return { ok: false, motivo: "sem_conversa" };
+  const conversationId = conv.id;
+
+  // Uma passagem para a equipe DURANTE este fluxo (sentimento, pedido) ou uma
+  // pessoa com a conversa: devolver à IA desfaria uma decisão que não é do
+  // fluxo. Só com a opção ligada — fluxo que devolve de propósito ("depois de
+  // 2h sem resposta da equipe, volta pra IA") continua podendo.
+  if (input.naoTirarDePessoa === true) {
+    const passouDuranteOFluxo =
+      conv.last_handoff_at !== null &&
+      new Date(conv.last_handoff_at).getTime() >= new Date(input.exec.started_at).getTime();
+    if (conv.assignee_kind === "user" || passouDuranteOFluxo) {
+      return { ok: false, motivo: "pessoa_no_comando" };
+    }
+  }
 
   const r = await devolverAtendimentoAoAgente(
     {
@@ -917,7 +952,76 @@ async function devolverAoAgenteDoFluxo(
   );
 
   if (!r.ok) return { ok: false, motivo: r.erro };
+
+  // O que o fluxo coletou entra no "Resumo acumulado" — o bloco que o agente
+  // lê na abertura de TODO turno. Não é fatal: a devolução já aconteceu.
+  const contexto = (input.contexto ?? "").trim();
+  if (contexto !== "") {
+    await acrescentarAoResumoDoLead(admin, orgId, input.contactId, `Triagem automática:\n${contexto}`);
+  }
+
+  if (input.iniciarAtendimento === true) {
+    await pedirTurnoDoAgente(admin, orgId, {
+      contactId: input.contactId,
+      conversationId,
+      channelSessionId: conv.channel_session_id,
+      execucaoId: input.exec.id,
+    });
+  }
+
   return { ok: true, jaEstavaComOAgente: r.jaEstavaComOAgente };
+}
+
+/**
+ * Pede o turno do agente AGORA — o mesmo evento que a entrada de mensagem
+ * emite (`lib/channels/pos-entrada.ts`), para passar pelo MESMO portão do drain
+ * (agente publicado, grupo, modo externo, deduplicação). Duas marcas a mais:
+ * `imediato` (sem o debounce) e `entregue_por_fluxo` (o turno não é calado
+ * pelo "fluxo no comando", que foi quem o chamou).
+ *
+ * A mensagem de referência é a última que o cliente mandou — a resposta dele à
+ * última pergunta da triagem. Sem nenhuma, não há o que responder e nada sai.
+ */
+async function pedirTurnoDoAgente(
+  admin: SupabaseClient,
+  orgId: string,
+  p: { contactId: string; conversationId: string; channelSessionId: string | null; execucaoId: string },
+): Promise<void> {
+  if (p.channelSessionId === null) return;
+  const { data } = await admin
+    .from("messages")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("contact_id", p.contactId)
+    .eq("direction", "inbound")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const ultima = (data as { id: string } | null)?.id ?? null;
+  if (ultima === null) return;
+
+  const { error } = await admin.rpc("emit_event" as never, {
+    p_event_type: "ai_agent.dispatch_requested",
+    p_entity_kind: "message",
+    p_entity_id: ultima,
+    p_payload: {
+      organization_id: orgId,
+      conversation_id: p.conversationId,
+      contact_id: p.contactId,
+      channel_session_id: p.channelSessionId,
+      inbound_message_id: ultima,
+      entregue_por_fluxo: p.execucaoId,
+      imediato: true,
+    },
+    p_metadata: { source: "flow.handoff_to_agent", [CAUSADO_POR_FLUXO]: p.execucaoId },
+    p_organization_id: orgId,
+  } as never);
+  if (error) {
+    logger.warn("flow-engine: turno do agente não foi pedido", {
+      execution_id: p.execucaoId,
+      detail: error.message.slice(0, 160),
+    });
+  }
 }
 
 // ─────────────────────────── disparo em massa ────────────────────────────────

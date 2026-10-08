@@ -341,6 +341,19 @@ export interface PortaDoCrm {
    */
   devolverAoAgente(input: {
     contactId: string;
+    /**
+     * O que o fluxo coletou, já interpolado. Vai para o "Resumo acumulado" que
+     * o agente lê em todo turno. Vazio/ausente = nada a acrescentar.
+     */
+    contexto?: string;
+    /** Abre o turno do agente AGORA, em vez de esperar a próxima mensagem. */
+    iniciarAtendimento?: boolean;
+    /**
+     * Não desfaz uma passagem para pessoa feita DURANTE esta execução, nem tira
+     * a conversa de quem a assumiu — devolve `{ ok: false, motivo:
+     * "pessoa_no_comando" }`. Desligado = o comportamento de sempre.
+     */
+    naoTirarDePessoa?: boolean;
   }): Promise<{ ok: true; jaEstavaComOAgente: boolean } | { ok: false; motivo: string }>;
 
   /**
