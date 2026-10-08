@@ -25,7 +25,7 @@ export type DecisaoDeArmar = { armar: true } | { armar: false; motivo: "conversa
 
 export function decidirArmar(p: {
   config: TriggerMessageReceivedConfig;
-  /** Última mensagem com o contato ANTES desta (qualquer sentido), se houver. */
+  /** Última mensagem NESTA conversa antes desta (qualquer sentido), se houver. */
   ultimaMensagemAntes: Date | null;
   /** Quando esta mensagem chegou. */
   agora: Date;
@@ -68,11 +68,21 @@ export async function precondicoesDaConversa(
   if (!precisaOlharAConversa(p.config) || p.contactId === null) return { armar: true };
 
   try {
+    // "Conversa em andamento" é NESTA conversa — a do número em que o cliente
+    // escreveu —, e não em qualquer conversa do contato. Medido em produção
+    // (2026-10-08): o dono testou do celular pessoal, que é o mesmo número que
+    // recebe os avisos de passagem por OUTRA conexão; o aviso de 1 minuto antes
+    // contou como conversa e a triagem nunca começou. Sem a conversa no evento,
+    // o contato é o melhor recorte que há.
     let anterior = admin
       .from("messages")
       .select("created_at")
-      .eq("organization_id", p.organizationId)
-      .eq("contact_id", p.contactId)
+      .eq("organization_id", p.organizationId);
+    anterior =
+      p.conversationId !== null
+        ? anterior.eq("conversation_id", p.conversationId)
+        : anterior.eq("contact_id", p.contactId);
+    anterior = anterior
       .neq("type", "system")
       .lt("created_at", p.chegouEm.toISOString())
       .order("created_at", { ascending: false })

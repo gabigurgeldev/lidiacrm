@@ -5,9 +5,66 @@
  * resposta do cliente ao menu. A regra pura decide; o default de cada campo
  * mantém todo fluxo já publicado igual.
  */
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 
-import { decidirArmar, lerConfigDoGatilhoDeMensagem, precisaOlharAConversa } from "@/lib/flow-engine/gatilho-de-conversa";
+import {
+  decidirArmar,
+  lerConfigDoGatilhoDeMensagem,
+  precisaOlharAConversa,
+  precondicoesDaConversa,
+} from "@/lib/flow-engine/gatilho-de-conversa";
+
+describe("precondicoesDaConversa — o recorte é a CONVERSA, não o contato", () => {
+  /**
+   * O caso de produção (2026-10-08): o celular pessoal do dono é o MESMO
+   * contato que recebe os avisos de passagem por outra conexão. O aviso de
+   * 1 minuto antes estava na outra conversa; contá-lo calou a triagem.
+   */
+  function adminFalso() {
+    const filtrosDeMensagem: Record<string, unknown> = {};
+    const q = (tabela: string) => {
+      const eu: Record<string, unknown> = {};
+      const reg = (col: string, val: unknown) => {
+        if (tabela === "messages") filtrosDeMensagem[col] = val;
+        return eu;
+      };
+      Object.assign(eu, {
+        select: () => eu,
+        eq: reg,
+        neq: () => eu,
+        lt: () => eu,
+        order: () => eu,
+        limit: () => eu,
+        maybeSingle: async () => {
+          if (tabela === "conversations") return { data: { status: "open", assignee_kind: null }, error: null };
+          // Só o recorte por CONTATO enxerga o aviso da outra conexão.
+          const avisoDaOutraConversa = filtrosDeMensagem.contact_id !== undefined;
+          return {
+            data: avisoDaOutraConversa ? { created_at: new Date(Date.now() - 60_000).toISOString() } : null,
+            error: null,
+          };
+        },
+      });
+      return eu;
+    };
+    return { admin: { from: q } as unknown as SupabaseClient, filtrosDeMensagem };
+  }
+
+  it("⭐ mensagem recente em OUTRA conversa do contato não cala a triagem", async () => {
+    const { admin, filtrosDeMensagem } = adminFalso();
+    const r = await precondicoesDaConversa(admin, {
+      organizationId: "org-1",
+      contactId: "ct-1",
+      conversationId: "conv-suporte",
+      messageId: "msg-1",
+      chegouEm: new Date(),
+      config: lerConfigDoGatilhoDeMensagem({ quando: "conversa_nova_ou_retorno" }),
+    });
+    expect(filtrosDeMensagem.conversation_id).toBe("conv-suporte");
+    expect(r).toEqual({ armar: true });
+  });
+});
 
 const agora = new Date("2026-10-07T12:00:00Z");
 const horasAtras = (h: number) => new Date(agora.getTime() - h * 3_600_000);
