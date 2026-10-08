@@ -1,6 +1,6 @@
 "use client";
 import { useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api/client";
 import { useActiveOrg } from "@/hooks/auth/AuthProvider";
@@ -135,4 +135,22 @@ export function useExecucoes(filtro: { status?: string; flowId?: string } = {}) 
   });
 
   return { ...query, realtimeStatus, seguranca };
+}
+
+/**
+ * Para uma execução em andamento (`POST /api/v1/flows/executions/[id]/cancel`).
+ * Invalida o PREFIXO das listas e a trilha — a mesma execução aparece nas duas.
+ */
+export function useCancelarExecucao() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (execucaoId: string) =>
+      apiClient
+        .post<{ data: { id: string; status: string } }>(`/api/v1/flows/executions/${execucaoId}/cancel`, {})
+        .then((r) => r.data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["flow-executions"] });
+      void qc.invalidateQueries({ queryKey: ["flow-execution-trail"] });
+    },
+  });
 }

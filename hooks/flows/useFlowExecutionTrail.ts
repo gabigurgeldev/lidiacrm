@@ -36,6 +36,7 @@ export const NOME_DO_PASSO: Record<string, string> = {
   espera_por_evento: "Aguardando o cliente",
   fluxo_concluido: "Concluído",
   fluxo_morreu: "Parou",
+  execucao_cancelada: "Cancelada por uma pessoa",
   no_falhou: "Falhou",
   frente_concluiu: "Caminho concluído",
 };
