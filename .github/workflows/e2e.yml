@@ -249,6 +249,7 @@ jobs:
         integracoes-via-api.spec.ts
         agenda-tipos-de-agendamento.spec.ts agenda-grade-interativa.spec.ts
         agente-novo-e-uso.spec.ts agente-organiza-operacao.spec.ts
+        agente-editor-salva-o-que-mostra.spec.ts
         central-de-avisos-capacidades.spec.ts escalacao-ciclo.spec.ts
         navegacao.spec.ts olhar-telas-do-epico.spec.ts pipelines-gestao.spec.ts
         qa-agente-usa-as-maos.spec.ts qa-selo-no-funil-usado.spec.ts

@@ -67,6 +67,7 @@ import {
 } from "../_actions";
 
 import { versionCreateSchema, agentMcpCreateSchema } from "@/lib/ai/agents/validation";
+import { mensagemDeErroDoAgente } from "@/lib/ai/agents/mensagem-de-erro";
 import type { SelectableChannel as ChannelSessionLite } from "@/lib/channels/selectable";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
@@ -264,6 +265,31 @@ function buildState(args: {
   };
 }
 
+/**
+ * JSON com as chaves em ordem — para comparar estados do formulário.
+ *
+ * `JSON.stringify` puro depende da ordem de inserção das chaves, e o Postgres
+ * devolve `jsonb` com as chaves REORDENADAS. Um `trigger_config` salvo e relido
+ * vinha com a mesma informação em outra ordem, e o formulário acusava
+ * "alterações não salvas" que não existiam — o que trava o Publicar.
+ */
+function chaveEstavel(valor: unknown): string {
+  return JSON.stringify(valor, (_k, v: unknown) =>
+    v !== null && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
+      : v,
+  );
+}
+
+/** As colunas de `ai_agents` que o editor mostra — salvas fora da versão. */
+function identidadeDoForm(s: FormState) {
+  return {
+    name: s.name.trim(),
+    description: s.description.trim() === "" ? null : s.description.trim(),
+    priority: s.priority,
+  };
+}
+
 function toVersionPayload(s: FormState) {
   return {
     system_prompt: s.system_prompt,
@@ -331,9 +357,35 @@ export function AgentForm(props: Props) {
    */
   const [papel, setPapel] = React.useState<"conversa" | "operacao" | "seguranca">("conversa");
 
-  const dirty = JSON.stringify(form) !== JSON.stringify(baseline);
+  // Duas partes salvas em lugares diferentes: a identidade vai para `ai_agents`,
+  // o resto para o rascunho. Só grava rascunho quem mudou o conteúdo dele.
+  const versaoAlterada = chaveEstavel(toVersionPayload(form)) !== chaveEstavel(toVersionPayload(baseline));
+  const identidadeAlterada =
+    chaveEstavel(identidadeDoForm(form)) !== chaveEstavel(identidadeDoForm(baseline));
+  const dirty = versaoAlterada || identidadeAlterada;
+
+  // Depois de salvar, o formulário passa a ser o que o SERVIDOR devolveu. O
+  // banco não devolve byte a byte o que a tela mandou: o schema completa valores
+  // padrão (um `trigger_config` antigo ganha as chaves que faltavam) e o jsonb
+  // reordena chaves. Sem esta troca, o formulário seguia "com alterações não
+  // salvas" depois de salvar — e o Publicar ficava travado pedindo para salvar.
+  //
+  // A troca só acontece quando o CONTEÚDO do baseline muda (os dados novos
+  // chegaram), nunca no render seguinte ao clique, que ainda tem os antigos.
+  const sincronizarAposSalvar = React.useRef(false);
+  const chaveDoBaseline = chaveEstavel(baseline);
+  React.useEffect(() => {
+    if (sincronizarAposSalvar.current) {
+      sincronizarAposSalvar.current = false;
+      setForm(baseline);
+    }
+    // `baseline` muda de identidade a cada render; o que importa é o conteúdo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveDoBaseline]);
 
   function patch(p: Partial<FormState>) {
+    // Mexeu depois de salvar: o que vale é o que a pessoa está digitando agora.
+    sincronizarAposSalvar.current = false;
     setForm((prev) => ({ ...prev, ...p }));
   }
 
@@ -398,19 +450,32 @@ export function AgentForm(props: Props) {
 
   const isValid = Object.keys(validation).length === 0;
 
+  // "A chave desta instalação" é escolha VÁLIDA quando a instalação tem a chave
+  // daquele provedor: o motor a usa (`edge/llm/credentials.ts`) e o servidor
+  // confere de novo antes de publicar. Antes ela salvava e nunca publicava —
+  // inclusive o agente criado no onboarding, depois da primeira edição.
+  const usaChaveDaInstalacao =
+    form.credential_id === CHAVE_DA_INSTALACAO &&
+    (props.provedoresDaInstalacao ?? []).includes(form.provider);
+
   const publishBlockReason = React.useMemo(() => {
-    if (!isEdit) return t("Salve o agent antes de publicar.");
+    if (!isEdit) return t("Crie o agente antes de publicar.");
     if (!props.draft) return t("Sem rascunho para publicar.");
     if (!isValid) return t("Resolva os erros do formulário.");
     if (dirty) return t("Salve o rascunho antes de publicar.");
-    if (!cred) return t("Escolha a chave de acesso da empresa de inteligência artificial.");
-    if (credSt !== "validated")
-      return `${t("Credencial")} ${form.provider} ${credSt === "invalid" ? t("inválida") : t("ainda não validada")}.`;
+    if (!usaChaveDaInstalacao) {
+      if (!cred) return t("Escolha a chave de acesso da empresa de inteligência artificial.");
+      if (credSt !== "validated")
+        return `${t("Credencial")} ${form.provider} ${credSt === "invalid" ? t("inválida") : t("ainda não validada")}.`;
+    }
     if (!channelSession) return t("Escolha por qual número de WhatsApp ele atende.");
     if (channelSession.status !== "working" && channelSession.status !== "WORKING")
       return `${t("Número WhatsApp não está conectado (status:")} ${channelSession.status}).`;
     return null;
-  }, [isEdit, props, isValid, dirty, cred, credSt, form.provider, channelSession, t]);
+  }, [isEdit, props, isValid, dirty, usaChaveDaInstalacao, cred, credSt, form.provider, channelSession, t]);
+
+  /** O código do servidor vira frase: o que deu errado e onde mexer. */
+  const erroDoServidor = (codigo: string): string => `${t(mensagemDeErroDoAgente(codigo))} (${codigo})`;
 
   // ---------------------------------------------------------------------
   // Handlers
@@ -425,12 +490,20 @@ export function AgentForm(props: Props) {
     setSaving(true);
     try {
       if (isEdit) {
-        const res = await saveAgentDraftAction(props.agent.id, toVersionPayload(form));
+        const res = await saveAgentDraftAction(
+          props.agent.id,
+          versaoAlterada ? toVersionPayload(form) : null,
+          identidadeAlterada ? identidadeDoForm(form) : undefined,
+        );
         if (!res.ok) {
-          toast.error(res.message ?? `${t("Erro")}: ${res.error}`);
+          // A mensagem de escopo já vem escrita para o dono ("Um dos materiais
+          // marcados não existe mais…"); o resto é código, que vira frase.
+          toast.error(res.error === "validation_failed" && res.message ? res.message : erroDoServidor(res.error));
           return;
         }
-        toast.success(`${t("Rascunho")} v${res.data!.version_number} ${t("salvo.")}`);
+        const numero = res.data?.version_number;
+        toast.success(numero != null ? `${t("Rascunho")} v${numero} ${t("salvo.")}` : t("Alterações salvas."));
+        sincronizarAposSalvar.current = true;
         router.refresh();
       } else {
         const payload = {
@@ -446,10 +519,10 @@ export function AgentForm(props: Props) {
         }
         const res = await createMcpAgentAction(validated.data);
         if (!res.ok) {
-          toast.error(res.message ?? `${t("Erro")}: ${res.error}`);
+          toast.error(res.error === "validation_failed" && res.message ? res.message : erroDoServidor(res.error));
           return;
         }
-        toast.success(t("Agent criado."));
+        toast.success(t("Agente criado."));
         router.push(`/app/ai/agents/${res.data!.agent_id}`);
       }
     } finally {
@@ -463,7 +536,7 @@ export function AgentForm(props: Props) {
     try {
       const res = await publishAgentAction(props.agent.id, props.draft.id);
       if (!res.ok) {
-        toast.error(`${t("Falha ao publicar:")} ${res.error}`);
+        toast.error(`${t("Falha ao publicar:")} ${erroDoServidor(res.error)}`);
         return;
       }
       toast.success(`v${props.draft.version_number} ${t("publicada e ativa.")}`);
@@ -571,6 +644,16 @@ export function AgentForm(props: Props) {
           ) : null}
         </div>
       </div>
+      {/*
+        O motivo de o Publicar estar travado ficava só no `title` do botão —
+        invisível no celular, e invisível para quem não passa o mouse. Agora ele
+        aparece escrito, embaixo dos botões, quando há rascunho esperando.
+      */}
+      {isEdit && !readOnly && props.draft && publishBlockReason !== null ? (
+        <p className="-mt-2 text-right text-xs text-muted-foreground" data-testid="motivo-do-publicar">
+          {t("Para publicar:")} {publishBlockReason}
+        </p>
+      ) : null}
 
       {/*
         NAVEGAÇÃO POR PAPEL (spec 16 §6). Um form só, um save só — os papéis são

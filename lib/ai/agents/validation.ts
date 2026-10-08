@@ -200,6 +200,7 @@ export const agentMcpCreateSchema = z
   })
   .strict();
 
+/** Identidade do agente (colunas de `ai_agents`: nome, descrição, ordem) — o que o editor salva junto do rascunho. */
 export const agentMcpPatchSchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),

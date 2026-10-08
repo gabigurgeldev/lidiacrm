@@ -26,11 +26,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 import {
   agentMcpCreateSchema,
+  agentMcpPatchSchema,
   versionCreateSchema,
   versionPatchSchema,
   PUBLISH_ERROR_CODES,
 } from "@/lib/ai/agents/validation";
 import { publishAgentVersion } from "@/lib/ai/agents/publish";
+import { conteudoDaVersao } from "@/lib/ai/agents/conteudo-da-versao";
+import type { VersionInput } from "@/lib/ai/agents/validation";
 import { VALID_TOOL_IDS } from "@/lib/mcp/tools";
 
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -57,24 +60,43 @@ async function ensureAdmin() {
 // saveAgentDraftAction
 // ---------------------------------------------------------------------------
 
+/**
+ * Salva o que mudou no editor: a IDENTIDADE do agente (nome, descrição, ordem
+ * de preferência — colunas de `ai_agents`) e/ou o CONTEÚDO da versão (o
+ * rascunho em `ai_agent_versions`).
+ *
+ * As duas partes são opcionais e independentes. Antes só a versão era gravada:
+ * mudar o nome na tela marcava o formulário como alterado, o toast dizia
+ * "Rascunho salvo", e o nome voltava ao antigo no próximo carregamento — e o
+ * formulário seguia "alterado" para sempre, travando o Publicar com "Salve o
+ * rascunho antes de publicar". Renomear também não cria rascunho: versão nova
+ * só nasce quando o conteúdo dela mudou.
+ */
 export async function saveAgentDraftAction(
   agentId: string,
-  payload: unknown,
-): Promise<ActionResult<{ version_id: string; version_number: number }>> {
+  payload: unknown | null,
+  identidade?: unknown,
+): Promise<ActionResult<{ version_id: string | null; version_number: number | null }>> {
   if (!UUID_RX.test(agentId)) return { ok: false, error: "invalid_request" };
   const guard = await ensureAdmin();
   if (!guard.ok) return guard;
   const { authUser, activeOrg } = guard;
 
-  const parsed = versionCreateSchema.safeParse(payload);
-  if (!parsed.success) {
+  const parsedIdentidade = identidade === undefined || identidade === null
+    ? null
+    : agentMcpPatchSchema.safeParse(identidade);
+  if (parsedIdentidade !== null && !parsedIdentidade.success) {
+    return { ok: false, error: "validation_failed", details: parsedIdentidade.error.flatten() };
+  }
+
+  const parsed = payload === null ? null : versionCreateSchema.safeParse(payload);
+  if (parsed !== null && !parsed.success) {
     return {
       ok: false,
       error: "validation_failed",
       details: parsed.error.flatten(),
     };
   }
-  const v = parsed.data;
   const requestId = randomUUID();
   const admin = createAdminClient();
 
@@ -87,6 +109,32 @@ export async function saveAgentDraftAction(
     .maybeSingle();
   if (!agent) return { ok: false, error: "not_found" };
   if (agent.archived_at) return { ok: false, error: "agent_archived" };
+
+  if (parsedIdentidade !== null && Object.keys(parsedIdentidade.data).length > 0) {
+    const mudancas = parsedIdentidade.data;
+    const { error: idErr } = await admin
+      .from("ai_agents")
+      .update({ ...mudancas, updated_at: new Date().toISOString() })
+      .eq("id", agentId)
+      .eq("organization_id", activeOrg.orgId);
+    if (idErr) return { ok: false, error: "internal_error", message: idErr.message };
+    void audit({
+      action: "ai_agent.updated",
+      actorUserId: authUser.id,
+      organizationId: activeOrg.orgId,
+      resourceType: "ai_agent",
+      resourceId: agentId,
+      requestId,
+      metadata: { fields: Object.keys(mudancas) },
+    });
+    revalidatePath("/app/ai/agents");
+  }
+
+  if (parsed === null) {
+    revalidatePath(`/app/ai/agents/${agentId}`);
+    return { ok: true, data: { version_id: null, version_number: null } };
+  }
+  const v = parsed.data;
 
   // O escopo aponta para coisas que EXISTEM nesta organização. Marcar um
   // material apagado (ou de outra organização) produz uma configuração muda: a
@@ -168,34 +216,7 @@ export async function saveAgentDraftAction(
         organization_id: activeOrg.orgId,
         agent_id: agentId,
         version_number: nextNumber,
-        system_prompt: v.system_prompt,
-        provider: v.provider,
-        model: v.model,
-        credential_id: v.credential_id,
-        tool_ids: v.tool_ids,
-        trigger_config: v.trigger_config ?? undefined,
-        channel_session_id: v.channel_session_id,
-        max_steps: v.max_steps,
-        token_budget: v.token_budget,
-        cost_budget_cents: v.cost_budget_cents,
-        history_message_window: v.history_message_window,
-        history_token_window: v.history_token_window,
-        handoff_keywords: v.handoff_keywords,
-        handoff_tool_enabled: v.handoff_tool_enabled,
-        cases_enabled: v.cases_enabled,
-        operator_enabled: v.operator_enabled,
-        operator_model: v.operator_model,
-        operator_tool_ids: v.operator_tool_ids,
-        pipeline_ids: v.pipeline_ids,
-        knowledge_source_ids: v.knowledge_source_ids,
-        api_endpoint_ids: v.api_endpoint_ids,
-        split_messages: v.split_messages,
-        split_max_chars: v.split_max_chars,
-        reply_as_audio: v.reply_as_audio,
-        reply_as_audio_mirror: v.reply_as_audio_mirror,
-        human_request_try_first: v.human_request_try_first,
-        audio_voice: v.audio_voice,
-        followup: v.followup,
+        ...conteudoDaVersao(v),
         status: "draft",
         created_by: authUser.id,
       })
@@ -359,37 +380,11 @@ export async function revertToVersionAction(
     return { ok: false, error: "tool_id_invalid", details: { invalid } };
   }
 
-  // Cria draft idêntica com retry em 23505 (race no version_number).
-  type SourceRow = {
-    system_prompt: string;
-    provider: string;
-    model: string;
-    credential_id: string;
-    tool_ids: string[];
-    trigger_config: Record<string, unknown> | null;
-    channel_session_id: string;
-    max_steps: number;
-    token_budget: number;
-    cost_budget_cents: number;
-    history_message_window: number;
-    history_token_window: number;
-    handoff_keywords: string[];
-    handoff_tool_enabled: boolean;
-    cases_enabled: boolean;
-    operator_enabled: boolean;
-    operator_model: string | null;
-    operator_tool_ids: string[];
-    pipeline_ids: string[];
-    knowledge_source_ids: string[];
-    api_endpoint_ids: string[] | null;
-    split_messages: boolean;
-    split_max_chars: number;
-    reply_as_audio: boolean;
-    reply_as_audio_mirror: boolean;
-    human_request_try_first: boolean;
-    audio_voice: string;
-  };
-  const src = source as unknown as SourceRow;
+  // Cria draft idêntica com retry em 23505 (race no version_number). A linha
+  // lida do banco tem a forma das colunas, que é a forma do schema da versão —
+  // e é por `conteudoDaVersao` que ela é copiada, para o revert não esquecer
+  // coluna (esquecia `followup`, e reverter desligava os follow-ups).
+  const src = source as unknown as VersionInput;
 
   let createdId: string | null = null;
   let createdNumber: number | null = null;
@@ -410,37 +405,7 @@ export async function revertToVersionAction(
         organization_id: activeOrg.orgId,
         agent_id: agentId,
         version_number: nextNumber,
-        system_prompt: src.system_prompt,
-        provider: src.provider,
-        model: src.model,
-        credential_id: src.credential_id,
-        tool_ids: src.tool_ids,
-        trigger_config: src.trigger_config ?? undefined,
-        channel_session_id: src.channel_session_id,
-        max_steps: src.max_steps,
-        token_budget: src.token_budget,
-        cost_budget_cents: src.cost_budget_cents,
-        history_message_window: src.history_message_window,
-        history_token_window: src.history_token_window,
-        handoff_keywords: src.handoff_keywords,
-        handoff_tool_enabled: src.handoff_tool_enabled,
-        cases_enabled: src.cases_enabled,
-        operator_enabled: src.operator_enabled,
-        operator_model: src.operator_model,
-        operator_tool_ids: src.operator_tool_ids,
-        // O revert leva o escopo junto: voltar para uma versão e NÃO voltar a
-        // permissão dela seria publicar uma configuração que nunca existiu.
-        // Vale igual para o acervo: reverter e o assistente esquecer o material
-        // que aquela versão consultava é publicar uma configuração inventada.
-        pipeline_ids: src.pipeline_ids,
-        knowledge_source_ids: src.knowledge_source_ids ?? [],
-        api_endpoint_ids: src.api_endpoint_ids ?? [],
-        split_messages: src.split_messages,
-        split_max_chars: src.split_max_chars,
-        reply_as_audio: src.reply_as_audio,
-        reply_as_audio_mirror: src.reply_as_audio_mirror,
-        human_request_try_first: src.human_request_try_first,
-        audio_voice: src.audio_voice,
+        ...conteudoDaVersao(src),
         status: "draft",
         created_by: authUser.id,
       })
@@ -569,36 +534,10 @@ export async function createMcpAgentAction(
     organization_id: activeOrg.orgId,
     agent_id: agentRow.id,
     version_number: 1,
-    system_prompt: v.system_prompt,
-    provider: v.provider,
-    model: v.model,
-    credential_id: v.credential_id,
-    tool_ids: v.tool_ids,
-    trigger_config: v.trigger_config ?? undefined,
-    channel_session_id: v.channel_session_id,
-    max_steps: v.max_steps,
-    token_budget: v.token_budget,
-    cost_budget_cents: v.cost_budget_cents,
-    history_message_window: v.history_message_window,
-    history_token_window: v.history_token_window,
-    handoff_keywords: v.handoff_keywords,
-    handoff_tool_enabled: v.handoff_tool_enabled,
-    cases_enabled: v.cases_enabled,
-    split_messages: v.split_messages,
-    split_max_chars: v.split_max_chars,
-    reply_as_audio: v.reply_as_audio,
-    reply_as_audio_mirror: v.reply_as_audio_mirror,
-    human_request_try_first: v.human_request_try_first,
-    audio_voice: v.audio_voice,
-    // O corpo ACEITAVA estes cinco e o INSERT os descartava: criar o assistente
-    // pela tela com papel Operador, escopo de funil ou material marcado produzia
-    // uma versão com tudo no default do banco — desligado e vazio.
-    operator_enabled: v.operator_enabled,
-    operator_model: v.operator_model,
-    operator_tool_ids: v.operator_tool_ids,
-    pipeline_ids: v.pipeline_ids,
-    knowledge_source_ids: v.knowledge_source_ids,
-    api_endpoint_ids: v.api_endpoint_ids,
+    // Tudo o que o corpo aceita vai para a versão — o INSERT à mão descartava
+    // papel Operador, escopo e acervo (consertado uma vez) e seguiu descartando
+    // `followup`. Ver `lib/ai/agents/conteudo-da-versao.ts`.
+    ...conteudoDaVersao(v),
     status: "draft",
     created_by: authUser.id,
   });

@@ -522,7 +522,8 @@ export const DICIONARIO: Traducoes = {
   "Máximo de": { es: "Máximo de" },
   "capacidades por agente.": { es: "capacidades por agente." },
   "Campo inválido.": { es: "Campo inválido." },
-  "Salve o agent antes de publicar.": { es: "Guarda el agente antes de publicar." },
+  "Crie o agente antes de publicar.": { es: "Crea el agente antes de publicar." },
+  "Para publicar:": { es: "Para publicar:" },
   "Sem rascunho para publicar.": { es: "No hay borrador para publicar." },
   "Resolva os erros do formulário.": { es: "Resuelve los errores del formulario." },
   "Salve o rascunho antes de publicar.": { es: "Guarda el borrador antes de publicar." },
@@ -535,7 +536,62 @@ export const DICIONARIO: Traducoes = {
   "Formulário inválido.": { es: "Formulario inválido." },
   "salvo.": { es: "guardado." },
   "Validação falhou.": { es: "La validación falló." },
-  "Agent criado.": { es: "Agente creado." },
+  "Agente criado.": { es: "Agente creado." },
+  "Ele responde às mensagens que os clientes mandam para o número dele. Mensagens seguidas do mesmo cliente viram uma resposta só. Grupos de WhatsApp e mensagens enviadas por você mesmo nunca acionam o agente.": {
+    es: "Responde a los mensajes que los clientes envían a su número. Mensajes seguidos del mismo cliente reciben una sola respuesta. Los grupos de WhatsApp y los mensajes enviados por ti mismo nunca activan al agente.",
+  },
+  // Erros do servidor no editor de agente (lib/ai/agents/mensagem-de-erro.ts).
+  "Escolha a chave de acesso da empresa de inteligência artificial — ou cadastre uma em IA › Credenciais.": {
+    es: "Elige la clave de acceso de la empresa de inteligencia artificial — o registra una en IA › Credenciales.",
+  },
+  "A chave de acesso escolhida não existe mais. Escolha outra em IA › Credenciais.": {
+    es: "La clave de acceso elegida ya no existe. Elige otra en IA › Credenciales.",
+  },
+  "A chave de acesso escolhida está desativada. Ative-a ou escolha outra em IA › Credenciais.": {
+    es: "La clave de acceso elegida está desactivada. Actívala o elige otra en IA › Credenciales.",
+  },
+  "A chave de acesso ainda não foi validada. Abra IA › Credenciais e clique em validar.": {
+    es: "La clave de acceso aún no fue validada. Abre IA › Credenciales y haz clic en validar.",
+  },
+  "A chave de acesso é de outra empresa de inteligência artificial. Escolha uma chave da mesma empresa do modelo.": {
+    es: "La clave de acceso es de otra empresa de inteligencia artificial. Elige una clave de la misma empresa del modelo.",
+  },
+  "O número de WhatsApp escolhido não existe mais. Escolha outro.": {
+    es: "El número de WhatsApp elegido ya no existe. Elige otro.",
+  },
+  "O número de WhatsApp está desconectado. Reconecte-o em Conexões e tente publicar de novo.": {
+    es: "El número de WhatsApp está desconectado. Reconéctalo en Conexiones e intenta publicar de nuevo.",
+  },
+  "O modelo escolhido não está disponível. Escolha outro modelo.": {
+    es: "El modelo elegido no está disponible. Elige otro modelo.",
+  },
+  "Uma das capacidades marcadas não existe mais. Revise a lista de capacidades.": {
+    es: "Una de las capacidades marcadas ya no existe. Revisa la lista de capacidades.",
+  },
+  "Este agente está arquivado e não pode ser alterado.": {
+    es: "Este agente está archivado y no puede modificarse.",
+  },
+  "Este agente não existe mais.": { es: "Este agente ya no existe." },
+  "Esta versão não existe mais. Recarregue a página.": {
+    es: "Esta versión ya no existe. Recarga la página.",
+  },
+  "Esta versão já foi publicada. Recarregue a página para ver a mais recente.": {
+    es: "Esta versión ya fue publicada. Recarga la página para ver la más reciente.",
+  },
+  "Há campos com valores que o servidor recusou. Confira os campos em vermelho.": {
+    es: "Hay campos con valores que el servidor rechazó. Revisa los campos en rojo.",
+  },
+  "Só quem é administrador pode salvar e publicar agentes.": {
+    es: "Solo quien es administrador puede guardar y publicar agentes.",
+  },
+  "Você não tem acesso a esta organização.": { es: "No tienes acceso a esta organización." },
+  "Sua sessão expirou. Entre de novo.": { es: "Tu sesión expiró. Inicia sesión de nuevo." },
+  "O pedido não foi entendido. Recarregue a página e tente de novo.": {
+    es: "La solicitud no se entendió. Recarga la página e intenta de nuevo.",
+  },
+  "Algo deu errado do nosso lado. Tente de novo em instantes.": {
+    es: "Algo salió mal de nuestro lado. Intenta de nuevo en unos instantes.",
+  },
   "Falha ao publicar:": { es: "Error al publicar:" },
   "publicada e ativa.": { es: "publicada y activa." },
   Novo: { es: "Nuevo" },

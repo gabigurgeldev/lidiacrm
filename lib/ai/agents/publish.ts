@@ -6,6 +6,9 @@
  * with a stable error code, and unknown errors to 500.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+import { lerAmbiente, type FonteDeAmbiente } from "@/lib/instalacao/ambiente";
+
 import { PUBLISH_ERROR_CODES, type PublishErrorCode } from "./validation";
 
 export interface PublishOk {
@@ -31,10 +34,54 @@ interface PublishRow {
   published_at: string;
 }
 
+/**
+ * A versão sem credencial escolhida ("a chave desta instalação") tem com o que
+ * conversar? O motor resolve nesta ordem (`lib/agent-engine/edge/llm/credentials.ts`):
+ * a credencial ativa e validada mais recente do provedor na organização, senão
+ * a chave do provedor no `.env` da instalação. Publicar sem nenhuma das duas é
+ * publicar um agente que falha em toda mensagem.
+ *
+ * Mora AQUI, e não na função SQL, porque o banco não enxerga o `.env` do
+ * servidor. A função SQL só deixou de recusar `credential_id` nulo (migration
+ * 0231); quem decide se o nulo tem cobertura é esta checagem, que roda antes
+ * dela em todo caminho que publica (editor, API, revert, proposta aplicada).
+ */
+export async function versaoSemCredencialTemChave(
+  admin: SupabaseClient,
+  orgId: string,
+  provider: string,
+  ambiente: FonteDeAmbiente = process.env,
+): Promise<boolean> {
+  if (lerAmbiente(ambiente).chavesDeProvedor[provider] === true) return true;
+  const { data } = await admin
+    .from("ai_provider_credentials")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("provider", provider)
+    .eq("is_active", true)
+    .not("validated_at", "is", null)
+    .limit(1);
+  return (data ?? []).length > 0;
+}
+
 export async function publishAgentVersion(
   admin: SupabaseClient,
   params: { orgId: string; agentId: string; versionId: string },
 ): Promise<PublishResult> {
+  const { data: versao } = await admin
+    .from("ai_agent_versions")
+    .select("provider, credential_id")
+    .eq("id", params.versionId)
+    .eq("organization_id", params.orgId)
+    .maybeSingle();
+  if (
+    versao &&
+    versao.credential_id === null &&
+    !(await versaoSemCredencialTemChave(admin, params.orgId, versao.provider as string))
+  ) {
+    return { ok: false, code: "credential_missing", message: "credential_missing" };
+  }
+
   const { data, error } = await admin
     .rpc("fn_publish_ai_agent_version", {
       p_org_id: params.orgId,

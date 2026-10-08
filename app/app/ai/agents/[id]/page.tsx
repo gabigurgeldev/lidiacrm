@@ -9,14 +9,9 @@ import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
 
 import { AgentEditorClient } from "./_client";
-import type { MaterialDoAcervo } from "./_components/BasesDoAgente";
-import type { IntegracaoDoAcervo } from "./_components/IntegracoesDoAgente";
 import { isEmailConfigured } from "@/lib/email/resend";
 import { AgentTabs } from "./_components/AgentTabs";
-import type { FunilDaResposta } from "@/hooks/pipelines/usePipelines";
-import { coberturaDoFunil, type EtapaDoMapa } from "@/lib/leads/agent-mapping";
-import type { CoberturaPorFunil } from "./_components/FunisDoAgente";
-import { lerAmbiente } from "@/lib/instalacao/ambiente";
+import { carregarEscopoDoEditor, provedoresDaInstalacao } from "../_lib/dados-do-editor";
 import { servicoDeVozDaOrganizacao } from "@/lib/ai/voz/servico-da-organizacao";
 import { escolherVersoesDaTela } from "@/lib/ai/agents/versoes-da-tela";
 
@@ -30,21 +25,6 @@ const VERSION_COLUMNS =
 
 const CREDENTIAL_COLUMNS =
   "id, organization_id, provider, label, api_key_last4, validated_at, validation_error, models_available, is_active, created_by, created_at, updated_at";
-
-/**
- * Os provedores cuja chave veio na INSTALAÇÃO (`.env`), não da tela de
- * Credenciais.
- *
- * Sai de `lerAmbiente`, a mesma leitura que o retrato da instalação usa — uma
- * segunda lista de nomes de variável divergiria no dia em que um provedor novo
- * entrasse.
- */
-function provedoresDaInstalacao(): string[] {
-  const a = lerAmbiente();
-  return Object.entries(a.chavesDeProvedor)
-    .filter(([, tem]) => tem)
-    .map(([id]) => id);
-}
 
 export default async function AgentEditorPage({
   params,
@@ -83,7 +63,7 @@ export default async function AgentEditorPage({
   }
 
   // mcp_agent: busca versions + lookups.
-  const [versionsRes, credentialsRes, channelSessions, routerMemberRes, funisRes, acervoRes, integracoesRes] =
+  const [versionsRes, credentialsRes, channelSessions, routerMemberRes, escopo] =
     await Promise.all([
     supabase
       .from("ai_agent_versions")
@@ -103,59 +83,12 @@ export default async function AgentEditorPage({
       .eq("agent_id", id)
       .limit(1)
       .maybeSingle(),
-    // Os funis vêm com a página, não por fetch no cliente: a marcação usa
-    // "nenhum funil" para dizer algo importante, e uma lista que chega vazia no
-    // primeiro render diria isso por engano.
-    supabase
-      .from("crm_pipelines")
-      .select("id, name, slug, description, position, is_default")
-      .eq("organization_id", activeOrg.orgId)
-      .eq("is_archived", false)
-      .order("position"),
-    // O acervo vem com a página pelo mesmo motivo dos funis: a seção usa
-    // "nenhum material" para dizer algo importante, e uma lista que chega vazia
-    // no primeiro render diria isso por engano.
-    supabase
-      .from("ai_knowledge_sources")
-      .select("id, name, source_type, chunks_count, last_index_status")
-      .eq("organization_id", activeOrg.orgId)
-      .eq("is_active", true)
-      .order("created_at", { ascending: true }),
-    // Integrações via API (0223) com os endpoints, pelo mesmo motivo do acervo.
-    supabase
-      .from("ai_api_integrations")
-      .select(
-        "id, nome, identidade_modo, identidade_endpoint_id, ultimo_teste_ok, circuito_aberto_ate, endpoints:ai_api_endpoints!ai_api_endpoints_integration_id_fkey(id, slug, titulo, modo, exige_identidade, ativo)",
-      )
-      .eq("organization_id", activeOrg.orgId)
-      .is("arquivada_em", null)
-      .eq("ativo", true)
-      .order("created_at", { ascending: true }),
+    // Funis (com a cobertura de cada um), acervo e integrações: o mesmo
+    // carregador da página de criação — ver `_lib/dados-do-editor.ts`.
+    carregarEscopoDoEditor(supabase, activeOrg.orgId),
   ]);
 
   const versions = (versionsRes.data ?? []) as unknown as AgentVersionRow[];
-  const funis = (funisRes.data ?? []) as unknown as FunilDaResposta[];
-  const materiais = (acervoRes.data ?? []) as unknown as MaterialDoAcervo[];
-  const integracoes = (integracoesRes.data ?? []) as unknown as IntegracaoDoAcervo[];
-
-  // Quanto de cada funil o assistente sabe percorrer (spec 17 passo 4). Vem
-  // junto com a página porque a lacuna precisa aparecer no MESMO lugar em que o
-  // dono marca o funil — descobrir isso entrando funil por funil na tela de
-  // tradução é o que fez 3 dos 4 funis da produção ficarem mudos sem ninguém ver.
-  const { data: etapasRes } = await supabase
-    .from("crm_stages")
-    .select("id, name, is_won, is_lost, agent_stage_hint, pipeline_id")
-    .eq("organization_id", activeOrg.orgId)
-    .eq("is_archived", false);
-  const etapasPorFunil = new Map<string, EtapaDoMapa[]>();
-  for (const e of (etapasRes ?? []) as Array<EtapaDoMapa & { pipeline_id: string }>) {
-    etapasPorFunil.set(e.pipeline_id, [...(etapasPorFunil.get(e.pipeline_id) ?? []), e]);
-  }
-  const cobertura: CoberturaPorFunil = {};
-  for (const f of funis) {
-    const c = coberturaDoFunil(etapasPorFunil.get(f.id) ?? []);
-    cobertura[f.id] = { traduzidos: c.traduzidos, total: c.total, mudo: c.mudo };
-  }
   const credentials = (credentialsRes.data ?? []) as unknown as CredentialRow[];
   const routerMemberRow = routerMemberRes.data as { router_id: string; ai_routers: { name: string } | null } | null;
   const routerMembership = routerMemberRow
@@ -182,10 +115,10 @@ export default async function AgentEditorPage({
         provedoresDaInstalacao={provedoresDaInstalacao()}
         servicoDeVoz={await servicoDeVozDaOrganizacao(supabase, activeOrg.orgId)}
         channelSessions={channelSessions}
-        funis={funis}
-        cobertura={cobertura}
-        materiais={materiais}
-        integracoes={integracoes}
+        funis={escopo.funis}
+        cobertura={escopo.cobertura}
+        materiais={escopo.materiais}
+        integracoes={escopo.integracoes}
         emailConfigurado={isEmailConfigured()}
         routerMembership={routerMembership}
         readOnly={readOnly}

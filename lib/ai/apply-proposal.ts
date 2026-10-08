@@ -9,6 +9,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { publishAgentVersion } from "@/lib/ai/agents/publish";
+import { COLUNAS_DO_CONTEUDO, conteudoDaVersao } from "@/lib/ai/agents/conteudo-da-versao";
+import type { VersionInput } from "@/lib/ai/agents/validation";
 
 /** Bullet entra como seção datável no FIM do prompt — diff auditável, nunca rewrite. */
 export function composeAppliedPrompt(basePrompt: string, bulletContent: string): string {
@@ -30,8 +32,14 @@ export type ApplyProposalErrorCode =
   | "internal_error";
 
 /** Colunas copiadas da versão publicada para a nova (conteúdo imutável — cópia integral). */
-const VERSION_COPY_COLUMNS =
-  "id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled";
+/**
+ * Aplicar uma proposta publica uma versão NOVA que é a publicada com o prompt
+ * reescrito — e só o prompt. A lista anterior copiava 13 colunas à mão e
+ * perdia o resto: a versão "melhorada" ia ao ar sem acervo, sem escopo de funil
+ * (nenhuma escrita no CRM), sem papel Operador, sem casos, sem follow-up, sem
+ * áudio. A lista agora é a de `conteudoDaVersao`, a mesma do revert.
+ */
+const VERSION_COPY_COLUMNS = ["id", "version_number", ...COLUNAS_DO_CONTEUDO].join(", ");
 
 export async function applyProposal(
   admin: SupabaseClient,
@@ -137,20 +145,10 @@ export async function applyProposal(
       organization_id: orgId,
       agent_id: agentId,
       version_number: nextNumber,
-      system_prompt: composeAppliedPrompt(base.system_prompt, proposal.content),
-      provider: base.provider,
-      model: base.model,
-      credential_id: base.credential_id,
-      tool_ids: base.tool_ids,
-      trigger_config: base.trigger_config ?? undefined,
-      channel_session_id: base.channel_session_id,
-      max_steps: base.max_steps,
-      token_budget: base.token_budget,
-      cost_budget_cents: base.cost_budget_cents,
-      history_message_window: base.history_message_window,
-      history_token_window: base.history_token_window,
-      handoff_keywords: base.handoff_keywords,
-      handoff_tool_enabled: base.handoff_tool_enabled,
+      ...conteudoDaVersao({
+        ...(base as unknown as VersionInput),
+        system_prompt: composeAppliedPrompt((base as unknown as VersionInput).system_prompt, proposal.content),
+      }),
       status: "draft",
       created_by: userId,
     })
