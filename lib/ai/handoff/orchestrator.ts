@@ -24,7 +24,60 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 
+import { deveAnunciarPassagem, payloadDoAnuncio } from "@/lib/escalacao/anuncio-da-passagem";
+
 import { avisarLeadDoCrm } from "./aviso-ao-lead";
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+/**
+ * Par supabase-js de `lerEstadoAnteriorDaPassagem` (motor de conversa, `pg`):
+ * o contato estava em passagem (`force_human` ou silêncio `infinity`) e quando
+ * o dono foi avisado dele pela última vez. Falha de leitura degrada para
+ * "não estava, nunca avisado" — avisar a mais é melhor que calar.
+ */
+async function lerEstadoAnteriorDaPassagemCrm(
+  admin: AdminClient,
+  organizationId: string,
+  contactId: string,
+): Promise<{ estavaEmPassagem: boolean; ultimoAnuncioEm: Date | null }> {
+  try {
+    const [contato, silenciadas, anuncio] = await Promise.all([
+      admin
+        .from("contacts")
+        .select("force_human")
+        .eq("organization_id", organizationId)
+        .eq("id", contactId)
+        .maybeSingle(),
+      admin
+        .from("conversations")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
+        .eq("contact_id", contactId)
+        .eq("bot_silenced_until", "infinity"),
+      admin
+        .from("event_log")
+        .select("created_at")
+        .eq("organization_id", organizationId)
+        .eq("event_type", "agent.handoff_requested")
+        .eq("payload->>contact_id", contactId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const forceHuman = (contato.data as { force_human?: boolean } | null)?.force_human === true;
+    const ultimo = (anuncio.data as { created_at?: string } | null)?.created_at ?? null;
+    return {
+      estavaEmPassagem: forceHuman || (silenciadas.count ?? 0) > 0,
+      ultimoAnuncioEm: ultimo === null ? null : new Date(ultimo),
+    };
+  } catch (err) {
+    logger.warn("[handoff-orchestrator] estado anterior da passagem não foi lido", {
+      error: err instanceof Error ? err.message.slice(0, 200) : String(err),
+    });
+    return { estavaEmPassagem: false, ultimoAnuncioEm: null };
+  }
+}
 
 export type HandoffReason =
   | "requested_human"
@@ -97,6 +150,15 @@ export async function triggerHandoff(
     }
 
     const nowIso = new Date().toISOString();
+    const contactIdAntes =
+      (convNow as unknown as { contact_id?: string | null }).contact_id ?? null;
+
+    // O estado ANTES desta passagem decide se o dono é avisado (Step 7). Lido
+    // antes do Step 1, que é justamente o que o muda.
+    const anterior =
+      contactIdAntes === null
+        ? { estavaEmPassagem: false, ultimoAnuncioEm: null }
+        : await lerEstadoAnteriorDaPassagemCrm(admin, input.organizationId, contactIdAntes);
 
     // Step 0 — AVISA O LEAD. Antes de tudo, e este é o passo que faltava.
     //
@@ -108,7 +170,7 @@ export async function triggerHandoff(
     // Precisa do `contact_id` — é a semente da variante do texto. Sem ele
     // (conversa órfã, que a UI não mostra) seguimos sem avisar: o handoff é mais
     // importante que o aviso, e a falta vira linha no item da Central abaixo.
-    const contactId = (convNow as unknown as { contact_id?: string | null }).contact_id ?? null;
+    const contactId = contactIdAntes;
     const aviso =
       contactId === null
         ? { avisado: false, porque: "conversa_sem_contato" }
@@ -250,8 +312,21 @@ export async function triggerHandoff(
     // de propósito: assim os DOIS motores deduplicam um contra o outro, e uma
     // conversa escalada por sentimento e depois por pedido explícito não vira
     // dois avisos para a mesma pessoa.
+    let itemDaCentralNasceu = false;
     if (contactId !== null) {
       try {
+        // Cartão aberto de episódio que já acabou é resíduo: encerra para o
+        // episódio novo ganhar o seu (mesma regra de `performHumanHandoff`).
+        if (!anterior.estavaEmPassagem) {
+          await admin
+            .from("agent_inbox_items")
+            .update({ status: "resolved" })
+            .eq("organization_id", input.organizationId)
+            .eq("kind", "handoff")
+            .eq("ref_kind", "contact")
+            .eq("ref_id", contactId)
+            .eq("status", "open");
+        }
         const { data: aberto } = await admin
           .from("agent_inbox_items")
           .select("id")
@@ -281,6 +356,8 @@ export async function triggerHandoff(
               conversation_id: input.conversationId,
               error: inboxErr.message,
             });
+          } else {
+            itemDaCentralNasceu = true;
           }
         }
       } catch (err) {
@@ -288,6 +365,46 @@ export async function triggerHandoff(
         logger.warn("[handoff-orchestrator] inbox item skipped", {
           conversation_id: input.conversationId,
           error: err instanceof Error ? err.message.slice(0, 200) : String(err),
+        });
+      }
+    }
+
+    // Step 7 — o AVISO AO DONO (`agent.handoff_requested`, o evento que o
+    // gatilho de fluxo `trigger.ai_handoff` escuta para mandar o WhatsApp dele).
+    //
+    // Este motor só gravava `ai.handoff_triggered`, que nenhum fluxo escuta: a
+    // passagem por sentimento ou pelo worker antigo nunca avisava ninguém — e o
+    // item da Central que ela abria ainda calava o aviso da passagem SEGUINTE
+    // pelo outro motor, porque a chave de dedup é a mesma. `ai.handoff_triggered`
+    // continua (follow-up e contadores dependem dele); este é o par para o fluxo.
+    if (
+      contactId !== null &&
+      deveAnunciarPassagem({
+        estavaEmPassagem: anterior.estavaEmPassagem,
+        itemDaCentralNasceu,
+        ultimoAnuncioEm: anterior.ultimoAnuncioEm,
+        agora: new Date(),
+      })
+    ) {
+      const { error: anuncioErr } = await admin.rpc("emit_event" as never, {
+        p_event_type: "agent.handoff_requested",
+        p_entity_kind: input.leadId ? "crm_lead" : "contact",
+        p_entity_id: input.leadId ?? contactId,
+        p_payload: payloadDoAnuncio({
+          contactId,
+          conversationId: input.conversationId,
+          leadId: input.leadId ?? null,
+          reason: input.reason,
+          summary: `Passagem automática (motivo: ${input.reason}).`,
+          leadAvisado: aviso.avisado,
+        }),
+        p_metadata: { source_module: "handoff-orchestrator", source_id: input.conversationId },
+        p_organization_id: input.organizationId,
+      } as never);
+      if (anuncioErr) {
+        logger.warn("[handoff-orchestrator] aviso ao dono não foi gravado", {
+          conversation_id: input.conversationId,
+          error: (anuncioErr as { message?: string }).message ?? String(anuncioErr),
         });
       }
     }

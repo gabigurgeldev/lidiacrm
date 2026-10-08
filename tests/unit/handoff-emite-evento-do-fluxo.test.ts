@@ -6,8 +6,11 @@
  * `trigger.ai_handoff` escuta `agent.handoff_requested`, e este arquivo guarda
  * as duas metades do contrato:
  *
- *  - episódio NOVO (o insert do inbox entrou) → exatamente um evento, com o
- *    contato, a conversa, o motivo e o resumo que a mensagem do aviso usa;
+ *  - episódio NOVO (o contato não estava em passagem) → exatamente um evento,
+ *    com o contato, a conversa, o motivo e o resumo que a mensagem do aviso usa
+ *    — MESMO com um item velho aberto na Central, que era o defeito: o aviso só
+ *    saía quando o insert do item entrava, e um item esquecido calava todas as
+ *    passagens seguintes do mesmo cliente;
  *  - RE-EXECUÇÃO do mesmo episódio (a função é at-least-once) → nenhum evento.
  *    Sem isto, cada retry mandaria o mesmo aviso de novo ao WhatsApp do dono.
  *
@@ -30,11 +33,20 @@ import { buscarNo } from "@/lib/flow-engine/registry";
 
 type Chamada = { sql: string; params: unknown[] };
 
-function poolFalso(inboxEntrou: boolean): { pool: pg.Pool; chamadas: Chamada[] } {
+function poolFalso(
+  inboxEntrou: boolean,
+  antes: { emPassagem?: boolean; ultimoAnuncio?: Date | null } = {},
+): { pool: pg.Pool; chamadas: Chamada[] } {
   const chamadas: Chamada[] = [];
   const pool = {
     query: async (sql: string, params: unknown[] = []) => {
       chamadas.push({ sql, params });
+      if (sql.includes("as em_passagem")) {
+        return {
+          rows: [{ em_passagem: antes.emPassagem ?? false, ultimo_anuncio: antes.ultimoAnuncio ?? null }],
+          rowCount: 1,
+        };
+      }
       if (sql.includes("insert into agent_inbox_items")) {
         return { rows: [], rowCount: inboxEntrou ? 1 : 0 };
       }
@@ -80,8 +92,8 @@ describe("performHumanHandoff → agent.handoff_requested", () => {
     });
   });
 
-  it("re-execução do mesmo episódio (inbox já aberto) NÃO grava outro evento", async () => {
-    const { pool, chamadas } = poolFalso(false);
+  it("re-execução do mesmo episódio (contato já em passagem) NÃO grava outro evento", async () => {
+    const { pool, chamadas } = poolFalso(false, { emPassagem: true });
 
     await performHumanHandoff(pool, ids, {
       reason: "requested_human",
@@ -90,6 +102,39 @@ describe("performHumanHandoff → agent.handoff_requested", () => {
     });
 
     expect(eventosDaPassagem(chamadas), "retry dispararia o aviso ao dono de novo").toHaveLength(0);
+  });
+
+  it("item VELHO aberto na Central não cala a passagem nova do mesmo cliente", async () => {
+    // O defeito de produção: devolvido à IA sem o item ser fechado, o cliente
+    // escalou de novo — o insert do item não entrou, e o dono nunca soube.
+    const { pool, chamadas } = poolFalso(false, { emPassagem: false });
+
+    await performHumanHandoff(pool, ids, { reason: "requested_human", conversationSummary: "x", log });
+
+    expect(eventosDaPassagem(chamadas), "o dono não foi avisado da passagem nova").toHaveLength(1);
+    const encerrouResiduo = chamadas.some(
+      (c) => c.sql.includes("update agent_inbox_items") && c.sql.includes("'resolved'"),
+    );
+    expect(encerrouResiduo, "o cartão do episódio vencido continuou escondendo o novo").toBe(true);
+  });
+
+  it("dentro do cooldown, um segundo motor não duplica o aviso", async () => {
+    const { pool, chamadas } = poolFalso(true, {
+      emPassagem: false,
+      ultimoAnuncio: new Date(Date.now() - 5_000),
+    });
+
+    await performHumanHandoff(pool, ids, { reason: "low_sentiment", conversationSummary: "x", log });
+
+    expect(eventosDaPassagem(chamadas)).toHaveLength(0);
+  });
+
+  it("contato em passagem não tem o cartão aberto encerrado", async () => {
+    const { pool, chamadas } = poolFalso(false, { emPassagem: true });
+
+    await performHumanHandoff(pool, ids, { reason: "requested_human", conversationSummary: "x", log });
+
+    expect(chamadas.some((c) => c.sql.includes("update agent_inbox_items"))).toBe(false);
   });
 
   it("o gatilho de fluxo escuta exatamente o evento que a passagem grava", () => {

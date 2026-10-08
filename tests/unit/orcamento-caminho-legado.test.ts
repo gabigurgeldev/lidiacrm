@@ -96,6 +96,8 @@ interface Operacao {
   table: string;
   tipo: "insert" | "update";
   row: Record<string, unknown>;
+  /** O `kind` de um UPDATE mora no filtro (`.eq("kind", …)`), não na linha. */
+  filtroKind?: unknown;
 }
 
 /**
@@ -160,6 +162,7 @@ function makeAdminStub(
     let consultaDePublicado = false;
     let filtraJanelaDoMes = false;
     let filtraAberto = false;
+    let ultimoUpdate: Operacao | null = null;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const terminais: any = {
@@ -178,7 +181,8 @@ function makeAdminStub(
         };
       },
       update: (row: Record<string, unknown>) => {
-        operacoes.push({ table, tipo: "update", row });
+        ultimoUpdate = { table, tipo: "update", row };
+        operacoes.push(ultimoUpdate);
         return chain;
       },
       then: (resolve: (v: unknown) => unknown) => {
@@ -222,6 +226,7 @@ function makeAdminStub(
               if (prop === "not" && args[0] === "published_version_id") consultaDePublicado = true;
               if (prop === "gte" && args[0] === "created_at") filtraJanelaDoMes = true;
               if (prop === "eq" && args[0] === "status" && args[1] === "open") filtraAberto = true;
+              if (prop === "eq" && args[0] === "kind" && ultimoUpdate) ultimoUpdate.filtroKind = args[1];
               return chain;
             },
     });
@@ -263,14 +268,17 @@ function montar(
  * casos deste arquivo vermelharam sem que nada de orçamento tivesse mudado.
  * Régua que mede o vizinho reprova por motivo alheio.
  *
- * O `kind` só existe no INSERT (o UPDATE do retrato carrega `{status}` e a
- * identidade está no filtro, não na linha), então o corte é: item da Central que
- * NÃO declara um kind de outro assunto.
+ * O `kind` do INSERT está na linha; o do UPDATE está no filtro (`filtroKind`) —
+ * a passagem agora encerra cartão `handoff` vencido com um UPDATE `{status}`, e
+ * sem ler o filtro ele contaria como item de orçamento. O corte é: item da
+ * Central que NÃO declara um kind de outro assunto, na linha ou no filtro.
  */
 const KINDS_DE_OUTROS_ASSUNTOS = new Set(["handoff", "qr_rescan", "job_dead", "event_dead"]);
 const itensDeOrcamento = (operacoes: Operacao[]) =>
   operacoes.filter(
-    (o) => o.table === "agent_inbox_items" && !KINDS_DE_OUTROS_ASSUNTOS.has(String(o.row.kind)),
+    (o) =>
+      o.table === "agent_inbox_items" &&
+      !KINDS_DE_OUTROS_ASSUNTOS.has(String(o.row.kind ?? o.filtroKind)),
   );
 
 beforeEach(() => {
