@@ -19542,6 +19542,29 @@ drop trigger if exists trg_ai_agent_versions_content_immutable on public.ai_agen
 create trigger trg_ai_agent_versions_content_immutable
   before update on public.ai_agent_versions
   for each row execute function fn_ai_agent_version_content_immutable();
+-- ---- fluxo de triagem cala a IA (migration 0228) ----
+--
+-- Antes da VARREDURA anon, como a 0226: duas colunas e dois índices em
+-- flow_executions, sem função nova.
+alter table public.flow_executions
+  add column if not exists silencia_ia boolean not null default false;
+alter table public.flow_executions
+  add column if not exists exclusiva_por_contato boolean not null default false;
+
+comment on column public.flow_executions.silencia_ia is
+  'O agente de IA não responde ao contato enquanto esta execução está viva, nem a mensagem que chegou durante ela. Vem do gatilho (silenciar_ia).';
+comment on column public.flow_executions.exclusiva_por_contato is
+  'No máximo uma execução viva deste fluxo por contato (uniq_flow_executions_viva_por_contato). Vem do gatilho (uma_por_contato).';
+
+create unique index if not exists uniq_flow_executions_viva_por_contato
+  on public.flow_executions (flow_id, contact_id)
+  where exclusiva_por_contato
+    and contact_id is not null
+    and status in ('pending','running','waiting');
+
+create index if not exists idx_flow_executions_silencia_ia
+  on public.flow_executions (organization_id, contact_id, started_at desc)
+  where silencia_ia;
 
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----

@@ -12,6 +12,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { logger } from "@/lib/logger";
 
+import {
+  lerConfigDoGatilhoDeMensagem,
+  precondicoesDaConversa,
+} from "./gatilho-de-conversa";
 import { flowGraphSchema } from "./graph-schema";
 import { garantirNosRegistrados } from "./register-all";
 import { todosOsNos } from "./registry";
@@ -52,7 +56,7 @@ interface LinhaDeFluxo {
 function acharGatilho(
   graph: unknown,
   tipos: ReadonlySet<string>,
-): { id: string; config: Record<string, unknown> } | null {
+): { id: string; type: string; config: Record<string, unknown> } | null {
   const parsed = flowGraphSchema.safeParse(graph);
   if (!parsed.success) return null;
   const gatilho = parsed.data.nodes.find((n) => tipos.has(n.type));
@@ -60,7 +64,7 @@ function acharGatilho(
   // O `config` vem junto porque o filtro de CANAL precisa dele — ver
   // `escutaEsteCanal`. Antes esta função devolvia só o id, e o matcher nunca
   // enxergava a configuração do bloco de início.
-  return { id: gatilho.id, config: (gatilho.config ?? {}) as Record<string, unknown> };
+  return { id: gatilho.id, type: gatilho.type, config: (gatilho.config ?? {}) as Record<string, unknown> };
 }
 
 /**
@@ -171,6 +175,25 @@ export async function armarFluxosParaEvento(
       continue;
     }
 
+    // Triagem (migration 0228): "só no começo da conversa", "não se uma pessoa
+    // atende", "uma por cliente", "IA calada". Só o gatilho de mensagem tem.
+    const triagem =
+      gatilho.type === "trigger.message_received" ? lerConfigDoGatilhoDeMensagem(gatilho.config) : null;
+    if (triagem !== null) {
+      const decisao = await precondicoesDaConversa(admin, {
+        organizationId: fluxo.organization_id,
+        contactId,
+        conversationId: typeof row.payload?.conversation_id === "string" ? row.payload.conversation_id : null,
+        messageId: typeof row.payload?.message_id === "string" ? row.payload.message_id : null,
+        chegouEm: row.created_at ? new Date(row.created_at) : new Date(),
+        config: triagem,
+      });
+      if (!decisao.armar) {
+        pulados += 1;
+        continue;
+      }
+    }
+
     const { error: insErr } = await admin.from("flow_executions").insert({
       organization_id: fluxo.organization_id,
       flow_id: fluxo.id,
@@ -182,7 +205,13 @@ export async function armarFluxosParaEvento(
       next_eval_at: new Date().toISOString(),
       lead_id: leadId,
       contact_id: contactId,
+      // Só no gatilho de mensagem, cujo payload traz o id REAL da conversa (FK).
+      // Payload de webhook é texto de terceiro e não pode virar FK.
+      conversation_id:
+        triagem !== null && typeof row.payload?.conversation_id === "string" ? row.payload.conversation_id : null,
       trigger_event_id: row.id,
+      silencia_ia: triagem?.silenciar_ia ?? false,
+      exclusiva_por_contato: triagem?.uma_por_contato ?? false,
       lineage: { evento: row.event_type, event_id: row.id },
       context: {},
       // ⚠️ O PAYLOAD DO EVENTO, inteiro — é ele que vira `{{event.*}}`.
@@ -201,9 +230,10 @@ export async function armarFluxosParaEvento(
     });
 
     if (insErr !== null) {
-      // 23505 = `uniq_flow_executions_trigger_event`. O drain reentregou o
-      // evento (retry, ou dois workers), e este fluxo JÁ foi armado por ele.
-      // É o desenho funcionando, não um erro.
+      // 23505 = `uniq_flow_executions_trigger_event`: o drain reentregou o
+      // evento (retry, ou dois workers), e este fluxo JÁ foi armado por ele. Ou
+      // `uniq_flow_executions_viva_por_contato` (0228): este cliente já está
+      // numa execução viva deste fluxo. Nos dois, é o desenho funcionando.
       if ((insErr as { code?: string }).code === "23505") {
         pulados += 1;
         continue;

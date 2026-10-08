@@ -82,6 +82,7 @@ import {
   type StageClassifierKnobs,
 } from './stage-classifier';
 import { loadPlaybook } from './playbook';
+import { fluxoNoComando } from './fluxo-no-comando';
 import { DECLARACAO_INSTRUCTION, declaracaoDoTurnoSchema, promessasEmAberto, type DeclaracaoDoTurno } from './declaracao';
 import { projetarContexto, projetarRetornoDeTool, turnoProjeta, type ContextoProjetado } from './projecao';
 import { capacidadesEntreguesAoOperador, catalogoEntregueAoOperador } from './entrega-de-capacidade';
@@ -1150,6 +1151,26 @@ async function executarTurnoDoAgente(
   if (await isLeadInHandoff(pool, tenantId, leadId)) {
     runLog.info('turno pulado — lead em handoff humano (bot silenciado)', { kind: job.kind });
     return;
+  }
+
+  // Migration 0228: um fluxo de triagem está conversando com o cliente (gatilho
+  // com "silenciar a IA"). Só a resposta a MENSAGEM é calada — follow-up e caso
+  // seguem: não são resposta ao que o cliente acabou de dizer ao fluxo.
+  if (job.kind === 'inbound_turn') {
+    // Falha de leitura NÃO cala o agente: sem saber se há fluxo, o cliente sem
+    // resposta é pior que uma resposta a mais.
+    const fluxo = await fluxoNoComando(pool, tenantId, leadId, input.inboundMessageId ?? null).catch(
+      (err: unknown) => {
+        runLog.warn('fluxo no comando não foi lido — seguindo', {
+          error: err instanceof Error ? err.message.slice(0, 200) : 'erro desconhecido',
+        });
+        return null;
+      },
+    );
+    if (fluxo !== null) {
+      runLog.info('turno pulado — fluxo de triagem no comando', { kind: job.kind, flow_execution_id: fluxo.execucaoId });
+      return;
+    }
   }
 
   // JANELA ANTI-BAN (7h–22h por padrão, fuso do tenant): fora dela o turno é
