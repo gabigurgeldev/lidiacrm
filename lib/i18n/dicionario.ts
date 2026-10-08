@@ -593,6 +593,8 @@ export const DICIONARIO: Traducoes = {
   "Tamanho máximo por bolha (80–4000)": { es: "Tamaño máximo por burbuja (80–4000)" },
   "Responder em áudio (nota de voz)": { es: "Responder con audio (nota de voz)" },
   "Só quando o cliente mandar áudio": { es: "Solo cuando el cliente envíe audio" },
+  "Quando o cliente pedir uma pessoa, tentar resolver uma vez antes": { es: "Cuando el cliente pida una persona, intentar resolver una vez antes" },
+  "Ligado: o agente oferece ajuda uma vez; se o cliente insistir, passa na hora. Desligado: passa assim que o cliente pede. Na API oficial da Meta, o pedido de pessoa deve ser atendido sem demora — prefira desligado lá.": { es: "Activado: el agente ofrece ayuda una vez; si el cliente insiste, transfiere enseguida. Desactivado: transfiere en cuanto el cliente lo pide. En la API oficial de Meta, el pedido de una persona debe atenderse sin demora — mejor desactivado allí." },
   "Ligado: quem escreve recebe texto, quem manda áudio recebe áudio. Desligado: toda resposta sai em áudio.": { es: "Activado: quien escribe recibe texto, quien envía audio recibe audio. Desactivado: toda respuesta sale en audio." },
   "Cada resposta do agente sai como áudio, com a voz escolhida abaixo. Mensagens com link ou muito longas continuam em texto. Se o serviço de voz falhar, o cliente recebe a resposta em texto e a Central de avisos mostra o motivo.": {
     es: "Cada respuesta del agente sale como audio, con la voz elegida abajo. Los mensajes con enlace o muy largos siguen en texto. Si el servicio de voz falla, el cliente recibe la respuesta en texto y la Central de avisos muestra el motivo.",

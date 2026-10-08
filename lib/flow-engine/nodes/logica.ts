@@ -37,9 +37,11 @@ export const triggerLeadCreated: FlowNodeDefinition<Record<string, never>> = {
 /**
  * O bloco de início por "a IA passou a conversa para uma pessoa".
  *
- * O evento `agent.handoff_requested` é gravado por `performHumanHandoff`
- * (`lib/agent-engine/agent/human-handoff.ts`) uma vez por EPISÓDIO de passagem —
- * pedido do cliente, ferramenta do agente, teto de gasto ou suspeita de opt-out.
+ * O evento `agent.handoff_requested` é gravado pelos DOIS motores de passagem —
+ * `performHumanHandoff` (`lib/agent-engine/agent/human-handoff.ts`: pedido do
+ * cliente, ferramenta do agente, teto de gasto, suspeita de opt-out) e
+ * `triggerHandoff` (`lib/ai/handoff/orchestrator.ts`: sentimento, MCP) — uma vez
+ * por EPISÓDIO de passagem (regra em `lib/escalacao/anuncio-da-passagem.ts`).
  * O payload traz `reason`, `summary`, `conversation_id` e `lead_avisado`, que o
  * fluxo lê como `{{event.reason}}`, `{{event.summary}}`…; o contato chega pelos
  * fatos (`{{contact.name}}`, `{{contact.phone_number}}`).
