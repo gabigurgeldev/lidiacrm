@@ -2,13 +2,25 @@
 
 import { useState } from "react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import {
   contatoDaExecucao,
   nomeDoContato,
+  useCancelarExecucao,
   useExecucoes,
   type ExecucaoDeFluxo,
 } from "@/hooks/flows/useFlowExecutions";
@@ -131,6 +143,8 @@ function LinhaDaExecucao({
           </Badge>
         </button>
 
+        {VIVAS.has(execucao.status) && <CancelarExecucao execucaoId={execucao.id} nome={nome} />}
+
         {aberta && <Trilha execucaoId={execucao.id} />}
       </Card>
     </li>
@@ -196,5 +210,65 @@ function Trilha({ execucaoId }: { execucaoId: string }) {
         );
       })}
     </ol>
+  );
+}
+
+/** Estados em que a execução ainda anda — e portanto pode ser parada. */
+const VIVAS = new Set(["pending", "running", "waiting", "paused"]);
+
+/**
+ * Parar uma execução em andamento.
+ *
+ * Existe porque uma triagem armada por engano calava o agente de IA naquela
+ * conversa até o cliente responder o menu inteiro, ou o prazo vencer. Com
+ * confirmação: a parada não se desfaz, e o que o fluxo ia fazer depois (a
+ * entrega à IA, por exemplo) não acontece.
+ */
+function CancelarExecucao({ execucaoId, nome }: { execucaoId: string; nome: string | null }) {
+  const t = useT();
+  const [confirmando, setConfirmando] = useState(false);
+  const cancelar = useCancelarExecucao();
+
+  return (
+    <div className="mt-3 flex items-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setConfirmando(true)}
+        disabled={cancelar.isPending}
+        data-testid={`cancelar-execucao-${execucaoId}`}
+      >
+        {t("Cancelar execução")}
+      </Button>
+      {cancelar.isError && (
+        <p className="text-xs text-error-fg">{t("Não deu para cancelar. Tente de novo.")}</p>
+      )}
+      <AlertDialog open={confirmando} onOpenChange={setConfirmando}>
+        <AlertDialogContent data-testid={`confirmar-cancelar-execucao-${execucaoId}`}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("Cancelar a execução")}
+              {nome ? ` — ${nome}` : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t(
+                "O fluxo para onde está e não continua: os blocos seguintes (como entregar a conversa para a IA) não rodam. Se o fluxo calava a IA, ela volta a responder na próxima mensagem do cliente. Não dá para desfazer.",
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("Voltar")}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={cancelar.isPending}
+              data-testid={`confirmar-cancelamento-${execucaoId}`}
+              onClick={() => cancelar.mutate(execucaoId)}
+            >
+              {t("Cancelar execução")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
