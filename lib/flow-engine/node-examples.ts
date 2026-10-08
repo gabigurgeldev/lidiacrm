@@ -124,6 +124,10 @@ export function configExemploDoTipo(tipo: string): Record<string, unknown> {
         modo: "exata",
         prazo_ms: 3_600_000,
       };
+    case "logic.ask":
+      return { pergunta: "Qual é o seu nome?", canal_id: null, variavel: "nome", prazo_ms: 3_600_000 };
+    case "crm.update_contact":
+      return { nome: "{{vars.nome}}" };
     case "routing.random":
       return { quando_ninguem: "tentar_depois", tentar_de_novo_em_ms: 300_000 };
     case "routing.fixed_order":

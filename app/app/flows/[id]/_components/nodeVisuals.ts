@@ -87,6 +87,8 @@ export const ICONE_DO_TIPO: Partial<Record<string, PhosphorIcon>> = {
   "logic.loop": Repeat,
   "logic.await_event": Hourglass,
   "logic.choice_menu": ListChecks,
+  "logic.ask": Question,
+  "crm.update_contact": UserCircle,
   "logic.split": ShareNetwork,
   "flow.call": FlowArrow,
   "crm.add_tag": Tag,

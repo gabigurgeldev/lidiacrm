@@ -32,7 +32,14 @@
 
 import { z } from "zod";
 
-import { ramoPadrao, type FlowBranch, type FlowNodeDefinition, type NodeExecutionResult } from "../types";
+import {
+  ramoDeExcecao,
+  ramoPadrao,
+  type FlowBranch,
+  type FlowExecutionContext,
+  type FlowNodeDefinition,
+  type NodeExecutionResult,
+} from "../types";
 
 /** Onde o acordador deixa o payload do evento. Igual ao do `logic.await_event`. */
 const VAR_DO_EVENTO = "evento";
@@ -170,7 +177,7 @@ export function mensagemCasa(
  * o gatilho de teste local) pode mandar o texto com outro nome, e tirá-las
  * trocaria um bug por outro.
  */
-function textoDoEvento(evento: Record<string, unknown>): string {
+export function textoDoEvento(evento: Record<string, unknown>): string {
   for (const chave of ["body_preview", "body", "text", "message", "conteudo"]) {
     const valor = evento[chave];
     if (typeof valor === "string" && valor.trim() !== "") return valor;
@@ -256,8 +263,76 @@ export const menuConfigSchema = z.strictObject({
     .default([]),
   modo: z.enum(["contem", "exata"]).default("exata"),
   prazo_ms: z.number().int().min(PRAZO_MINIMO_MS).max(PRAZO_MAXIMO_MS).default(3_600_000),
+  /**
+   * A PERGUNTA, mandada pelo próprio menu (vazia = o de antes: quem pergunta é
+   * o bloco de envio anterior). Com `aceitar_numero`, as opções vão numeradas
+   * logo abaixo dela (1️⃣ 2️⃣ 3️⃣…) — o número da mensagem sai das MESMAS
+   * opções que o menu compara, e não pode divergir delas.
+   */
+  pergunta: z.string().max(1000).default(""),
+  /** Por qual conexão a pergunta sai. `null` = a do cliente. */
+  canal_id: z.string().uuid().nullable().default(null),
+  /**
+   * A opção N também aceita "N", "N️⃣" e o próprio rótulo, sem precisar
+   * listá-los em `aceita`.
+   */
+  aceitar_numero: z.boolean().default(false),
+  /**
+   * Onde guardar a escolha: `{{vars.<nome>}}` recebe o rótulo e
+   * `{{vars.<nome>_id}}` o id. Sem isto, dois menus seguidos escreviam no
+   * mesmo `menu_escolha` e o segundo apagava o primeiro.
+   */
+  guardar_em: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,39}$/u, "Use letras minúsculas, números e _ (ex.: sistema).")
+    .nullable()
+    .default(null),
 });
 export type MenuConfig = z.infer<typeof menuConfigSchema>;
+
+/** A saída de quando a pergunta do próprio bloco não saiu. */
+export const RAMO_PERGUNTA_NAO_SAIU = "nao_saiu";
+
+const EMOJI_DO_NUMERO = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+
+/** "1️⃣ Suporte" / "2️⃣ Financeiro", uma por linha — a lista que acompanha a pergunta. */
+export function listaNumerada(rotulos: readonly string[]): string {
+  return rotulos.map((r, i) => `${EMOJI_DO_NUMERO[i] ?? `${i + 1}.`} ${r}`).join("\n");
+}
+
+/**
+ * A resposta escolhe a opção de posição `indice` (base 0) pelo número? Aceita
+ * "2", "2️⃣", "2.", "2)", "opção 2" não — só o número, sozinho.
+ */
+export function respostaEhONumero(texto: string, indice: number): boolean {
+  const limpo = normalizar(texto).replace(/[️⃣.)\s-]/gu, "");
+  if (limpo === "") return false;
+  if (indice === 9 && texto.trim() === "🔟") return true;
+  return limpo === String(indice + 1);
+}
+
+/**
+ * Manda a pergunta do bloco (texto + lista), quando houver. `null` = saiu ou
+ * não havia o que mandar; string = o motivo de não ter saído.
+ */
+export async function mandarPergunta(
+  ctx: FlowExecutionContext,
+  pergunta: string,
+  canalId: string | null,
+  lista: string,
+): Promise<string | null> {
+  const texto = ctx.render(pergunta).trim();
+  if (texto === "" && lista === "") return null;
+  const contato = ctx.fatos.contact;
+  if (contato === null || contato.phone_number === null) return "sem_telefone_do_cliente";
+  const desfecho = await ctx.canal.enviarParaContato({
+    contactId: contato.id,
+    tipo: "texto",
+    texto: lista === "" ? texto : `${texto}\n\n${lista}`,
+    channelSessionId: canalId,
+  });
+  return desfecho.kind === "recusado" ? desfecho.motivo : null;
+}
 
 export const RAMO_NAO_RESPONDEU = "nao_respondeu";
 /** Respondeu, mas nada bateu. É o `else`: o pega-tudo do bloco. */
@@ -277,6 +352,9 @@ export const logicChoiceMenu: FlowNodeDefinition<MenuConfig> = {
     // fora do menu pede repetir a pergunta de outro jeito. É a mesma separação
     // que `logic.await_event` faz entre chegar e vencer o prazo.
     { id: RAMO_NAO_RESPONDEU, label: "Não respondeu a tempo", kind: "match" },
+    ...((config?.pergunta ?? "").trim() !== ""
+      ? [ramoDeExcecao(RAMO_PERGUNTA_NAO_SAIU, "A pergunta não saiu")]
+      : []),
     ramoPadrao("Não entendi a resposta"),
   ],
   execute: async (ctx, config): Promise<NodeExecutionResult> => {
@@ -288,25 +366,48 @@ export const logicChoiceMenu: FlowNodeDefinition<MenuConfig> = {
       }
 
       const texto = textoDoEvento(evento as Record<string, unknown>);
-      const escolhida = config.opcoes.find((o) => mensagemCasa(texto, o.aceita, config.modo));
+      const escolhida = config.opcoes.find(
+        (o, i) =>
+          mensagemCasa(texto, o.aceita, config.modo) ||
+          (config.aceitar_numero &&
+            (respostaEhONumero(texto, i) || normalizar(texto) === normalizar(o.label))),
+      );
 
       if (escolhida === undefined) {
         return {
           kind: "advance",
           branch_id: RAMO_NAO_ENTENDI,
-          vars: { menu_resposta: texto },
+          vars: {
+            menu_resposta: texto,
+            ...(config.guardar_em === null ? {} : { [`${config.guardar_em}_resposta`]: texto }),
+          },
         };
       }
       return {
         kind: "advance",
         branch_id: escolhida.id,
-        vars: { menu_escolha: escolhida.id, menu_resposta: texto },
+        vars: {
+          menu_escolha: escolhida.id,
+          menu_resposta: texto,
+          ...(config.guardar_em === null
+            ? {}
+            : { [config.guardar_em]: escolhida.label, [`${config.guardar_em}_id`]: escolhida.id }),
+        },
       };
     }
 
-    // ⚠️ Este bloco NÃO manda a pergunta. Quem manda é o bloco de envio antes
-    // dele — separar os dois é o que permite a pergunta ser texto, imagem ou
-    // modelo aprovado sem este bloco saber nada de canal.
+    // Com `pergunta`, o menu manda a própria pergunta antes de esperar.
+    if (config.pergunta.trim() !== "") {
+      const lista = config.aceitar_numero ? listaNumerada(config.opcoes.map((o) => o.label)) : "";
+      const naoSaiu = await mandarPergunta(ctx, config.pergunta, config.canal_id, lista);
+      if (naoSaiu !== null) {
+        return { kind: "advance", branch_id: RAMO_PERGUNTA_NAO_SAIU, vars: { envio_recusado: naoSaiu } };
+      }
+    }
+
+    // Sem `pergunta`, este bloco NÃO manda nada: quem pergunta é o bloco de
+    // envio antes dele — o que permite a pergunta ser imagem ou modelo
+    // aprovado. Com `pergunta`, mandou acima, em texto.
     return {
       kind: "await_event",
       event_type: "message.received",

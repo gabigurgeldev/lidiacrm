@@ -39,6 +39,7 @@ import {
   logicMerge,
 } from "./nodes/paralelo";
 import { triggerManual } from "./nodes/gatilho-manual";
+import { crmUpdateContact, logicAsk } from "./nodes/perguntar";
 
 let registrado = false;
 
@@ -61,6 +62,7 @@ export function garantirNosRegistrados(): void {
   registrarNo(logicSplit);
   registrarNo(logicHorarioDeFuncionamento);
   registrarNo(logicChoiceMenu);
+  registrarNo(logicAsk);
   registrarNo(flowCall);
   registrarNo(crmAddTag);
   registrarNo(crmRemoveTag);
@@ -71,6 +73,7 @@ export function garantirNosRegistrados(): void {
   registrarNo(routingRandom);
   registrarNo(routingFixedOrder);
   registrarNo(crmHandoffToAgent);
+  registrarNo(crmUpdateContact);
   registrarNo(whatsappNotifyUser);
   registrarNo(whatsappEnviarAoCliente);
   registrarNo(whatsappDisparoEmMassa);
