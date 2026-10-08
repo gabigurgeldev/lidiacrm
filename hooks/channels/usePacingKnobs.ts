@@ -17,6 +17,8 @@ export interface PacingSessionLite {
 export interface PacingWarmupView {
   number_activated_at: string | null;
   age_days: number;
+  /** De onde a idade saiu: data declarada pelo dono ou criação da conexão. */
+  age_from: "declarada" | "conexao" | null;
   skipped: boolean;
   /** Teto de HOJE pelo aquecimento; null = sem teto (número formado ou aquecimento pulado). */
   cap_today: number | null;

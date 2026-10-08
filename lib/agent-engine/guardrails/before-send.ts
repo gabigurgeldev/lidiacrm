@@ -938,7 +938,7 @@ export async function loadChannelProvider(
  * pararia de enviar. Falhar para o lado do "não sei" custa o fallback
  * conservador; falhar para o lado do erro custa o atendimento.
  */
-async function loadChannelIdentity(
+export async function loadChannelIdentity(
   db: Queryable,
   organizationId: string,
   channelSessionId: string,

@@ -1691,6 +1691,17 @@ tempo todo. É a jornada `J3`/`J8` vista de perto, e o padrão é sempre o mesmo
 | 5 | `followup/node-handlers.ts` | Enrollment morria com `action_turn_never_completed` em ~25 min esperando a janela abrir | enrollment `dead` no nó de abertura com o worker vivo | backoff + orçamento de ~11h |
 | 6 | `ai/log-invocation.ts` + card do agente | Duas telas mentindo: `erro_legado` no lugar de `limite_ou_saldo` (chave sem saldo), e o card anunciando o modelo da **criação** (`claude-sonnet-5`) enquanto o motor rodava o da **versão publicada** (`nvidia/nemotron-…:free`) | `/app/ai/runs` + `GET /versions` | `normalizarErro` no caminho legado; card lê a versão publicada |
 
+**Sétima causa — achada por leitura de código em 2026-10-08, NÃO medida numa
+VPS.** Mesmo padrão da causa 3, no teto de aquecimento em vez da janela: a idade
+do número vinha só de `channel_knobs.number_activated_at`, e sem linha ali (todo
+número em que ninguém salvou Conexões › Proteção de envio) a idade era 0 para
+sempre — teto de 20 envios/dia. Batido o teto, o veto do `pacingGate` virava
+erro de ensino e o turno terminava `ok` sem envio. Correção: idade conta da
+criação da conexão (`ativacaoEfetiva`), turno com teto atingido é adiado para a
+próxima abertura e abre `teto_do_numero` na Central. Prova contra Postgres real:
+`tests/invariants/teto-do-numero-adia-e-avisa.test.ts`. O que falta medir: uma
+VPS real com um número sem knobs passando da 20ª mensagem no dia.
+
 **Lição para o mapa:** nenhum desses casos falha com tela vermelha. Todos falham
 com **status verde e mensagem ausente**. Um caso de jornada que só verifica "a
 tela não deu erro" passa em todos os seis — a prova precisa ser sempre *a

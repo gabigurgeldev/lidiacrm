@@ -39,7 +39,7 @@ export async function GET(): Promise<Response> {
   const [{ data: sessions, error: sErr }, { data: knobs, error: kErr }] = await Promise.all([
     admin
       .from("channel_sessions")
-      .select("id, waha_session_name, display_name, phone_number, status, daily_message_limit")
+      .select("id, waha_session_name, display_name, phone_number, status, daily_message_limit, created_at")
       .eq("organization_id", org.orgId)
       // Canal arquivado foi excluído pelo usuário: não volta como opção aqui.
       .is("archived_at", null)
@@ -58,7 +58,7 @@ export async function GET(): Promise<Response> {
   );
   const items = (sessions ?? []).map((s) => ({
     channel_session: s,
-    ...knobsView(byuSession.get(s.id) ?? null),
+    ...knobsView(byuSession.get(s.id) ?? null, new Date(), s.created_at as string | null),
   }));
   return ok({ items }, { requestId });
 }
@@ -90,7 +90,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
   const admin = createAdminClient();
   const { data: session } = await admin
     .from("channel_sessions")
-    .select("id")
+    .select("id, created_at")
     .eq("id", channel_session_id)
     .eq("organization_id", org.orgId)
     // O MESMO filtro do GET, e não por simetria: sem ele a tela sumia com a
@@ -136,10 +136,19 @@ export async function PUT(req: NextRequest): Promise<Response> {
   }
 
   if (Object.keys(knobFields).length > 0) {
+    // Linha NOVA sem data informada nasce com a criação da conexão, não com o
+    // default `now()` da coluna: salvar a janela de um número de meses o
+    // rebaixava a recém-nascido (teto de aquecimento de 20 envios/dia). Linha que
+    // já existe mantém a data que tinha — o upsert não toca coluna omitida.
+    const nasceComAConexao =
+      currentRow === null && knobFields.number_activated_at === undefined && session.created_at
+        ? { number_activated_at: session.created_at as string }
+        : {};
     const { error: upErr } = await admin.from("channel_knobs").upsert(
       {
         organization_id: org.orgId,
         channel_session_id,
+        ...nasceComAConexao,
         ...knobFields,
       },
       { onConflict: "organization_id,channel_session_id" },
@@ -183,7 +192,14 @@ export async function PUT(req: NextRequest): Promise<Response> {
     .eq("channel_session_id", channel_session_id)
     .maybeSingle();
   return ok(
-    { channel_session_id, ...knobsView((savedRow as unknown as ChannelKnobsRow) ?? null) },
+    {
+      channel_session_id,
+      ...knobsView(
+        (savedRow as unknown as ChannelKnobsRow) ?? null,
+        new Date(),
+        (session.created_at as string | null) ?? null,
+      ),
+    },
     { requestId },
   );
 }
