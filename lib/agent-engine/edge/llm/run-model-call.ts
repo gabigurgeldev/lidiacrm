@@ -15,7 +15,7 @@
  * cacheWriteTokens}. Validado no ai@7 via scripts/smoke-llm.sh (modelo real) —
  * upgrade de major re-valida esses paths pelo mesmo gate (regra dura 16).
  */
-import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai';
+import { generateText, stepCountIs, type ModelMessage, type ToolChoice, type ToolSet } from 'ai';
 import type pg from 'pg';
 import { z } from 'zod';
 
@@ -172,6 +172,13 @@ export interface RunModelCallInput {
    * agente), nunca constante.
    */
   maxSteps?: number;
+  /**
+   * Obriga (ou proíbe) o modelo a chamar ferramenta. Ausente = o default do SDK
+   * ('auto'). Quem usa: o passo de resgate do turno mudo (inbound-turn.ts), que
+   * precisa que o modelo responda por `send_message` ou passe a conversa — e
+   * não que escreva texto solto, que o runtime descarta.
+   */
+  toolChoice?: ToolChoice<ToolSet>;
   /**
    * Override de provider/credencial vindo da versão PUBLICADA do agente (Fase
    * 2B) — resolvido no seam, nunca no call site. Sem ele, config da org.
@@ -472,6 +479,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       messages: input.messages,
       tools: prefix.tools,
       stopWhen: input.maxSteps === undefined ? undefined : stepCountIs(input.maxSteps),
+      ...(input.toolChoice !== undefined ? { toolChoice: input.toolChoice } : {}),
       temperature,
       topP,
       topK,

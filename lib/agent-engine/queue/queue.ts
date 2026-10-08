@@ -270,9 +270,27 @@ export async function completeJob<T = void>(
 }
 
 /**
+ * Espera antes da nova tentativa de um job que falhou: 5 s, 10 s, 20 s, 40 s…
+ * até 5 min, mais até 2 s de folga aleatória.
+ *
+ * Antes a nova tentativa ficava claimável NO MESMO INSTANTE. Um provedor de IA
+ * respondendo 429 (limite de taxa) recebia as cinco tentativas em sequência —
+ * e queimava as cinco contra o mesmo limite, matando o job em segundos, quando
+ * esperar um pouco era o que resolvia. A folga aleatória impede que vários jobs
+ * que falharam juntos (o provedor caiu para todos) voltem todos no mesmo tique.
+ *
+ * Não reordena a conversa: um `inbound_turn` pendente e adiado é exatamente o
+ * que o drain usa para COALESCER a mensagem seguinte do mesmo cliente
+ * (edge/crm/drain.ts), então a mensagem nova pega carona na nova tentativa em
+ * vez de abrir um job que passaria à frente dela.
+ */
+export const BACKOFF_DA_FALHA = { baseMs: 5_000, maxMs: 300_000, folgaMs: 2_000 } as const;
+
+/**
  * Devolve o job à fila após falha (attempts já foi incrementado no claim). Excedeu
  * `max_attempts` → 'dead' + escalação humana em agent_inbox_items (kind='job_dead'), no
- * MESMO statement (atômico). Devolve null se o lease já não era deste worker.
+ * MESMO statement (atômico). Senão volta a 'pending' com `run_after` adiado pelo
+ * `BACKOFF_DA_FALHA`. Devolve null se o lease já não era deste worker.
  */
 export async function failJob(
   db: Queryable,
@@ -286,6 +304,13 @@ export async function failJob(
     `with updated as (
        update job_queue
        set status = case when attempts >= max_attempts then 'dead' else 'pending' end,
+           run_after = case
+             when attempts >= max_attempts then run_after
+             else now() + (
+               least($5::bigint * power(2, greatest(attempts - 1, 0)), $6::bigint)
+               + floor(random() * $7::bigint)
+             ) * interval '1 millisecond'
+           end,
            locked_by = null, locked_at = null, last_error = $3
        where id = $1 and status = 'running' and locked_by = $2
          and ($4::int is null or attempts = $4)
@@ -307,7 +332,15 @@ export async function failJob(
        where status = 'dead'
      )
      select * from updated`,
-    [jobId, workerId, normalizeError(error), tentativa ?? null],
+    [
+      jobId,
+      workerId,
+      normalizeError(error),
+      tentativa ?? null,
+      BACKOFF_DA_FALHA.baseMs,
+      BACKOFF_DA_FALHA.maxMs,
+      BACKOFF_DA_FALHA.folgaMs,
+    ],
   );
   return rows[0] ?? null;
 }

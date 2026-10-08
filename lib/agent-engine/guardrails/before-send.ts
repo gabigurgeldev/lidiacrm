@@ -713,6 +713,14 @@ const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTim
  */
 export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSendResult> {
   const gates = args.gates ?? BEFORE_SEND_GATES;
+  // Camada semântica (F4-02): a chamada de modelo roda ANTES da trava do número,
+  // e o veredito entra no ctx para o `semanticPromiseGate` (sync) ler. Ausente =
+  // camada off. Rodava sob o `pg_advisory_xact_lock` — e uma chamada de modelo
+  // de segundos segurando a vez do NÚMERO enfileirava todas as conversas dele
+  // atrás dela; acima de 20 s (`lock_timeout`) a espera estourava e o turno
+  // inteiro, modelo incluso, era refeito. O veredito depende só do corpo, não
+  // de estado lido sob a trava, então nada se perde em calculá-lo antes.
+  const semanticPromise = args.classifyPromiseSemantic ? await args.classifyPromiseSemantic(args.body) : null;
   const client = await args.pool.connect();
   try {
     await client.query('begin');
@@ -741,9 +749,6 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
     const window = await loadRecentCopies(client, args.tenantId, args.channelSessionId, spinningKnobs.windowSize);
     // org de fonte confiável (RunBeforeSendArgs.tenantId = organization_id do row do job) — regra dura nº 1.
     const promise = await loadPromiseTable(client, args.tenantId);
-    // Camada semântica (F4-02): a chamada de modelo (async) roda AQUI, sob o lock, e o
-    // veredito entra no ctx para o `semanticPromiseGate` (sync) ler. Ausente = camada off.
-    const semanticPromise = args.classifyPromiseSemantic ? await args.classifyPromiseSemantic(args.body) : null;
     // Disclosure (F4-05): template por ponteiro da org + detecção de 1º outbound via
     // send_ledger (só conta se há template — sem template o gate é no-op de qualquer forma).
     const disclosure = await loadDisclosureTemplate(client, args.tenantId);

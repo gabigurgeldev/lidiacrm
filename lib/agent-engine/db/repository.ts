@@ -81,6 +81,9 @@ export type InboxKind =
   // ou teto diário) e o agente ADIOU a resposta para a próxima abertura. Sem
   // isto o turno terminava "ok" com zero envios e o cliente ficava sem nada.
   | 'teto_do_numero'
+  // (migration 0230) O agente terminou um turno de resposta sem enviar nada ao
+  // cliente — nem depois de ser cobrado, ou com todas as tentativas barradas.
+  | 'turno_sem_resposta'
   | 'other';
 
 export interface InboxItemRow {
