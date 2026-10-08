@@ -39,11 +39,17 @@ const VERSAO_DESATIVADA = "f3f3f3f3-0000-4000-8000-000000000006";
 const CREDENCIAL_DESATIVADA = "f3f3f3f3-0000-4000-8000-000000000007";
 const MODELO = "claude-teste-0231";
 
-async function agenteComVersao(agente: string, versao: string, credencial: string | null): Promise<void> {
+async function agenteComVersao(
+  agente: string,
+  versao: string,
+  credencial: string | null,
+  // `ai_agents_name_unique`: o nome é único por organização.
+  nome: string,
+): Promise<void> {
   await pool.query(
     `insert into ai_agents (id, organization_id, name, system_prompt, kind)
-     values ($1, $2, 'Agente 0231', 'você é um atendente', 'mcp_agent') on conflict (id) do nothing`,
-    [agente, ORG],
+     values ($1, $2, $3, 'você é um atendente', 'mcp_agent') on conflict (id) do nothing`,
+    [agente, ORG, nome],
   );
   await pool.query(
     `insert into ai_agent_versions (id, organization_id, agent_id, version_number, system_prompt,
@@ -87,8 +93,8 @@ beforeAll(async () => {
      on conflict (id) do nothing`,
     [CREDENCIAL_DESATIVADA, ORG],
   );
-  await agenteComVersao(AGENTE_NULO, VERSAO_NULA, null);
-  await agenteComVersao(AGENTE_DESATIVADA, VERSAO_DESATIVADA, CREDENCIAL_DESATIVADA);
+  await agenteComVersao(AGENTE_NULO, VERSAO_NULA, null, "Agente 0231 sem credencial");
+  await agenteComVersao(AGENTE_DESATIVADA, VERSAO_DESATIVADA, CREDENCIAL_DESATIVADA, "Agente 0231 desativada");
 });
 
 afterAll(async () => {
