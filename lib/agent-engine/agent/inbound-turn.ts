@@ -2888,8 +2888,21 @@ async function executarTurnoDoAgente(
     runLog.warn('checkpoint do turno não foi gravado — a resposta já saiu, o job segue', normalizarErro(err));
   }
 
+  // O JSON do checkpoint também é melhor-esforço, pelo MESMO motivo do bloco
+  // acima. Medido em produção (2026-10-08, gemini-2.5-flash-lite): o modelo
+  // devolveu JSON inválido, o throw reabriu o job JÁ RESPONDIDO, e a fila o
+  // re-rodou até 5 vezes, de 10 em 10 minutos — cada re-run pode mandar a
+  // resposta de novo, e a fila serial do contato segurou a mensagem seguinte.
+  let content: CheckpointContent | null = null;
   if (closing !== null) {
-    const content = parseCheckpointText(closing.result.text);
+    try {
+      content = parseCheckpointText(closing.result.text);
+    } catch (err) {
+      runLog.warn('checkpoint do turno veio malformado — a resposta já saiu, o job segue', normalizarErro(err));
+    }
+  }
+
+  if (content !== null) {
 
     // Wave 3 (2.4): o checkpoint anterior é lido ANTES de gravar o novo — a
     // timeline recebe o DIFF, nunca o snapshot. Emitir a cada turno encheria a
