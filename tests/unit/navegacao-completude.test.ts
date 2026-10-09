@@ -34,6 +34,8 @@ const NAV_ALLOWLIST: Record<string, string> = {
   "/app": "redirect para /app/inbox — não é tela, é o ponto de entrada",
   "/app/ai/agents/new":
     "sub-fluxo de criar agente, alcançado pelo botão dentro da lista de Agentes",
+  "/app/ai/agents/criar-com-ia":
+    "sub-fluxo de criar agente com IA, alcançado pelo botão \"Criar com IA\" dentro da lista de Agentes",
   "/app/team/invite": "sub-fluxo de convite, alcançado de dentro de Equipe",
   "/app/settings/tenant/whatsapp": "redirect legado para /app/connections; mantido por links salvos",
   "/app/settings/canal-oficial":

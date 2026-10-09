@@ -229,6 +229,11 @@ export const callConfigSchema = z.strictObject({
 
 export type CallConfig = z.infer<typeof callConfigSchema>;
 
+/** Onde o resultado da filha fica para os blocos seguintes: `{{vars.subfluxo.*}}`. */
+export const VAR_DO_SUBFLUXO = "subfluxo";
+/** Desfecho quando a filha não terminou dentro do prazo do motor. */
+export const DESFECHO_SUBFLUXO_NO_PRAZO = "prazo_esgotado";
+
 export const flowCall: FlowNodeDefinition<CallConfig> = {
   type: "flow.call",
   version: 1,
@@ -238,6 +243,33 @@ export const flowCall: FlowNodeDefinition<CallConfig> = {
   configSchema: callConfigSchema,
   branches: () => [ramoPadrao("Quando terminar")],
   execute: async (ctx, config): Promise<NodeExecutionResult> => {
+    // A VOLTA. O motor registra `subfluxo_chamado` com o prazo, e é isso que
+    // preenche `esperaEmCurso` quando o pai acorda. Antes, a volta era tratada
+    // como primeira visita e cada despertar disparava OUTRA filha.
+    //
+    // O resultado vai para `vars.subfluxo` — desfecho e saída da filha, ou
+    // `prazo_esgotado` quando ela não terminou a tempo. Um único ramo de saída
+    // de propósito: quem precisa separar os casos usa uma condição sobre
+    // `{{vars.subfluxo.desfecho}}`, sem mudar o contrato deste bloco.
+    if (ctx.esperaEmCurso !== null) {
+      const evento = ctx.escopo.frame.vars[VAR_DO_EVENTO] as
+        | { outcome?: unknown; output?: unknown }
+        | undefined;
+      return {
+        kind: "advance",
+        branch_id: "else",
+        vars: {
+          [VAR_DO_SUBFLUXO]:
+            evento === undefined
+              ? { desfecho: DESFECHO_SUBFLUXO_NO_PRAZO, saida: {} }
+              : {
+                  desfecho: typeof evento.outcome === "string" ? evento.outcome : "concluido",
+                  saida:
+                    typeof evento.output === "object" && evento.output !== null ? evento.output : {},
+                },
+        },
+      };
+    }
     const entrada: Record<string, unknown> = {};
     for (const [chave, valor] of Object.entries(config.entrada)) {
       entrada[chave] = ctx.render(valor);

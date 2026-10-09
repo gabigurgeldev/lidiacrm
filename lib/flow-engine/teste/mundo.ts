@@ -136,7 +136,12 @@ export interface Mundo {
   }>;
   globais: Record<string, unknown>;
   subFluxosPublicados: Set<string>;
-  avisosDeSubFluxo: Array<{ execution_id: string; parent_execution_id: string; outcome: string }>;
+  avisosDeSubFluxo: Array<{
+    execution_id: string;
+    parent_execution_id: string;
+    outcome: string;
+    output: Record<string, unknown>;
+  }>;
 }
 
 let proximaFrente = 0;
@@ -277,7 +282,11 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
         return { inserted: false };
       }
       mundo.passos.push(evento);
-      if (evento.event_type === "espera_iniciada" || evento.event_type === "espera_por_evento") {
+      if (
+        evento.event_type === "espera_iniciada" ||
+        evento.event_type === "espera_por_evento" ||
+        evento.event_type === "subfluxo_chamado"
+      ) {
         mundo.esperas.set(`${evento.execution_id}:${evento.node_id}`, {
           desde: mundo.agora,
           ate: new Date(String(evento.payload.ate)),

@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Criar agente com IA — entrevista, prévia revisável, rascunho",
+    "subtitle": "a IA pergunta só o que falta, escreve agente e materiais seguindo uma doutrina escrita, e nada é gravado antes do clique",
+    "output": "agente-criado-por-ia.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "humano", "label": "O que o dono vê" },
+    { "id": "cliente", "label": "No navegador" },
+    { "id": "borda", "label": "Borda HTTP" },
+    { "id": "regra", "label": "Regra e doutrina (puras)" },
+    { "id": "config", "label": "Configuração do tenant" },
+    { "id": "banco", "label": "Banco e filas" }
+  ],
+  "mainPath": ["botao", "tela", "entrevistar", "gerar", "revisao", "criar", "materiais", "agente", "editor"],
+  "nodes": [
+    { "id": "botao", "lane": "humano", "col": 1, "type": "frontend", "label": "\"Criar com IA\" na lista de Agentes", "sublabel": "AgentsList.tsx · ao lado de Novo agente" },
+    { "id": "tela", "lane": "cliente", "col": 2, "type": "frontend", "label": "criar-com-ia/_client.tsx", "sublabel": "contar → perguntas → revisar → criar · estado só no navegador" },
+    { "id": "entrevistar", "lane": "borda", "col": 3, "type": "api", "label": "POST /ai/agents/construtor/entrevistar", "sublabel": "até 4 perguntas por rodada · teto de 3 rodadas imposto pelo servidor" },
+    { "id": "gerar", "lane": "borda", "col": 4, "type": "api", "label": "POST /ai/agents/construtor/gerar", "sublabel": "duas chamadas em paralelo: agente e materiais · devolve PRÉVIA, não grava" },
+    { "id": "doutrina", "lane": "regra", "col": 4, "type": "lib", "label": "construtor/doutrina.ts", "sublabel": "seções obrigatórias do prompt, anti-invenção, handoff, formato WhatsApp, regras por nicho" },
+    { "id": "entrevista", "lane": "regra", "col": 3, "type": "lib", "label": "construtor/entrevista.ts", "sublabel": "banco de perguntas por assunto · prioridade por nicho" },
+    { "id": "teto", "lane": "regra", "col": 5, "type": "lib", "label": "construtor/capacidades.ts", "sublabel": "pacotes ligados em ordem enquanto cabem no teto de ferramentas" },
+    { "id": "porta", "lane": "config", "col": 3, "type": "lib", "label": "portaComFallback + orcamentoPermite", "sublabel": "mesma porta do Criar fluxo com IA · recusa antes de gastar" },
+    { "id": "revisao", "lane": "humano", "col": 5, "type": "frontend", "label": "Prévia editável", "sublabel": "nome, prompt, capacidades, materiais, lacunas, número de WhatsApp" },
+    { "id": "criar", "lane": "borda", "col": 6, "type": "api", "label": "POST /ai/agents/construtor/criar", "sublabel": "admin · org da sessão · corpo strict" },
+    { "id": "provedor", "lane": "config", "col": 6, "type": "lib", "label": "resolverProvedorDoAgente", "sublabel": "provedor da instalação + modelo + chave · compartilhado com o onboarding" },
+    { "id": "materiais", "lane": "banco", "col": 6, "type": "database", "label": "ai_knowledge_sources / ai_faq_items", "sublabel": "criarMaterialDeTexto · mesmo caminho da tela de materiais" },
+    { "id": "indexador", "lane": "banco", "col": 7, "type": "worker", "label": "rag-indexer (knowledge_source.updated)", "sublabel": "fatia e indexa · precisa de chave de embedding" },
+    { "id": "agente", "lane": "banco", "col": 7, "type": "database", "label": "ai_agents + ai_agent_versions v1", "sublabel": "status draft · knowledge_source_ids · audit ai_agent.created origem=construtor" },
+    { "id": "editor", "lane": "humano", "col": 8, "type": "frontend", "label": "Editor do agente", "sublabel": "/app/ai/agents/:id · testar e publicar é decisão humana" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "botao", "to": "tela", "label": "abre a tela" },
+    { "id": "e2", "from": "tela", "to": "entrevistar", "label": "material + respostas" },
+    { "id": "e3", "from": "entrevista", "to": "entrevistar", "label": "checklist e ritmo" },
+    { "id": "e4", "from": "entrevistar", "to": "porta", "label": "objeto pela porta" },
+    { "id": "e5", "from": "tela", "to": "gerar", "label": "quando pronto (ou pulou)" },
+    { "id": "e6", "from": "doutrina", "to": "gerar", "label": "meta-prompts" },
+    { "id": "e7", "from": "gerar", "to": "porta", "label": "agente ‖ materiais" },
+    { "id": "e8", "from": "gerar", "to": "teto", "label": "apara pacotes" },
+    { "id": "e9", "from": "gerar", "to": "revisao", "label": "prévia + lacunas" },
+    { "id": "e10", "from": "revisao", "to": "criar", "label": "clique em Criar agente" },
+    { "id": "e11", "from": "criar", "to": "provedor", "label": "modelo e chave" },
+    { "id": "e12", "from": "criar", "to": "teto", "label": "confere de novo" },
+    { "id": "e13", "from": "criar", "to": "materiais", "label": "primeiro" },
+    { "id": "e14", "from": "materiais", "to": "indexador", "label": "evento" },
+    { "id": "e15", "from": "criar", "to": "agente", "label": "rascunho apontando para os materiais" },
+    { "id": "e16", "from": "agente", "to": "editor", "label": "Abrir no editor" },
+    { "id": "e17", "from": "editor", "to": "revisao", "label": "laço de retorno: o que a IA errou se corrige no editor; lacunas viram transferência para humano" }
+  ],
+  "naoLigacoes": [
+    { "de": "gerar", "para": "agente", "porque": "a geração NUNCA grava. Só o clique em 'Criar agente' depois da revisão escreve — mesma regra do Criar fluxo com IA." },
+    { "de": "criar", "para": "editor", "porque": "o agente nasce RASCUNHO e nunca é publicado por esta rota: um prompt escrito por IA não fala com cliente real antes de alguém lê-lo." }
+  ]
+}

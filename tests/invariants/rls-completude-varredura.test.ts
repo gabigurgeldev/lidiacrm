@@ -75,6 +75,25 @@ interface Excecao {
  * linhas da OUTRA organização, não uma leitura como superusuário.
  */
 const PROVA_PROPRIA: readonly Excecao[] = [
+  ...(
+    [
+      "coord_politica_versoes",
+      "coord_politica_destinos",
+      "coord_politica_ponteiros",
+      "coord_estado_conversa",
+      "coord_chamadas",
+      "coord_admissoes",
+      "coord_transicoes",
+    ] as const
+  ).map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/coordenador-nucleo.test.ts prova, nas sete tabelas do coordenador, " +
+      "a leitura cross-org com controle positivo e o pedido da tabela inteira (membro da A " +
+      "não vê nenhuma linha da B) e que o cliente NÃO escreve: a policy é só de leitura e o " +
+      "GRANT de escrita é revogado de authenticated — delete dá permission denied. Quem " +
+      "escreve é o service role, pelas RPCs fn_coord_*.",
+  })),
   ...(["assinaturas", "cobrancas", "eventos_asaas"] as const).map((tabela) => ({
     tabela,
     razao:

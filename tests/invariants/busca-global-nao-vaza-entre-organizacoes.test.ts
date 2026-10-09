@@ -119,14 +119,14 @@ beforeAll(() => {
 /** As três consultas do handler, em SQL — o mesmo recorte, sem o PostgREST no meio. */
 const CONTATOS = `
   select count(*) from public.contacts
-  where display_name ilike '%${TERMO}%' or name ilike '%${TERMO}%'`;
+  where (display_name ilike '%${TERMO}%' or name ilike '%${TERMO}%')`;
 const CONVERSAS = `
   select count(*) from public.conversations c
   join public.contacts ct on ct.id = c.contact_id
-  where ct.display_name ilike '%${TERMO}%' or ct.name ilike '%${TERMO}%'`;
+  where (ct.display_name ilike '%${TERMO}%' or ct.name ilike '%${TERMO}%')`;
 const LEADS = `
   select count(*) from public.crm_leads
-  where title ilike '%${TERMO}%' or description ilike '%${TERMO}%'`;
+  where (title ilike '%${TERMO}%' or description ilike '%${TERMO}%')`;
 
 describe("controle: o cenário existe antes de qualquer conclusão", () => {
   /**
