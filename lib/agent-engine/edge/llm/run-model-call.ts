@@ -365,6 +365,15 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   const registry = deps.registry ?? createDefaultRegistry();
   const purpose = input.purpose ?? 'agent_turn';
 
+  // Contabilidade separada (só o ensaio): orçamento e `llm_calls` por outra
+  // conexão, sem contato nem job — eles só existem dentro da transação que será
+  // desfeita, e uma FK para eles quebraria o insert de fora.
+  const contabil = cfg.contabilidade;
+  const dbDaConta = contabil?.db ?? db;
+  const inputDaConta: RunModelCallInput =
+    contabil === undefined ? input : { ...input, leadId: null, jobId: null, variantId: null };
+  const purposeDaConta = contabil === undefined ? purpose : `${contabil.prefixoDoProposito}${purpose}`;
+
   // A config da org é lida ANTES da decisão porque o resolvedor precisa dela
   // como último degrau da precedência (o padrão, quando ninguém mais opinou).
   const padrao = await resolveOrgLlmConfig(db, cfg, input.tenantId, input.llmOverride);
@@ -441,7 +450,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   // Continua ANTES de qualquer byte ao provedor, que é a propriedade que
   // importa: bloqueio custa zero token.
   await aplicarOrcamento({
-    db,
+    db: dbDaConta,
     organizationId: input.tenantId,
     orcamentoDaConfig: config.orcamento,
     orcamentoIndisponivelPorque: config.orcamentoIndisponivelPorque,
@@ -450,7 +459,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     provider: config.provider,
     model,
     origem: decisao.origem,
-    input,
+    input: inputDaConta,
     ...(deps.log ? { log: deps.log } : {}),
   });
 
@@ -507,9 +516,19 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     // Grava e RELANÇA: quem chama continua decidindo o que fazer com a falha
     // (o worker reagenda, o dry-run mostra na tela). Engolir aqui trocaria uma
     // falha invisível por uma silenciosa, que é pior.
-    await registrarFalha(db, {
-      input,
+    contabil?.aoRegistrar?.({
       purpose,
+      provider: config.provider,
+      model,
+      status: 'erro',
+      inputTokens: 0,
+      outputTokens: 0,
+      costCents: null,
+      latencyMs: Date.now() - startedAt,
+    });
+    await registrarFalha(dbDaConta, {
+      input: inputDaConta,
+      purpose: purposeDaConta,
       provider: config.provider,
       model,
       origem: decisao.origem,
@@ -539,7 +558,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   };
   const cost = costCents(model, usage);
 
-  const { rows } = await db.query<{ id: string }>(
+  const { rows } = await dbDaConta.query<{ id: string }>(
     `insert into llm_calls
        (organization_id, contact_id, job_id, variant_id, purpose, provider, model,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_cents, latency_ms,
@@ -547,11 +566,11 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'ok', $14)
      returning id`,
     [
-      input.tenantId,
-      input.leadId ?? null,
-      input.jobId ?? null,
-      input.variantId ?? null,
-      purpose,
+      inputDaConta.tenantId,
+      inputDaConta.leadId ?? null,
+      inputDaConta.jobId ?? null,
+      inputDaConta.variantId ?? null,
+      purposeDaConta,
       config.provider,
       model,
       usage.inputTokens,
@@ -563,6 +582,17 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       decisao.origem,
     ],
   );
+
+  contabil?.aoRegistrar?.({
+    purpose,
+    provider: config.provider,
+    model,
+    status: 'ok',
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    costCents: cost,
+    latencyMs,
+  });
 
   // Só métricas — nunca conteúdo de mensagem (PII) nem chave.
   deps.log?.info('llm: chamada concluída', {

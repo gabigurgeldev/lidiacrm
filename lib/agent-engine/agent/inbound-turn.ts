@@ -108,6 +108,8 @@ import {
   provideCaseUpdateInputSchema,
 } from './human-cases';
 import { buildMcpTurnTools } from '../edge/crm/mcp-tools';
+import { capacidadesSimuladas } from '../ensaio/capacidades-simuladas';
+import type { PublishedAgentConfig } from './agent-config';
 import { cancelPendingCronsForLead } from '../cron/scheduler';
 import {
   latestInboundSignal,
@@ -339,6 +341,15 @@ export const MAX_VETOS_DE_VOCABULARIO_INTERNO = 2;
  * Medido em produção: um lead recebeu 8 mensagens seguidas do mesmo turno.
  */
 export const DEFAULT_MAX_SENDS_PER_TURN = 3;
+
+/**
+ * O canal que o turno usa quando ninguém injeta outro. Exportado para o ensaio
+ * (`lib/agent-engine/ensaio`) embrulhar o MESMO canal — lendo a saúde real do
+ * número e capturando só o envio — sem nomear o provedor fora daqui.
+ */
+export function canalPadraoDoTurno(pool: pg.Pool, crmCfg: CrmEdgeConfig): ChannelAdapter {
+  return new WahaChannelAdapter(pool, crmCfg);
+}
 
 /**
  * Job já saiu de 'running' por decisão do próprio run (ex.: cancelJob no veto
@@ -712,6 +723,24 @@ export interface InboundTurnDeps {
     conferirDestino?: (hostname: string) => Promise<void>;
     enviarEmail?: EnviarEmail;
     emailConfigurado?: () => boolean;
+  };
+  /**
+   * O turno é um ENSAIO (`lib/agent-engine/ensaio`, botão Testar da tela): roda
+   * dentro de uma transação que será desfeita. Só os efeitos que escapariam da
+   * transação mudam aqui — o resto do turno é o de produção, linha por linha:
+   *
+   *  - o agente é o do FORMULÁRIO (`agente`), não o escolhido pelo número/roteador;
+   *  - as capacidades do CRM não executam (`capacidadesSimuladas`): a ponte MCP
+   *    escreve por fora da transação;
+   *  - o espelho de etapa no CRM não é chamado, pelo mesmo motivo;
+   *  - cada chamada de ferramenta é observada (`aoChamarFerramenta`).
+   *
+   * Canal, relógio, espera e integrações chegam pelos seams que já existiam.
+   */
+  ensaio?: {
+    id: string;
+    agente: PublishedAgentConfig;
+    aoChamarFerramenta?: (chamada: { ferramenta: string; entrada: unknown; resultado: unknown }) => void;
   };
   /**
    * Seam do coordenador de atendimento (migration 0229) — só os testes passam.
@@ -1124,7 +1153,7 @@ export async function runAgentTurn(
           },
           {
             motivo: 'orcamento_de_ia',
-            channel: (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, deps.crmCfg)))(pool),
+            channel: (deps.channel ?? ((p: pg.Pool) => canalPadraoDoTurno(p, deps.crmCfg)))(pool),
             now: deps.clock?.() ?? new Date(),
             log: logDaEscolta,
             ...(deps.knobs.disclosureMode !== undefined ? { disclosureMode: deps.knobs.disclosureMode } : {}),
@@ -1208,7 +1237,9 @@ async function executarTurnoDoAgente(
   // execução que entregou deixa de ser a dona, e o coordenador decide QUAL
   // agente atende — em vez de o roteador antigo decidir por fora dele.
   let coordenacao: ResultadoDaEntrada = { modo: 'off' };
-  if (job.kind === 'inbound_turn') {
+  // No ensaio o coordenador não é consultado: o teste é do agente do formulário,
+  // e o decisor chamaria o modelo para talvez entregar a conversa a outro.
+  if (job.kind === 'inbound_turn' && deps.ensaio === undefined) {
     const coordenar =
       deps.coordenar ??
       ((p: pg.Pool, e: Parameters<NonNullable<InboundTurnDeps['coordenar']>>[1]) =>
@@ -1406,8 +1437,12 @@ async function executarTurnoDoAgente(
   // Com o coordenador conduzindo, o agente é o que ELE escolheu — carregado
   // pela versão publicada, sem reclassificar. Dois roteadores decidindo a mesma
   // mensagem é exatamente o que o coordenador existe para acabar.
+  // No ensaio, o agente é o do formulário — não o que o número, o roteador ou o
+  // coordenador escolheriam (e o rascunho nem está publicado).
   let routed: TurnAgentResolution;
-  if (coordenadorConduz !== null) {
+  if (deps.ensaio !== undefined) {
+    routed = { config: deps.ensaio.agente, routerId: null, intentName: null, confidence: null, outcome: 'no_router' };
+  } else if (coordenadorConduz !== null) {
     const config = await loadPublishedAgentConfigById(pool, tenantId, coordenadorConduz.agentId);
     if (config === null) {
       // Despublicado/arquivado entre a decisão e aqui. Falar com o agente
@@ -1607,7 +1642,7 @@ async function executarTurnoDoAgente(
   // de qualquer chamada de modelo; o canal precisa existir antes deles.
   const turnCrmCfg =
     agentConfig !== null ? { ...deps.crmCfg, agentActorId: agentConfig.agentId } : deps.crmCfg;
-  const channel = (deps.channel ?? ((p: pg.Pool) => new WahaChannelAdapter(p, turnCrmCfg)))(pool);
+  const channel = (deps.channel ?? ((p: pg.Pool) => canalPadraoDoTurno(p, turnCrmCfg)))(pool);
   // STOP lido no turno (fonte: CRM via get_lead_context) — combinado com o cache
   // durável leads.is_opted_out no gate 1 da cadeia (F2-13).
   const optedOutThisTurn = openingContext.context.contact.is_blocked;
@@ -2381,12 +2416,16 @@ async function executarTurnoDoAgente(
             // funil) nem falha o job: humano resolve via inbox_items. Os motivos
             // de MIRROR_WARN_ONLY (tenant sem mapa; humano moveu o card antes) são
             // só warn — estado legítimo do produto não é incidente.
-            const mirror = await mirrorLeadStageToCrm(pool, deps.crmCfg, {
-              tenantId,
-              leadId,
-              toStage: update.transition.to,
-              ...(update.transition.reason !== undefined ? { reason: update.transition.reason } : {}),
-            });
+            // No ensaio o espelho NÃO roda: ele move o card pelo cliente HTTP do
+            // Supabase, fora da transação do turno — moveria o card de verdade.
+            const mirror = deps.ensaio !== undefined
+              ? ({ ok: true } as const)
+              : await mirrorLeadStageToCrm(pool, deps.crmCfg, {
+                  tenantId,
+                  leadId,
+                  toStage: update.transition.to,
+                  ...(update.transition.reason !== undefined ? { reason: update.transition.reason } : {}),
+                });
             if (!mirror.ok) {
               runLog.warn('espelho de stage no CRM falhou — harness mantido', {
                 to_stage: update.transition.to,
@@ -2795,7 +2834,14 @@ async function executarTurnoDoAgente(
       if (catalogoEntregue.length > 0) {
         runLog.info('capacidades de catálogo entregues ao operador', { entregues: catalogoEntregue });
       }
-      const mcp = await buildMcpTurnTools(deps.crmCfg, { organizationId: tenantId, jobId: job.id }, configDoTurno, runLog);
+      // No ensaio: as MESMAS ferramentas, sem execução (e sem token efêmero, que
+      // é escrita em `api_tokens` fora da transação).
+      const mcp = deps.ensaio !== undefined
+        ? (() => {
+            const simuladas = capacidadesSimuladas(configDoTurno.toolIds);
+            return { tools: simuladas, toolIds: Object.keys(simuladas), cleanup: async () => {} };
+          })()
+        : await buildMcpTurnTools(deps.crmCfg, { organizationId: tenantId, jobId: job.id }, configDoTurno, runLog);
       if (mcp !== null) {
         mcpCleanup = mcp.cleanup;
         for (const [name, mcpTool] of Object.entries(mcp.tools)) {
@@ -2900,6 +2946,7 @@ async function executarTurnoDoAgente(
     // `escolher_conta` mandam mensagem/e-mail ou gravam — ficam de fora.
     readOnlyTools: [...READ_ONLY_TOOLS, ...readOnlyDeIntegracao],
     log: runLog, // os warns dos gates do breaker saem carimbados com o run
+    ...(deps.ensaio?.aoChamarFerramenta !== undefined ? { aoChamar: deps.ensaio.aoChamarFerramenta } : {}),
   });
 
   // F3-11: stage-classifier auxiliar. Roda ANTES do turno (modelo BARATO pelo seam

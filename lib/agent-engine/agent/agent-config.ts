@@ -294,6 +294,31 @@ export async function loadPublishedAgentConfigById(
 }
 
 /**
+ * Variante por VERSÃO, qualquer status — só o ensaio do agente usa
+ * (`lib/agent-engine/ensaio`). O ensaio grava o formulário como rascunho dentro
+ * da transação desfeita no fim e lê por aqui, com a MESMA lista de colunas e o
+ * MESMO mapeamento da produção: um segundo mapeamento "do formulário para a
+ * config" seria o lugar exato em que o teste passaria a divergir do atendimento.
+ */
+export async function loadAgentConfigByVersionId(
+  db: pg.Pool,
+  organizationId: string,
+  versionId: string,
+): Promise<PublishedAgentConfig | null> {
+  const { rows } = await db.query<Row>(
+    `select ${SELECT_AGENT_CONFIG_COLUMNS}
+     from ai_agent_versions v
+     join ai_agents a on a.id = v.agent_id
+     where v.organization_id = $1
+       and v.id = $2`,
+    [organizationId, versionId],
+  );
+  const r = rows[0];
+  if (r === undefined) return null;
+  return mapAgentConfigRow(r);
+}
+
+/**
  * Detecção de handoff por keywords CONFIGURADAS na tela (soma-se à detecção
  * determinística regex do engine — nunca a substitui). Case-insensitive,
  * substring simples: a semântica do EPIC-13 (sentinel de handoff_keywords).
