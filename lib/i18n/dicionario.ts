@@ -8161,6 +8161,18 @@ export const DICIONARIO: Traducoes = {
   "Ajustes avançados": { es: "Ajustes avanzados" },
   "Seções do agente": { es: "Secciones del agente" },
   "Ordem entre agentes, freios por atendimento e quanto da conversa ele relê.": { es: "Orden entre agentes, frenos por atención y cuánto de la conversación relee." },
+  // Modelos de agente por ramo (PR12)
+  "Começar de um modelo": { es: "Empezar desde un modelo" },
+  "O modelo preenche as instruções, as capacidades e as palavras que chamam uma pessoa. Nada é salvo até você clicar em Criar agente, e tudo continua editável.": { es: "El modelo completa las instrucciones, las capacidades y las palabras que llaman a una persona. No se guarda nada hasta que hagas clic en Crear agente, y todo sigue siendo editable." },
+  "Em uso": { es: "En uso" },
+  "Começar em branco": { es: "Empezar en blanco" },
+  "Jeito de falar": { es: "Forma de hablar" },
+  "Tira dúvidas, entende o motivo do contato e ajuda a marcar o horário.": { es: "Resuelve dudas, entiende el motivo del contacto y ayuda a reservar el horario." },
+  "Entende o que a pessoa procura, apresenta imóveis e propõe a visita.": { es: "Entiende lo que la persona busca, presenta inmuebles y propone la visita." },
+  "Entende o pedido e junta as informações para o orçamento.": { es: "Entiende el pedido y reúne la información para el presupuesto." },
+  "Tira dúvidas sobre o curso e ajuda quem quer entrar.": { es: "Resuelve dudas sobre el curso y ayuda a quien quiere inscribirse." },
+  "Ajuda a escolher o produto, informa frete e acompanha o pedido.": { es: "Ayuda a elegir el producto, informa el envío y acompaña el pedido." },
+  "Entende o que a pessoa precisa e responde com o material da empresa.": { es: "Entiende lo que la persona necesita y responde con el material de la empresa." },
 };
 
 /**

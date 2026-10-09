@@ -10,7 +10,8 @@ import { z } from "zod";
 import { audit } from "@/lib/audit";
 import { listSelectableChannels, type SelectableChannel } from "@/lib/channels/selectable";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { aiAgentDefaultSchema, type PromptTemplate } from "@/lib/schemas/onboarding";
+import { aiAgentDefaultSchema } from "@/lib/schemas/onboarding";
+import { PROMPT_BODIES, ondeTrabalha } from "@/lib/ai/agents/tons";
 import { capacidadesPadraoDoOnboarding } from "@/lib/ai/agents/capacidades-padrao";
 import { publicarMemoriaDaOrg } from "@/lib/ai/memoria-da-org";
 import { resolverProvedorDoAgente } from "@/lib/ai/agents/provedor-do-agente";
@@ -21,33 +22,8 @@ import {
   OnboardingError,
 } from "./_shared";
 
-/**
- * O jeito de falar do funcionário.
- *
- * Os corpos diziam "loja online" e "e-commerce" em dois dos três — num produto
- * que se declara multi-nicho por escrito, e cuja maioria de adopters roda em
- * clínica, imobiliária e infoproduto. Uma clínica terminava o onboarding com um
- * atendente que se apresentava como sendo de uma loja virtual.
- *
- * Recebem o nome do negócio E o ramo: um funcionário que sabe onde trabalha é o
- * mínimo que se espera de alguém contratado, e saber o QUE o lugar faz é a
- * diferença entre "Olá, como posso ajudar?" e uma primeira frase que já mostra
- * que ele entendeu onde está. O ramo é o que o dono respondeu no primeiro passo;
- * quem não respondeu recebe a versão sem ele, e não uma inventada.
- */
-function ondeTrabalha(negocio: string, oQueFaz: string | undefined): string {
-  return oQueFaz ? `${negocio}, que é: ${oQueFaz}` : negocio;
-}
-
-const PROMPT_BODIES: Record<PromptTemplate, (onde: string) => string> = {
-  ecommerce_friendly: (n) =>
-    `Você atende os clientes de ${n}. Fale de forma calorosa e próxima, como alguém que gosta de ajudar. Cumprimente, entenda o que a pessoa precisa e ofereça opções claras. Confirme os detalhes antes de agir.`,
-  ecommerce_professional: (n) =>
-    `Você atende os clientes de ${n}. Fale de forma objetiva, cordial e profissional. Vá direto ao ponto, sem parecer frio, e sempre termine indicando o próximo passo.`,
-  support_minimal: (n) =>
-    `Você atende os clientes de ${n}. Responda em frases curtas, peça apenas o que for necessário e chame uma pessoa do time assim que a dúvida sair do seu alcance.`,
-};
-
+// O jeito de falar (os três corpos de texto e o "onde ele trabalha") mora em
+// `lib/ai/agents/tons.ts`, compartilhado com os modelos de agente por nicho.
 /** O agente padrão desta organização, do jeito que este passo precisa vê-lo. */
 interface AgenteDoOnboarding {
   id: string;
