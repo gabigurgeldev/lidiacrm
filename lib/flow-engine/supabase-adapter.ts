@@ -97,7 +97,8 @@ export function criarFlowAdminClient(admin: SupabaseClient): FlowAdminClient {
       // de espera por evento nunca saber que já esperou — ele reagendaria um
       // prazo novo a cada volta, para sempre, e a saída "Aconteceu" nunca seria
       // percorrida.
-      const ESPERAS = ["espera_iniciada", "espera_por_evento"];
+      // `subfluxo_chamado` é a terceira: o pai dorme até a filha terminar.
+      const ESPERAS = ["espera_iniciada", "espera_por_evento", "subfluxo_chamado"];
       if (linha === null || !ESPERAS.includes(linha.event_type)) return null;
       const ate = typeof linha.payload.ate === "string" ? Date.parse(linha.payload.ate) : NaN;
       if (Number.isNaN(ate)) return null;
@@ -340,15 +341,21 @@ export function criarFlowAdminClient(admin: SupabaseClient): FlowAdminClient {
     },
 
     async chamarSubFluxo(input) {
-      // A versão PUBLICADA é a que roda. Chamar um fluxo em rascunho faria o
+      // A versão ATIVA é a que roda. Chamar um fluxo em rascunho faria o
       // sub-fluxo mudar debaixo de quem o chama, a cada salvamento do editor.
+      //
+      // A coluna é `active_version_id` — a mesma que o gatilho e o ativar-fluxo
+      // leem. Este select pedia `published_version_id`, que a tabela `flows` não
+      // tem: o PostgREST devolvia erro, `data` vinha nulo e TODO `flow.call`
+      // morria em `subfluxo_indisponivel`, publicado ou não.
       const { data: fluxo } = await admin
         .from("flows")
-        .select("id, published_version_id")
+        .select("id, active_version_id, status")
         .eq("organization_id", input.organization_id)
         .eq("id", input.flow_id)
         .maybeSingle();
-      const versao = (fluxo as { published_version_id: string | null } | null)?.published_version_id;
+      const linha = fluxo as { active_version_id: string | null; status: string } | null;
+      const versao = linha?.status === "active" ? linha.active_version_id : null;
       if (!versao) return null;
 
       const { data: grafo } = await admin
