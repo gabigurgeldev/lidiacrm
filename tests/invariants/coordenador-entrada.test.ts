@@ -321,6 +321,22 @@ describe("0229 · entrada do coordenador", () => {
     });
   });
 
+  it("o fluxo ENTREGOU a conversa (handoff): mesmo vivo, deixa de ser dono e o coordenador escolhe o agente", async () => {
+    const e = await conversa(SESSAO_ATIVA);
+    await fala(e, "inbound", "quero agendar", 20);
+    await coordenarTurnoDeEntrada(pool, nuncaChamado(), e);
+    const { rows } = await pool.query<{ id: string }>(
+      `select dono_execution_id as id from coord_estado_conversa where conversation_id = $1`,
+      [e.conversationId],
+    );
+    const execucao = rows[0]!.id;
+    await fala(e, "outbound", "Qual o seu problema?", 10);
+    await fala(e, "inbound", "preciso de suporte com o login");
+
+    const r = await coordenarTurnoDeEntrada(pool, nuncaChamado(), { ...e, liberadoPorFluxo: execucao });
+    expect(r).toMatchObject({ modo: "active", acao: "agente", agentId: SUPORTE });
+  });
+
   it("o lote é o que veio depois da última fala da empresa — o histórico já respondido não decide", async () => {
     const e = await conversa(SESSAO_ATIVA);
     // Antes da ativação: perguntou do plano e foi respondido pelo legado.
