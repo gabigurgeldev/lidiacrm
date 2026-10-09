@@ -200,3 +200,28 @@ export const CAMPOS_AVANCADOS = [
 export function avancadoTemErro(erros: Record<string, string>): boolean {
   return CAMPOS_AVANCADOS.some((campo) => erros[campo] !== undefined);
 }
+
+/**
+ * JSON com as chaves em ordem — para comparar estados do formulário.
+ *
+ * `JSON.stringify` puro depende da ordem de inserção das chaves, e o Postgres
+ * devolve `jsonb` com as chaves REORDENADAS. Um `trigger_config` salvo e relido
+ * vinha com a mesma informação em outra ordem, e o formulário acusava
+ * "alterações não salvas" que não existiam — o que trava o Publicar.
+ */
+export function chaveEstavel(valor: unknown): string {
+  return JSON.stringify(valor, (_k, v: unknown) =>
+    v !== null && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
+      : v,
+  );
+}
+
+/** As colunas de `ai_agents` que o editor mostra — salvas fora da versão. */
+export function identidadeDoForm(s: FormState) {
+  return {
+    name: s.name.trim(),
+    description: s.description.trim() === "" ? null : s.description.trim(),
+    priority: s.priority,
+  };
+}

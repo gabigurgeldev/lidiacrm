@@ -4,13 +4,6 @@ import * as React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
 import { padraoParaPalavras, palavrasParaPadrao } from "@/lib/ai/agents/filtro-em-palavras";
 import { problemaDoPadrao } from "@/lib/regex/segura";
@@ -22,6 +15,20 @@ export interface BusinessHoursValue {
   weekdays: number[];
 }
 
+/**
+ * A forma gravada em `trigger_config`. A tela edita o filtro de assunto e o
+ * horário de funcionamento — o resto passa intacto, para não reescrever dado
+ * de quem já salvou. Os outros campos existiam como controles e nenhum mudava
+ * nada no atendimento real (o motor canônico não os lê):
+ *
+ *  - `events`: só existe um evento, mensagem recebida;
+ *  - `ignore_groups`: grupo NUNCA aciona o agente (`edge/crm/drain.ts`);
+ *  - `ignore_self`: só mensagem RECEBIDA aciona o agente;
+ *  - `concurrency`: a fila já atende um cliente por vez e junta a rajada.
+ *
+ * `keyword_regex` é o "Só responder sobre…", que o motor aplica
+ * (`lib/agent-engine/agent/filtro-de-assunto.ts`).
+ */
 export interface TriggerValue {
   events: ("message")[];
   filters: {
@@ -96,59 +103,11 @@ export function TriggerEditor({ value, onChange, disabled, roteador }: Props) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <Label>{t("O que faz ele responder")}</Label>
-        <div className="mt-1 flex flex-wrap gap-2">
-          {(["message"] as const).map((ev) => {
-            const checked = value.events.includes(ev);
-            return (
-              <label
-                key={ev}
-                className="flex cursor-pointer items-center gap-2 rounded border border-border/60 px-2 py-1 text-xs"
-              >
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 accent-primary"
-                  checked={checked}
-                  onChange={() =>
-                    onChange({
-                      ...value,
-                      events: checked
-                        ? (value.events.filter((e) => e !== ev) as TriggerValue["events"])
-                        : ([...value.events, ev] as TriggerValue["events"]),
-                    })
-                  }
-                  disabled={disabled}
-                />
-                {/* `message` é o nome do evento no wire; na tela vale o que ele
-                    significa para quem lê. */}
-                {ev === "message" ? t("Uma mensagem nova do cliente") : ev}
-              </label>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={value.filters.ignore_groups}
-            onCheckedChange={(v) => patchFilters({ ignore_groups: v })}
-            disabled={disabled}
-            id="ignore_groups"
-          />
-          <Label htmlFor="ignore_groups">{t("Não responder em grupos")}</Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={value.filters.ignore_self}
-            onCheckedChange={(v) => patchFilters({ ignore_self: v })}
-            disabled={disabled}
-            id="ignore_self"
-          />
-          <Label htmlFor="ignore_self">{t("Não responder às mensagens que saem do seu próprio número")}</Label>
-        </div>
-      </div>
+      <p className="text-xs leading-snug text-muted-foreground" data-testid="gatilho-explicacao">
+        {t(
+          "Ele responde às mensagens que os clientes mandam para o número dele. Mensagens seguidas do mesmo cliente viram uma resposta só. Grupos de WhatsApp e mensagens enviadas por você mesmo nunca acionam o agente.",
+        )}
+      </p>
 
       <div className="space-y-2" data-testid="filtro-de-assunto">
         <Label htmlFor={modoDoFiltro === "palavras" ? "filtro_palavras" : "keyword_regex"}>
@@ -223,23 +182,6 @@ export function TriggerEditor({ value, onChange, disabled, roteador }: Props) {
               ? t("Esta expressão não é uma lista de palavras")
               : t("Voltar para lista de palavras")}
         </button>
-      </div>
-
-      <div className="space-y-1">
-        <Label>{t("Quantos atendimentos ao mesmo tempo")}</Label>
-        <Select
-          value={value.concurrency}
-          onValueChange={(v) => onChange({ ...value, concurrency: v as TriggerValue["concurrency"] })}
-          disabled={disabled}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="one_per_conversation">{t("Um de cada vez por conversa")}</SelectItem>
-            <SelectItem value="one_per_contact">{t("Um de cada vez por cliente")}</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       <div className="space-y-2 rounded-md border border-border/60 p-3">
