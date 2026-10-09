@@ -120,6 +120,12 @@ interface EditProps extends BaseProps {
 
 interface CreateProps extends BaseProps {
   mode: "create";
+  /**
+   * Campos que um modelo de agente por ramo já preencheu
+   * (`lib/ai/agents/modelos-por-nicho.ts`). Só o PONTO DE PARTIDA: nada é salvo
+   * até o Criar, e tudo continua editável.
+   */
+  inicial?: Partial<FormState>;
 }
 
 type Props = (EditProps | CreateProps) & {
@@ -172,7 +178,7 @@ export function AgentForm(props: Props) {
       const ref = props.base ?? props.draft ?? props.published;
       return buildState({ agent: props.agent, version: ref, servicoDeVoz: props.servicoDeVoz });
     }
-    return buildState({ version: null, servicoDeVoz: props.servicoDeVoz });
+    return { ...buildState({ version: null, servicoDeVoz: props.servicoDeVoz }), ...props.inicial };
   }, [isEdit, props]);
 
   const [form, setForm] = React.useState<FormState>(baseline);

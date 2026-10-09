@@ -12,38 +12,15 @@ import { createDefaultAgent, skipAi } from "@/app/actions/onboarding/createDefau
 import type { PromptTemplate } from "@/lib/schemas/onboarding";
 import { cn } from "@/lib/utils";
 import { PROVEDOR_POR_ID } from "@/lib/ai/pontos/provedores";
+// O jeito de falar mora junto dos corpos de texto que ele escolhe: os modelos
+// de agente por nicho oferecem os mesmos três.
+import { JEITOS_DE_FALAR as JEITOS } from "@/lib/ai/agents/tons";
 
-/**
- * O jeito de falar, não o "estilo de prompt".
- *
- * Os rótulos anteriores eram "Amigável (e-commerce)", "Profissional" e "Suporte
- * minimalista" — dois deles amarrados a loja virtual, num produto cuja maioria
- * de adopters roda em clínica, imobiliária e infoproduto. Os identificadores
- * continuam os mesmos porque já existem gravados; só a fala mudou.
- */
 /** "openrouter" no meio de uma frase é identificador vazando para a tela. */
 function provedorLegivel(id: string | null, t: (texto: string) => string): string {
   if (!id) return t("da inteligência escolhida na instalação");
   return `${t("da")} ${PROVEDOR_POR_ID.get(id)?.rotulo ?? id}`;
 }
-
-const JEITOS: { id: PromptTemplate; titulo: string; desc: string }[] = [
-  {
-    id: "ecommerce_friendly",
-    titulo: "Próximo e caloroso",
-    desc: "Conversa como gente, puxa assunto, tranquiliza. Bom para quem vende no dia a dia.",
-  },
-  {
-    id: "ecommerce_professional",
-    titulo: "Objetivo e cordial",
-    desc: "Vai direto ao ponto sem ser seco, e sempre indica o próximo passo.",
-  },
-  {
-    id: "support_minimal",
-    titulo: "Curto e prático",
-    desc: "Frases curtas, pergunta só o essencial e chama uma pessoa cedo.",
-  },
-];
 
 interface Props {
   /** O que ele já sabe fazer, em linguagem de dono de negócio. */
