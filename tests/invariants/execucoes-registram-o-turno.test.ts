@@ -232,11 +232,12 @@ async function semeia(c: Cenario, n: number) {
   );
 }
 
-async function publica(agente: string, versao: string, sessao: string, triggerConfig: unknown) {
+async function publica(agente: string, versao: string, nome: string, sessao: string, triggerConfig: unknown) {
+  // `ai_agents_name_unique`: nome é único por organização.
   await pool.query(
     `insert into ai_agents (id, organization_id, name, system_prompt)
-     values ($1,$2,'Atendente','system') on conflict (id) do nothing`,
-    [agente, ORG],
+     values ($1,$2,$3,'system') on conflict (id) do nothing`,
+    [agente, ORG, nome],
   );
   await pool.query(
     `insert into ai_agent_versions
@@ -274,9 +275,9 @@ beforeAll(async () => {
       [sessao, ORG, nome],
     );
   }
-  await publica(AGENTE, AGENTE_V, SESSION_ABERTA, {});
+  await publica(AGENTE, AGENTE_V, "Atendente", SESSION_ABERTA, {});
   // Só domingo, 8h–9h: terça 15h está fora.
-  await publica(AGENTE_FECHADO, AGENTE_FECHADO_V, SESSION_FECHADA, {
+  await publica(AGENTE_FECHADO, AGENTE_FECHADO_V, "Atendente do domingo", SESSION_FECHADA, {
     filters: {
       business_hours: { timezone: "America/Sao_Paulo", start: "08:00", end: "09:00", weekdays: [0] },
     },
