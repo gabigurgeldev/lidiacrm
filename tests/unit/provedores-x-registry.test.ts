@@ -269,7 +269,8 @@ describe("a corrente inteira: lista × execução × tela", () => {
     // PROVEDORES, "a tela oferece todos" é verdade por construção e o
     // invariante do topo deste arquivo passa a valer para o que se vê.
     const { readFileSync } = await import("node:fs");
-    const fonte = readFileSync("app/app/ai/agents/[id]/_components/AgentForm.tsx", "utf8");
+    // O seletor de empresa saiu do `AgentForm.tsx` para a seção dele no editor.
+    const fonte = readFileSync("app/app/ai/agents/[id]/_components/editor/SecaoInteligencia.tsx", "utf8");
 
     const literais = [...fonte.matchAll(/<SelectItem\s+value="([^"]+)"/g)]
       .map((m) => m[1])

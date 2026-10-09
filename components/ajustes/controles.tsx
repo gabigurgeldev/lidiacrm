@@ -29,6 +29,7 @@ export function LinhaInterruptor({
   aoMudar,
   desabilitado,
   testid,
+  id: idDoInterruptor,
 }: {
   titulo: ReactNode;
   descricao?: ReactNode;
@@ -37,8 +38,11 @@ export function LinhaInterruptor({
   aoMudar: (ligado: boolean) => void;
   desabilitado?: boolean;
   testid?: string;
+  /** `id` do interruptor, quando algo de fora o procura por ele (uma sonda, um teste). */
+  id?: string;
 }) {
-  const id = useId();
+  const gerado = useId();
+  const id = idDoInterruptor ?? gerado;
   return (
     <Linha
       icone={icone}

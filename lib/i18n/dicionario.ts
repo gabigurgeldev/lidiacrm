@@ -8148,6 +8148,19 @@ export const DICIONARIO: Traducoes = {
   "Nenhum agente atende este número — as mensagens dele ficam só na Inbox.": { es: "Ningún agente atiende este número: sus mensajes quedan solo en la Bandeja." },
   "Abrir agente": { es: "Abrir agente" },
   "Renomear agente": { es: "Renombrar agente" },
+  // Editor de agente em seções (PR11b)
+  "Ordem entre agentes": { es: "Orden entre agentes" },
+  "Memória da conversa": { es: "Memoria de la conversación" },
+  "Várias mensagens curtas": { es: "Varios mensajes cortos" },
+  "A voz em que o cliente ouve as respostas.": { es: "La voz con la que el cliente escucha las respuestas." },
+  "Como ele deve falar, o que pode prometer e o que nunca deve dizer. Ele lê isto antes de toda resposta.": { es: "Cómo debe hablar, qué puede prometer y qué nunca debe decir. Lo lee antes de cada respuesta." },
+  "Mais de um agente pode atender o mesmo número: a lista de agentes mostra quem atende primeiro.": { es: "Más de un agente puede atender el mismo número: la lista de agentes muestra quién atiende primero." },
+  "Quem é": { es: "Quién es" },
+  "Inteligência": { es: "Inteligencia" },
+  "Quando atende": { es: "Cuándo atiende" },
+  "Ajustes avançados": { es: "Ajustes avanzados" },
+  "Seções do agente": { es: "Secciones del agente" },
+  "Ordem entre agentes, freios por atendimento e quanto da conversa ele relê.": { es: "Orden entre agentes, frenos por atención y cuánto de la conversación relee." },
 };
 
 /**
