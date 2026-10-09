@@ -87,7 +87,9 @@ describe("drain: entrega do fluxo", () => {
       if (sql.includes("is_group")) return { rows: [{ is_group: false }] };
       if (sql.includes("tem_agente")) return { rows: [{ tem_agente: true, tem_roteador: false }] };
       if (sql.includes("media_derived_status")) return { rows: [{ type: "text", media_derived_status: null }] };
-      if (sql.includes("entregue_por_fluxo") && sql.includes("update job_queue")) {
+      // A marca vai como PARÂMETRO jsonb (entrega do fluxo e retorno do
+      // coordenador usam o mesmo update); o SQL é reconhecido pela antecipação.
+      if (sql.includes("update job_queue") && sql.includes("least(run_after")) {
         return { rows: jobPendente ? [{ id: "job-pendente" }] : [] };
       }
       if (sql.includes("insert into job_queue")) return { rows: [{ id: "job-novo" }], rowCount: 1 };
@@ -99,9 +101,10 @@ describe("drain: entrega do fluxo", () => {
   it("⭐ job pendente da última resposta é MARCADO e antecipado — não só carona", async () => {
     const { p, calls } = pool(true);
     await drainTick(p, knobs, log);
-    const marca = calls.find((c) => c.sql.includes("update job_queue") && c.sql.includes("entregue_por_fluxo"));
+    const marca = calls.find((c) => c.sql.includes("update job_queue") && c.sql.includes("least(run_after"));
     expect(marca, "a carona sem marca deixaria o job ser calado pelo fluxo").toBeDefined();
     expect(marca!.sql).toContain("least(run_after, now())");
+    expect(JSON.parse(String(marca!.params?.[2]))).toEqual({ entregue_por_fluxo: EXEC });
     expect(calls.some((c) => c.sql.includes("insert into job_queue"))).toBe(false);
   });
 

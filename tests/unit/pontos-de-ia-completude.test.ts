@@ -120,6 +120,16 @@ const FORA_DO_SEAM: Record<string, { arquivo: string; marcador: string }> = {
     arquivo: "app/api/v1/flows/[id]/ai/plano/route.ts",
     marcador: "resolverCadeia",
   },
+  // "Criar agente com IA": mesmo molde das rotas de fluxo — `resolverCadeia`
+  // posicional, sem `purpose:` que a varredura textual alcance.
+  agent_builder_entrevistar: {
+    arquivo: "app/api/v1/ai/agents/construtor/entrevistar/route.ts",
+    marcador: "resolverCadeia",
+  },
+  agent_builder_gerar: {
+    arquivo: "app/api/v1/ai/agents/construtor/gerar/route.ts",
+    marcador: "resolverCadeia",
+  },
 };
 
 describe("registro de pontos de IA × código", () => {

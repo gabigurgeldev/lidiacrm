@@ -509,6 +509,8 @@ export const AUDIT_ACTIONS = [
   "billing.metodo_trocado",
   "billing.assinatura_cancelada",
   "billing.isencao_alterada",
+  // Dias a mais de teste grátis, dados à mão pelo painel da plataforma.
+  "billing.trial_estendido",
   "billing.webhook_recusado",
   "billing.conciliacao_run",
   // ── Back Office de afiliados (CRM → Back Office) ─────────────────────────

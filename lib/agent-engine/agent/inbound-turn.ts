@@ -106,7 +106,8 @@ import {
   vetoDeTetoDoNumero,
   type TetoDoNumeroAtingido,
 } from './teto-do-numero';
-import { resolveTurnAgent } from './resolve-turn-agent';
+import { resolveTurnAgent, type TurnAgentResolution } from './resolve-turn-agent';
+import { loadPublishedAgentConfigById } from './agent-config';
 import {
   hasOpenCaseForContact,
   getCaseAwaitingLead,
@@ -132,6 +133,17 @@ import { READ_ONLY_TOOLS, wrapToolsWithBreaker, type ToolBreakerThresholds } fro
 import { avisarCapDoNumero, loadChannelProvider, runBeforeSend } from '../guardrails/before-send';
 import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
+import { coordenarTurnoDeEntrada, type ResultadoDaEntrada } from '@/lib/coordenador/entrada';
+import { decisorPorLlm } from '@/lib/coordenador/decisor/llm';
+import { blocoDoRetorno, lerChamada } from '@/lib/coordenador/chamadas';
+import {
+  descricaoDaFerramenta,
+  destinosPermitidos,
+  entradaDaFerramentaSchema,
+  executarPedido,
+  NOME_DA_FERRAMENTA_DO_COORDENADOR,
+} from '@/lib/coordenador/ferramenta';
+import { carregarVersaoDaPolitica } from '@/lib/coordenador/politica/resolver';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
 import { sendInBubbles } from './split-message';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
@@ -366,6 +378,8 @@ const inboundTurnPayloadSchema = z
     inbound_message_id: z.string().uuid(),
     crm_event_id: z.string().uuid(),
     entregue_por_fluxo: z.string().uuid().optional(),
+    /** A tarefa que este agente chamou voltou (migration 0230). */
+    coord_chamada_id: z.string().uuid().optional(),
   })
   .passthrough();
 
@@ -736,6 +750,17 @@ export interface InboundTurnDeps {
     agente: PublishedAgentConfig;
     aoChamarFerramenta?: (chamada: { ferramenta: string; entrada: unknown; resultado: unknown }) => void;
   };
+  /**
+   * Seam do coordenador de atendimento (migration 0229) — só os testes passam.
+   * A produção usa `coordenarTurnoDeEntrada` com o decisor pelo seam de LLM.
+   */
+  coordenar?: (pool: pg.Pool, entrada: {
+    organizationId: string;
+    conversationId: string;
+    contactId: string;
+    channelSessionId: string;
+    jobId: string;
+  }) => Promise<ResultadoDaEntrada>;
 }
 
 /** Checkpoint mais recente do lead — a memória que atravessa sessões. */
@@ -997,6 +1022,11 @@ export interface AgentTurnInput {
    * é calado pelo "fluxo no comando" e abre sabendo que há uma triagem.
    */
   entreguePorFluxo?: string;
+  /**
+   * A chamada do coordenador que acabou de VOLTAR a este agente (migration
+   * 0230). Presente = a abertura diz ao modelo o que o fluxo chamado fez.
+   */
+  retornoDaChamada?: string;
   /** monta a abertura APÓS o ritual de leitura (inbound vs. bloco temporal do follow-up). */
   buildOpening: (ritual: {
     previous: LeadCheckpointRow | null;
@@ -1200,6 +1230,50 @@ async function executarTurnoDoAgente(
   // com o tempo, duas respostas.
   const camadas = await lerCamadasDaOrg(pool, tenantId);
 
+  // COORDENADOR DE ATENDIMENTO (migration 0229). Sem política publicada — o
+  // estado de toda instalação até alguém ligá-lo — devolve `off` e NADA abaixo
+  // muda. Em `shadow` grava a recomendação e o turno segue o caminho legado.
+  // Em `active` ele é a ÚNICA fonte de "quem conduz": o roteador não
+  // reclassifica e o "fluxo no comando" do legado não é consultado.
+  //
+  // Vem antes do handoff humano de propósito: em `active` a mensagem que chega
+  // com uma pessoa no comando é ADMITIDA para ninguém automático, e não fica
+  // pendente para ser relida como pergunta nova quando a equipe devolver.
+  //
+  // Turno entregue por um fluxo legado (`crm.handoff_to_agent`) não passa por
+  // aqui: a delegação com retorno do coordenador entra com os nós `coord.*`.
+  let coordenacao: ResultadoDaEntrada = { modo: 'off' };
+  // No ensaio o coordenador não é consultado: o teste é do agente do formulário,
+  // e o decisor chamaria o modelo para talvez entregar a conversa a outro.
+  if (job.kind === 'inbound_turn' && input.entreguePorFluxo === undefined && deps.ensaio === undefined) {
+    const coordenar =
+      deps.coordenar ??
+      ((p: pg.Pool, e: Parameters<NonNullable<InboundTurnDeps['coordenar']>>[1]) =>
+        coordenarTurnoDeEntrada(p, decisorPorLlm(p, deps.llmCfg, { log: runLog }), e, { log: runLog }));
+    coordenacao = await coordenar(pool, {
+      organizationId: tenantId,
+      conversationId: input.conversationId,
+      contactId: leadId,
+      channelSessionId: input.channelSessionId,
+      jobId: job.id,
+    });
+    if (coordenacao.modo === 'active' && coordenacao.acao === 'nada') {
+      runLog.info('turno pulado — o coordenador não entregou a conversa a um agente', {
+        motivo: coordenacao.motivo,
+      });
+      return;
+    }
+  }
+  const coordenadorConduz = coordenacao.modo === 'active' && coordenacao.acao === 'agente' ? coordenacao : null;
+  const concessaoDoEnvio = coordenadorConduz
+    ? {
+        conversationId: input.conversationId,
+        executorTipo: 'agente' as const,
+        executorId: coordenadorConduz.agentId,
+        geracao: coordenadorConduz.geracao,
+      }
+    : null;
+
   // F4-06 (acceptance 2): lead em handoff humano → NO-OP no INÍCIO do turno, antes de
   // qualquer chamada de modelo/CRM. O bot silenciou (bot_silenced_until='infinity', cache
   // do force_human do CRM) e só o humano/CRM libera — o agente nunca reassume (regra dura 2).
@@ -1211,7 +1285,7 @@ async function executarTurnoDoAgente(
   // Migration 0228: um fluxo de triagem está conversando com o cliente (gatilho
   // com "silenciar a IA"). Só a resposta a MENSAGEM é calada — follow-up e caso
   // seguem: não são resposta ao que o cliente acabou de dizer ao fluxo.
-  if (job.kind === 'inbound_turn' && input.entreguePorFluxo === undefined) {
+  if (job.kind === 'inbound_turn' && input.entreguePorFluxo === undefined && coordenadorConduz === null) {
     // Falha de leitura NÃO cala o agente: sem saber se há fluxo, o cliente sem
     // resposta é pior que uma resposta a mais.
     const fluxo = await fluxoNoComando(pool, tenantId, leadId, input.inboundMessageId ?? null).catch(
@@ -1333,31 +1407,49 @@ async function executarTurnoDoAgente(
   // cada turno, zero cache; org/sessão da row do job (fonte confiável). Sem router
   // ativo pra sessão, o resolver devolve o mesmo fluxo de hoje (outcome 'no_router').
   // null = sem agente publicado p/ esta sessão → fallback (playbook + settings + env).
-  // No ensaio, o agente é o do formulário — não o que o número ou o roteador
-  // escolheriam (e o rascunho nem está publicado).
-  const routed = deps.ensaio !== undefined
-    ? {
-        config: deps.ensaio.agente,
-        routerId: null,
-        intentName: null,
-        confidence: null,
-        outcome: 'no_router' as const,
-      }
-    : await resolveTurnAgent(
-    pool,
-    deps.llmCfg,
-    {
-      tenantId,
-      leadId,
-      jobId: job.id,
-      channelSessionId: input.channelSessionId,
-      conversationId: input.conversationId,
-      signal: routingSignal,
-      stickyAgentId: sticky.active_ai_agent_id,
-      stickyIntent: sticky.active_intent,
-    },
-    { log: runLog },
-  );
+  //
+  // Com o coordenador conduzindo, o agente é o que ELE escolheu — carregado
+  // pela versão publicada, sem reclassificar. Dois roteadores decidindo a mesma
+  // mensagem é exatamente o que o coordenador existe para acabar.
+  // No ensaio, o agente é o do formulário — não o que o número, o roteador ou o
+  // coordenador escolheriam (e o rascunho nem está publicado).
+  let routed: TurnAgentResolution;
+  if (deps.ensaio !== undefined) {
+    routed = { config: deps.ensaio.agente, routerId: null, intentName: null, confidence: null, outcome: 'no_router' };
+  } else if (coordenadorConduz !== null) {
+    const config = await loadPublishedAgentConfigById(pool, tenantId, coordenadorConduz.agentId);
+    if (config === null) {
+      // Despublicado/arquivado entre a decisão e aqui. Falar com o agente
+      // genérico seria falar sem dono; o vigia devolve a conversa.
+      runLog.warn('turno pulado — agente escolhido pelo coordenador não tem versão publicada', {
+        agent_id: coordenadorConduz.agentId,
+      });
+      return;
+    }
+    runLog.info('agente escolhido pelo coordenador', {
+      agent_id: coordenadorConduz.agentId,
+      coord_geracao: coordenadorConduz.geracao,
+      coord_motivo: coordenadorConduz.motivo,
+      politica_versao_id: coordenadorConduz.politicaVersaoId,
+    });
+    routed = { config, routerId: null, intentName: null, confidence: null, outcome: 'no_router' };
+  } else {
+    routed = await resolveTurnAgent(
+      pool,
+      deps.llmCfg,
+      {
+        tenantId,
+        leadId,
+        jobId: job.id,
+        channelSessionId: input.channelSessionId,
+        conversationId: input.conversationId,
+        signal: routingSignal,
+        stickyAgentId: sticky.active_ai_agent_id,
+        stickyIntent: sticky.active_intent,
+      },
+      { log: runLog },
+    );
+  }
   const agentConfig = routed.config;
   if (agentConfig !== null) {
     runLog.info('config do agente publicada em uso', {
@@ -1393,6 +1485,23 @@ async function executarTurnoDoAgente(
         'fora do horário de funcionamento — job reagendado para a abertura da janela',
       );
     }
+  }
+
+  // O coordenador é a fonte; `active_ai_agent_id` é o espelho que a inbox e o
+  // sticky do roteador leem. Mantê-lo igual evita a tela dizer um agente e o
+  // turno ser de outro. Falha aqui é de exibição, nunca derruba a resposta.
+  if (coordenadorConduz !== null && sticky.active_ai_agent_id !== coordenadorConduz.agentId) {
+    await pool
+      .query(
+        `update conversations set active_ai_agent_id = $3, active_agent_set_at = now()
+         where organization_id = $1 and id = $2`,
+        [tenantId, input.conversationId, coordenadorConduz.agentId],
+      )
+      .catch((err: unknown) => {
+        runLog.warn('espelho do agente do coordenador não gravado', {
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
+        });
+      });
   }
 
   // Fase 3: grava a decisão de roteamento e a aderência da conversa ao agente.
@@ -1944,6 +2053,7 @@ async function executarTurnoDoAgente(
           body: rendered,
           // Só ESTE gate muda; stop, LGPD e pacing continuam valendo integralmente.
           isTemplate: true,
+          ...(concessaoDoEnvio !== null ? { coordenacao: concessaoDoEnvio } : {}),
           optedOutThisTurn,
           crmDailyLimit: null,
           now: clock(),
@@ -2084,6 +2194,9 @@ async function executarTurnoDoAgente(
             // não é dele, e a única saída seria o silêncio. O follow-up determinístico
             // idem (ver GateContext.internalVocabularyEnforced).
             enforceInternalVocabulary: true,
+            // Fencing do coordenador: sob o lock do envio, confere se este agente
+            // ainda é o dono na geração que recebeu. Ausente no caminho legado.
+            ...(concessaoDoEnvio !== null ? { coordenacao: concessaoDoEnvio } : {}),
             ...(deps.knobs.disclosureMode !== undefined ? { disclosureMode: deps.knobs.disclosureMode } : {}),
             // Gate 5 (F4-02): classificador semântico roteado pelo MESMO seam agnóstico (budget
             // da org checado nele). Closure com tenant/lead/job da ROW fechados — nunca do payload.
@@ -2748,6 +2861,57 @@ async function executarTurnoDoAgente(
     });
   }
 
+  // Coordenador (migration 0230): o agente pode PEDIR uma troca — chamar um
+  // fluxo e voltar, ou transferir. Só quando o coordenador conduz este turno e
+  // a política dá a ele algum destino. Org, conversa, agente e geração saem do
+  // runtime; o modelo só escolhe a chave do destino.
+  if (coordenadorConduz !== null) {
+    try {
+      const politicaDoTurno = await carregarVersaoDaPolitica(pool, tenantId, coordenadorConduz.politicaVersaoId);
+      const permitidos = politicaDoTurno ? destinosPermitidos(politicaDoTurno, coordenadorConduz.agentId) : null;
+      if (politicaDoTurno && permitidos && permitidos.chamar.length + permitidos.transferir.length > 0) {
+        rawTools[NOME_DA_FERRAMENTA_DO_COORDENADOR] = tool({
+          description: descricaoDaFerramenta(permitidos),
+          inputSchema: entradaDaFerramentaSchema,
+          execute: async (pedido) => {
+            try {
+              const r = await executarPedido(
+                pool,
+                politicaDoTurno,
+                {
+                  organizationId: tenantId,
+                  conversationId: input.conversationId,
+                  agentId: coordenadorConduz.agentId,
+                  agentVersionId: agentConfig?.versionId ?? null,
+                  geracao: coordenadorConduz.geracao,
+                  jobId: job.id,
+                },
+                pedido,
+                clock(),
+              );
+              runLog.info('pedido ao coordenador', { acao: pedido.acao, destino: pedido.destino, status: r.status });
+              return r;
+            } catch (err) {
+              runLog.warn('pedido ao coordenador falhou', {
+                error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+              });
+              return {
+                ok: false,
+                status: 'recusado',
+                motivo: 'erro',
+                mensagem: 'O coordenador não respondeu agora. Continue você mesmo o atendimento.',
+              };
+            }
+          },
+        });
+      }
+    } catch (err) {
+      runLog.warn('ferramenta do coordenador não montada — turno segue sem ela', {
+        error: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+      });
+    }
+  }
+
   // Circuit breaker de tools (F2-15): estado no closure DESTA invocação — zera
   // entre runs por construção (mesma garantia de isolamento do resto do run).
   const tools = wrapToolsWithBreaker(rawTools, {
@@ -2874,9 +3038,19 @@ async function executarTurnoDoAgente(
         `Se a mensagem dele responde a isso, chame provide_case_update com este case_id e a informação recebida — ` +
         `NÃO diga que já repassou/avisou o responsável sem chamar a tool.`
       : '';
+  // A tarefa que este agente chamou voltou: o que o fluxo fez entra como DADO.
+  // Falhar ao ler não derruba o turno — o histórico da conversa já mostra o
+  // que o fluxo disse ao cliente.
+  const retornoBlock =
+    input.retornoDaChamada !== undefined
+      ? await lerChamada(pool, tenantId, input.retornoDaChamada)
+          .then((c) => (c !== null ? blocoDoRetorno(c) : ''))
+          .catch(() => '')
+      : '';
   const openingSuffixes = [
     matchedSkillsBlock,
     stageHintBlock,
+    retornoBlock,
     input.entreguePorFluxo !== undefined ? DICA_DA_ENTREGA_DO_FLUXO : '',
     pedidoDeHumano === 'tentar_uma_vez' ? DICA_DO_PEDIDO_DE_HUMANO : '',
     splitHint,
@@ -3403,6 +3577,7 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       conversationId: payload.conversation_id,
       inboundMessageId: payload.inbound_message_id,
       ...(payload.entregue_por_fluxo !== undefined ? { entreguePorFluxo: payload.entregue_por_fluxo } : {}),
+      ...(payload.coord_chamada_id !== undefined ? { retornoDaChamada: payload.coord_chamada_id } : {}),
       buildOpening: ({ previous, leadState, context, notesIndexBlock, projeta, entregues }) =>
         buildOpeningMessage(previous, leadState, context, notesIndexBlock, projeta, entregues),
     });

@@ -24,7 +24,10 @@
  *   7. senão bloqueado: `trial_vencido` se nunca pagou, `inadimplente` se já.
  *
  * Tolerância é só para quem JÁ pagou: trial vencido bloqueia no dia seguinte,
- * sem prorrogação — decisão do dono do produto.
+ * sem prorrogação AUTOMÁTICA — decisão do dono do produto. A prorrogação
+ * MANUAL existe: o painel da plataforma move `trial_termina_em` para frente
+ * (`./estender-teste.ts`), e esta regra não muda nada por isso — ela só lê a
+ * data nova.
  */
 
 export type StatusDaAssinatura = "trial" | "ativa" | "inadimplente" | "cancelada";

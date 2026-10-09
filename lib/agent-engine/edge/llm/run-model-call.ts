@@ -123,6 +123,7 @@ const PURPOSES_CLASSIFICADORES = new Set([
   'intent_router',
   'followup_classify',
   'classify',
+  'coordenador_decidir',
 ]);
 /** Resumos rodam DEPOIS da resposta: não atrasam o cliente, mas seguram o job. */
 const PURPOSES_RESUMO = new Set(['checkpoint', 'compaction', 'flush']);
