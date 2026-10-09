@@ -44,11 +44,21 @@ function evento(channelSessionId: string) {
  * Um Supabase de mentira que responde por TABELA. `insert` é um espião: é ele
  * que responde à única pergunta que este arquivo faz.
  */
-function admin(configDoGatilho: Record<string, unknown>) {
+function admin(
+  configDoGatilho: Record<string, unknown>,
+  opcoes: { coordenador?: "active" | "shadow"; blocos?: string[] } = {},
+) {
   const insert = vi.fn(async () => ({ error: null }));
   const grafo = {
     nodes: [
       { id: "n1", type: "trigger.keyword", label: "g", position: { x: 0, y: 0 }, config: configDoGatilho },
+      ...(opcoes.blocos ?? []).map((type, i) => ({
+        id: `b${i}`,
+        type,
+        label: type,
+        position: { x: 0, y: 0 },
+        config: {},
+      })),
     ],
     edges: [],
   };
@@ -58,7 +68,13 @@ function admin(configDoGatilho: Record<string, unknown>) {
       const linha =
         tabela === "flows"
           ? [{ id: "f1", organization_id: "org-1", active_version_id: "v1", settings: {} }]
-          : { id: "v1", graph: grafo, trigger_config: {} };
+          : tabela === "coord_politica_ponteiros"
+            ? opcoes.coordenador
+              ? [{ channel_session_id: null, versao_id: "pv1" }]
+              : []
+            : tabela === "coord_politica_versoes"
+              ? { modo: opcoes.coordenador }
+              : { id: "v1", graph: grafo, trigger_config: {} };
       const cadeia: Record<string, unknown> = {
         then: (r: (v: unknown) => unknown) => Promise.resolve({ data: linha, error: null }).then(r),
       };
@@ -100,6 +116,34 @@ describe("compatibilidade — fluxo publicado antes do campo existir", () => {
   it("⭐ `canal_id: null` é 'todos os números', não 'nenhum'", async () => {
     const a = admin({ palavras: ["oi"], modo: "contem", canal_id: null });
     await armarFluxosParaEvento(a.cliente, evento(CANAL_B));
+    expect(a.insert).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Coordenador de atendimento ATIVO (migration 0229): um fluxo que fala com o
+ * cliente não é armado pela mensagem — quem decide se ele conduz é o
+ * coordenador. Fluxo de bastidor segue armando, e sem coordenador (ou em
+ * shadow) nada muda.
+ */
+describe("coordenador ativo — o gatilho de mensagem não arma fluxo interativo", () => {
+  const gatilho = { palavras: ["oi"], modo: "contem" };
+
+  it("⭐ fluxo que pergunta ao cliente NÃO é armado: seria uma segunda voz", async () => {
+    const a = admin(gatilho, { coordenador: "active", blocos: ["logic.ask"] });
+    await armarFluxosParaEvento(a.cliente, evento(CANAL_A));
+    expect(a.insert).not.toHaveBeenCalled();
+  });
+
+  it("fluxo de bastidor (marcar, atribuir) segue armando", async () => {
+    const a = admin(gatilho, { coordenador: "active", blocos: ["crm.add_tag", "whatsapp.notify_user"] });
+    await armarFluxosParaEvento(a.cliente, evento(CANAL_A));
+    expect(a.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it("em shadow nada muda: o fluxo interativo arma como antes", async () => {
+    const a = admin(gatilho, { coordenador: "shadow", blocos: ["whatsapp.send_to_lead"] });
+    await armarFluxosParaEvento(a.cliente, evento(CANAL_A));
     expect(a.insert).toHaveBeenCalledTimes(1);
   });
 });

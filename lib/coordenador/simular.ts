@@ -27,6 +27,8 @@ export interface ResultadoDaSimulacao {
   motivo: string;
   motivo_legivel: string;
   usou_modelo: boolean;
+  /** As regras não bastaram: a decisão real consultaria o modelo. */
+  precisou_do_modelo: boolean;
   decisor: Pick<Decisao, "status" | "escolha" | "confianca" | "modelo" | "ms" | "custoCents"> | null;
 }
 
@@ -57,6 +59,7 @@ export async function simular(args: {
   };
 
   let proposta = decidir({ estado, politica, texto: cenario.texto, fatos });
+  const precisouDoModelo = proposta.acao === "consultar_modelo";
   let decisao: Decisao | null = null;
   if (proposta.acao === "consultar_modelo") {
     const consulta = proposta;
@@ -92,6 +95,7 @@ export async function simular(args: {
     motivo,
     motivo_legivel: rotuloDoMotivo(motivo),
     usou_modelo: decisao !== null,
+    precisou_do_modelo: precisouDoModelo,
     decisor: decisao
       ? {
           status: decisao.status,

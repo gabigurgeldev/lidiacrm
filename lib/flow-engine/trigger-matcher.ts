@@ -16,7 +16,10 @@ import {
   lerConfigDoGatilhoDeMensagem,
   precondicoesDaConversa,
 } from "./gatilho-de-conversa";
+import { coordenadorAtivoNoCanal } from "@/lib/coordenador/via-supabase";
+
 import { flowGraphSchema } from "./graph-schema";
+import { fluxoEhInterativo } from "./interativo";
 import { garantirNosRegistrados } from "./register-all";
 import { todosOsNos } from "./registry";
 
@@ -142,6 +145,16 @@ export async function armarFluxosParaEvento(
 
   let armados = 0;
   let pulados = 0;
+  // Lido uma vez por evento, e só para evento de mensagem: é a única entrada
+  // em que um fluxo disputa a conversa com o agente.
+  const conversaCoordenada =
+    row.event_type === "message.received"
+      ? await coordenadorAtivoNoCanal(
+          admin,
+          row.organization_id,
+          typeof row.payload?.channel_session_id === "string" ? row.payload.channel_session_id : null,
+        )
+      : false;
 
   for (const fluxo of fluxos) {
     if (causadoPorFluxo !== null && fluxo.settings?.reagir_ao_proprio_motor !== true) {
@@ -171,6 +184,13 @@ export async function armarFluxosParaEvento(
     if (!escutaEsteCanal(gatilho.config, row.payload)) {
       // Chegou por um número que este fluxo não escuta. Nem cria execução: ver
       // o comentário de `escutaEsteCanal`.
+      pulados += 1;
+      continue;
+    }
+    // Coordenador ativo: quem decide se um fluxo INTERATIVO conduz é ele (o
+    // fluxo pode ser destino da política). Armá-lo aqui também daria ao
+    // cliente duas vozes para a mesma mensagem. Bastidor segue armando.
+    if (conversaCoordenada && fluxoEhInterativo(v.graph)) {
       pulados += 1;
       continue;
     }
