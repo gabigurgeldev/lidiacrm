@@ -48,7 +48,10 @@ const eventoDeAudio = (criadoHaMs: number) => ({
 function poolFalso(
   msgRow: { type: string; media_derived_status: string | null },
   calls: string[],
-  capacidade: { tem_agente: boolean; tem_roteador: boolean } = { tem_agente: true, tem_roteador: false },
+  capacidade: { tem_agente: boolean; tem_roteador: boolean; tem_coordenador?: boolean } = {
+    tem_agente: true,
+    tem_roteador: false,
+  },
 ) {
   const query = vi.fn().mockImplementation((sql: string) => {
     calls.push(sql);
@@ -132,5 +135,21 @@ it('sem agente MAS com roteador que resolve alguém: turno segue (caminho genér
     poolFalso(textoSimples, calls, { tem_agente: false, tem_roteador: true }),
     knobs, log,
   );
+  expect(calls.some((s) => s.includes('job_queue'))).toBe(true);
+});
+
+/**
+ * Coordenador ativo (migration 0229): os destinos dele são agentes da org
+ * inteira. Um número sem agente próprio, mas com política `active`, tem quem
+ * atenda — o portão não pode fechar a porta que a política abriu.
+ */
+it('sem agente nem roteador, MAS com coordenador ativo: turno segue', async () => {
+  const calls: string[] = [];
+  process.env.__ESPERA__ = '0';
+  await drainTick(
+    poolFalso(textoSimples, calls, { tem_agente: false, tem_roteador: false, tem_coordenador: true }),
+    knobs, log,
+  );
+  expect(calls.some((s) => s.includes('tem_coordenador'))).toBe(true);
   expect(calls.some((s) => s.includes('job_queue'))).toBe(true);
 });

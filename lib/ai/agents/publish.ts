@@ -43,7 +43,7 @@ interface PublishRow {
  *
  * Mora AQUI, e não na função SQL, porque o banco não enxerga o `.env` do
  * servidor. A função SQL só deixou de recusar `credential_id` nulo (migration
- * 0231); quem decide se o nulo tem cobertura é esta checagem, que roda antes
+ * 0232); quem decide se o nulo tem cobertura é esta checagem, que roda antes
  * dela em todo caminho que publica (editor, API, revert, proposta aplicada).
  */
 export async function versaoSemCredencialTemChave(

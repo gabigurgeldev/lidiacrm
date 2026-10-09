@@ -1,5 +1,5 @@
 -- ============================================================================
--- 0231 — "A CHAVE DESTA INSTALAÇÃO" PUBLICA.
+-- 0232 — "A CHAVE DESTA INSTALAÇÃO" PUBLICA.
 --
 -- O editor oferece "a chave desta instalação" quando o `.env` do servidor tem a
 -- chave do provedor, e grava a versão com `credential_id` nulo — o motor sabe
@@ -71,7 +71,7 @@ begin
     raise exception 'version_invalid_state' using errcode = 'P0001';
   end if;
 
-  -- credential_id NULO = "a chave desta instalação" (0231). O banco não enxerga
+  -- credential_id NULO = "a chave desta instalação" (0232). O banco não enxerga
   -- o .env do servidor; quem confere que há chave para o provedor é
   -- `publishAgentVersion` (lib/ai/agents/publish.ts), antes desta chamada.
   -- Escolhida uma credencial, ela continua sendo conferida aqui, inteira.
@@ -143,7 +143,7 @@ end;
 $$;
 
 comment on function public.fn_publish_ai_agent_version(uuid, uuid, uuid) is
-  'Troca atômica de versão publicada do agente. 0231: credential_id nulo = chave da instalação; a cobertura (chave no .env ou credencial validada do provedor) é conferida em lib/ai/agents/publish.ts antes da chamada.';
+  'Troca atômica de versão publicada do agente. 0232: credential_id nulo = chave da instalação; a cobertura (chave no .env ou credencial validada do provedor) é conferida em lib/ai/agents/publish.ts antes da chamada.';
 
 -- Hardening (item 9 da doutrina): `create or replace` não muda o ACL de quem já
 -- tem a função, mas quem ATUALIZA pode tê-la recriada com o default de anon.

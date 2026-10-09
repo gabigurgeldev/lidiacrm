@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 
 /**
- * `fn_publish_ai_agent_version` ACEITA "A CHAVE DESTA INSTALAÇÃO" (migration 0231).
+ * `fn_publish_ai_agent_version` ACEITA "A CHAVE DESTA INSTALAÇÃO" (migration 0232).
  *
  * O editor grava `credential_id` nulo quando a chave vem do `.env` do servidor,
  * e o motor sabe usá-la. A função recusava nulo com `credential_missing` — o
@@ -37,7 +37,7 @@ const VERSAO_NULA = "f3f3f3f3-0000-4000-8000-000000000004";
 const AGENTE_DESATIVADA = "f3f3f3f3-0000-4000-8000-000000000005";
 const VERSAO_DESATIVADA = "f3f3f3f3-0000-4000-8000-000000000006";
 const CREDENCIAL_DESATIVADA = "f3f3f3f3-0000-4000-8000-000000000007";
-const MODELO = "claude-teste-0231";
+const MODELO = "claude-teste-0232";
 
 async function agenteComVersao(
   agente: string,
@@ -82,7 +82,7 @@ beforeAll(async () => {
   );
   await pool.query(
     `insert into ai_models (provider, model_id, display_name)
-     select 'anthropic', $1, 'Modelo de teste 0231'
+     select 'anthropic', $1, 'Modelo de teste 0232'
       where not exists (select 1 from ai_models where provider = 'anthropic' and model_id = $1)`,
     [MODELO],
   );
@@ -93,8 +93,8 @@ beforeAll(async () => {
      on conflict (id) do nothing`,
     [CREDENCIAL_DESATIVADA, ORG],
   );
-  await agenteComVersao(AGENTE_NULO, VERSAO_NULA, null, "Agente 0231 sem credencial");
-  await agenteComVersao(AGENTE_DESATIVADA, VERSAO_DESATIVADA, CREDENCIAL_DESATIVADA, "Agente 0231 desativada");
+  await agenteComVersao(AGENTE_NULO, VERSAO_NULA, null, "Agente 0232 sem credencial");
+  await agenteComVersao(AGENTE_DESATIVADA, VERSAO_DESATIVADA, CREDENCIAL_DESATIVADA, "Agente 0232 desativada");
 });
 
 afterAll(async () => {
