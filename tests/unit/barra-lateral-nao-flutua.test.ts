@@ -72,7 +72,11 @@ describe("a barra ocupa lugar, em vez de flutuar", () => {
   it("é `sticky` e ocupa a altura da tela", () => {
     // O efeito visual precisa continuar: a barra não rola com a página.
     expect(BARRA).toMatch(/\bsticky\b/);
-    expect(BARRA).toMatch(/h-screen/);
+    // `h-full`, não `h-screen`: desde c4243fb5 quem dá a altura da janela é o
+    // contêiner do layout (`app/app/layout.tsx`), que a divide com os avisos do
+    // topo. `h-screen` passaria da janela sempre que houvesse um aviso.
+    expect(BARRA).toMatch(/\bh-full\b/);
+    expect(BARRA, "h-screen ignora os avisos do topo e passa da janela").not.toMatch(/\bh-screen\b/);
   });
 
   it("não encolhe", () => {

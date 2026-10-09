@@ -123,16 +123,19 @@ export async function resolveEnvioStevo(
   const { organizationId, instanceId } = lookup;
   if (!organizationId || !instanceId) return null;
 
+  const COM = `stevo_instance_id, stevo_token_encrypted, ${COLUNA_DO_TOKEN_OFICIAL}`;
+  const SEM = "stevo_instance_id, stevo_token_encrypted";
+
   // `organization_id` À MÃO (service role bypassa RLS) e o mesmo recorte de
   // `archived_at` do índice único — ver o cabeçalho do arquivo, issue #236.
+  // A consulta vem logo depois da closure: é ali que o gate de
+  // `canal-consulta-por-organizacao.test.ts` procura o `.is(ARCHIVED_AT, null)`.
   const base = (colunas: string) => () =>
     admin
       .from("channel_sessions")
       .select(colunas)
       .eq("organization_id", organizationId)
       .eq("stevo_instance_id", instanceId);
-  const COM = `stevo_instance_id, stevo_token_encrypted, ${COLUNA_DO_TOKEN_OFICIAL}`;
-  const SEM = "stevo_instance_id, stevo_token_encrypted";
 
   const { data, error } = await consultaTolerante(
     COLUNA_DO_TOKEN_OFICIAL,

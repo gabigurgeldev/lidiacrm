@@ -461,12 +461,22 @@ describe('sendMessageHandler — os 6 desfechos do envio', () => {
     expect(String(fetchMock.mock.calls[0]![0])).toContain('graph.facebook.com');
   });
 
-  it('8b. template ausente do espelho FALHA, não envia às cegas', async () => {
-    // Sem esta guarda, um nome errado viraria 132000 na Meta — cobrado e tarde.
+  it('8b. template fora do espelho vai à Meta, e a recusa DELA é o motivo gravado', async () => {
+    // O contrato mudou em `send-template-for-session.ts`: o espelho não veta o
+    // que não conhece — quem responde é a Meta, a autoridade. Antes a mensagem
+    // falhava com "template_missing" sem nunca perguntar, e um template aprovado
+    // que ainda não tinha chegado ao espelho simplesmente não saía. O que este
+    // caso cobra agora é que a recusa da Meta chegue ao operador com o código
+    // dela, e não um erro genérico.
     wahaConfigured(true);
     vi.stubEnv('META_PHONE_NUMBER_ID', '1103328999528818');
     vi.stubEnv('META_SYSTEM_USER_TOKEN', 'tok');
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: 132001, message: 'Template name does not exist in the translation' } }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const msg = await sendMessageHandler(
@@ -483,8 +493,8 @@ describe('sendMessageHandler — os 6 desfechos do envio', () => {
 
     const linha = msg as unknown as { status: string; error_message: string };
     expect(linha.status).toBe('failed');
-    expect(linha.error_message).toMatch(/template_missing/);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(linha.error_message).toMatch(/meta_132001/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   /**

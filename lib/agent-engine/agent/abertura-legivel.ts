@@ -37,7 +37,8 @@ export const FUSO_PADRAO = 'America/Sao_Paulo';
 export function fusoUtilizavel(fuso: string | null | undefined): string {
   if (typeof fuso !== 'string' || fuso.trim() === '') return FUSO_PADRAO;
   try {
-    new Intl.DateTimeFormat('pt-BR', { timeZone: fuso });
+    // Só valida o fuso — o idioma não importa aqui.
+    new Intl.DateTimeFormat(undefined, { timeZone: fuso });
     return fuso;
   } catch {
     return FUSO_PADRAO;

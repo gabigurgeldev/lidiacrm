@@ -80,11 +80,12 @@ const servicos = lerServicos(compose);
 const NOSSOS = ["app", "worker", "scheduler"] as const;
 
 describe("packaging — o artefato que o cliente instala", () => {
-  it("o parser enxerga os 7 serviços de produção", () => {
+  it("o parser enxerga os 8 serviços de produção", () => {
     // Guarda do próprio instrumento: se o parser parar de enxergar os serviços,
     // todos os testes abaixo passariam vazios — verde por não ter medido nada.
+    // `migrate` (fb417d7f) aplica o schema no deploy, com a MESMA imagem do app.
     expect([...servicos.keys()].sort()).toEqual(
-      ["app", "caddy", "redis", "scheduler", "srh", "waha", "worker"].sort(),
+      ["app", "caddy", "migrate", "redis", "scheduler", "srh", "waha", "worker"].sort(),
     );
   });
 

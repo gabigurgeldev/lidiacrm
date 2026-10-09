@@ -1,5 +1,5 @@
 -- ============================================================================
--- 0209 — O ARQUIVO DO WEBHOOK TAMBÉM ESQUECEU A STEVO.
+-- 0234 (nasceu 0209 e foi renumerada: outra migration já usava o número) — O ARQUIVO DO WEBHOOK TAMBÉM ESQUECEU A STEVO.
 --
 -- A 0206 recriou os DOIS checks de `channel_sessions` (`_provider_check` e
 -- `_provider_ref_check`) para aceitar `stevo` — mas `webhook_events_log` tem

@@ -35,6 +35,8 @@ import {
   titularSchema,
 } from "@/lib/billing/validacao";
 import { cn } from "@/lib/utils";
+import { copyToClipboard } from "@/lib/clipboard";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 
 type Metodo = "PIX" | "CREDIT_CARD";
 
@@ -114,6 +116,7 @@ function EsperandoPix({
   onPago: () => void;
 }) {
   const t = useT();
+  const tag = useTagDeIdioma();
   const { data } = useStatusDaAssinatura(3000);
   const [copiado, setCopiado] = useState(false);
 
@@ -129,12 +132,11 @@ function EsperandoPix({
   }, [pago, onPago]);
 
   async function copiar() {
-    try {
-      await navigator.clipboard.writeText(r.copiaECola);
+    // `copyToClipboard` cobre também o self-host em http://, onde a API de
+    // área de transferência do navegador não existe. Sem cópia, o texto continua selecionável.
+    if (await copyToClipboard(r.copiaECola)) {
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2500);
-    } catch {
-      /* navegador sem permissão de clipboard: o texto continua selecionável */
     }
   }
 
@@ -144,7 +146,7 @@ function EsperandoPix({
         <p className="text-sm font-semibold">{t("Escaneie o QR Code no app do seu banco")}</p>
         <p className="mt-1 text-xs text-muted-foreground">
           {reaisDe(r.valorCentavos)}
-          {r.expiraEm ? ` · ${t("válido até")} ${new Date(r.expiraEm).toLocaleString("pt-BR")}` : ""}
+          {r.expiraEm ? ` · ${t("válido até")} ${new Date(r.expiraEm).toLocaleString(tag)}` : ""}
         </p>
       </div>
       <div className="mx-auto rounded-2xl border bg-white p-3 shadow-sm">
@@ -217,6 +219,7 @@ export function Checkout({
   modo?: "assinar" | "gerenciar";
 }) {
   const t = useT();
+  const tag = useTagDeIdioma();
   const router = useRouter();
   const checkout = useCheckout();
 
@@ -293,7 +296,7 @@ export function Checkout({
   }
   if (resultado?.tipo === "cartao_agendado") {
     const quando = resultado.vencimento
-      ? new Date(`${resultado.vencimento}T12:00:00Z`).toLocaleDateString("pt-BR")
+      ? new Date(`${resultado.vencimento}T12:00:00Z`).toLocaleDateString(tag)
       : null;
     return (
       <Sucesso

@@ -28,6 +28,7 @@ vi.mock("@/lib/agent-engine/cron/scheduler", () => ({
 import type pg from "pg";
 
 import { performHumanHandoff } from "@/lib/agent-engine/agent/human-handoff";
+import { motivoEmLinhas } from "@/lib/escalacao/anuncio-da-passagem";
 import { garantirNosRegistrados } from "@/lib/flow-engine/register-all";
 import { buscarNo } from "@/lib/flow-engine/registry";
 
@@ -87,6 +88,9 @@ describe("performHumanHandoff → agent.handoff_requested", () => {
       conversation_id: "conversa-1",
       lead_id: "lead-9",
       reason: "requested_human",
+      // O motivo já quebrado em linhas, para o bloco de aviso do fluxo usar
+      // `{{event.reason_em_linhas}}` sem montar texto (`anuncio-da-passagem.ts`).
+      reason_em_linhas: motivoEmLinhas("requested_human"),
       summary: "Cliente do Radar não consegue conectar o número.",
       lead_avisado: true,
     });

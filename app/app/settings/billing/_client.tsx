@@ -20,9 +20,11 @@ import {
   useCancelarAssinatura,
   useStatusDaAssinatura,
 } from "@/hooks/useAssinatura";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 
-const data = (iso: string | null) =>
-  iso ? new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso).toLocaleDateString("pt-BR") : "—";
+/** A data no idioma de quem lê (`useTagDeIdioma`), nunca fixa em pt-BR. */
+const dataNoIdioma = (iso: string | null, tag: string) =>
+  iso ? new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso).toLocaleDateString(tag) : "—";
 
 function SeloDoStatus({ status }: { status: string }) {
   const t = useT();
@@ -35,6 +37,8 @@ function SeloDoStatus({ status }: { status: string }) {
 
 export function GerenciarAssinatura({ email }: { email: string }) {
   const t = useT();
+  const tag = useTagDeIdioma();
+  const data = (iso: string | null) => dataNoIdioma(iso, tag);
   const { data: s, isLoading } = useStatusDaAssinatura();
   const cancelar = useCancelarAssinatura();
   const [trocando, setTrocando] = useState(false);

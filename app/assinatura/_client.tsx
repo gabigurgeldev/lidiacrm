@@ -6,12 +6,16 @@ import { MarcaDaBarra } from "@/components/shell/sidebar/SidebarBrand";
 import { useT } from "@/hooks/i18n/useT";
 import type { EstadoDeAcesso } from "@/lib/billing/acesso";
 import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
+import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 
-const dataCurta = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" }) : "";
+/** A data no idioma de quem lê (`useTagDeIdioma`), nunca fixa em pt-BR. */
+const dataCurtaNoIdioma = (iso: string | null, tag: string) =>
+  iso ? new Date(iso).toLocaleDateString(tag, { day: "2-digit", month: "long" }) : "";
 
 function Situacao({ estado }: { estado: EstadoDeAcesso }) {
   const t = useT();
+  const tag = useTagDeIdioma();
+  const dataCurta = (iso: string | null) => dataCurtaNoIdioma(iso, tag);
   const bloqueado = !estado.liberado;
   const titulo =
     estado.motivo === "trial_vencido"

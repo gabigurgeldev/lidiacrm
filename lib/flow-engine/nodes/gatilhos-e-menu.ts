@@ -320,29 +320,6 @@ export function respostaEhONumero(texto: string, indice: number): boolean {
   return limpo === String(indice + 1);
 }
 
-/**
- * Manda a pergunta do bloco (texto + lista), quando houver. `null` = saiu ou
- * não havia o que mandar; string = o motivo de não ter saído.
- */
-export async function mandarPergunta(
-  ctx: FlowExecutionContext,
-  pergunta: string,
-  canalId: string | null,
-  lista: string,
-): Promise<string | null> {
-  const texto = ctx.render(pergunta).trim();
-  if (texto === "" && lista === "") return null;
-  const contato = ctx.fatos.contact;
-  if (contato === null || contato.phone_number === null) return "sem_telefone_do_cliente";
-  const desfecho = await ctx.canal.enviarParaContato({
-    contactId: contato.id,
-    tipo: "texto",
-    texto: lista === "" ? texto : `${texto}\n\n${lista}`,
-    channelSessionId: canalId,
-  });
-  return desfecho.kind === "recusado" ? desfecho.motivo : null;
-}
-
 export const RAMO_NAO_RESPONDEU = "nao_respondeu";
 /** Respondeu, mas nada bateu. É o `else`: o pega-tudo do bloco. */
 export const RAMO_NAO_ENTENDI = "else";
@@ -429,6 +406,33 @@ export const logicChoiceMenu: FlowNodeDefinition<MenuConfig> = {
     };
   },
 };
+
+/**
+ * Mora DEPOIS da definição do menu, que é quem a chama: a sonda de
+ * `campo-que-interpola-tem-seletor.test.ts` recorta o arquivo por definição, e
+ * aqui em cima ela creditava o `ctx.render` ao gatilho de palavra-chave.
+ *
+ * Manda a pergunta do bloco (texto + lista), quando houver. `null` = saiu ou
+ * não havia o que mandar; string = o motivo de não ter saído.
+ */
+export async function mandarPergunta(
+  ctx: FlowExecutionContext,
+  pergunta: string,
+  canalId: string | null,
+  lista: string,
+): Promise<string | null> {
+  const texto = ctx.render(pergunta).trim();
+  if (texto === "" && lista === "") return null;
+  const contato = ctx.fatos.contact;
+  if (contato === null || contato.phone_number === null) return "sem_telefone_do_cliente";
+  const desfecho = await ctx.canal.enviarParaContato({
+    contactId: contato.id,
+    tipo: "texto",
+    texto: lista === "" ? texto : `${texto}\n\n${lista}`,
+    channelSessionId: canalId,
+  });
+  return desfecho.kind === "recusado" ? desfecho.motivo : null;
+}
 
 // ──────────────────────────── trigger.webhook ────────────────────────────────
 

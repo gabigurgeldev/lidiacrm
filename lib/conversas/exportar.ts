@@ -8,6 +8,8 @@
  * inclusive o que a tela esconde por respeito: mensagem apagada sai como
  * "(mensagem apagada)", nunca com o texto que o cliente mandou tirar do ar.
  */
+import { tagDeIdioma } from "@/lib/i18n/datas";
+import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 
 /** Teto de mensagens por arquivo. Acima disso o arquivo avisa que cortou. */
 export const TETO_DA_EXPORTACAO = 10_000;
@@ -83,14 +85,16 @@ export function linhasDaConversa(
   mensagens: readonly MensagemParaExportar[],
   fuso: string,
   nomes: ReadonlyMap<string, string> = new Map(),
+  /** Idioma de quem baixa o arquivo (`tagDeIdioma`). */
+  tag: string = tagDeIdioma(IDIOMA_PADRAO),
 ): LinhaExportada[] {
-  const fmtData = new Intl.DateTimeFormat("pt-BR", {
+  const fmtData = new Intl.DateTimeFormat(tag, {
     timeZone: fuso,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
-  const fmtHora = new Intl.DateTimeFormat("pt-BR", {
+  const fmtHora = new Intl.DateTimeFormat(tag, {
     timeZone: fuso,
     hour: "2-digit",
     minute: "2-digit",
@@ -116,7 +120,8 @@ export function linhasDaConversa(
 export function fusoSeguro(fuso: string | null | undefined): string {
   if (!fuso) return "America/Sao_Paulo";
   try {
-    new Intl.DateTimeFormat("pt-BR", { timeZone: fuso });
+    // Só valida o fuso — o idioma não importa aqui.
+    new Intl.DateTimeFormat(undefined, { timeZone: fuso });
     return fuso;
   } catch {
     return "America/Sao_Paulo";

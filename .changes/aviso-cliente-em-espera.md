@@ -9,8 +9,7 @@ cliente até alguém devolver a conversa. Se o cliente escrevia de novo nesse
 meio-tempo, ninguém respondia — e ninguém era avisado, porque o aviso ao dono
 só saía numa passagem nova.
 
-O gatilho **"Quando o cliente manda mensagem"** ganhou a opção **"Só quando o
-cliente está esperando a equipe"**. Ligada a um bloco "Avisar o vendedor no
+O gatilho **"Quando o cliente manda mensagem"** ganhou a opção **"Só quando o cliente está esperando a equipe"**. Ligada a um bloco "Avisar o vendedor no
 WhatsApp", ela avisa a equipe sempre que um cliente em espera manda
 mensagem. Um cliente que manda várias mensagens seguidas gera um aviso só (o
 intervalo mínimo entre avisos é ajustável, 30 minutos por padrão).
