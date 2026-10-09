@@ -57,6 +57,12 @@ export interface DrainKnobs {
   idleIntervalMs: number;
   /** Janela de coalescência de rajada inbound por contato (0 = sem debounce). */
   debounceMs: number;
+  /**
+   * Teto da janela DESLIZANTE, contado da 1ª mensagem da rajada. Cada mensagem
+   * nova empurra o turno para `agora + debounceMs`, sem passar deste teto.
+   * Ausente = janela fixa contada da 1ª mensagem (o comportamento anterior).
+   */
+  debounceMaxMs?: number;
   /** Evento 'processing' órfão volta a 'pending' após isto. */
   reapTimeoutMs: number;
 }
@@ -328,13 +334,41 @@ async function processEvent(
       return 'processado';
     }
   } else if (knobs.debounceMs > 0) {
-    const { rows: pendingRows } = await pool.query<{ id: string }>(
-      `select id from job_queue
-       where organization_id = $1 and contact_id = $2
-         and kind = 'inbound_turn' and status = 'pending' and run_after > now()
-       limit 1`,
-      [event.organization_id, p.contact_id],
-    );
+    // Janela DESLIZANTE: quem escreve "oi" e, 7 s depois, "queria saber o preço"
+    // e, 3 s depois, "do plano anual" ainda está no meio da frase. Com a janela
+    // fixa contada da 1ª mensagem, o turno saía aos 8 s respondendo só às duas
+    // primeiras, e a terceira abria um segundo turno — duas respostas para uma
+    // pergunta. Cada mensagem empurra o turno para `agora + debounce`, com teto
+    // contado da 1ª (`created_at` do job), para quem escreve sem parar não
+    // esperar para sempre.
+    //
+    // `greatest` é o que torna isto seguro: a conta SÓ empurra para frente. Um
+    // job adiado para a abertura da janela anti-ban (22h → 7h) ou para a nova
+    // tentativa de uma falha tem `run_after` maior que a conta e fica onde está.
+    const { rows: pendingRows } =
+      knobs.debounceMaxMs !== undefined
+        ? await pool.query<{ id: string }>(
+            `update job_queue
+                set run_after = greatest(
+                      run_after,
+                      least(now() + ($3 * interval '1 millisecond'),
+                            created_at + ($4 * interval '1 millisecond')))
+              where id = (
+                select id from job_queue
+                 where organization_id = $1 and contact_id = $2
+                   and kind = 'inbound_turn' and status = 'pending' and run_after > now()
+                 order by run_after
+                 limit 1)
+              returning id`,
+            [event.organization_id, p.contact_id, knobs.debounceMs, knobs.debounceMaxMs],
+          )
+        : await pool.query<{ id: string }>(
+            `select id from job_queue
+             where organization_id = $1 and contact_id = $2
+               and kind = 'inbound_turn' and status = 'pending' and run_after > now()
+             limit 1`,
+            [event.organization_id, p.contact_id],
+          );
     if (pendingRows[0]) {
       log.info('drain: rajada coalescida em job pendente', {
         event_id: event.id,

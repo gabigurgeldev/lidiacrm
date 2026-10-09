@@ -10102,6 +10102,12 @@ alter table public.agent_inbox_items
     -- aceita cujo executor não começou, ou laço de transferências contido.
     -- Entra NESTA lista, no fim, pela mesma razão das de cima (#159).
     'coordenador_preso',
+    -- (migration 0231) O agente terminou um turno de resposta sem enviar nada
+    -- ao cliente: escreveu a resposta como texto solto (que o runtime descarta)
+    -- ou encerrou calado, e nem a cobrança obrigatória resolveu — ou todas as
+    -- tentativas foram barradas pelas conferências. Antes o turno terminava "ok"
+    -- e ninguém sabia. Entra NESTA lista, no fim.
+    'turno_sem_resposta',
     'other'
   ));
 

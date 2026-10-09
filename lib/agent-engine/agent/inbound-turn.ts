@@ -90,6 +90,7 @@ import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memor
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
+import { decidirResgateDoTurnoMudo, MENSAGEM_DE_RESGATE, avisarTurnoSemResposta } from './turno-mudo';
 import {
   MENSAGEM_DO_TETO,
   tetoDoNumeroAtingido,
@@ -940,7 +941,10 @@ export function buildOpeningMessage(
 ): string {
   const entregue = (nome: string): boolean => entregues.includes(nome);
   return [
-    'Novo turno de atendimento: o lead enviou uma mensagem (a última inbound do histórico abaixo).',
+    // "As mensagens", no plural: a fila junta a rajada do cliente num turno só
+    // (INBOUND_DEBOUNCE_MS), e "a última" fazia o modelo responder só à última
+    // frase de quem escreveu três seguidas.
+    'Novo turno de atendimento: o lead escreveu. As mensagens dele desde a sua última resposta estão no fim do histórico abaixo — responda a todas juntas, não só à última.',
     '',
     ...ritualBlocks(previous, leadState, context, notesIndexBlock, projeta),
     '',
@@ -1853,6 +1857,9 @@ async function executarTurnoDoAgente(
   // mesmo número gastou o último envio entre a pré-checagem e aqui). Se nada saiu,
   // o turno é adiado depois do modelo, em vez de terminar "ok" e mudo.
   let tetoVetado: TetoDoNumeroAtingido | null = null;
+  // Códigos de todo veto da cadeia de envio devolvido ao modelo neste turno —
+  // o que decide se o turno sem resposta merece resgate ou só aviso.
+  const vetosDoTurno: string[] = [];
   // Citações acumuladas por buscas de conhecimento DESTE turno — anexadas à
   // próxima outbound enviada (shape de lib/ai/citations/types, que a UI já lê).
   let pendingCitations: ReturnType<typeof citationsFromHits> = [];
@@ -2061,8 +2068,10 @@ async function executarTurnoDoAgente(
           const teto = vetoDeTetoDoNumero(chain);
           if (teto !== null) {
             tetoVetado ??= teto;
+            vetosDoTurno.push(chain.code);
             return { ok: false, error: { code: chain.code, message: MENSAGEM_DO_TETO } };
           }
+          vetosDoTurno.push(chain.code);
           return { ok: false, error: { code: chain.code, message: chain.message } };
         }
         const outcome = chain.outcome;
@@ -2215,6 +2224,7 @@ async function executarTurnoDoAgente(
             // abre um caso mínimo e libera o envio — nunca deixa a promessa passar sem caso.
             casePromiseVetoCount += 1;
             if (casePromiseVetoCount < 2) {
+              vetosDoTurno.push(chain.code);
               return { ok: false, error: { code: chain.code, message: chain.message } };
             }
             const auto = await openCase(
@@ -2232,6 +2242,7 @@ async function executarTurnoDoAgente(
             if (!auto.ok) {
               // openCase falhou (ex.: já existe outro caso aberto por corrida) — NÃO envie
               // prometendo humano sem caso; mantém a invariante com o erro de ensino original.
+              vetosDoTurno.push(chain.code);
               return { ok: false, error: { code: chain.code, message: chain.message } };
             }
             openedCaseThisTurn = true;
@@ -2258,6 +2269,7 @@ async function executarTurnoDoAgente(
             // medição, que é o produto deste gate.
             internalVocabularyVetoCount += 1;
             if (internalVocabularyVetoCount < MAX_VETOS_DE_VOCABULARIO_INTERNO) {
+              vetosDoTurno.push(chain.code);
               return { ok: false, error: { code: chain.code, message: chain.message } };
             }
             runLog.warn('fail-safe do gate de vocabulário interno: envio liberado após vetos seguidos', {
@@ -2278,10 +2290,12 @@ async function executarTurnoDoAgente(
             const teto = vetoDeTetoDoNumero(chain);
             if (teto !== null) {
               tetoVetado ??= teto;
+              vetosDoTurno.push(chain.code);
               return { ok: false, error: { code: chain.code, message: MENSAGEM_DO_TETO } };
             }
             // Erro de ENSINO pt-br (mesmo shape de get_lead_context/breaker): o
             // modelo o vê no turno seguinte. NÃO é exceção — não derruba o run.
+            vetosDoTurno.push(chain.code);
             return { ok: false, error: { code: chain.code, message: chain.message } };
           }
           const outcome = chain.outcome;
@@ -3120,14 +3134,82 @@ async function executarTurnoDoAgente(
     }
   }
 
+  // ── TURNO MUDO ─────────────────────────────────────────────────────────────
+  //
+  // O cliente escreveu, o modelo rodou, e nada saiu: escreveu a resposta como
+  // texto solto (que o runtime descarta), ou simplesmente encerrou. O turno
+  // terminava "ok" e a conversa ficava sem resposta, sem ninguém saber. Regra
+  // inteira e os casos legítimos de silêncio em `turno-mudo.ts`.
+  let mensagensDoTurno: ModelMessage[] = [...turn.result.response.messages];
+  const algoSaiuNoTurno = (): boolean =>
+    outcomes.some((o) => o.kind === 'sent' || o.kind === 'already_sent' || o.kind === 'queued');
+  const resgate = decidirResgateDoTurnoMudo({
+    kind: job.kind,
+    algoSaiu: algoSaiuNoTurno(),
+    clienteBloqueado: optedOutThisTurn,
+    vetos: vetosDoTurno,
+    passouParaHumano: algoSaiuNoTurno() ? false : await isLeadInHandoff(pool, tenantId, leadId),
+  });
+  if (resgate.acao === 'cobrar_resposta') {
+    // UMA chance, só com as ferramentas de falar com o cliente, e obrigatória:
+    // `toolChoice: 'required'` impede a segunda prosa solta. `maxSteps: 1`
+    // porque o que importa é a ferramenta executar — o modelo não precisa ver o
+    // resultado, e um segundo passo seria forçado a chamar ferramenta de novo.
+    const ferramentasDeResposta: ToolSet = {
+      ...(tools.send_message !== undefined ? { send_message: tools.send_message } : {}),
+      ...(tools.request_human_handoff !== undefined ? { request_human_handoff: tools.request_human_handoff } : {}),
+    };
+    const cobranca = { role: 'user' as const, content: MENSAGEM_DE_RESGATE };
+    try {
+      const resgatado = await runModelCall(
+        pool,
+        deps.llmCfg,
+        {
+          tenantId,
+          leadId,
+          jobId: job.id,
+          purpose: 'agent_turn',
+          system,
+          messages: [...openingMessages, ...mensagensDoTurno, cobranca],
+          tools: ferramentasDeResposta,
+          toolChoice: 'required',
+          maxSteps: 1,
+          ...(agentConfig !== null
+            ? {
+                model: agentConfig.model,
+                llmOverride: { provider: agentConfig.provider, credentialId: agentConfig.credentialId },
+              }
+            : {}),
+        },
+        { registry: deps.registry, log: runLog },
+      );
+      mensagensDoTurno = [...mensagensDoTurno, cobranca, ...resgatado.result.response.messages];
+      runLog.info('turno mudo — modelo cobrado a responder', { respondeu: algoSaiuNoTurno() });
+    } catch (err) {
+      if (err instanceof LlmBudgetExceededError) throw err;
+      runLog.warn('resgate do turno mudo falhou — segue para o aviso', normalizarErro(err));
+    }
+    if (runError !== null) throw runError;
+  }
+  if (resgate.acao !== 'nada' && !algoSaiuNoTurno() && !(await isLeadInHandoff(pool, tenantId, leadId))) {
+    await avisarTurnoSemResposta(pool, {
+      tenantId,
+      leadId,
+      motivo: resgate.acao === 'avisar' ? 'barrado' : 'nao_respondeu',
+      vetos: vetosDoTurno,
+      log: runLog,
+    });
+    runLog.warn('turno terminou sem resposta ao cliente', { motivo: resgate.acao, vetos: vetosDoTurno });
+  }
+
   // F3-10: poda os tool results antigos da fita do run ANTES de reenviá-los no fechamento
   // (é onde a fita inteira é re-serializada num prompt) — o conteúdo durável já foi para
   // lead_notes pelo flush (F3-07), então o stub não perde nada recuperável. Opera SÓ no
   // sufixo por-lead, nunca no prefixo estável (regra de cache 15).
   const responseMessages =
     deps.knobs.prune !== undefined
-      ? pruneToolResults(turn.result.response.messages, deps.knobs.prune)
-      : turn.result.response.messages;
+      ? pruneToolResults(mensagensDoTurno, deps.knobs.prune)
+      : mensagensDoTurno;
 
   // Fechamento imposto pelo runtime: 2ª chamada, mesma conversa, só o checkpoint.
   //
