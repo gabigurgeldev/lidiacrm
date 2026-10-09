@@ -109,6 +109,31 @@ describe("decidir", () => {
     expect(p).toEqual({ acao: "nada", motivo: "resposta_a_pergunta" });
   });
 
+  it("fluxo dono que TERMINOU não segura a conversa — a mensagem volta à decisão", () => {
+    // Sem isto, a próxima mensagem depois de um fluxo concluído virava
+    // "resposta à pergunta" de uma pergunta que ninguém mais faria: conversa muda.
+    const pol = politica({}, {
+      regras_de_entrada: [{ id: "cobranca", quando: "contem", termos: ["cobrança"], destino: "suporte" }],
+    });
+    const p = decidir({
+      estado: estado({ dono_tipo: "fluxo", dono_execution_id: EXEC }),
+      politica: pol,
+      texto: "e a cobrança?",
+      fatos: { ...semFatos, fluxoDoDonoVivo: false },
+    });
+    expect(p).toMatchObject({ acao: "destino", destino: { chave: "suporte" } });
+  });
+
+  it("fluxo dono terminou, mas há triagem do legado viva: ela é adotada", () => {
+    const p = decidir({
+      estado: estado({ dono_tipo: "fluxo", dono_execution_id: EXEC }),
+      politica: politica(),
+      texto: "oi",
+      fatos: { ...semFatos, fluxoDoDonoVivo: false, fluxoVivoLegado: { executionId: "outra" }, flowIdConduzindo: AGENDA_FLOW },
+    });
+    expect(p).toEqual({ acao: "adotar_fluxo", executionId: "outra", motivo: "reconciliacao" });
+  });
+
   it("Cenário F: interrupção explícita para outro destino sai do fluxo; para o MESMO fluxo, não", () => {
     const pol = politica({}, {
       regras_de_entrada: [

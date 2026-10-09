@@ -113,7 +113,9 @@ export function decisorPorLlm(
               tenantId: p.organizationId,
               leadId: p.contactId,
               jobId: p.jobId,
-              purpose: FINALIDADE_DO_DECISOR,
+              // Literal, não a constante: é a forma que a varredura de
+              // `pontos-de-ia-completude` reconhece como emissão do ponto.
+              purpose: 'coordenador_decidir',
               system,
               messages: [{ role: "user", content: user }],
             },

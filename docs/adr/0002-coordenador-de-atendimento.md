@@ -206,3 +206,81 @@ o corpus do marco M7.
 - **M8:** empacotamento.
 
 Cada marco entra na `main` com o coordenador desligado por padrão.
+
+## M2 — onde a entrada encosta no runtime
+
+A decisão acontece no **início do turno de entrada** (`runAgentTurn` em
+`lib/agent-engine/agent/inbound-turn.ts`), não no webhook nem no drain:
+
+- a mensagem já foi persistida e o opt-out aplicado (`pos-entrada.ts`);
+  decidir ali não atrasa o reconhecimento do canal;
+- o debounce de entrada já agrupou os fragmentos — uma decisão por **lote**,
+  não por "oi" / "queria saber" / "do plano";
+- o lote é o que o cliente disse **depois da última fala da empresa** e ainda
+  não foi admitido. Sem esse corte, a primeira ativação juntaria dias de
+  conversa já respondida num texto só.
+
+O que muda por modo:
+
+| Modo | Turno |
+|---|---|
+| sem política / `off` | idêntico ao de antes. Nenhuma linha escrita. |
+| `shadow` | grava a recomendação em `coord_transicoes` (`status = shadow`) e segue o caminho legado inteiro. Pode consultar o modelo, dentro do teto por hora. |
+| `active` | o coordenador é a única fonte de "quem conduz": `resolveTurnAgent` não reclassifica, `fluxoNoComando` não é consultado, o agente é carregado pela versão publicada que a política escolheu, e `conversations.active_ai_agent_id` vira espelho do dono. |
+
+Duas regras de falha, deliberadamente diferentes: não conseguir **ler** a
+política devolve `off` (o coordenador é aditivo e não pode calar quem nunca o
+ligou); falhar **depois** de saber que a política é `active` não cai no legado,
+porque o roteador antigo falaria por cima de um dono que pode já estar gravado.
+O turno não fala e o vigia (M4) recupera.
+
+O portão de capacidade do drain passa a contar política `active` no número:
+os destinos do coordenador são agentes da org inteira, e um número sem agente
+próprio ainda tem quem atenda.
+
+Limites conhecidos deste marco:
+
+- turno entregue por fluxo legado (`crm.handoff_to_agent`) não passa pelo
+  coordenador — a delegação fluxo → agente com retorno entra com os nós
+  `coord.*`;
+- turno adiado pela janela anti-ban decide antes de adiar; na retomada o lote
+  já está admitido e o dono segue o mesmo, sem nova decisão.
+
+## M3 (primeira parte) — envio com fencing, chamada agente → fluxo, `flow.call`
+
+**Fencing no envio.** Gate `coordenacao` na cadeia `before_send` (v7), logo
+depois do `stop`, avaliado sob o advisory lock por número que já serializa o
+envio. O turno conduzido pelo coordenador leva a concessão (executor + geração);
+uma pessoa que assumiu um segundo antes já sobe a geração pela trigger, e a
+resposta que o agente estava escrevendo não sai. Fora de uma concessão o gate
+é no-op — o caminho legado não muda. Mensagem que o canal já aceitou antes da
+troca pode chegar: não há exactly-once no transporte externo, e o que o gate
+impede são envios NOVOS de quem perdeu a vez.
+
+**Chamada agente → fluxo** (migration 0230). A ferramenta
+`solicitar_acao_do_coordenador` entra no turno só quando o coordenador conduz e
+a política dá ao agente destinos em `permissoes`. O modelo escolhe a chave; org,
+conversa, agente e geração vêm do runtime. `fn_coord_chamar_fluxo` faz fencing,
+execução, chamada e troca numa transação. O retorno é um trigger em
+`flow_executions`: a chamada fecha com a saída e a conversa volta ao agente com
+o turno dele no outbox — e o turno abre com o resultado como dado entre marcas.
+
+**`flow.call` consertado** (independe do coordenador):
+
+1. lia `flows.published_version_id`, que não existe — todo subfluxo morria em
+   `subfluxo_indisponivel`. Lê `active_version_id` de fluxo `active`;
+2. a volta era tratada como primeira visita (o passo não gravava o prazo, então
+   `esperaEmCurso` não a reconhecia) e cada despertar criava OUTRA filha. O
+   passo grava `ate`, e o nó, na volta, segue com `vars.subfluxo`
+   (`desfecho` + `saida`, ou `prazo_esgotado`);
+3. `output` nunca era escrito. A filha grava o contexto final como saída, e a
+   filha que MORRE também avisa o pai, com desfecho `falhou`.
+
+**Fluxo dono que terminou não segura a conversa.** Antes, com o dono `fluxo`
+concluído, toda mensagem seguinte virava "resposta à pergunta" e a conversa
+ficava muda. O fato `fluxoDoDonoVivo` devolve a mensagem à decisão.
+
+Ainda não feito (próximas partes do M3): nós `coord.*` no editor de fluxo
+(fluxo chama agente com retorno, transferir, decidir destino), gatilho de fluxo
+chamável com entrada/saída declaradas, slot de interação entre frentes
+paralelas, prazo/cancelamento de chamada pelo vigia.

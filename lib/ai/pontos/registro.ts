@@ -232,6 +232,18 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     registraEm: "llm_calls",
   },
   {
+    id: "coordenador_decidir",
+    rotulo: "Escolher quem conduz a conversa",
+    oQueFaz:
+      "Quando a mensagem do cliente não casa com nenhuma regra do coordenador, escolhe entre os agentes e fluxos permitidos qual deve conduzir.",
+    papel: "entender",
+    exige: {},
+    emissor: "lib/coordenador/decisor/llm.ts",
+    sintomaDeFalha:
+      "As conversas ficam com quem já estava atendendo ou caem no destino padrão do coordenador, mesmo quando o assunto mudou.",
+    registraEm: "llm_calls",
+  },
+  {
     id: "stage_classifier",
     rotulo: "Identificar a etapa do lead",
     oQueFaz:

@@ -4712,6 +4712,7 @@ export const DICIONARIO: Traducoes = {
 
   // ─── Onboarding: conferências de saída (guardrails), "E nunca vai fazer" ───
   "Respeitar quem pediu para parar": { es: "Respetar a quien pidió parar" },
+  "Falar só quem está atendendo": { es: "Que hable solo quien está atendiendo" },
   "Respeitar dados apagados e a base legal": { es: "Respetar datos borrados y la base legal" },
   "Segurar o ritmo de envio": { es: "Mantener el ritmo de envío" },
   "Respeitar a janela do WhatsApp": { es: "Respetar la ventana de WhatsApp" },

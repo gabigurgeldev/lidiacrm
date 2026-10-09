@@ -28,6 +28,9 @@ const ORG_B = "0229bbbb-0000-4000-8000-000000000002";
 const MEMBRO_A = "0229aaaa-1111-4000-8000-000000000001";
 const SESSAO_A = "0229aaaa-2222-4000-8000-000000000001";
 const SESSAO_B = "0229bbbb-2222-4000-8000-000000000002";
+// Segundo número da org A: a mesma pessoa em dois números são duas conversas
+// (o baseline garante uma conversa por contato e número).
+const SESSAO_A2 = "0229aaaa-2222-4000-8000-000000000002";
 const CONTATO_A = "0229aaaa-3333-4000-8000-000000000001";
 const CONTATO_B = "0229bbbb-3333-4000-8000-000000000002";
 const CONV_A = "0229aaaa-4444-4000-8000-000000000001";
@@ -49,13 +52,14 @@ function seed(): void {
       values ('${MEMBRO_A}', '${ORG_A}', 'admin', now());
     insert into public.channel_sessions (id, organization_id, waha_session_name, webhook_secret_encrypted) values
       ('${SESSAO_A}', '${ORG_A}', 'coord-inv-a', '\\x00'::bytea),
+      ('${SESSAO_A2}', '${ORG_A}', 'coord-inv-a2', '\\x00'::bytea),
       ('${SESSAO_B}', '${ORG_B}', 'coord-inv-b', '\\x00'::bytea);
     insert into public.contacts (id, organization_id, display_name) values
       ('${CONTATO_A}', '${ORG_A}', 'Cliente A'),
       ('${CONTATO_B}', '${ORG_B}', 'Cliente B');
     insert into public.conversations (id, organization_id, contact_id, channel_session_id, status) values
       ('${CONV_A}',  '${ORG_A}', '${CONTATO_A}', '${SESSAO_A}', 'open'),
-      ('${CONV_A2}', '${ORG_A}', '${CONTATO_A}', '${SESSAO_A}', 'open'),
+      ('${CONV_A2}', '${ORG_A}', '${CONTATO_A}', '${SESSAO_A2}', 'open'),
       ('${CONV_B}',  '${ORG_B}', '${CONTATO_B}', '${SESSAO_B}', 'open');
     insert into public.ai_agents (id, organization_id, name, system_prompt) values
       ('${AGENTE_A}',  '${ORG_A}', 'Comercial A', 'prompt'),

@@ -26,7 +26,9 @@ export type CategoriaDeTransicao =
   | "manual"
   | "retorno"
   | "recuperacao"
-  | "fallback";
+  | "fallback"
+  /** Um executor pediu a troca (o agente chamou ou transferiu). Migration 0230. */
+  | "delegacao";
 
 export interface EstadoDaConversa {
   organization_id: string;

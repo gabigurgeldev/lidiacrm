@@ -31,6 +31,15 @@ export interface FatosDaConversa {
   fluxoVivoLegado: { executionId: string } | null;
   /** `flow_id` da execução que conduz (do coordenador ou do legado), se houver. */
   flowIdConduzindo: string | null;
+  /**
+   * A execução que o estado diz ser a dona ainda está viva? Ausente = viva
+   * (quem não sabe não pode concluir que o fluxo acabou).
+   *
+   * Sem este fato, um fluxo que TERMINOU continuava dono para sempre: toda
+   * mensagem seguinte virava "resposta à pergunta" de uma pergunta que ninguém
+   * mais faria, e a conversa ficava muda.
+   */
+  fluxoDoDonoVivo?: boolean;
 }
 
 export type CategoriaDaProposta = "regra" | "continuidade" | "modelo" | "manual" | "fallback";
@@ -121,10 +130,11 @@ export function decidir(args: {
     : null;
 
   // 2. Fluxo conduzindo (do coordenador, ou o de triagem do legado ao ligar).
+  const donoFluxoEncerrado = estado?.dono_tipo === "fluxo" && fatos.fluxoDoDonoVivo === false;
   const fluxoConduzindo =
-    estado?.dono_tipo === "fluxo" && estado.dono_execution_id
+    estado?.dono_tipo === "fluxo" && estado.dono_execution_id && !donoFluxoEncerrado
       ? estado.dono_execution_id
-      : estado === null || estado.dono_tipo === "nenhum"
+      : estado === null || estado.dono_tipo === "nenhum" || donoFluxoEncerrado
         ? fatos.fluxoVivoLegado?.executionId ?? null
         : null;
   if (fluxoConduzindo !== null) {
@@ -139,7 +149,7 @@ export function decidir(args: {
     if (destinoDaRegra && !mesmoFluxo && politica.config.interrupcao.permitir) {
       return { acao: "destino", destino: destinoDaRegra, categoria: "regra", motivo: "interrupcao" };
     }
-    if (estado?.dono_tipo !== "fluxo") {
+    if (estado?.dono_tipo !== "fluxo" || donoFluxoEncerrado) {
       return { acao: "adotar_fluxo", executionId: fluxoConduzindo, motivo: "reconciliacao" };
     }
     return { acao: "nada", motivo: "resposta_a_pergunta" };
