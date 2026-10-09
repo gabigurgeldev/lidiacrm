@@ -284,6 +284,21 @@ Avatar (sm/md) com tooltip mostrando nome do owner. Suporta "unassigned" (ícone
 
 Badge especializada para tags livres (cliente VIP, frete-grátis, etc.). Cor neutra default; usuário pode escolher de palette restrita (5 stops do greige + accent). Suporta close button (`X` 12px) em modo editável.
 
+## Kit de Ajustes (`components/ajustes`)
+
+A linguagem "Ajustes do iOS" (`.ios-grupo`, `.ios-linha`, `.ios-segmentado`, `.ios-disco` em `app/globals.css`) em componentes. **Tela nova de configuração usa o kit, não as classes soltas** — cada tela que montou o próprio arranjo inventou uma variação de "título do grupo".
+
+| Peça | Para quê |
+|---|---|
+| `PaginaAjustes` | Cabeçalho da página (título, descrição, ações à direita) e o espaço entre grupos |
+| `Grupo` | UM cartão agrupado. Título e rodapé ficam FORA do cartão; `recuo="icone"` recua o divisor |
+| `Linha` | Rótulo à esquerda; `valor` ou `controle` à direita. Com `href`/`aoClicar` vira navegação, com seta |
+| `LinhaInterruptor` | Linha com interruptor; o rótulo inteiro é clicável |
+| `Segmentado` | Escolha de UM valor entre poucos (`radiogroup`, setas trocam). Para abas com conteúdo, `Tabs` + `SEGMENTADO_ABAS`/`GATILHO_DA_ABA` |
+| `Campo` / `Dica` / `Aviso` | Formulário dentro do grupo: rótulo em cima, controle de largura inteira (a `.ios-linha` espremeria o campo de texto) |
+
+O kit não traduz: quem chama passa o texto já por `t()`/`traduzir()`, e por isso ele serve em página de servidor e de cliente. Vidro (`.ios-vidro`) não entra em nenhuma peça — é de chassi. Contrato vigiado por `tests/unit/kit-de-ajustes.test.tsx`.
+
 ---
 
 # Composition rules

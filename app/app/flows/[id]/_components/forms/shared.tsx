@@ -1,7 +1,5 @@
 "use client";
 
-import { Label } from "@/components/ui/label";
-
 /**
  * Os primitivos que todo formulário de bloco usa.
  *
@@ -58,52 +56,7 @@ export interface FluxoChamavel {
   publicado: boolean;
 }
 
-/**
- * Um cartão agrupado. O título fica FORA do cartão (o `.ios-grupo` não tem
- * fatia de cabeçalho — pôr o título dentro o transformaria na primeira linha
- * do grupo, com divisor embaixo, lido como se fosse mais um campo).
- */
-export function Secao({
-  titulo,
-  children,
-  testid,
-}: {
-  titulo?: string;
-  children: React.ReactNode;
-  testid?: string;
-}) {
-  return (
-    <div className="space-y-1.5">
-      {titulo !== undefined && (
-        <p className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {titulo}
-        </p>
-      )}
-      <div className="ios-grupo" data-testid={testid}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-/** Uma linha do cartão: rótulo em cima, controle de largura inteira embaixo. */
-export function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5 px-4 py-3">
-      <Label>{rotulo}</Label>
-      {children}
-    </div>
-  );
-}
-
-/** Explicação de um campo. Mora DENTRO do `Campo`, embaixo do controle. */
-export function Dica({ texto }: { texto: string }) {
-  return <p className="text-xs leading-snug text-muted-foreground">{texto}</p>;
-}
-
-/** O bloco que não tem o que ajustar — explica o que ele faz, em vez de nada. */
-export function Aviso({ texto }: { texto: string }) {
-  return (
-    <p className="ios-grupo px-4 py-3 text-xs leading-snug text-muted-foreground">{texto}</p>
-  );
-}
+// `Secao`, `Campo`, `Dica` e `Aviso` subiram para o kit de Ajustes
+// (`components/ajustes`), que as outras telas também usam. Reexportados aqui
+// para os dezesseis formulários de bloco não mudarem de import.
+export { Aviso, Campo, Dica, Secao } from "@/components/ajustes";
