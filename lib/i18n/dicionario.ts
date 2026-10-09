@@ -8031,7 +8031,6 @@ export const DICIONARIO: Traducoes = {
   "Escreva como se fosse o cliente para ver o que o agente responderia.": { es: "Escribe como si fueras el cliente para ver qué respondería el agente." },
   "não enviada": { es: "no enviada" },
   "O agente está pensando…": { es: "El agente está pensando…" },
-  "Mensagem do cliente": { es: "Mensaje del cliente" },
   "Oi! Vocês atendem hoje?": { es: "¡Hola! ¿Atienden hoy?" },
   "Enviar como cliente": { es: "Enviar como cliente" },
   "Recomeçar conversa": { es: "Reiniciar conversación" },
