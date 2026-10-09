@@ -155,9 +155,16 @@ const KNOWN_DEBT: { reason: string; files: string[] }[] = [
       "regex PIORA o código — por isso a decisão é registrar, não reescrever.",
     files: [
       "app/api/v1/ai/agents/[id]/versions/[vid]/test/route.ts",
+      // (2026-10-09) Os quatro com esta marca entraram na main em 2026-10-01
+      // (6543a7b0 e a1bb5e61) só com prosa — medido linha a linha: nenhuma
+      // menção fora de comentário. Eles deixaram o `verify` da main vermelho
+      // neste passo, e o `verify` para no primeiro erro: typecheck e suíte
+      // unit não rodavam em PR nenhum desde então.
+      "app/api/v1/bulk-sends/media/route.ts",
       "app/api/v1/conversations/[id]/media/route.ts",
       "app/api/v1/webhook-sources/route.ts",
       "app/api/v1/webhooks/in/[token]/route.ts",
+      "app/api/v1/messages/_handler.ts", // (2026-10-09) ver acima
       "app/app/ai/agents/[id]/_components/TestPanel.tsx",
       "components/inbox/media/media-utils.ts",
       "lib/agent-engine/channel-adapter.ts",
@@ -175,7 +182,9 @@ const KNOWN_DEBT: { reason: string; files: string[] }[] = [
       "lib/automation/start-conversation.ts",
       "lib/env.ts",
       "lib/followup/reactivity.ts",
+      "lib/messaging/media/tts.ts", // (2026-10-09) ver acima
       "lib/messaging/media/types.ts",
+      "lib/messaging/media/video-whatsapp.ts", // (2026-10-09) ver acima
       "lib/messaging/media/waha-source.ts",
       "lib/schemas/channels.ts",
       "lib/supabase/admin.ts",
