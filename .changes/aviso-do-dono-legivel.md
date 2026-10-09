@@ -1,6 +1,6 @@
 ---
 impacto: capacidade_nova
-secao: novidades
+secao: adicionado
 titulo: O aviso de passagem para o dono pode chegar organizado, uma informação por linha
 ---
 
