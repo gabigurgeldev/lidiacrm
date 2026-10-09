@@ -19,6 +19,7 @@ import { deriveVideoText } from "@/lib/messaging/media/video-derive";
 import {
   apiTranscriptionProvider,
   escolherTranscricao,
+  idiomaDaTranscricao,
   type EscolhaDaTranscricao,
 } from "@/lib/messaging/media/transcription";
 import { logger } from "@/lib/logger";
@@ -180,7 +181,18 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
       openrouter: openaiKey ? null : await chaveDo("openrouter"),
     });
 
-    const deps = buildDeriveDeps(llm, transcricao, row.organization_id);
+    // O idioma vem do locale da org: sem ele o modelo adivinha pelo áudio, e
+    // áudio curto em português já saiu em tailandês (ver `TranscriptionCreds.language`).
+    const { data: org } = await admin
+      .from("organizations")
+      .select("locale")
+      .eq("id", row.organization_id)
+      .maybeSingle();
+    const idioma = idiomaDaTranscricao((org as { locale?: string | null } | null)?.locale);
+    const transcricaoNoIdioma =
+      transcricao && idioma ? { ...transcricao, creds: { ...transcricao.creds, language: idioma } } : transcricao;
+
+    const deps = buildDeriveDeps(llm, transcricaoNoIdioma, row.organization_id);
 
     const text = await deriveMediaText(msg.type, buffer, msg.media_mime ?? "application/octet-stream", deps);
     await admin.from("messages")
