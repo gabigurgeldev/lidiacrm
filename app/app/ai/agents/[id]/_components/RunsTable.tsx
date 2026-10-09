@@ -88,7 +88,7 @@ export function RunsTable({ agentId, active }: Props) {
               <TableHead>{t("Tokens (in/out)")}</TableHead>
               <TableHead>{t("Custo")}</TableHead>
               <TableHead>{t("Latência")}</TableHead>
-              <TableHead>{t("Steps")}</TableHead>
+              <TableHead>{t("Passos")}</TableHead>
               <TableHead className="text-right">{t("Ações")}</TableHead>
             </TableRow>
           </TableHeader>

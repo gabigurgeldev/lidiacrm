@@ -161,7 +161,7 @@ export function VersionHistory({ agentId, versions, readOnly }: Props) {
               ) : null}
               <div className="ml-auto flex gap-2">
                 <Button variant="ghost" size="sm" onClick={() => openDiff(v)}>
-                  {t("Diff")}
+                  {t("Comparar")}
                 </Button>
                 {canRevert ? (
                   <Button
@@ -183,8 +183,8 @@ export function VersionHistory({ agentId, versions, readOnly }: Props) {
           <DialogHeader>
             <DialogTitle>
               {diffPair
-                ? `${t("Diff v")}${diffPair.a.version_number}${t(" ↔ v")}${diffPair.b.version_number}`
-                : t("Diff")}
+                ? `${t("Comparar com v")}${diffPair.a.version_number}${t(" ↔ v")}${diffPair.b.version_number}`
+                : t("Comparar")}
             </DialogTitle>
           </DialogHeader>
           {diffPair ? <VersionDiff versionA={diffPair.a} versionB={diffPair.b} /> : null}
@@ -202,7 +202,7 @@ export function VersionHistory({ agentId, versions, readOnly }: Props) {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {t("Uma nova versão idêntica a v")}{revertTarget?.version_number}
-              {t(" será criada e publicada imediatamente. A versão atualmente publicada vira superseded.")}
+              {t(" será criada e publicada imediatamente. A versão publicada hoje deixa de valer.")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

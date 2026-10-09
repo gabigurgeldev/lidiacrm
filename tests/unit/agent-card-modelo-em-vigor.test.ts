@@ -31,7 +31,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { modeloEmVigor } from "@/app/app/ai/agents/_components/AgentCard";
+import { modeloEmVigor } from "@/app/app/ai/agents/_components/modelo-em-vigor";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 
 function agente(over: Partial<AgentRow>): AgentRow {
