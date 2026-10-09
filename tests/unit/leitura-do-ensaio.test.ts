@@ -98,6 +98,13 @@ describe("lerDesfecho", () => {
     expect(lerDesfecho(relatorio({ desfecho: "sem_resposta" })).detalhe).toMatch(/sem chamar o envio/);
   });
 
+  it("fora do assunto diz que ESTE agente não responderia, e para onde a mensagem iria", () => {
+    const d = lerDesfecho(relatorio({ desfecho: "fora_do_assunto" }));
+    expect(d.titulo).toBe("Este agente não responderia");
+    expect(d.detalhe).toMatch(/Só responder sobre/);
+    expect(d.tom).toBe("atencao");
+  });
+
   it("adiado traz o motivo do motor; falha traz o erro", () => {
     expect(
       lerDesfecho(relatorio({ desfecho: "adiado", adiamento: { motivo: "fora da janela", ate: null } })).detalhe,

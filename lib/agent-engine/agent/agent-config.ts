@@ -15,6 +15,7 @@
  */
 import type pg from 'pg';
 
+import { lerFiltroDeAssunto } from './filtro-de-assunto';
 import { lerJanelaDeAtendimento, type JanelaDeAtendimento } from './janela-de-atendimento';
 
 export interface PublishedAgentConfig {
@@ -109,6 +110,12 @@ export interface PublishedAgentConfig {
    * conserta (o campo existia na tela e nenhum leitor vivo o consultava).
    */
   janelaDeAtendimento: JanelaDeAtendimento | null;
+  /**
+   * "Só responder sobre…" (`trigger_config.filters.keyword_regex`), cru como foi
+   * salvo. `null` = responde a qualquer assunto. Quem obedece é a escolha do
+   * agente sem roteador — ver `filtro-de-assunto.ts`.
+   */
+  filtroDeAssunto: string | null;
   /** criadores (p/ mint do token efêmero de audit — padrão do runtime nativo). */
   versionCreatedBy: string | null;
   agentCreatedBy: string | null;
@@ -247,16 +254,22 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     // Leitura DEFENSIVA e que falha ABERTA: jsonb livre com shape estranho vira
     // `null` (sem janela ⇒ atende sempre), nunca uma mordaça acidental.
     janelaDeAtendimento: lerJanelaDeAtendimento(r.trigger_config),
+    filtroDeAssunto: lerFiltroDeAssunto(r.trigger_config),
     versionCreatedBy: r.version_created_by,
     agentCreatedBy: r.agent_created_by,
   };
 }
 
-export async function loadPublishedAgentConfig(
+/**
+ * Todos os agentes publicados no número, do mais prioritário ao menos. A escolha
+ * entre eles (filtro de assunto, conversa em andamento) é de
+ * `filtro-de-assunto.ts`; aqui é só leitura.
+ */
+export async function loadPublishedAgentCandidates(
   db: pg.Pool,
   organizationId: string,
   channelSessionId: string,
-): Promise<PublishedAgentConfig | null> {
+): Promise<PublishedAgentConfig[]> {
   const { rows } = await db.query<Row>(
     `select ${SELECT_AGENT_CONFIG_COLUMNS}
      from ai_agents a
@@ -268,13 +281,20 @@ export async function loadPublishedAgentConfig(
        -- dispatcher nativo do CRM — pausar = despublicar).
        and v.status = 'published'
        and v.channel_session_id = $2
-     order by a.priority desc, a.created_at asc
-     limit 1`,
+     order by a.priority desc, a.created_at asc`,
     [organizationId, channelSessionId],
   );
-  const r = rows[0];
-  if (r === undefined) return null;
-  return mapAgentConfigRow(r);
+  return rows.map(mapAgentConfigRow);
+}
+
+/** O mais prioritário do número, sem olhar assunto (rascunho de resposta, queda do roteador). */
+export async function loadPublishedAgentConfig(
+  db: pg.Pool,
+  organizationId: string,
+  channelSessionId: string,
+): Promise<PublishedAgentConfig | null> {
+  const candidatos = await loadPublishedAgentCandidates(db, organizationId, channelSessionId);
+  return candidatos[0] ?? null;
 }
 
 /**

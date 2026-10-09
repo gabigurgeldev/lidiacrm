@@ -7975,6 +7975,23 @@ export const DICIONARIO: Traducoes = {
   "Com os limites acima,": { es: "Con los límites de arriba," },
   "deles teriam sido cortados.": { es: "de ellas habrían sido cortadas." },
   "Com os limites acima, nenhum deles teria sido cortado.": { es: "Con los límites de arriba, ninguna habría sido cortada." },
+  // Filtro de assunto do agente ("Só responder sobre…").
+  "Só responder sobre… (opcional)": { es: "Solo responder sobre… (opcional)" },
+  "Este agente é escolhido pelo roteador": { es: "Este agente lo elige el enrutador" },
+  "lá quem decide o assunto é o roteador, e este filtro não vale.": { es: "allí quien decide el tema es el enrutador, y este filtro no se aplica." },
+  "Ex.: pedido, entrega, segunda via": { es: "Ej.: pedido, entrega, segunda copia" },
+  "Ex.: pedidos?|entrega|2a via": { es: "Ej.: pedidos?|entrega|2a copia" },
+  "O filtro passou de 200 caracteres.": { es: "El filtro superó los 200 caracteres." },
+  "O filtro tem um erro de escrita (parêntese ou colchete sem par, por exemplo).": { es: "El filtro tiene un error de escritura (paréntesis o corchete sin pareja, por ejemplo)." },
+  "O filtro repete um trecho que já se repete, como (a+)+. Isso pode travar o atendimento — simplifique.": { es: "El filtro repite un tramo que ya se repite, como (a+)+. Eso puede trabar la atención — simplifícalo." },
+  "O filtro usa referência a um trecho anterior. Isso não é aceito aqui.": { es: "El filtro usa una referencia a un tramo anterior. Eso no se acepta aquí." },
+  "Em branco, ele responde a tudo. Preenchido, ele só entra numa conversa nova quando o cliente falar de uma dessas palavras (separe por vírgula; acento e maiúscula não importam). Conversa que ele já atende continua com ele.": { es: "En blanco, responde a todo. Completado, solo entra en una conversación nueva cuando el cliente hable de una de estas palabras (separa por coma; tildes y mayúsculas no importan). La conversación que ya atiende sigue con él." },
+  "Expressão regular contra o que o cliente escreveu desde a última resposta, sem acento e em minúsculas.": { es: "Expresión regular contra lo que el cliente escribió desde la última respuesta, sin tildes y en minúsculas." },
+  "Usar expressão regular (avançado)": { es: "Usar expresión regular (avanzado)" },
+  "Esta expressão não é uma lista de palavras": { es: "Esta expresión no es una lista de palabras" },
+  "Voltar para lista de palavras": { es: "Volver a lista de palabras" },
+  "Este agente não responderia": { es: "Este agente no respondería" },
+  "A mensagem não fala do assunto em \"Só responder sobre…\". Em produção, ela iria para outro agente do número que aceite o assunto — ou ficaria na Inbox para a equipe.": { es: "El mensaje no trata del tema en \"Solo responder sobre…\". En producción, iría a otro agente del número que acepte el tema — o quedaría en la Bandeja para el equipo." },
 };
 
 /**
