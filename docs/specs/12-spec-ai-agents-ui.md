@@ -45,6 +45,10 @@ Adiciona item "Agentes IA" na sidebar principal, entre "Pipelines" e "Configura�
 - Server Actions para save/publish (não chama fetch direto do client)
 - Realtime: Supabase channel `ai_agent_runs:org_id=eq.X` para atualizar log de runs ao vivo
 
+> **Estado atual (2026-10):** quem escreve `ai_agent_runs` é o motor vivo, uma linha por turno
+> que fala com o cliente e tem agente publicado, gravada no fim com o desfecho
+> (`lib/agent-engine/agent/registro-do-turno.ts`). O Testar (ensaio) não grava linha.
+
 ---
 
 ## 2. Tela: `/ai/agents` (Lista)

@@ -8102,6 +8102,16 @@ export const DICIONARIO: Traducoes = {
   "Voltar para lista de palavras": { es: "Volver a lista de palabras" },
   "Este agente não responderia": { es: "Este agente no respondería" },
   "A mensagem não fala do assunto em \"Só responder sobre…\". Em produção, ela iria para outro agente do número que aceite o assunto — ou ficaria na Inbox para a equipe.": { es: "El mensaje no trata del tema en \"Solo responder sobre…\". En producción, iría a otro agente del número que acepte el tema — o quedaría en la Bandeja para el equipo." },
+  // Execuções do agente: desfecho legível.
+  "Respondeu": { es: "Respondió" },
+  "Respondeu, cortado pelo limite": { es: "Respondió, cortado por el límite" },
+  "Passou para uma pessoa": { es: "Pasó a una persona" },
+  "Adiado: fora do horário": { es: "Aplazado: fuera del horario" },
+  "Ficou sem resposta": { es: "Quedó sin respuesta" },
+  "Cortado pelo limite, sem resposta": { es: "Cortado por el límite, sin respuesta" },
+  "Adiado": { es: "Aplazado" },
+  "Interrompido": { es: "Interrumpido" },
+  "Em andamento": { es: "En curso" },
 };
 
 /**
