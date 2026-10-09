@@ -113,6 +113,7 @@ export function buildCaseReplyOpeningMessage(
   context: LeadContext,
   notesIndexBlock: string,
   projeta = false,
+  fuso: string | null = null,
 ): string {
   const caseIdShort = caseId.slice(0, 8);
   const note = body?.trim() ?? '';
@@ -127,7 +128,7 @@ export function buildCaseReplyOpeningMessage(
     '## Instrução do responsável sobre o caso',
     instructionBlock,
     '',
-    ...ritualBlocks(previous, leadState, context, notesIndexBlock, projeta),
+    ...ritualBlocks(previous, leadState, context, notesIndexBlock, projeta, fuso),
     '',
     'Repasse ao lead usando a tool send_message — NUNCA escreva a resposta como texto direto',
     '(texto fora de tool é descartado pelo runtime). Use get_lead_context se precisar reler o contexto.',
@@ -169,8 +170,8 @@ export function createCaseReplyTurnHandler(deps: InboundTurnDeps) {
     await runAgentTurn(deps, job, pool, ctx, {
       channelSessionId: caseConversation.channelSessionId,
       conversationId: caseConversation.conversationId,
-      buildOpening: ({ previous, leadState, context, notesIndexBlock, projeta }) =>
-        buildCaseReplyOpeningMessage(action, payload.case_id, payload.body, previous, leadState, context, notesIndexBlock, projeta),
+      buildOpening: ({ previous, leadState, context, notesIndexBlock, projeta, fuso }) =>
+        buildCaseReplyOpeningMessage(action, payload.case_id, payload.body, previous, leadState, context, notesIndexBlock, projeta, fuso ?? null),
     });
   };
 }
