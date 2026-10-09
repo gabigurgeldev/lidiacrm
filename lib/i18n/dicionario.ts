@@ -8172,7 +8172,6 @@ export const DICIONARIO: Traducoes = {
   "Agentes de IA": { es: "Agentes de IA" },
   "Quem atende seus clientes no WhatsApp, número por número. Clique num agente para mudar o que ele faz.": { es: "Quién atiende a tus clientes en WhatsApp, número por número. Haz clic en un agente para cambiar lo que hace." },
   "Salve o agente antes de publicar.": { es: "Guarda el agente antes de publicar." },
-  "Agente criado.": { es: "Agente creado." },
   ". Publicar fica bloqueado até validar.": { es: ". Publicar queda bloqueado hasta validar." },
   "Máximo de 20 fluxos por agente.": { es: "Máximo de 20 flujos por agente." },
   "padrão": { es: "predeterminado" },
