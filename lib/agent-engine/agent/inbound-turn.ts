@@ -92,7 +92,6 @@ import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
 import { decidirResgateDoTurnoMudo, MENSAGEM_DE_RESGATE, avisarTurnoSemResposta } from './turno-mudo';
 import {
-  avisarTetoDoNumero,
   MENSAGEM_DO_TETO,
   tetoDoNumeroAtingido,
   vetoDeTetoDoNumero,
@@ -119,7 +118,7 @@ import {
 } from './skills';
 import { readSkillReference, skillHasReferences } from './skill-references';
 import { READ_ONLY_TOOLS, wrapToolsWithBreaker, type ToolBreakerThresholds } from './tool-breaker';
-import { loadChannelProvider, runBeforeSend } from '../guardrails/before-send';
+import { avisarCapDoNumero, loadChannelProvider, runBeforeSend } from '../guardrails/before-send';
 import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
@@ -1231,6 +1230,7 @@ async function executarTurnoDoAgente(
     const teto = await tetoDoNumeroAtingido(pool, {
       tenantId,
       channelSessionId: input.channelSessionId,
+      contactId: leadId,
       now: agora,
       log: runLog,
     });
@@ -1239,12 +1239,13 @@ async function executarTurnoDoAgente(
         delayMs: Math.max(teto.nextAllowedAt.getTime() - agora.getTime(), 1_000),
         reason: `teto do dia do número atingido (${teto.code}) — turno adiado para a próxima abertura`,
       });
-      await avisarTetoDoNumero(pool, {
-        tenantId,
-        channelSessionId: input.channelSessionId,
-        teto,
-        log: runLog,
-      });
+      // O mesmo aviso que a cadeia de envio abre quando o teto a barra — aqui ela
+      // não chega a rodar, então quem avisa é a pré-checagem.
+      await avisarCapDoNumero(
+        pool,
+        { tenantId, channelSessionId: input.channelSessionId, code: teto.code, reason: teto.reason },
+        runLog,
+      );
       runLog.info('turno adiado — teto do dia do número atingido', {
         code: teto.code,
         abertura: teto.nextAllowedAt.toISOString(),
@@ -2896,19 +2897,14 @@ async function executarTurnoDoAgente(
 
   // Teto do dia vetou e NADA saiu: o cliente ficaria sem resposta até escrever de
   // novo. Adia o turno inteiro para a próxima abertura — sem checkpoint, porque a
-  // conversa não andou — e avisa quem opera. Se algo saiu, o turno fecha normal:
-  // o cliente foi respondido, e o aviso ainda conta que o número chegou ao teto.
+  // conversa não andou. Se algo saiu, o turno fecha normal: o cliente foi
+  // respondido. Nos dois casos o aviso na Central já foi aberto pela própria
+  // cadeia de envio, no veto (`avisarCapDoNumero`).
   // A cópia tipada é necessária: `tetoVetado` é atribuída dentro do execute do
   // `send_message` (closure), e o compilador, que não enxerga essa atribuição,
   // estreitaria a variável para `null` aqui.
   const tetoNoEnvio = tetoVetado as TetoDoNumeroAtingido | null;
   if (tetoNoEnvio !== null) {
-    await avisarTetoDoNumero(pool, {
-      tenantId,
-      channelSessionId: input.channelSessionId,
-      teto: tetoNoEnvio,
-      log: runLog,
-    });
     const algoSaiu = outcomes.some((o) => o.kind === 'sent' || o.kind === 'already_sent' || o.kind === 'queued');
     if (!algoSaiu) {
       const agora = clock();
@@ -3019,7 +3015,6 @@ async function executarTurnoDoAgente(
   // seam), registra e segue para `completeJob`. Orçamento esgotado continua
   // subindo: é o handoff de `runAgentTurn`, descrito acima.
   let closing: Awaited<ReturnType<typeof runModelCall>> | null = null;
-  let content: CheckpointContent | null = null;
   try {
     closing = await runModelCall(
       pool,
@@ -3046,17 +3041,26 @@ async function executarTurnoDoAgente(
       },
       { registry: deps.registry, log: runLog },
     );
-    // A LEITURA do JSON mora dentro do mesmo melhor-esforço que a chamada. Fora
-    // dele, um checkpoint malformado (o modelo devolveu prosa, cortou o JSON)
-    // lançava DEPOIS de a resposta ter saído: o job falhava e o turno inteiro —
-    // todas as chamadas de modelo — era refeito até cinco vezes, por um resumo.
-    content = parseCheckpointText(closing.result.text);
   } catch (err) {
     if (err instanceof LlmBudgetExceededError) throw err;
     runLog.warn('checkpoint do turno não foi gravado — a resposta já saiu, o job segue', normalizarErro(err));
   }
 
-  if (closing !== null && content !== null) {
+  // O JSON do checkpoint também é melhor-esforço, pelo MESMO motivo do bloco
+  // acima. Medido em produção (2026-10-08, gemini-2.5-flash-lite): o modelo
+  // devolveu JSON inválido, o throw reabriu o job JÁ RESPONDIDO, e a fila o
+  // re-rodou até 5 vezes, de 10 em 10 minutos — cada re-run pode mandar a
+  // resposta de novo, e a fila serial do contato segurou a mensagem seguinte.
+  let content: CheckpointContent | null = null;
+  if (closing !== null) {
+    try {
+      content = parseCheckpointText(closing.result.text);
+    } catch (err) {
+      runLog.warn('checkpoint do turno veio malformado — a resposta já saiu, o job segue', normalizarErro(err));
+    }
+  }
+
+  if (content !== null) {
 
     // Wave 3 (2.4): o checkpoint anterior é lido ANTES de gravar o novo — a
     // timeline recebe o DIFF, nunca o snapshot. Emitir a cada turno encheria a
@@ -3167,7 +3171,7 @@ async function executarTurnoDoAgente(
           // O lastro é a chamada de modelo que PRODUZIU este checkpoint
           // (llm_calls.id). Sem ele a linha entraria como 'system' e perderia a
           // autoria justamente no evento mais "de IA" que existe.
-          ...(closing.callId ? { evidence: { llm_call_ids: [closing.callId] } } : {}),
+          ...(closing?.callId ? { evidence: { llm_call_ids: [closing.callId] } } : {}),
           ...(agentConfig?.agentId ? { agentId: agentConfig.agentId } : {}),
           reason: mudanca.reason,
           payload: {

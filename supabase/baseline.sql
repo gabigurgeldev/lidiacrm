@@ -10097,13 +10097,7 @@ alter table public.agent_inbox_items
     'integracao_api_falhando',
     'acao_externa_falhou',
     'verificacao_bloqueada',
-    -- (migration 0229) O número esgotou o teto de mensagens de hoje (degrau de
-    -- aquecimento por idade, ou teto diário) e o agente ADIOU a resposta para a
-    -- próxima abertura. Antes o veto voltava ao modelo como erro de ensino e o
-    -- turno terminava "ok" com zero envios: o cliente não recebia nada, nem no
-    -- dia seguinte. Entra NESTA lista, no fim.
-    'teto_do_numero',
-    -- (migration 0230) O agente terminou um turno de resposta sem enviar nada
+    -- (migration 0229) O agente terminou um turno de resposta sem enviar nada
     -- ao cliente: escreveu a resposta como texto solto (que o runtime descarta)
     -- ou encerrou calado, e nem a cobrança obrigatória resolveu — ou todas as
     -- tentativas foram barradas pelas conferências. Antes o turno terminava "ok"

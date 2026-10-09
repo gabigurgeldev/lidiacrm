@@ -468,6 +468,8 @@ export const pacingGate: Gate = {
       state: ctx.pacing.state,
       crmDailyLimit: ctx.pacing.crmDailyLimit,
       banRisk,
+      // Resposta a quem escreveu nas últimas 24 h não consome o warm-up (ver o campo).
+      respondeAoContato: isWindowOpen(ctx.now, ctx.messagingWindow?.lastInboundAt ?? null),
       rng: ctx.pacing.rng,
     });
     if (!decision.allow) {
@@ -871,6 +873,19 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       await escalateLgpdVeto(args.pool, { tenantId: args.tenantId, leadId: args.leadId, code: veto.code }, args.log);
     }
 
+    // Cap do número (warm-up / limite diário) vetou: avisa na Central. O veto de
+    // `outside_window` NÃO entra — esse tem dono, a resposta é reagendada para a
+    // abertura. O de cap não tem: a IA para de responder a TODO cliente daquele
+    // número até amanhã, e sem este aviso ninguém sabe (produção, 2026-10-08:
+    // o dono do Açaí Delícia só descobriu porque o próprio teste ficou sem resposta).
+    if (veto !== null && (veto.code === 'warmup_cap' || veto.code === 'daily_cap')) {
+      await avisarCapDoNumero(
+        args.pool,
+        { tenantId: args.tenantId, channelSessionId: args.channelSessionId, code: veto.code, reason: veto.message },
+        args.log,
+      );
+    }
+
     if (veto !== null) {
       // Nada foi escrito: rollback fecha a tx e solta o lock. O envio NÃO acontece.
       await client.query('rollback');
@@ -992,7 +1007,7 @@ async function readStopFlags(db: Queryable, organizationId: string, contactId: s
  * números diferentes, e a janela é por conversa, não por pessoa: responder no número
  * A não abre licença para escrever pelo número B.
  */
-async function readLastInboundAt(
+export async function readLastInboundAt(
   db: Queryable,
   organizationId: string,
   contactId: string,
@@ -1065,5 +1080,46 @@ async function rollback(client: pg.PoolClient, cause: unknown): Promise<void> {
     await client.query('rollback');
   } catch (rollbackErr) {
     throw new AggregateError([cause, rollbackErr], 'rollback falhou após erro na cadeia before_send');
+  }
+}
+
+/**
+ * Abre UM aviso na Central quando o cap do número barra a IA. Dedup por número
+ * enquanto o aviso está aberto: o cap barra todo envio seguinte até amanhã, e um
+ * aviso por mensagem enterraria a Central. `kind='other'` + `ref_kind='pacing_cap'`
+ * segue o padrão do escalateLgpdVeto — sem migration de CHECK. Escrita no pool,
+ * fora da tx do veto (que faz rollback); falha aqui vira log, nunca derruba o veto.
+ */
+export async function avisarCapDoNumero(
+  db: pg.Pool,
+  input: { tenantId: string; channelSessionId: string; code: 'warmup_cap' | 'daily_cap'; reason: string },
+  log: Logger,
+): Promise<void> {
+  const aquecimento = input.code === 'warmup_cap';
+  const title = aquecimento
+    ? 'A IA parou de enviar: limite de aquecimento do número atingido hoje'
+    : 'A IA parou de enviar: limite diário de envios do número atingido';
+  const body =
+    (aquecimento
+      ? 'O número ainda está em aquecimento, e o teto de envios de hoje acabou. '
+      : 'O limite diário de mensagens deste número acabou. ') +
+    'Até amanhã a IA não consegue mandar nada por ele — inclusive respostas. ' +
+    'Atenda pela Caixa de entrada, ou ajuste o limite em Conexões › Proteção de envio. ' +
+    `Detalhe técnico: ${input.reason}`;
+  try {
+    await db.query(
+      `insert into agent_inbox_items (organization_id, kind, severity, title, body, ref_kind, ref_id)
+       select $1, 'other', 'critical', $2, $3, 'pacing_cap', $4
+       where not exists (
+         select 1 from agent_inbox_items
+         where organization_id = $1 and ref_kind = 'pacing_cap' and ref_id = $4 and status = 'open'
+       )`,
+      [input.tenantId, title, body, input.channelSessionId],
+    );
+  } catch (err) {
+    log.error('falha ao avisar cap do número na Central (segue: o gate já barrou o envio)', {
+      code: input.code,
+      error: err instanceof Error ? err.name : 'unknown',
+    });
   }
 }

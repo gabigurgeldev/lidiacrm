@@ -1,5 +1,5 @@
 -- ============================================================================
--- 0230 — O TURNO QUE TERMINA SEM RESPONDER AO CLIENTE AVISA.
+-- 0229 — O TURNO QUE TERMINA SEM RESPONDER AO CLIENTE AVISA.
 --
 -- O cliente escrevia, o agente rodava, e nada saía: o modelo escrevia a resposta
 -- como texto solto (o runtime descarta tudo o que não passa por send_message,
@@ -46,7 +46,6 @@ alter table public.agent_inbox_items
     'integracao_api_falhando',
     'acao_externa_falhou',
     'verificacao_bloqueada',
-    'teto_do_numero',
     'turno_sem_resposta',
     'other'
   ));
