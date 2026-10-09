@@ -77,10 +77,6 @@ export type InboxKind =
   | 'integracao_api_falhando'
   | 'acao_externa_falhou'
   | 'verificacao_bloqueada'
-  // (migration 0229) O número esgotou o teto de mensagens de hoje (aquecimento
-  // ou teto diário) e o agente ADIOU a resposta para a próxima abertura. Sem
-  // isto o turno terminava "ok" com zero envios e o cliente ficava sem nada.
-  | 'teto_do_numero'
   | 'other';
 
 export interface InboxItemRow {

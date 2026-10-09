@@ -1696,9 +1696,12 @@ VPS.** Mesmo padrão da causa 3, no teto de aquecimento em vez da janela: a idad
 do número vinha só de `channel_knobs.number_activated_at`, e sem linha ali (todo
 número em que ninguém salvou Conexões › Proteção de envio) a idade era 0 para
 sempre — teto de 20 envios/dia. Batido o teto, o veto do `pacingGate` virava
-erro de ensino e o turno terminava `ok` sem envio. Correção: idade conta da
-criação da conexão (`ativacaoEfetiva`), turno com teto atingido é adiado para a
-próxima abertura e abre `teto_do_numero` na Central. Prova contra Postgres real:
+erro de ensino e o turno terminava `ok` sem envio. Desde o PR #34, resposta a
+quem escreveu nas últimas 24 h não consome o aquecimento; o teto segue valendo
+para quem fala sem ter sido chamado (follow-up). Correção: idade conta da
+criação da conexão (`ativacaoEfetiva`), e o turno com teto atingido é adiado
+para a próxima abertura, com o mesmo aviso `pacing_cap` que a cadeia de envio
+abre. Prova contra Postgres real:
 `tests/invariants/teto-do-numero-adia-e-avisa.test.ts`. O que falta medir: uma
 VPS real com um número sem knobs passando da 20ª mensagem no dia.
 

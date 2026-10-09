@@ -5,12 +5,21 @@
  * (`decidePacing`: degraus por idade + teto diário). Até aqui esse limite só era
  * conferido DENTRO da cadeia de envio, e no caminho do agente o veto vira erro
  * de ensino devolvido ao modelo pelo `send_message`. O turno terminava `ok`, com
- * zero envios, sem reagendamento e sem aviso: o cliente escrevia depois da 20ª
- * mensagem do dia e não recebia nada — nem naquele dia, nem no seguinte.
+ * zero envios e sem reagendamento: a mensagem não saía nem naquele dia, nem no
+ * seguinte.
  *
  * É o mesmo defeito que a janela de horário já tinha tido (inbound-turn.ts, "ISTO
  * CONSERTA UMA MENSAGEM PERDIDA"), e a cura é a mesma: o turno é ADIADO para a
  * próxima abertura, e quem opera fica sabendo.
+ *
+ * ─── Quem o teto alcança ───────────────────────────────────────────────────
+ *
+ * Resposta a quem escreveu nas últimas 24 h NÃO consome o aquecimento
+ * (`respondeAoContato` em `decidePacing`, medido em produção: a IA calava no meio
+ * do pedido). Esta conferência faz a MESMA pergunta que a cadeia de envio faz,
+ * com o mesmo insumo (`readLastInboundAt`): se ela adiasse um turno que o envio
+ * deixaria passar, o conserto viraria o defeito. Na prática, quem chega ao teto
+ * aqui é o turno que fala com quem NÃO escreveu há pouco — o follow-up.
  *
  * ─── Por que conferir antes não adia turno que teria passado ────────────────
  *
@@ -22,18 +31,18 @@
  *
  * Canal sem risco de banimento (`banRisk: false`, ex.: API oficial) não tem teto
  * de aquecimento: `decidePacing` já desarma essa parte, e aqui nada adia.
+ *
+ * O aviso na Central é o MESMO que a cadeia de envio abre (`avisarCapDoNumero`):
+ * um número no teto é um fato só, venha de onde vier a descoberta.
  */
 import type pg from 'pg';
 
 import { capabilitiesOfSession } from '@/lib/channels/capabilities';
-import { insertInboxItem } from '../db/repository';
-import { loadChannelIdentity } from '../guardrails/before-send';
+import { loadChannelIdentity, readLastInboundAt } from '../guardrails/before-send';
+import { isWindowOpen } from '../guardrails/messaging-window';
 import type { Logger } from '../obs/logger';
 import { decidePacing } from '../pacing/engine';
 import { loadChannelKnobs, loadPacingState } from '../pacing/store';
-
-/** ref_kind do aviso — o id é o `channel_session_id`. */
-export const REF_KIND_TETO = 'teto_do_numero';
 
 export interface TetoDoNumeroAtingido {
   code: 'warmup_cap' | 'daily_cap';
@@ -66,12 +75,13 @@ export function vetoDeTetoDoNumero(veto: {
 }
 
 /**
- * O número já esgotou o teto de hoje? null = pode seguir (inclusive quando a
- * resposta é "fora da janela": esse caso tem guarda própria, antes desta).
+ * O número já esgotou o teto de hoje PARA ESTE contato? null = pode seguir
+ * (inclusive quando a resposta é "fora da janela": esse caso tem guarda própria,
+ * antes desta).
  */
 export async function tetoDoNumeroAtingido(
   db: pg.Pool,
-  args: { tenantId: string; channelSessionId: string; now: Date; log?: Logger },
+  args: { tenantId: string; channelSessionId: string; contactId: string; now: Date; log?: Logger },
 ): Promise<TetoDoNumeroAtingido | null> {
   const cfg = await loadChannelKnobs(db, args.tenantId, args.channelSessionId, args.log);
   const canal = await loadChannelIdentity(db, args.tenantId, args.channelSessionId);
@@ -83,6 +93,7 @@ export async function tetoDoNumeroAtingido(
     timezone: cfg.knobs.timezone,
     numberActivatedAt: cfg.numberActivatedAt,
   });
+  const ultimaEntrada = await readLastInboundAt(db, args.tenantId, args.contactId, args.channelSessionId);
   const decisao = decidePacing({
     now: args.now,
     knobs: cfg.knobs,
@@ -92,54 +103,10 @@ export async function tetoDoNumeroAtingido(
     // adiar turno que o envio deixaria passar.
     crmDailyLimit: null,
     banRisk,
+    // A mesma pergunta do `pacingGate`, com o mesmo insumo.
+    respondeAoContato: isWindowOpen(args.now, ultimaEntrada),
   });
   if (decisao.allow) return null;
   if (decisao.code !== 'warmup_cap' && decisao.code !== 'daily_cap') return null;
   return { code: decisao.code, nextAllowedAt: decisao.nextAllowedAt, reason: decisao.reason };
-}
-
-/**
- * O laço de retorno: o operador fica sabendo que o número parou de responder
- * hoje, e onde mexer. UM aviso aberto por número (dedupe por kind+ref) — a
- * 21ª, a 22ª e a 30ª mensagem do dia não abrem três avisos.
- *
- * Falha ao avisar não derruba nada: o turno já foi adiado, e o motivo está no
- * log e no `last_error` do job.
- */
-export async function avisarTetoDoNumero(
-  db: pg.Pool,
-  args: { tenantId: string; channelSessionId: string; teto: TetoDoNumeroAtingido; log?: Logger },
-): Promise<void> {
-  const aquecimento = args.teto.code === 'warmup_cap';
-  try {
-    await insertInboxItem(
-      db,
-      args.tenantId,
-      {
-        kind: 'teto_do_numero',
-        severity: 'warn',
-        title: aquecimento
-          ? 'Um número atingiu o limite de aquecimento de hoje e o agente parou de responder'
-          : 'Um número atingiu o limite de mensagens de hoje e o agente parou de responder',
-        body:
-          `Motivo: ${args.teto.reason}. As mensagens que chegarem agora serão respondidas ` +
-          `na próxima abertura (${args.teto.nextAllowedAt.toISOString()}). ` +
-          (aquecimento
-            ? 'O limite cresce com a idade do número. Se ele já era usado antes de ser ' +
-              'conectado aqui, informe desde quando em Conexões › Proteção de envio — ou ' +
-              'marque que ele já está aquecido.'
-            : 'O limite diário fica em Conexões › Proteção de envio.'),
-        // ref_kind PRÓPRIO, não 'channel_session': `lib/channels/health.ts` resolve todo
-        // aviso aberto com esse ref_kind quando a conexão volta a ficar saudável — e
-        // um teto de aquecimento não acaba porque a conexão está boa.
-        refKind: REF_KIND_TETO,
-        refId: args.channelSessionId,
-      },
-      'kind_e_ref',
-    );
-  } catch (err) {
-    args.log?.warn('aviso de teto do número não foi aberto — turno já adiado', {
-      error: (err instanceof Error ? err.message : String(err)).slice(0, 160),
-    });
-  }
 }
