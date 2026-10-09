@@ -818,7 +818,10 @@ async function caminharFrente(p: PasseioDaFrente): Promise<void> {
         execution_id: execucao.id,
         node_id: nodeId,
         event_type: "subfluxo_chamado",
-        payload: { fluxo: resultado.flow_id, execucao_filha: filha.execution_id },
+        // `ate` é o campo que `esperaEmCurso` lê. Sem ele a volta (filha
+        // terminou, ou o prazo venceu) era indistinguível da primeira visita, e
+        // o `flow.call` disparava OUTRA filha a cada vez que o pai acordava.
+        payload: { fluxo: resultado.flow_id, execucao_filha: filha.execution_id, ate: prazo.toISOString() },
         idempotency_key: `${p.frente.id}:${nodeId}:subfluxo:${passos}`,
       });
       await deps.db.atualizarFrente(p.frente.id, execucao.organization_id, {
@@ -1039,6 +1042,10 @@ async function concluir(
   extra: Partial<FlowExecutionPatch> = {},
 ): Promise<void> {
   const agora = deps.relogio();
+  // A SAÍDA de uma filha é o contexto com que ela terminou — é o que quem a
+  // chamou recebe em `{{vars.subfluxo.saida}}`. Antes, `output` nascia `{}` e
+  // nunca era escrito: o pai acordava com a resposta vazia, sempre.
+  const saida = execucao.parent_execution_id !== null ? (extra.context ?? execucao.context) : null;
   await deps.db.registrarPasso({
     organization_id: execucao.organization_id,
     execution_id: execucao.id,
@@ -1049,6 +1056,7 @@ async function concluir(
   });
   await deps.db.atualizarExecucao(execucao.id, execucao.organization_id, {
     ...extra,
+    ...(saida !== null ? { output: saida } : {}),
     status: "completed",
     outcome,
     // Terminal NÃO tem relógio — é o que o CHECK `flow_executions_clock_check`
@@ -1058,25 +1066,42 @@ async function concluir(
     completed_at: agora.toISOString(),
     updated_at: agora.toISOString(),
   });
-  // Uma execução FILHA que termina tem de avisar quem a chamou. É o que faz
-  // `flow.call` ser uma chamada, e não um disparo — sem o aviso, quem chamou
-  // acorda pelo prazo de 24h, um dia depois de a resposta estar pronta.
-  if (execucao.parent_execution_id !== null) {
-    try {
-      await deps.db.avisarQueSubFluxoTerminou({
-        organization_id: execucao.organization_id,
-        execution_id: execucao.id,
-        parent_execution_id: execucao.parent_execution_id,
-        outcome,
-        output: execucao.output,
-      });
-    } catch {
-      // O aviso é secundário ao `completed` já gravado: falhar aqui não pode
-      // desfazê-lo, senão a filha seria reclamada para concluir de novo, em
-      // laço. Quem chamou ainda tem o prazo como rede.
-    }
-  }
+  await avisarQuemChamou(execucao, deps, outcome, saida ?? {});
   resumo.concluidas += 1;
+}
+
+/** Desfecho que o pai recebe quando a filha MORRE — não é um desfecho de negócio. */
+export const DESFECHO_DE_FILHA_QUE_FALHOU = "falhou";
+
+/**
+ * Uma execução FILHA que termina — bem ou mal — tem de avisar quem a chamou.
+ * É o que faz `flow.call` ser uma chamada, e não um disparo: sem o aviso, quem
+ * chamou acorda pelo prazo de 24h, um dia depois de a resposta estar pronta.
+ *
+ * Vale também para a filha que MORRE. Antes, só a que concluía avisava: a que
+ * falhava deixava o pai parado o dia inteiro, e o pai acordava "no prazo" sem
+ * saber que a filha tinha morrido logo no primeiro bloco.
+ */
+async function avisarQuemChamou(
+  execucao: FlowExecutionRow,
+  deps: TickDeps,
+  outcome: string,
+  output: Record<string, unknown>,
+): Promise<void> {
+  if (execucao.parent_execution_id === null) return;
+  try {
+    await deps.db.avisarQueSubFluxoTerminou({
+      organization_id: execucao.organization_id,
+      execution_id: execucao.id,
+      parent_execution_id: execucao.parent_execution_id,
+      outcome,
+      output,
+    });
+  } catch {
+    // O aviso é secundário ao terminal já gravado: falhar aqui não pode
+    // desfazê-lo, senão a filha seria reclamada para terminar de novo, em
+    // laço. Quem chamou ainda tem o prazo como rede.
+  }
 }
 
 async function falhar(
@@ -1111,6 +1136,7 @@ async function falhar(
       updated_at: agora.toISOString(),
     });
     await avisarQueMorreu(execucao, deps, erro);
+    await avisarQuemChamou(execucao, deps, DESFECHO_DE_FILHA_QUE_FALHOU, {});
     resumo.mortas += 1;
     return;
   }
@@ -1160,6 +1186,7 @@ async function matar(
   // "Automação parou" e ensina o operador a ignorar o vermelho, que é o oposto
   // do que este aviso existe para fazer. Ver `desfecho-esperado.ts`.
   if (!ehDesfechoEsperado(motivo)) await avisarQueMorreu(execucao, deps, motivo);
+  await avisarQuemChamou(execucao, deps, DESFECHO_DE_FILHA_QUE_FALHOU, {});
   resumo.mortas += 1;
 }
 

@@ -12,7 +12,8 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { rodarTickDeFluxos } from "./engine";
+import { VAR_DO_EVENTO } from "./acordar-por-evento";
+import { DESFECHO_DE_FILHA_QUE_FALHOU, rodarTickDeFluxos } from "./engine";
 import type { FlowGraph } from "./graph-schema";
 import { esquecerRegistroParaTeste, garantirNosRegistrados } from "./register-all";
 import { limparRegistroParaTeste } from "./registry";
@@ -405,6 +406,96 @@ describe("chamar outro fluxo", () => {
       execution_id: filha.id,
       parent_execution_id: "exec-1",
     });
+  });
+
+  /**
+   * Acorda o pai. Com evento, como `acordarFrentesQueEsperam` faz: o aviso da
+   * filha em `vars` e a execução de volta a `pending`. Sem evento, o relógio
+   * passa do prazo de 24h — é a volta pelo prazo.
+   */
+  function acordarPai(evento: Record<string, unknown> | null): void {
+    if (evento === null) {
+      mundo.agora = new Date(mundo.agora.getTime() + 25 * 60 * 60_000);
+      return;
+    }
+    const agora = mundo.agora.toISOString();
+    const [id, frente] = [...mundo.frentes.entries()].find(([, f]) => f.execution_id === "exec-1")!;
+    mundo.frentes.set(id, {
+      ...frente,
+      status: "ready",
+      next_eval_at: agora,
+      awaiting_event_type: null,
+      awaiting_match: null,
+      wait_deadline: null,
+      vars: { ...frente.vars, [VAR_DO_EVENTO]: evento },
+    });
+    const pai = mundo.execucoes.get("exec-1")!;
+    mundo.execucoes.set("exec-1", { ...pai, status: "pending", next_eval_at: agora });
+  }
+
+  function resultadoNoPai(): Record<string, unknown> | undefined {
+    const frente = [...mundo.frentes.values()].find((f) => f.execution_id === "exec-1")!;
+    const onde = { ...mundo.execucoes.get("exec-1")!.context, ...frente.vars } as Record<string, unknown>;
+    return onde.subfluxo as Record<string, unknown> | undefined;
+  }
+
+  it("o pai acorda com a resposta da filha e segue — sem disparar OUTRA filha", async () => {
+    // O defeito: a volta era tratada como primeira visita e cada despertar do
+    // pai criava uma filha nova, em laço, e o pai nunca passava do bloco.
+    mundo.subFluxosPublicados.add(FILHO);
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+    const filhas = () => [...mundo.execucoes.values()].filter((e) => e.parent_execution_id === "exec-1");
+    expect(filhas()).toHaveLength(1);
+
+    acordarPai({ execution_id: filhas()[0]!.id, outcome: "aprovado", output: { score: 9 } });
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+
+    expect(filhas()).toHaveLength(1);
+    expect(mundo.marcacoes).toContain("voltou_do_subfluxo");
+    expect(resultadoNoPai()).toEqual({ desfecho: "aprovado", saida: { score: 9 } });
+  });
+
+  it("a filha não terminou no prazo: o pai segue com `prazo_esgotado`, sem chamar de novo", async () => {
+    mundo.subFluxosPublicados.add(FILHO);
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+    acordarPai(null);
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+
+    expect([...mundo.execucoes.values()].filter((e) => e.parent_execution_id === "exec-1")).toHaveLength(1);
+    expect(resultadoNoPai()).toEqual({ desfecho: "prazo_esgotado", saida: {} });
+  });
+
+  it("a SAÍDA da filha é o contexto com que ela terminou — não o `{}` com que nasceu", async () => {
+    mundo.subFluxosPublicados.add(FILHO);
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+    const filha = [...mundo.execucoes.values()].find((e) => e.id !== "exec-1")!;
+    mundo.execucoes.set(filha.id, {
+      ...filha,
+      status: "pending",
+      current_node_id: "fim",
+      context: { resposta: "sim" },
+    });
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+
+    expect(mundo.avisosDeSubFluxo[0]?.output).toMatchObject({ resposta: "sim" });
+    expect(mundo.execucoes.get(filha.id)!.output).toMatchObject({ resposta: "sim" });
+  });
+
+  it("a filha que MORRE também avisa quem a chamou — o pai não espera o dia inteiro", async () => {
+    mundo.subFluxosPublicados.add(FILHO);
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+    const filha = [...mundo.execucoes.values()].find((e) => e.id !== "exec-1")!;
+    mundo.execucoes.set(filha.id, { ...filha, status: "pending", current_node_id: "bloco_que_sumiu" });
+    await rodarTickDeFluxos(mundo.montar(grafoQueChama(FILHO)));
+
+    expect(mundo.execucoes.get(filha.id)!.status).toBe("dead");
+    expect(mundo.avisosDeSubFluxo).toEqual([
+      expect.objectContaining({
+        execution_id: filha.id,
+        parent_execution_id: "exec-1",
+        outcome: DESFECHO_DE_FILHA_QUE_FALHOU,
+      }),
+    ]);
   });
 
   it("sub-fluxo que não está publicado MATA a execução, em vez de repetir", async () => {

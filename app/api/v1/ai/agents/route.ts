@@ -22,6 +22,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 import { agentCreateSchema } from "@/lib/ai/guardrails-schema";
 import { agentMcpCreateSchema } from "@/lib/ai/agents/validation";
+import { linhaDeVersaoNova } from "@/lib/ai/agents/linha-da-versao";
 
 export const dynamic = "force-dynamic";
 
@@ -153,38 +154,9 @@ export async function POST(req: NextRequest): Promise<Response> {
         organization_id: activeOrg.orgId,
         agent_id: agentRow.id,
         version_number: 1,
-        system_prompt: v.system_prompt,
-        provider: v.provider,
-        model: v.model,
-        credential_id: v.credential_id,
-        tool_ids: v.tool_ids,
-        trigger_config: v.trigger_config ?? undefined,
-        channel_session_id: v.channel_session_id,
-        max_steps: v.max_steps,
-        token_budget: v.token_budget,
-        cost_budget_cents: v.cost_budget_cents,
-        history_message_window: v.history_message_window,
-        history_token_window: v.history_token_window,
-        handoff_keywords: v.handoff_keywords,
-        handoff_tool_enabled: v.handoff_tool_enabled,
-        cases_enabled: v.cases_enabled,
-        split_messages: v.split_messages,
-        split_max_chars: v.split_max_chars,
-        reply_as_audio: v.reply_as_audio,
-        reply_as_audio_mirror: v.reply_as_audio_mirror,
-        human_request_try_first: v.human_request_try_first,
-        audio_voice: v.audio_voice,
-        followup: v.followup,
-        // O corpo ACEITAVA estes quatro e o INSERT os descartava: criar um
-        // agente pela API com papel Operador ligado, escopo de funil e acervo
-        // marcado produzia uma versão com todos eles no default do banco —
-        // desligado e vazio. O 201 dizia que tinha dado certo.
-        operator_enabled: v.operator_enabled,
-        operator_model: v.operator_model,
-        operator_tool_ids: v.operator_tool_ids,
-        pipeline_ids: v.pipeline_ids,
-        knowledge_source_ids: v.knowledge_source_ids,
-        api_endpoint_ids: v.api_endpoint_ids,
+        // A lista de colunas mora em `linhaDeVersaoNova` — o construtor de agente
+        // cria pelo mesmo mapeamento.
+        ...linhaDeVersaoNova(v),
         status: "draft",
         created_by: authUser.id,
       })

@@ -79,6 +79,16 @@ export const CONFERENCIAS_DE_SAIDA: readonly ConferenciaDeSaida[] = [
      camada: null,
   },
   {
+    nome: "coordenacao",
+    rotulo: "Falar só quem está atendendo",
+    oQueProtege:
+      "Com o coordenador ligado, um agente que perdeu a conversa (para a equipe ou para outro agente ou fluxo) não envia a resposta que estava escrevendo.",
+    escolha: null,
+    porQueNaoSeDesliga:
+      "Duas vozes respondendo a mesma pessoa ao mesmo tempo confundem o cliente. Sem o coordenador ligado, esta conferência não faz nada.",
+     camada: null,
+  },
+  {
     nome: "lgpd",
     rotulo: "Respeitar dados apagados e a base legal",
     oQueProtege:

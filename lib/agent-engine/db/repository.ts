@@ -77,7 +77,11 @@ export type InboxKind =
   | 'integracao_api_falhando'
   | 'acao_externa_falhou'
   | 'verificacao_bloqueada'
-  // (migration 0229) O agente terminou um turno de resposta sem enviar nada ao
+  // (migration 0229) O coordenador de atendimento não recuperou sozinho uma
+  // conversa: chamada vencida sem consumidor, troca cujo executor não começou,
+  // ou laço de transferências contido.
+  | 'coordenador_preso'
+  // (migration 0231) O agente terminou um turno de resposta sem enviar nada ao
   // cliente — nem depois de ser cobrado, ou com todas as tentativas barradas.
   | 'turno_sem_resposta'
   | 'other';

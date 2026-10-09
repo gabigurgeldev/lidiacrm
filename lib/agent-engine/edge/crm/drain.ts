@@ -34,6 +34,12 @@ const dispatchPayloadSchema = z
      */
     entregue_por_fluxo: z.string().uuid().optional(),
     imediato: z.boolean().optional(),
+    /**
+     * A tarefa que o agente chamou VOLTOU (coordenador, migration 0230). O
+     * turno abre sabendo o que o fluxo fez — por isso a marca não pode se
+     * perder na carona de um job pendente, como a entrega do fluxo.
+     */
+    coord_chamada_id: z.string().uuid().optional(),
   })
   .passthrough();
 
@@ -205,6 +211,7 @@ async function processEvent(
   const { rows: capacidade } = await pool.query<{
     tem_agente: boolean;
     tem_roteador: boolean;
+    tem_coordenador: boolean;
   }>(
     `select
        exists(
@@ -242,11 +249,23 @@ async function processEvent(
                  and ma.archived_at is null and mv.status = 'published'
              )
            )
-       ) as tem_roteador`,
+       ) as tem_roteador,
+       -- Coordenador ATIVO para o número (migration 0229): os destinos dele
+       -- são agentes da org inteira, não só os publicados neste número — o
+       -- portão não pode fechar a porta que a política abriu. O ponteiro do
+       -- número vence o da org, como em carregarPoliticaEfetiva.
+       coalesce(
+         (select v.modo from coord_politica_ponteiros pp
+            join coord_politica_versoes v on v.id = pp.versao_id
+           where pp.organization_id = $1 and pp.channel_session_id = $2),
+         (select v.modo from coord_politica_ponteiros pp
+            join coord_politica_versoes v on v.id = pp.versao_id
+           where pp.organization_id = $1 and pp.channel_session_id is null)
+       ) = 'active' as tem_coordenador`,
     [event.organization_id, p.channel_session_id],
   );
   const cap = capacidade[0];
-  if (cap !== undefined && !cap.tem_agente && !cap.tem_roteador) {
+  if (cap !== undefined && !cap.tem_agente && !cap.tem_roteador && cap.tem_coordenador !== true) {
     log.info('drain: nenhum agente publicado para a sessão — turno pulado (sem gasto)', {
       event_id: event.id,
       channel_session_id: p.channel_session_id,
@@ -296,15 +315,19 @@ async function processEvent(
   // última resposta do cliente ao fluxo, e ele será pulado pelo "fluxo no
   // comando" (a mensagem chegou durante a triagem). Sem marcar o job, a IA
   // nunca falaria — a carona carrega a marca e antecipa o relógio.
-  if (p.entregue_por_fluxo !== undefined) {
+  if (p.entregue_por_fluxo !== undefined || p.coord_chamada_id !== undefined) {
+    const marca: Record<string, string> = {
+      ...(p.entregue_por_fluxo !== undefined ? { entregue_por_fluxo: p.entregue_por_fluxo } : {}),
+      ...(p.coord_chamada_id !== undefined ? { coord_chamada_id: p.coord_chamada_id } : {}),
+    };
     const { rows: marcados } = await pool.query<{ id: string }>(
       `update job_queue
-          set payload = payload || jsonb_build_object('entregue_por_fluxo', $3::text),
+          set payload = payload || $3::jsonb,
               run_after = least(run_after, now())
         where organization_id = $1 and contact_id = $2
           and kind = 'inbound_turn' and status = 'pending'
         returning id`,
-      [event.organization_id, p.contact_id, p.entregue_por_fluxo],
+      [event.organization_id, p.contact_id, JSON.stringify(marca)],
     );
     if (marcados[0]) {
       log.info('drain: entrega do fluxo marcou o job pendente', { event_id: event.id, job_id: marcados[0].id });
@@ -368,6 +391,7 @@ async function processEvent(
       inbound_message_id: p.inbound_message_id,
       crm_event_id: event.id,
       ...(p.entregue_por_fluxo !== undefined ? { entregue_por_fluxo: p.entregue_por_fluxo } : {}),
+      ...(p.coord_chamada_id !== undefined ? { coord_chamada_id: p.coord_chamada_id } : {}),
     },
     ...(runAfter !== undefined ? { runAfter } : {}),
   });
