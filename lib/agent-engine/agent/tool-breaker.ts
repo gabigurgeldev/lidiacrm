@@ -50,6 +50,13 @@ export interface ToolBreakerOptions {
   log: Logger;
   /** campos estruturados dos warns (tenant/lead/job) — args crus jamais. */
   logFields?: Record<string, unknown>;
+  /**
+   * Observa cada chamada de ferramenta do turno — inclusive as que o próprio
+   * disjuntor bloqueou. Só o ensaio (`lib/agent-engine/ensaio`) passa: é como a
+   * tela de teste mostra o que o agente fez. Em produção fica ausente, e nada
+   * muda. Recebe a entrada e o resultado em memória, nunca vai para log.
+   */
+  aoChamar?: (chamada: { ferramenta: string; entrada: unknown; resultado: unknown }) => void;
 }
 
 /**
@@ -127,6 +134,17 @@ export function wrapToolsWithBreaker(tools: ToolSet, opts: ToolBreakerOptions): 
   ): BreakerBlockedResult => ({ ok: false, error: { code, message } });
 
   const wrapExecute = (toolName: string, execute: AnyExecute): AnyExecute => {
+    const comDisjuntor = executarComDisjuntor(toolName, execute);
+    if (opts.aoChamar === undefined) return comDisjuntor;
+    const aoChamar = opts.aoChamar;
+    return async (input: unknown, options: unknown): Promise<unknown> => {
+      const resultado = await comDisjuntor(input, options);
+      aoChamar({ ferramenta: toolName, entrada: input, resultado });
+      return resultado;
+    };
+  };
+
+  const executarComDisjuntor = (toolName: string, execute: AnyExecute): AnyExecute => {
     return async (input: unknown, options: unknown): Promise<unknown> => {
       const argsHash = canonicalHash(input);
       const exactKey = `${toolName}:${argsHash}`;
