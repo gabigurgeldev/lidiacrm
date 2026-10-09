@@ -468,6 +468,8 @@ export const pacingGate: Gate = {
       state: ctx.pacing.state,
       crmDailyLimit: ctx.pacing.crmDailyLimit,
       banRisk,
+      // Resposta a quem escreveu nas últimas 24 h não consome o warm-up (ver o campo).
+      respondeAoContato: isWindowOpen(ctx.now, ctx.messagingWindow?.lastInboundAt ?? null),
       rng: ctx.pacing.rng,
     });
     if (!decision.allow) {
