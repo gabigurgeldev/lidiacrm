@@ -5,7 +5,10 @@
  * `loadPublishedAgentConfig` por channel_session.
  *
  * Regra de decisão (spec 2026-07-23, decisões do Rafael 2026-07-26):
- *   1. sem router ativo pra sessão ⇒ fluxo atual intacto (config por sessão).
+ *   1. sem router ativo pra sessão ⇒ os agentes publicados no número, por
+ *      prioridade, escolhidos pelo filtro de assunto ("Só responder sobre…") —
+ *      ver `filtro-de-assunto.ts`. Sem filtro em nenhum, é o de sempre: o mais
+ *      prioritário. Nenhum casa ⇒ outcome 'fora_do_assunto', e o turno é pulado.
  *   2. sticky ativo (router.sticky + stickyAgentId ainda membro do router):
  *      classifica MESMO ASSIM (barato, é o que detecta troca de assunto) —
  *      só troca se a intenção vier DIFERENTE da sticky E confiança >= min;
@@ -56,10 +59,12 @@ import type { Logger } from '../obs/logger';
 import type { LlmEdgeConfig } from '../edge/llm/run-model-call';
 import { loadActiveRouter } from './router-config';
 import {
+  loadPublishedAgentCandidates,
   loadPublishedAgentConfig,
   loadPublishedAgentConfigById,
   type PublishedAgentConfig,
 } from './agent-config';
+import { escolherPorAssunto } from './filtro-de-assunto';
 import { classifyIntent } from './intent-classifier';
 
 export interface TurnAgentResolution {
@@ -67,7 +72,21 @@ export interface TurnAgentResolution {
   routerId: string | null;
   intentName: string | null;
   confidence: number | null;
-  outcome: 'no_router' | 'classified' | 'sticky' | 'reclassified' | 'fallback' | 'no_match' | 'classifier_failed';
+  outcome:
+    | 'no_router'
+    | 'classified'
+    | 'sticky'
+    | 'reclassified'
+    | 'fallback'
+    | 'no_match'
+    | 'classifier_failed'
+    /** Sem roteador, nenhum agente do número aceita o assunto: ninguém responde. */
+    | 'fora_do_assunto';
+  /**
+   * Sem roteador: algum candidato do número tinha filtro de assunto, então a
+   * escolha dependeu do assunto e a conversa precisa lembrar quem a pegou.
+   */
+  assuntoDecidiu?: boolean;
 }
 
 export interface ResolveTurnAgentDeps {
@@ -75,6 +94,7 @@ export interface ResolveTurnAgentDeps {
   loadActiveRouter?: typeof loadActiveRouter;
   loadPublishedAgentConfigById?: typeof loadPublishedAgentConfigById;
   loadPublishedAgentConfig?: typeof loadPublishedAgentConfig;
+  loadPublishedAgentCandidates?: typeof loadPublishedAgentCandidates;
   classifyIntent?: typeof classifyIntent;
 }
 
@@ -90,23 +110,42 @@ export async function resolveTurnAgent(
     signal: string | null;
     stickyAgentId: string | null;
     stickyIntent: string | null;
+    /** Rajada do cliente já normalizada (`montarAssunto`); `null` = sem texto. */
+    assunto?: string | null;
+    /** Agente da conversa em andamento (respondeu há pouco), ou `null`. */
+    emAndamentoCom?: string | null;
   },
   deps: ResolveTurnAgentDeps,
 ): Promise<TurnAgentResolution> {
   const _loadActiveRouter = deps.loadActiveRouter ?? loadActiveRouter;
   const _loadAgentById = deps.loadPublishedAgentConfigById ?? loadPublishedAgentConfigById;
   const _loadAgentBySession = deps.loadPublishedAgentConfig ?? loadPublishedAgentConfig;
+  const _loadCandidates = deps.loadPublishedAgentCandidates ?? loadPublishedAgentCandidates;
   const _classifyIntent = deps.classifyIntent ?? classifyIntent;
 
   try {
     const router = await _loadActiveRouter(db, input.tenantId, input.channelSessionId);
     if (router === null) {
+      const candidatos = await _loadCandidates(db, input.tenantId, input.channelSessionId);
+      const assuntoDecidiu = candidatos.some((agentConfig) => agentConfig.filtroDeAssunto !== null);
+      const escolha = escolherPorAssunto(candidatos, {
+        assunto: input.assunto ?? null,
+        emAndamentoCom: input.emAndamentoCom ?? null,
+      });
+      if (assuntoDecidiu) {
+        deps.log.info('resolve-turn-agent: agente escolhido pelo assunto', {
+          candidatos: candidatos.length,
+          motivo: escolha.motivo,
+          agentId: escolha.escolhido?.agentId ?? null,
+        });
+      }
       return {
-        config: await _loadAgentBySession(db, input.tenantId, input.channelSessionId),
+        config: escolha.escolhido,
         routerId: null,
         intentName: null,
         confidence: null,
-        outcome: 'no_router',
+        outcome: escolha.motivo === 'fora_do_assunto' ? 'fora_do_assunto' : 'no_router',
+        assuntoDecidiu,
       };
     }
 

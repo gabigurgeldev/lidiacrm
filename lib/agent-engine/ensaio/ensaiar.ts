@@ -61,7 +61,13 @@ export interface PedidoDeEnsaio {
   agora?: Date;
 }
 
-export type DesfechoDoEnsaio = 'respondeu' | 'passou_para_humano' | 'adiado' | 'sem_resposta' | 'falhou';
+export type DesfechoDoEnsaio =
+  | 'respondeu'
+  | 'passou_para_humano'
+  | 'adiado'
+  | 'fora_do_assunto'
+  | 'sem_resposta'
+  | 'falhou';
 
 export interface RelatorioDoEnsaio {
   id: string;
@@ -299,6 +305,7 @@ export async function ensaiarTurno(
     const job = jobs[0]!;
 
     // 4. O turno de produção, com os efeitos externos trocados.
+    let foraDoAssunto = false;
     const deps: FollowupTurnDeps = {
       ...depsBase,
       llmCfg: {
@@ -334,6 +341,9 @@ export async function ensaiarTurno(
           const simulada =
             typeof c.resultado === 'object' && c.resultado !== null && (c.resultado as { simulado?: unknown }).simulado === true;
           ferramentas.push({ ...c, simulada });
+        },
+        aoFicarForaDoAssunto: () => {
+          foraDoAssunto = true;
         },
       },
     };
@@ -406,7 +416,9 @@ export async function ensaiarTurno(
         ? 'falhou'
         : adiado
           ? 'adiado'
-          : capturadas.length > 0
+          : foraDoAssunto
+            ? 'fora_do_assunto'
+            : capturadas.length > 0
             ? 'respondeu'
             : passouParaHumano
               ? 'passou_para_humano'

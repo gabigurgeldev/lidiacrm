@@ -54,19 +54,25 @@ function camposDaConfig(): string[] {
   return [...src.slice(ini, fim).matchAll(/^ {2}(\w+)\??:/gm)].map((m) => m[1]!);
 }
 
-/** Arquivos que leem o campo, fora do próprio módulo que o carrega. */
-function consumidoresDe(campo: string): string[] {
+function gitGrep(args: string[]): string[] {
   try {
-    const saida = execFileSync(
-      "git",
-      ["grep", "-l", "-e", `agentConfig.${campo}`, "-e", `agentConfig?.${campo}`, "--", "lib", "workers", "app"],
-      { cwd: RAIZ, encoding: "utf8" },
-    );
+    const saida = execFileSync("git", ["grep", "-l", ...args], { cwd: RAIZ, encoding: "utf8" });
     return saida.split("\n").filter((f) => f !== "" && !f.includes("agent-config"));
   } catch {
     // `git grep` sai com 1 quando não encontra nada — ausência, não falha.
     return [];
   }
+}
+
+/** Arquivos que leem o campo, fora do próprio módulo que o carrega. */
+function consumidoresDe(campo: string): string[] {
+  return [
+    ...gitGrep(["-e", `agentConfig.${campo}`, "-e", `agentConfig?.${campo}`, "--", "lib", "workers", "app"]),
+    // A escolha ENTRE agentes publicados no número lê o campo de cada candidato
+    // antes de existir um `agentConfig` — por isso, só nesse arquivo, vale o
+    // acesso por qualquer nome.
+    ...gitGrep(["-E", "-e", `\\.${campo}\\b`, "--", "lib/agent-engine/agent/filtro-de-assunto.ts"]),
+  ];
 }
 
 describe("knobs da versão publicada", () => {

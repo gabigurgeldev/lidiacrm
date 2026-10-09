@@ -12,6 +12,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
+import { padraoParaPalavras, palavrasParaPadrao } from "@/lib/ai/agents/filtro-em-palavras";
+import { problemaDoPadrao } from "@/lib/regex/segura";
 
 export interface BusinessHoursValue {
   timezone: string;
@@ -35,6 +37,8 @@ interface Props {
   value: TriggerValue;
   onChange: (v: TriggerValue) => void;
   disabled?: boolean;
+  /** Membro de roteador: quem escolhe o agente é o roteador, e o filtro de assunto não vale. */
+  roteador?: { routerName: string } | null;
 }
 
 const WEEKDAYS = [
@@ -47,8 +51,18 @@ const WEEKDAYS = [
   { id: 6, label: "Sáb" },
 ];
 
-export function TriggerEditor({ value, onChange, disabled }: Props) {
+export function TriggerEditor({ value, onChange, disabled, roteador }: Props) {
   const t = useT();
+  // O padrão salvo é a fonte; a lista de palavras é só como a tela o mostra.
+  // Padrão que não é lista de palavras abre direto no modo avançado.
+  const palavrasIniciais = padraoParaPalavras(value.filters.keyword_regex);
+  const [modoDoFiltro, setModoDoFiltro] = React.useState<"palavras" | "avancado">(
+    palavrasIniciais === null ? "avancado" : "palavras",
+  );
+  const [textoDasPalavras, setTextoDasPalavras] = React.useState((palavrasIniciais ?? []).join(", "));
+  const filtro = value.filters.keyword_regex;
+  const problemaDoFiltro = filtro === null ? null : problemaDoPadrao(filtro);
+  const palavrasDoFiltro = padraoParaPalavras(filtro);
   function patchFilters(p: Partial<TriggerValue["filters"]>) {
     onChange({ ...value, filters: { ...value.filters, ...p } });
   }
@@ -136,23 +150,79 @@ export function TriggerEditor({ value, onChange, disabled }: Props) {
         </div>
       </div>
 
-      <div className="space-y-1">
-        <Label htmlFor="keyword_regex">{t("Só responder quando a mensagem falar de algo específico (opcional)")}</Label>
-        <Input
-          id="keyword_regex"
-          value={value.filters.keyword_regex ?? ""}
-          onChange={(e) =>
-            patchFilters({ keyword_regex: e.target.value.trim() === "" ? null : e.target.value })
-          }
-          placeholder={t("Ex.: pedido|status|orçamento")}
-          disabled={disabled}
-          spellCheck={false}
-        />
+      <div className="space-y-2" data-testid="filtro-de-assunto">
+        <Label htmlFor={modoDoFiltro === "palavras" ? "filtro_palavras" : "keyword_regex"}>
+          {t("Só responder sobre… (opcional)")}
+        </Label>
+        {roteador ? (
+          <p className="rounded-md bg-accent-soft p-2 text-xs text-text-muted" data-testid="filtro-de-assunto-roteador">
+            {t("Este agente é escolhido pelo roteador")} «{roteador.routerName}» —{" "}
+            {t("lá quem decide o assunto é o roteador, e este filtro não vale.")}
+          </p>
+        ) : null}
+        {modoDoFiltro === "palavras" ? (
+          <Input
+            id="filtro_palavras"
+            value={textoDasPalavras}
+            onChange={(e) => {
+              setTextoDasPalavras(e.target.value);
+              patchFilters({ keyword_regex: palavrasParaPadrao(e.target.value) });
+            }}
+            placeholder={t("Ex.: pedido, entrega, segunda via")}
+            disabled={disabled}
+          />
+        ) : (
+          <Input
+            id="keyword_regex"
+            value={filtro ?? ""}
+            onChange={(e) =>
+              patchFilters({ keyword_regex: e.target.value.trim() === "" ? null : e.target.value })
+            }
+            placeholder={t("Ex.: pedidos?|entrega|2a via")}
+            disabled={disabled}
+            spellCheck={false}
+            aria-invalid={problemaDoFiltro !== null && problemaDoFiltro !== "vazio"}
+          />
+        )}
+        {problemaDoFiltro !== null && problemaDoFiltro !== "vazio" ? (
+          <p className="text-xs text-destructive" role="alert" data-testid="filtro-de-assunto-erro">
+            {problemaDoFiltro === "longo_demais"
+              ? t("O filtro passou de 200 caracteres.")
+              : problemaDoFiltro === "invalido"
+                ? t("O filtro tem um erro de escrita (parêntese ou colchete sem par, por exemplo).")
+                : problemaDoFiltro === "quantificador_aninhado"
+                  ? t("O filtro repete um trecho que já se repete, como (a+)+. Isso pode travar o atendimento — simplifique.")
+                  : t("O filtro usa referência a um trecho anterior. Isso não é aceito aqui.")}
+          </p>
+        ) : null}
         <p className="text-xs text-muted-foreground">
-          {t(
-            "Deixe em branco para o agente responder a tudo. Se preencher, ele só entra quando a mensagem contiver uma dessas palavras — separe por barra vertical (|). Aceita expressão regular, para quem já conhece.",
-          )}
+          {modoDoFiltro === "palavras"
+            ? t(
+                "Em branco, ele responde a tudo. Preenchido, ele só entra numa conversa nova quando o cliente falar de uma dessas palavras (separe por vírgula; acento e maiúscula não importam). Conversa que ele já atende continua com ele.",
+              )
+            : t(
+                "Expressão regular contra o que o cliente escreveu desde a última resposta, sem acento e em minúsculas.",
+              )}
         </p>
+        <button
+          type="button"
+          className="text-xs font-medium text-primary underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={disabled || (modoDoFiltro === "avancado" && palavrasDoFiltro === null)}
+          onClick={() => {
+            if (modoDoFiltro === "palavras") {
+              setModoDoFiltro("avancado");
+              return;
+            }
+            setTextoDasPalavras((palavrasDoFiltro ?? []).join(", "));
+            setModoDoFiltro("palavras");
+          }}
+        >
+          {modoDoFiltro === "palavras"
+            ? t("Usar expressão regular (avançado)")
+            : palavrasDoFiltro === null
+              ? t("Esta expressão não é uma lista de palavras")
+              : t("Voltar para lista de palavras")}
+        </button>
       </div>
 
       <div className="space-y-1">

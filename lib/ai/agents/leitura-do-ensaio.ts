@@ -94,6 +94,13 @@ export function lerDesfecho(r: RelatorioDoEnsaio): DesfechoLegivel {
         detalhe: r.adiamento?.motivo ?? null,
         tom: "atencao",
       };
+    case "fora_do_assunto":
+      return {
+        titulo: "Este agente não responderia",
+        detalhe:
+          "A mensagem não fala do assunto em \"Só responder sobre…\". Em produção, ela iria para outro agente do número que aceite o assunto — ou ficaria na Inbox para a equipe.",
+        tom: "atencao",
+      };
     case "sem_resposta": {
       const barradas = r.conferencias.filter((c) => c.barradaPor !== null);
       return {

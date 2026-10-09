@@ -88,6 +88,7 @@ import { projetarContexto, projetarRetornoDeTool, turnoProjeta, type ContextoPro
 import { capacidadesEntreguesAoOperador, catalogoEntregueAoOperador } from './entrega-de-capacidade';
 import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memory';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
+import { CONVERSA_EM_ANDAMENTO_MS, montarAssunto, passaNoFiltro } from './filtro-de-assunto';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
 import { decidirResgateDoTurnoMudo, MENSAGEM_DE_RESGATE, avisarTurnoSemResposta } from './turno-mudo';
@@ -750,6 +751,8 @@ export interface InboundTurnDeps {
     id: string;
     agente: PublishedAgentConfig;
     aoChamarFerramenta?: (chamada: { ferramenta: string; entrada: unknown; resultado: unknown }) => void;
+    /** O filtro de assunto do formulário recusou a mensagem: em produção, este agente não responderia. */
+    aoFicarForaDoAssunto?: () => void;
   };
   /**
    * Seam do coordenador de atendimento (migration 0229) — só os testes passam.
@@ -1404,17 +1407,26 @@ async function executarTurnoDoAgente(
   // Fase 3: stickiness do router — qual agente já atende esta conversa. Leituras
   // tolerantes a falha (ex.: clone self-host ainda sem a migration 0085 aplicada) —
   // um erro aqui degrada pro fluxo sem router, nunca derruba o turno (review T5).
-  let sticky: { active_ai_agent_id: string | null; active_intent: string | null } = {
+  let sticky: { active_ai_agent_id: string | null; active_intent: string | null; last_outbound_at: Date | null } = {
     active_ai_agent_id: null,
     active_intent: null,
+    last_outbound_at: null,
   };
   // Regra 6 do resolver (nunca classifica em follow-up): só busca o sinal em turno
   // inbound de verdade — um follow-up de dias depois não pode reclassificar sobre a
   // mensagem antiga que originou a promessa (review T5, finding 1).
   let routingSignal: string | null = null;
+  // Filtro de assunto ("Só responder sobre…"): a RAJADA desde a última resposta,
+  // não só a última mensagem — o cliente escreve "oi" / "queria saber" / "do meu
+  // pedido" em três balões, e o assunto está no terceiro.
+  let assunto: string | null = null;
   try {
-    const { rows: convRows } = await pool.query<{ active_ai_agent_id: string | null; active_intent: string | null }>(
-      'select active_ai_agent_id, active_intent from conversations where organization_id = $1 and id = $2',
+    const { rows: convRows } = await pool.query<{
+      active_ai_agent_id: string | null;
+      active_intent: string | null;
+      last_outbound_at: Date | null;
+    }>(
+      'select active_ai_agent_id, active_intent, last_outbound_at from conversations where organization_id = $1 and id = $2',
       [tenantId, input.conversationId],
     );
     sticky = convRows[0] ?? sticky;
@@ -1431,6 +1443,17 @@ async function executarTurnoDoAgente(
         [tenantId, input.conversationId],
       );
       routingSignal = sigRows[0]?.body ?? null;
+      const { rows: rajada } = await pool.query<{ body: string | null }>(
+        `select body from messages m
+         where m.organization_id = $1 and m.conversation_id = $2 and m.direction = 'inbound'
+           and m.sent_at > coalesce(
+             (select max(o.sent_at) from messages o
+               where o.organization_id = $1 and o.conversation_id = $2 and o.direction = 'outbound'),
+             '-infinity'::timestamptz)
+         order by m.sent_at desc, m.id desc limit 20`,
+        [tenantId, input.conversationId],
+      );
+      assunto = montarAssunto(rajada.map((r) => r.body).reverse());
     }
   } catch (err) {
     runLog.warn('leitura de sticky/sinal do router falhou — turno segue sem router', {
@@ -1448,8 +1471,25 @@ async function executarTurnoDoAgente(
   // mensagem é exatamente o que o coordenador existe para acabar.
   // No ensaio, o agente é o do formulário — não o que o número, o roteador ou o
   // coordenador escolheriam (e o rascunho nem está publicado).
+  // "Em andamento" = a conversa teve resposta nas últimas 24 h. Com ela, quem
+  // já atende segue atendendo mesmo que a mensagem nova não fale do assunto do
+  // filtro ("pode ser terça?") — ver `filtro-de-assunto.ts`.
+  const emAndamento =
+    sticky.last_outbound_at !== null &&
+    clock().getTime() - new Date(sticky.last_outbound_at).getTime() < CONVERSA_EM_ANDAMENTO_MS;
   let routed: TurnAgentResolution;
   if (deps.ensaio !== undefined) {
+    // O ensaio tem um agente só, o do formulário: o filtro decide se ele
+    // responderia, e o relatório diz quando não.
+    if (
+      job.kind === 'inbound_turn' &&
+      !emAndamento &&
+      !passaNoFiltro(deps.ensaio.agente.filtroDeAssunto, assunto)
+    ) {
+      runLog.info('ensaio: mensagem fora do assunto do filtro — o agente não responderia');
+      deps.ensaio.aoFicarForaDoAssunto?.();
+      return;
+    }
     routed = { config: deps.ensaio.agente, routerId: null, intentName: null, confidence: null, outcome: 'no_router' };
   } else if (coordenadorConduz !== null) {
     const config = await loadPublishedAgentConfigById(pool, tenantId, coordenadorConduz.agentId);
@@ -1481,9 +1521,20 @@ async function executarTurnoDoAgente(
         signal: routingSignal,
         stickyAgentId: sticky.active_ai_agent_id,
         stickyIntent: sticky.active_intent,
+        assunto,
+        emAndamentoCom: emAndamento ? sticky.active_ai_agent_id : null,
       },
       { log: runLog },
     );
+  }
+  if (routed.outcome === 'fora_do_assunto') {
+    // Todos os agentes do número têm filtro, e nenhum aceita esta mensagem. Não
+    // é o genérico que responde (`config: null` normalmente seria): o dono
+    // disse "só sobre isto", e a conversa fica na Inbox para a equipe.
+    runLog.info('turno pulado — nenhum agente do número aceita o assunto da mensagem', {
+      assunto_chars: assunto?.length ?? 0,
+    });
+    return;
   }
   const agentConfig = routed.config;
   if (agentConfig !== null) {
@@ -1534,6 +1585,27 @@ async function executarTurnoDoAgente(
       )
       .catch((err: unknown) => {
         runLog.warn('espelho do agente do coordenador não gravado', {
+          error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
+        });
+      });
+  }
+
+  // Sem roteador, quando o filtro de assunto decidiu, a conversa lembra quem a
+  // pegou: é o que mantém o mesmo agente na próxima mensagem, mesmo que ela não
+  // repita o assunto. Falha aqui só custa a aderência, nunca a resposta.
+  if (
+    routed.assuntoDecidiu === true &&
+    agentConfig !== null &&
+    sticky.active_ai_agent_id !== agentConfig.agentId
+  ) {
+    await pool
+      .query(
+        `update conversations set active_ai_agent_id = $3, active_agent_set_at = now()
+         where organization_id = $1 and id = $2`,
+        [tenantId, input.conversationId, agentConfig.agentId],
+      )
+      .catch((err: unknown) => {
+        runLog.warn('agente escolhido pelo assunto não gravado na conversa', {
           error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
         });
       });

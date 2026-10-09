@@ -209,7 +209,7 @@ Layout 2 colunas em desktop, stack em mobile.
 | max_steps | 1-25 | — |
 | token_budget | 1000-500000 | — |
 | cost_budget_cents | 1-10000 | — |
-| keyword_regex | regex válida | "Regex inválida" (try/catch new RegExp) |
+| keyword_regex | regex válida, ≤200 caracteres, sem repetição aninhada nem referência reversa (`lib/regex/segura.ts`) | motivo em português; a tela edita como lista de palavras e só mostra a regex no modo avançado |
 | business_hours | from < to | "Horário fim deve ser maior que início" |
 | handoff_keywords | array, cada item min 2 chars | — |
 

@@ -36,6 +36,7 @@ function fakeConfig(agentId: string): PublishedAgentConfig {
     ragTopK: 5,
     ragSimilarityThreshold: 0.72,
     janelaDeAtendimento: null,
+    filtroDeAssunto: null,
     versionCreatedBy: null,
     operatorEnabled: false,
   operatorModel: null,
@@ -80,6 +81,7 @@ function makeDeps(overrides: {
   loadActiveRouter?: ReturnType<typeof vi.fn>;
   loadPublishedAgentConfigById?: ReturnType<typeof vi.fn>;
   loadPublishedAgentConfig?: ReturnType<typeof vi.fn>;
+  loadPublishedAgentCandidates?: ReturnType<typeof vi.fn>;
   classifyIntent?: ReturnType<typeof vi.fn>;
 }) {
   return {
@@ -87,18 +89,20 @@ function makeDeps(overrides: {
     loadActiveRouter: overrides.loadActiveRouter ?? vi.fn(),
     loadPublishedAgentConfigById: overrides.loadPublishedAgentConfigById ?? vi.fn(),
     loadPublishedAgentConfig: overrides.loadPublishedAgentConfig ?? vi.fn(),
+    loadPublishedAgentCandidates: overrides.loadPublishedAgentCandidates ?? vi.fn().mockResolvedValue([]),
     classifyIntent: overrides.classifyIntent ?? vi.fn(),
   } as never;
 }
 
 describe('resolveTurnAgent', () => {
-  it('1. canal sem router → no_router, usa loadPublishedAgentConfig por sessão', async () => {
+  it('1. canal sem router → no_router, o mais prioritário dos publicados no número', async () => {
     const loadActiveRouter = vi.fn().mockResolvedValue(null);
-    const loadPublishedAgentConfig = vi.fn().mockResolvedValue(fakeConfig('agent-sessao'));
+    const loadPublishedAgentCandidates = vi.fn().mockResolvedValue([fakeConfig('agent-sessao'), fakeConfig('agent-outro')]);
     const classifyIntent = vi.fn();
     const out = await resolveTurnAgent({} as never, {} as never,
       { ...baseInput, signal: 'oi', stickyAgentId: null, stickyIntent: null },
-      makeDeps({ loadActiveRouter, loadPublishedAgentConfig, classifyIntent }));
+      makeDeps({ loadActiveRouter, loadPublishedAgentCandidates, classifyIntent }));
+    expect(out.assuntoDecidiu).toBe(false);
     expect(out.outcome).toBe('no_router');
     expect(out.config?.agentId).toBe('agent-sessao');
     expect(out.routerId).toBeNull();
@@ -303,5 +307,63 @@ describe('resolveTurnAgent', () => {
     expect(out.config).toBeNull();
     expect(out.outcome).toBe('no_match');
     expect(warn).toHaveBeenCalled();
+  });
+
+  describe('sem router: filtro de assunto ("Só responder sobre…")', () => {
+    const comFiltro = (id: string, filtro: string | null): PublishedAgentConfig => ({ ...fakeConfig(id), filtroDeAssunto: filtro });
+
+    it('17. dois agentes no número: o que aceita o assunto atende, mesmo sendo menos prioritário', async () => {
+      const loadPublishedAgentCandidates = vi
+        .fn()
+        .mockResolvedValue([comFiltro('agent-vendas', 'preco|comprar'), comFiltro('agent-suporte', 'pedido|entrega')]);
+      const out = await resolveTurnAgent({} as never, {} as never,
+        { ...baseInput, signal: 'do meu pedido', stickyAgentId: null, stickyIntent: null, assunto: 'oi, do meu pedido' },
+        makeDeps({ loadActiveRouter: vi.fn().mockResolvedValue(null), loadPublishedAgentCandidates }));
+      expect(out.outcome).toBe('no_router');
+      expect(out.config?.agentId).toBe('agent-suporte');
+      expect(out.assuntoDecidiu).toBe(true);
+    });
+
+    it('18. ninguém aceita → fora_do_assunto com config null (o turno é pulado, não cai no genérico)', async () => {
+      const loadPublishedAgentCandidates = vi.fn().mockResolvedValue([comFiltro('agent-vendas', 'preco')]);
+      const out = await resolveTurnAgent({} as never, {} as never,
+        { ...baseInput, signal: 'bom dia', stickyAgentId: null, stickyIntent: null, assunto: 'bom dia' },
+        makeDeps({ loadActiveRouter: vi.fn().mockResolvedValue(null), loadPublishedAgentCandidates }));
+      expect(out.outcome).toBe('fora_do_assunto');
+      expect(out.config).toBeNull();
+    });
+
+    it('19. conversa em andamento fica com quem atende, mesmo fora do assunto', async () => {
+      const loadPublishedAgentCandidates = vi
+        .fn()
+        .mockResolvedValue([comFiltro('agent-vendas', 'preco'), comFiltro('agent-suporte', 'pedido')]);
+      const out = await resolveTurnAgent({} as never, {} as never,
+        {
+          ...baseInput,
+          signal: 'pode ser terça?',
+          stickyAgentId: 'agent-suporte',
+          stickyIntent: null,
+          assunto: 'pode ser terca?',
+          emAndamentoCom: 'agent-suporte',
+        },
+        makeDeps({ loadActiveRouter: vi.fn().mockResolvedValue(null), loadPublishedAgentCandidates }));
+      expect(out.config?.agentId).toBe('agent-suporte');
+    });
+
+    it('20. com router ativo o filtro não vale — quem escolhe é o classificador', async () => {
+      const r = router({ sticky: false });
+      const loadPublishedAgentCandidates = vi.fn();
+      const out = await resolveTurnAgent({} as never, {} as never,
+        { ...baseInput, signal: 'bom dia', stickyAgentId: null, stickyIntent: null, assunto: 'bom dia' },
+        makeDeps({
+          loadActiveRouter: vi.fn().mockResolvedValue(r),
+          classifyIntent: vi.fn().mockResolvedValue({ intentName: 'vendas', confidence: 0.9 }),
+          loadPublishedAgentConfigById: vi.fn(async (_d: unknown, _o: unknown, id: string) => comFiltro(id, 'nada-casa')),
+          loadPublishedAgentCandidates,
+        }));
+      expect(out.outcome).toBe('classified');
+      expect(out.config?.agentId).toBe('agent-vendas');
+      expect(loadPublishedAgentCandidates).not.toHaveBeenCalled();
+    });
   });
 });
