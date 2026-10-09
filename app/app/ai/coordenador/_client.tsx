@@ -47,6 +47,7 @@ import {
 import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 import { tagDeIdioma } from "@/lib/i18n/datas";
 import { Plus, Trash } from "@/lib/ui/icons";
+import { GATILHO_DA_ABA, SEGMENTADO_ABAS } from "@/components/ajustes";
 
 interface Props {
   painelInicial: Painel;
@@ -191,10 +192,10 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
 
   return (
     <Tabs defaultValue="configurar" className="flex flex-col gap-4">
-      <TabsList className="w-full sm:w-auto">
-        <TabsTrigger value="configurar">{t("Configurar")}</TabsTrigger>
-        <TabsTrigger value="simular">{t("Simular")}</TabsTrigger>
-        <TabsTrigger value="atividade">{t("Atividade")}</TabsTrigger>
+      <TabsList className={`${SEGMENTADO_ABAS} max-w-full self-start overflow-x-auto`}>
+        <TabsTrigger value="configurar" className={GATILHO_DA_ABA}>{t("Configurar")}</TabsTrigger>
+        <TabsTrigger value="simular" className={GATILHO_DA_ABA}>{t("Simular")}</TabsTrigger>
+        <TabsTrigger value="atividade" className={GATILHO_DA_ABA}>{t("Atividade")}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="configurar" className="flex flex-col gap-4">

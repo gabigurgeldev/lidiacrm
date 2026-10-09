@@ -9,6 +9,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { createClient } from "@/lib/supabase/server";
 
 import { ListaDeIntegracoes, type IntegracaoDaLista } from "./_components/ListaDeIntegracoes";
+import { PaginaAjustes } from "@/components/ajustes";
 
 export const dynamic = "force-dynamic";
 
@@ -37,16 +38,13 @@ export default async function IntegracoesPage() {
   const chave = chaveDeCifragemUtilizavel();
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Integrações via API", idioma)}</h1>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          {traduzir(
-            "Conecte os sistemas do seu negócio para o agente buscar dados de verdade ao responder — um pedido, uma conta, um status. Correções só rodam depois que o cliente confirma, e consultas a uma conta exigem que ele prove por e-mail que é o dono.",
-            idioma,
-          )}
-        </p>
-      </header>
+    <PaginaAjustes
+      titulo={traduzir("Integrações via API", idioma)}
+      descricao={traduzir(
+        "Conecte os sistemas do seu negócio para o agente buscar dados de verdade ao responder — um pedido, uma conta, um status. Correções só rodam depois que o cliente confirma, e consultas a uma conta exigem que ele prove por e-mail que é o dono.",
+        idioma,
+      )}
+    >
       {!chave.ok ? (
         <p className="rounded-md border border-warning-fg/30 bg-warning-bg p-3 text-sm text-warning-fg" data-testid="integracoes-sem-chave">
           {traduzir("A chave de criptografia da instalação não está utilizável, então não dá para guardar a chave de acesso de uma API.", idioma)}{" "}
@@ -65,6 +63,6 @@ export default async function IntegracoesPage() {
         integracoes={(data ?? []) as unknown as IntegracaoDaLista[]}
         podeEscrever={ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin}
       />
-    </div>
+    </PaginaAjustes>
   );
 }

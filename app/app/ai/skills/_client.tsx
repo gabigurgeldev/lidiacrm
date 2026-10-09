@@ -4,11 +4,9 @@ import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
 import * as React from "react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
-import { PuzzlePiece, UploadSimple, DownloadSimple, Trash, Info } from "@/lib/ui/icons";
+import { PuzzlePiece, UploadSimple, DownloadSimple, Trash } from "@/lib/ui/icons";
 import { usePermission } from "@/hooks/auth/AuthProvider";
 import {
   useSkills,
@@ -18,6 +16,7 @@ import {
   type SkillsState,
 } from "@/hooks/ai/useSkills";
 import { useT } from "@/hooks/i18n/useT";
+import { Grupo, Linha } from "@/components/ajustes";
 
 interface Props {
   initialState: SkillsState;
@@ -88,134 +87,99 @@ export function SkillsClient({ initialState }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle>{t("Skills instaladas")}</CardTitle>
-              <CardDescription>
-                {t(
-                  "O que seus agentes já sabem fazer além da conversa comum — cada skill só entra em ação quando o assunto pede.",
-                )}
-              </CardDescription>
-            </div>
-            {canManage && (
-              <>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".zip"
-                  className="hidden"
-                  onChange={handleFileChosen}
-                />
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={importSkill.isPending}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <UploadSimple /> {importSkill.isPending ? t("Enviando…") : t("Enviar skill (.zip)")}
-                </Button>
-              </>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {installed.length === 0 ? (
-            <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-              {t('Nenhuma skill instalada ainda. Instale uma pronta do catálogo abaixo ou envie a sua em "Enviar skill (.zip)".')}
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {installed.map((skill) => (
-                <li
-                  key={skill.name}
-                  className="flex flex-col gap-1.5 rounded-md border border-border/60 p-3 text-sm"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <PuzzlePiece className="text-accent" aria-hidden />
-                    <span className="font-medium">{skill.name}</span>
-                    <Badge variant={skill.source === "catalog" ? "info" : "neutral"} className="text-[10px]">
-                      {skill.source === "catalog" ? t("do catálogo") : t("manual")}
-                    </Badge>
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      {t("atualizada em")} {formatDate(skill.updated_at, tagDoIdioma)}
-                    </span>
-                  </div>
-                  {skill.description && <p className="text-text-muted">{skill.description}</p>}
-                  {canManage && (
-                    <div className="flex sm:justify-end">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={uninstall.isPending && pendingName === skill.name}
-                        onClick={() => handleUninstall(skill.name)}
-                        className="w-full sm:w-auto"
-                      >
-                        <Trash /> {t("Desinstalar")}
-                      </Button>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
+    <div className="flex max-w-3xl flex-col gap-6">
+      {canManage && (
+        <div className="flex sm:justify-end">
+          <input ref={fileInputRef} type="file" accept=".zip" className="hidden" onChange={handleFileChosen} />
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={importSkill.isPending}
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full sm:w-auto"
+          >
+            <UploadSimple /> {importSkill.isPending ? t("Enviando…") : t("Enviar skill (.zip)")}
+          </Button>
+        </div>
+      )}
 
-          <div className="flex items-start gap-2 rounded-md bg-accent-soft p-3 text-xs text-text-muted">
-            <Info className="mt-0.5 shrink-0" aria-hidden />
-            <p>
-              {t(
-                "Para personalizar uma skill instalada, basta reenviar um .zip com o mesmo nome — a sua versão passa a valer no lugar da do catálogo. Não há editor dentro do sistema nesta fase.",
-              )}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <Grupo
+        titulo={t("Skills instaladas")}
+        rodape={t(
+          "Para personalizar uma skill instalada, basta reenviar um .zip com o mesmo nome — a sua versão passa a valer no lugar da do catálogo. Não há editor dentro do sistema nesta fase.",
+        )}
+        recuo="icone"
+        testid="skills-instaladas"
+      >
+        {installed.length === 0 ? (
+          <p className="px-4 py-3 text-sm text-muted-foreground">
+            {t('Nenhuma skill instalada ainda. Instale uma pronta do catálogo abaixo ou envie a sua em "Enviar skill (.zip)".')}
+          </p>
+        ) : (
+          installed.map((skill) => (
+            <Linha
+              key={skill.name}
+              icone={<PuzzlePiece size={18} />}
+              disco
+              titulo={skill.name}
+              descricao={
+                <>
+                  {skill.description ? <span className="block">{skill.description}</span> : null}
+                  {skill.source === "catalog" ? t("do catálogo") : t("manual")} · {t("atualizada em")}{" "}
+                  {formatDate(skill.updated_at, tagDoIdioma)}
+                </>
+              }
+              controle={
+                canManage ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={uninstall.isPending && pendingName === skill.name}
+                    onClick={() => handleUninstall(skill.name)}
+                  >
+                    <Trash /> {t("Desinstalar")}
+                  </Button>
+                ) : undefined
+              }
+            />
+          ))
+        )}
+      </Grupo>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("Catálogo")}</CardTitle>
-          <CardDescription>
-            {t("Skills prontas, mantidas pela plataforma, disponíveis para instalar com um clique.")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {catalog.length === 0 ? (
-            <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-              {t("Nenhuma skill nova no catálogo — você já instalou tudo que a plataforma oferece hoje.")}
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {catalog.map((skill) => (
-                <li
-                  key={skill.name}
-                  className="flex flex-col gap-1.5 rounded-md border border-border/60 p-3 text-sm"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <PuzzlePiece aria-hidden />
-                    <span className="font-medium">{skill.name}</span>
-                  </div>
-                  {skill.description && <p className="text-text-muted">{skill.description}</p>}
-                  {canManage && (
-                    <div className="flex sm:justify-end">
-                      <Button
-                        size="sm"
-                        disabled={install.isPending && pendingName === skill.name}
-                        onClick={() => handleInstall(skill.name)}
-                        className="w-full sm:w-auto"
-                      >
-                        <DownloadSimple />
-                        {install.isPending && pendingName === skill.name ? t("Instalando…") : t("Instalar")}
-                      </Button>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <Grupo
+        titulo={t("Catálogo")}
+        rodape={t("Skills prontas, mantidas pela plataforma, disponíveis para instalar com um clique.")}
+        recuo="icone"
+        testid="skills-catalogo"
+      >
+        {catalog.length === 0 ? (
+          <p className="px-4 py-3 text-sm text-muted-foreground">
+            {t("Nenhuma skill nova no catálogo — você já instalou tudo que a plataforma oferece hoje.")}
+          </p>
+        ) : (
+          catalog.map((skill) => (
+            <Linha
+              key={skill.name}
+              icone={<PuzzlePiece size={18} />}
+              disco
+              titulo={skill.name}
+              descricao={skill.description ?? undefined}
+              controle={
+                canManage ? (
+                  <Button
+                    size="sm"
+                    disabled={install.isPending && pendingName === skill.name}
+                    onClick={() => handleInstall(skill.name)}
+                  >
+                    <DownloadSimple />
+                    {install.isPending && pendingName === skill.name ? t("Instalando…") : t("Instalar")}
+                  </Button>
+                ) : undefined
+              }
+            />
+          ))
+        )}
+      </Grupo>
     </div>
   );
 }

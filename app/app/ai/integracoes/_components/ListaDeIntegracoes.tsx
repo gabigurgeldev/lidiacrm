@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { useApiErrorHandler } from "@/components/feedback/ApiErrorToast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Grupo, Linha } from "@/components/ajustes";
 import {
   Dialog,
   DialogContent,
@@ -68,7 +67,7 @@ export function ListaDeIntegracoes({ integracoes, podeEscrever }: { integracoes:
   const [aberto, setAberto] = useState(false);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex max-w-3xl flex-col gap-4">
       {podeEscrever ? (
         <div className="flex sm:justify-end">
           <Button onClick={() => setAberto(true)} className="w-full sm:w-auto" data-testid="nova-integracao">
@@ -78,7 +77,7 @@ export function ListaDeIntegracoes({ integracoes, podeEscrever }: { integracoes:
       ) : null}
 
       {integracoes.length === 0 ? (
-        <Card className="flex flex-col items-center gap-3 p-10 text-center" data-testid="integracoes-vazio">
+        <div className="ios-grupo flex flex-col items-center gap-3 p-10 text-center" data-testid="integracoes-vazio">
           <PlugsConnected size={28} aria-hidden className="text-muted-foreground" />
           <h2 className="font-medium">{t("Nenhum sistema conectado ainda")}</h2>
           <p className="max-w-md text-sm text-muted-foreground">
@@ -86,33 +85,32 @@ export function ListaDeIntegracoes({ integracoes, podeEscrever }: { integracoes:
               "Cadastre o endereço da API do seu sistema e os pontos que o agente pode chamar. Depois, marque esses pontos na tela do agente.",
             )}
           </p>
-        </Card>
+        </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <Grupo testid="integracoes-lista">
           {integracoes.map((i) => {
             const leituras = i.endpoints.filter((e) => e.modo === "leitura" && e.ativo).length;
             const acoes = i.endpoints.filter((e) => e.modo === "acao" && e.ativo).length;
             return (
-              <Link key={i.id} href={`/app/ai/integracoes/${i.id}`} data-testid={`integracao-${i.id}`}>
-                <Card className="flex h-full flex-col gap-2 p-4 transition-colors hover:bg-surface-elevated">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{i.nome}</p>
-                      <p className="truncate text-xs text-muted-foreground">{host(i.base_url)}</p>
-                    </div>
-                    <SeloDeSaude i={i} />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
+              <Linha
+                key={i.id}
+                href={`/app/ai/integracoes/${i.id}`}
+                testid={`integracao-${i.id}`}
+                titulo={i.nome}
+                descricao={
+                  <>
+                    <span className="block truncate">{host(i.base_url)}</span>
                     {leituras} {leituras === 1 ? t("consulta") : t("consultas")} · {acoes}{" "}
                     {acoes === 1 ? t("correção") : t("correções")}
                     {i.identidade_modo === "email_otp" ? ` · ${t("verifica o dono por e-mail")}` : ""}
                     {i.tipo === "suporte_v1" ? ` · ${t("Contrato de Suporte v1")}` : ""}
-                  </p>
-                </Card>
-              </Link>
+                  </>
+                }
+                controle={<SeloDeSaude i={i} />}
+              />
             );
           })}
-        </div>
+        </Grupo>
       )}
 
       <NovaIntegracaoDialog open={aberto} onOpenChange={setAberto} />

@@ -8020,6 +8020,13 @@ export const DICIONARIO: Traducoes = {
   "Nome do cabeçalho": { es: "Nombre del encabezado" },
   "Criar integração": { es: "Crear integración" },
   "Sistemas seus que o agente consulta — e as correções que ele aplica depois que o cliente confirma.": { es: "Tus sistemas que el agente consulta — y las correcciones que aplica después de que el cliente confirma." },
+  // Central de IA no kit de Ajustes
+  "modelos": { es: "modelos" },
+  "em uso por 1 agente publicado": { es: "en uso por 1 agente publicado" },
+  "em uso por": { es: "en uso por" },
+  "agentes publicados": { es: "agentes publicados" },
+  "Não dá para remover: há agentes publicados usando esta chave.": { es: "No se puede eliminar: hay agentes publicados usando esta clave." },
+  "Agentes que usam esta chave vão falhar ao responder. Esta ação não pode ser desfeita.": { es: "Los agentes que usan esta clave fallarán al responder. Esta acción no se puede deshacer." },
 };
 
 /**

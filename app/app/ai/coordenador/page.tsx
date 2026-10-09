@@ -7,6 +7,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { CoordenadorClient } from "./_client";
+import { PaginaAjustes } from "@/components/ajustes";
 
 export const dynamic = "force-dynamic";
 
@@ -26,17 +27,14 @@ export default async function CoordenadorPage() {
   const podePublicar = user.is_platform_admin || ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Coordenador de atendimento", idioma)}</h1>
-        <p className="text-sm text-muted-foreground">
-          {traduzir(
-            "Decide quem conduz cada conversa — um agente, um fluxo ou a equipe — para o cliente nunca ouvir duas vozes ao mesmo tempo.",
-            idioma,
-          )}
-        </p>
-      </header>
+    <PaginaAjustes
+      titulo={traduzir("Coordenador de atendimento", idioma)}
+      descricao={traduzir(
+        "Decide quem conduz cada conversa — um agente, um fluxo ou a equipe — para o cliente nunca ouvir duas vozes ao mesmo tempo.",
+        idioma,
+      )}
+    >
       <CoordenadorClient painelInicial={painel} podePublicar={podePublicar} />
-    </div>
+    </PaginaAjustes>
   );
 }
