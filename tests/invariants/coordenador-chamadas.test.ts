@@ -5,6 +5,9 @@ import { chamarFluxo } from "@/lib/coordenador/chamadas";
 import { lerEstado, transicionar } from "@/lib/coordenador/estado";
 import { executarPedido } from "@/lib/coordenador/ferramenta";
 import { carregarPoliticaEfetiva } from "@/lib/coordenador/politica/resolver";
+import { vezDoTurnoSemMensagem } from "@/lib/coordenador/vez";
+import { vigiarCoordenador } from "@/lib/coordenador/vigia";
+import { insertInboxItem } from "@/lib/agent-engine/db/repository";
 
 /**
  * O ciclo "agente chama um fluxo e volta" (migration 0230), no banco que o
@@ -282,6 +285,72 @@ describe("0230 · chamada agente → fluxo e retorno", () => {
       dono_tipo: "fluxo",
       dono_execution_id: r.executionId,
     });
+  });
+
+  it("follow-up sem mensagem nova: agente dono fala; fluxo no meio da etapa adia; pessoa não fala", async () => {
+    const c = await conversaComOComercial();
+    const q = { organizationId: ORG, conversationId: c.conversationId, channelSessionId: SESSAO };
+    expect(await vezDoTurnoSemMensagem(pool, q)).toMatchObject({
+      acao: "seguir_como_agente",
+      agentId: COMERCIAL,
+      geracao: c.geracao,
+    });
+
+    const r = await chamar(c, "retorno", `t8-${c.conversationId}`);
+    if (!r.ok) throw new Error(r.motivo);
+    expect(await vezDoTurnoSemMensagem(pool, q)).toMatchObject({ acao: "adiar", motivo: "fluxo_conduzindo" });
+
+    await pool.query(`update conversations set bot_silenced_until = 'infinity' where id = $1`, [c.conversationId]);
+    expect(await vezDoTurnoSemMensagem(pool, q)).toEqual({ acao: "pular", motivo: "pessoa_no_comando" });
+  });
+
+  it("vigia: chamada vencida cancela o fluxo e a conversa volta a quem chamou; a chamada fica `expirou`", async () => {
+    const c = await conversaComOComercial();
+    const r = await chamar(c, "retorno", `t9-${c.conversationId}`);
+    if (!r.ok) throw new Error(r.motivo);
+    await pool.query(`update coord_chamadas set prazo = now() - interval '1 minute' where id = $1`, [r.chamadaId]);
+
+    const resultado = await vigiarCoordenador(pool, async () => false);
+    expect(resultado.expiradas).toBeGreaterThanOrEqual(1);
+
+    const { rows } = await pool.query<{ chamada: string; execucao: string }>(
+      `select ch.status as chamada, x.status as execucao
+         from coord_chamadas ch join flow_executions x on x.id = ch.destino_execution_id
+        where ch.id = $1`,
+      [r.chamadaId],
+    );
+    expect(rows[0]).toEqual({ chamada: "expirou", execucao: "cancelled" });
+    expect(await lerEstado(pool, ORG, c.conversationId)).toMatchObject({ dono_tipo: "agente", dono_agent_id: COMERCIAL });
+  });
+
+  it("vigia: conversa com o cliente sem resposta há 10 min abre UM aviso na Central — não um por rodada", async () => {
+    const c = await conversaComOComercial();
+    await pool.query(
+      `update messages set created_at = now() - interval '20 minutes', sent_at = now() - interval '20 minutes'
+        where conversation_id = $1`,
+      [c.conversationId],
+    );
+    const avisar = async (organizationId: string, aviso: { conversationId: string; motivo: string }) =>
+      (await insertInboxItem(
+        pool,
+        organizationId,
+        {
+          kind: "coordenador_preso",
+          title: "Uma conversa ficou sem ninguém conduzindo",
+          refKind: "conversation",
+          refId: aviso.conversationId,
+        },
+        "kind_e_ref",
+      )) !== null;
+
+    await vigiarCoordenador(pool, avisar);
+    await vigiarCoordenador(pool, avisar);
+    const { rows } = await pool.query<{ n: string }>(
+      `select count(*)::text n from agent_inbox_items
+        where kind = 'coordenador_preso' and ref_id = $1 and status = 'open'`,
+      [c.conversationId],
+    );
+    expect(rows[0]?.n).toBe("1");
   });
 
   it("ferramenta do agente: destino fora da permissão é recusado; transferência permitida despacha o novo agente", async () => {

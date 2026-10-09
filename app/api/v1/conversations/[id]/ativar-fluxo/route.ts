@@ -23,8 +23,11 @@ import { z } from "zod";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { coordenadorAtivoNoCanal, entregarAoFluxoPelaEquipe } from "@/lib/coordenador/via-supabase";
 import { acharNoDeGatilho, kindDoGatilho } from "@/lib/flow-engine/gatilho";
+import { fluxoEhInterativo } from "@/lib/flow-engine/interativo";
 import { garantirNosRegistrados } from "@/lib/flow-engine/register-all";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -61,11 +64,11 @@ export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
   // A conversa precisa ser da org; o contato dela é quem recebe o fluxo.
   const { data: conv } = await supabase
     .from("conversations")
-    .select("id, contact_id")
+    .select("id, contact_id, channel_session_id")
     .eq("id", conversationId)
     .eq("organization_id", orgId)
     .maybeSingle();
-  const conversa = conv as { id: string; contact_id: string | null } | null;
+  const conversa = conv as { id: string; contact_id: string | null; channel_session_id: string | null } | null;
   if (!conversa) return fail("not_found", "Conversa não encontrada.", 404, { requestId });
   if (!conversa.contact_id) {
     return fail("invalid_request", "Esta conversa ainda não tem contato.", 422, { requestId });
@@ -155,6 +158,27 @@ export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
     .single();
 
   if (insErr !== null) return fail("internal_error", insErr.message, 500, { requestId });
+  const executionId = (exec as { id: string }).id;
+
+  // Coordenador ATIVO (migration 0229): a equipe ativou um fluxo que fala com
+  // o cliente — ele passa a ser o DONO da conversa, pela transição única
+  // (categoria `manual`, a que pode tirar a conversa de uma pessoa). Sem isto,
+  // o agente e o fluxo responderiam ao mesmo cliente. A org vem da sessão, e o
+  // cliente admin é obrigatório: as funções do coordenador são só do
+  // service_role. Fluxo de bastidor não disputa a conversa e não transiciona.
+  let coordenador: { ok: boolean; motivo?: string } | null = null;
+  if (fluxoEhInterativo(v.graph)) {
+    const admin = createAdminClient();
+    if (await coordenadorAtivoNoCanal(admin, orgId, conversa.channel_session_id)) {
+      const r = await entregarAoFluxoPelaEquipe(admin, {
+        organizationId: orgId,
+        conversationId,
+        executionId,
+        userId: authz.user.id,
+      });
+      coordenador = r.ok ? { ok: true } : { ok: false, motivo: r.motivo };
+    }
+  }
 
   void audit({
     action: "flow.started_manually",
@@ -163,8 +187,13 @@ export async function POST(req: NextRequest, ctx: Contexto): Promise<Response> {
     resourceType: "flow",
     resourceId: flowId,
     requestId,
-    metadata: { execution_id: (exec as { id: string }).id, contact_id: contactId, flow_name: f.name },
+    metadata: {
+      execution_id: executionId,
+      contact_id: contactId,
+      flow_name: f.name,
+      ...(coordenador !== null ? { coordenador } : {}),
+    },
   });
 
-  return ok({ execucao: exec, ja_estava_rodando: false }, { requestId, status: 201 });
+  return ok({ execucao: exec, ja_estava_rodando: false, coordenador }, { requestId, status: 201 });
 }
