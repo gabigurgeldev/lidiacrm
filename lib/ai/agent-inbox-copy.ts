@@ -74,10 +74,7 @@ export const KIND_LABEL = {
   integracao_api_falhando: "Uma integração via API está falhando e o agente parou de consultá-la",
   acao_externa_falhou: "O cliente confirmou uma correção e ela não foi aplicada",
   verificacao_bloqueada: "Alguém errou o código de verificação de uma conta várias vezes",
-  // (migration 0229) Diz o que o CLIENTE vive — o agente parou de responder
-  // hoje por aquele número —, não o nome do degrau de aquecimento.
-  teto_do_numero: "Um número chegou ao limite de mensagens de hoje e o agente parou de responder",
-  // (migration 0230) Diz o que o CLIENTE vive: escreveu e ficou sem resposta.
+  // (migration 0229) Diz o que o CLIENTE vive: escreveu e ficou sem resposta.
   turno_sem_resposta: "Um cliente ficou sem resposta do agente",
   other: "Aviso do assistente",
 } as const satisfies Record<InboxKind, string>;

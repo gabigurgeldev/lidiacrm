@@ -19,19 +19,32 @@ import type * as ObsLogger from "@/lib/agent-engine/obs/logger";
  * turno terminava "ok" com zero envios, sem reagendamento e sem aviso. O
  * cliente que escrevesse depois da 20ª mensagem do dia não recebia nada.
  *
+ * ─── Quem o teto alcança ───────────────────────────────────────────────────
+ *
+ * Desde o PR #34, resposta a quem escreveu nas últimas 24 h não consome o
+ * aquecimento (`respondeAoContato`). O teto segue valendo para o turno que fala
+ * com quem NÃO escreveu há pouco — na vida real, o follow-up. Os casos 1–3
+ * exercitam esse caminho com a última entrada do contato três dias atrás
+ * (`conversations.last_inbound_at`, o insumo da janela); o 4 guarda o outro lado.
+ *
  * ─── O que cada caso guarda (e como foi sabotado) ──────────────────────────
  *
  *  1. Número conectado há 40 dias, SEM linha de knobs, com 25 envios hoje: o
- *     agente responde. Sabotagem: voltar `loadChannelKnobs` a ler só
+ *     agente fala. Sabotagem: voltar `loadChannelKnobs` a ler só
  *     `channel_knobs` (idade 0) → o turno é adiado e o caso reprova.
  *  2. Número conectado ontem, já com 20 envios hoje: o turno é ADIADO antes de
  *     chamar o modelo, o job volta a `pending` com `run_after` no futuro, e a
- *     Central recebe `teto_do_numero`. Sabotagem: tirar a pré-checagem de
- *     `inbound-turn.ts` → o modelo é chamado, nada sai, o turno termina "ok".
+ *     Central recebe o aviso de limite do número (`pacing_cap`). Sabotagem:
+ *     tirar a pré-checagem de `inbound-turn.ts` → o modelo é chamado, nada
+ *     sai, o turno termina "ok".
  *  3. O teto estoura NO MEIO do turno (o modelo fake grava 20 envios no ledger
  *     antes de pedir o `send_message` — a corrida com outro turno do mesmo
  *     número): nada sai, e o turno é adiado em vez de fechar mudo. Sabotagem:
  *     tirar o bloco `tetoNoEnvio` → o job termina `done` sem envio.
+ *  4. Número conectado ontem, 20 envios hoje, e o cliente ACABOU de escrever:
+ *     o agente responde, sem adiar e sem aviso. Sabotagem: tirar
+ *     `respondeAoContato` da pré-checagem → o turno é adiado, contra o que a
+ *     cadeia de envio deixaria passar.
  *
  * Harness igual ao de `janela-usa-o-relogio-injetado.test.ts`: handler real,
  * modelo fake, canal que CAPTURA, relógio fixo dentro da janela. Cada caso tem
@@ -82,6 +95,7 @@ function cenario(n: number): Cenario {
 const NUMERO_ANTIGO = cenario(1);
 const NUMERO_NOVO_NO_TETO = cenario(2);
 const TETO_NO_MEIO = cenario(3);
+const CLIENTE_ACABOU_DE_ESCREVER = cenario(4);
 
 type Modules = {
   createInboundTurnHandler: typeof InboundTurn.createInboundTurnHandler;
@@ -219,7 +233,12 @@ async function gastaEnviosDeHoje(sessao: string, n: number): Promise<void> {
   );
 }
 
-async function semeiaCenario(c: Cenario, conectadoHaDias: number, rotulo: string): Promise<void> {
+async function semeiaCenario(
+  c: Cenario,
+  conectadoHaDias: number,
+  rotulo: string,
+  ultimaEntradaDoContato: Date,
+): Promise<void> {
   await pool.query(
     `insert into contacts (id, organization_id, name, phone_number)
      values ($1,$2,$3,$4) on conflict (id) do nothing`,
@@ -232,9 +251,10 @@ async function semeiaCenario(c: Cenario, conectadoHaDias: number, rotulo: string
     [c.sessao, ORG, `teto-${rotulo}`, new Date(AGORA.getTime() - conectadoHaDias * DIA_MS)],
   );
   await pool.query(
-    `insert into conversations (id, organization_id, contact_id, channel_session_id, status, is_group)
-     values ($1,$2,$3,$4,'ai_handling',false) on conflict (id) do nothing`,
-    [c.conversa, ORG, c.contato, c.sessao],
+    `insert into conversations (id, organization_id, contact_id, channel_session_id, status, is_group,
+       last_inbound_at)
+     values ($1,$2,$3,$4,'ai_handling',false,$5) on conflict (id) do nothing`,
+    [c.conversa, ORG, c.contato, c.sessao, ultimaEntradaDoContato],
   );
   await pool.query(
     `insert into messages (id, organization_id, conversation_id, channel_session_id, contact_id,
@@ -248,7 +268,8 @@ async function semeiaCenario(c: Cenario, conectadoHaDias: number, rotulo: string
 async function avisosDoTeto(sessao: string): Promise<number> {
   const { rows } = await pool.query<{ n: string }>(
     `select count(*) as n from agent_inbox_items
-      where organization_id = $1 and kind = 'teto_do_numero' and ref_id = $2 and status = 'open'`,
+      where organization_id = $1 and kind = 'other' and ref_kind = 'pacing_cap'
+        and ref_id = $2 and status = 'open'`,
     [ORG, sessao],
   );
   return Number(rows[0]?.n ?? 0);
@@ -276,9 +297,11 @@ beforeAll(async () => {
      values ($1,'teto-do-numero','Teto do Numero','Teto do Numero') on conflict (id) do nothing`,
     [ORG],
   );
-  await semeiaCenario(NUMERO_ANTIGO, 40, "antigo");
-  await semeiaCenario(NUMERO_NOVO_NO_TETO, 1, "novo");
-  await semeiaCenario(TETO_NO_MEIO, 1, "meio");
+  const haTresDias = new Date(AGORA.getTime() - 3 * DIA_MS);
+  await semeiaCenario(NUMERO_ANTIGO, 40, "antigo", haTresDias);
+  await semeiaCenario(NUMERO_NOVO_NO_TETO, 1, "novo", haTresDias);
+  await semeiaCenario(TETO_NO_MEIO, 1, "meio", haTresDias);
+  await semeiaCenario(CLIENTE_ACABOU_DE_ESCREVER, 1, "agora", new Date(AGORA.getTime() - 60_000));
   await pool.query(
     `with v as (
        insert into playbook_versions (organization_id, layer, content)
@@ -327,5 +350,17 @@ describe("o teto do dia do número não cala o agente", () => {
     expect(enviados).toHaveLength(0);
     expect(await estadoDoJob(jobId)).toEqual({ status: "pending", adiado: true });
     expect(await avisosDoTeto(TETO_NO_MEIO.sessao)).toBe(1);
+  });
+
+  it("cliente que acabou de escrever é respondido mesmo com o número no teto de aquecimento", async () => {
+    await gastaEnviosDeHoje(CLIENTE_ACABOU_DE_ESCREVER.sessao, 20);
+    const enviados: string[] = [];
+    const { doGenerate } = modeloQueManda("agora");
+
+    const { erro } = await rodaTurno(CLIENTE_ACABOU_DE_ESCREVER, montaHandler(doGenerate, enviados));
+
+    expect(erro).toBeNull();
+    expect(enviados).toHaveLength(1);
+    expect(await avisosDoTeto(CLIENTE_ACABOU_DE_ESCREVER.sessao)).toBe(0);
   });
 });

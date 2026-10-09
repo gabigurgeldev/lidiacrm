@@ -41,6 +41,19 @@ export interface PacingInput {
    * Omitir = `true`: nenhum chamador existente muda de comportamento.
    */
   banRisk?: boolean;
+  /**
+   * O envio RESPONDE a um contato que escreveu nas últimas 24 h? Então o cap de
+   * WARM-UP não se aplica — o limite diário do CRM e o throttle continuam.
+   *
+   * Warm-up existe contra o padrão que bane número novo: volume alto para quem não
+   * pediu contato. Responder a quem acabou de escrever é o oposto disso. Medido em
+   * produção (2026-10-08, Açaí Delícia): número conectado na véspera, cap de 20/dia,
+   * e a IA calava no 3º atendimento do dia, no meio do pedido — o cliente ficava sem
+   * resposta e ninguém era avisado. Disparo em massa e prospecção fria não passam
+   * por aqui com `true` (o motor de disparo não informa o campo).
+   * Omitir = `false`: comportamento anterior.
+   */
+  respondeAoContato?: boolean;
   /** [0,1) — injetável nos testes; default Math.random. */
   rng?: () => number;
 }
@@ -83,7 +96,7 @@ export function decidePacing(input: PacingInput): PacingDecision {
   const ageDays = state.numberActivatedAt
     ? Math.max(0, Math.floor((now.getTime() - state.numberActivatedAt.getTime()) / DAY_MS))
     : 0;
-  const wCap = warmupCapFor(ageDays, knobs.warmupDailyCaps);
+  const wCap = input.respondeAoContato === true ? null : warmupCapFor(ageDays, knobs.warmupDailyCaps);
   const effectiveCap = Math.min(wCap ?? Infinity, crmDailyLimit ?? Infinity);
   if (state.sentToday >= effectiveCap) {
     const nextAllowedAt = addMs(nextDayOpen(now, knobs), jitterOf(rng, knobs));

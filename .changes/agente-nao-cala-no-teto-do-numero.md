@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: O agente não para mais de responder depois da 20ª mensagem do dia
+titulo: Número conectado há meses deixa de ser tratado como novo, e o follow-up no limite do dia é adiado em vez de sumir
 ---
 
 Todo número de WhatsApp passa por um aquecimento contra banimento: nos
@@ -11,9 +11,10 @@ conhecida se alguém tivesse salvo a tela **Conexões › Proteção de envio**.
 isso, todo número era tratado como recém-nascido para sempre — limite de 20
 mensagens por dia, mesmo num número de meses.
 
-E quando o limite era atingido, o agente simplesmente não respondia: o
-atendimento aparecia como concluído, nenhuma mensagem saía, ninguém era avisado
-e o cliente ficava sem resposta, nem naquele dia nem no seguinte.
+Responder a quem escreveu nas últimas 24 horas já não consome esse limite. Mas
+as mensagens que o agente manda por conta própria (follow-up) consomem, e
+quando o limite acabava, o follow-up simplesmente não saía: aparecia como
+concluído, sem aviso, e não era tentado de novo.
 
 Agora:
 
@@ -23,10 +24,9 @@ Agora:
   e convida a informar a data real, se o número já era usado antes.
 - **Salvar a tela de Proteção de envio não "rejuvenesce" mais o número.** Antes,
   mudar só a janela de horário fazia o número voltar a ter idade zero.
-- **Limite atingido adia a resposta em vez de calar.** A mensagem do cliente é
-  respondida na próxima abertura da janela de envio, e a **Central de avisos**
-  mostra "Um número chegou ao limite de mensagens de hoje", com o que fazer.
+- **Limite atingido adia a mensagem em vez de perdê-la.** Ela sai na próxima
+  abertura da janela de envio, e a **Central de avisos** mostra o mesmo aviso de
+  limite do número que já aparecia quando o envio era barrado.
 - Automações e disparos em massa passam a usar a mesma idade que o agente.
 
-Nada muda para quem opera o servidor: a atualização aplica sozinha a mudança de
-banco (um tipo novo de aviso na Central), sem passo manual.
+Nada muda para quem opera o servidor: não há mudança de banco nem passo manual.
