@@ -7696,6 +7696,30 @@ export const DICIONARIO: Traducoes = {
   "Teste até": { es: "Prueba hasta" },
   "Teste grátis": { es: "Prueba gratis" },
   "Teste grátis por": { es: "Prueba gratis por" },
+  // ── Estender teste grátis (painel da plataforma) ──────────────────────────
+  "Estender teste grátis": { es: "Extender prueba gratis" },
+  "Soma dias ao fim atual do teste (ou a hoje, se ele já venceu).": {
+    es: "Suma días al fin actual de la prueba (o a hoy, si ya venció).",
+  },
+  "Assinatura cancelada: estender o teste não libera o acesso.": {
+    es: "Suscripción cancelada: extender la prueba no libera el acceso.",
+  },
+  "Organização paga: o teste não está em uso.": { es: "Organización paga: la prueba no está en uso." },
+  "Organização isenta: nunca é bloqueada.": { es: "Organización exenta: nunca se bloquea." },
+  "Dias a mais": { es: "Días adicionales" },
+  "Novo fim do teste:": { es: "Nuevo fin de la prueba:" },
+  "Informe de 1 a 365 dias.": { es: "Indica de 1 a 365 días." },
+  Estender: { es: "Extender" },
+  "Fim atual:": { es: "Fin actual:" },
+  "Novo fim:": { es: "Nuevo fin:" },
+  "Estendendo...": { es: "Extendiendo..." },
+  "Teste estendido até": { es: "Prueba extendida hasta" },
+  "A primeira cobrança já agendada no Asaas continua na data antiga. Ajuste-a no Asaas se precisar.": {
+    es: "El primer cobro ya programado en Asaas sigue en la fecha anterior. Ajústalo en Asaas si es necesario.",
+  },
+  "Esta organização já tem assinatura no Asaas. A primeira cobrança agendada não muda com isto.": {
+    es: "Esta organización ya tiene suscripción en Asaas. El primer cobro programado no cambia con esto.",
+  },
   "Trocar forma de pagamento": { es: "Cambiar forma de pago" },
   "Troque a forma de pagamento quando quiser.": { es: "Cambia la forma de pago cuando quieras." },
   "Vale para as próximas mensalidades.": { es: "Vale para las próximas mensualidades." },
