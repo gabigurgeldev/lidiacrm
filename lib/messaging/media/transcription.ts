@@ -13,6 +13,23 @@ export interface TranscriptionCreds {
   apiKey: string;
   model?: string;
   baseUrl?: string;
+  /**
+   * Idioma do áudio (ISO-639-1, ex.: "pt"). Sem ele o modelo ADIVINHA o idioma
+   * pelo próprio áudio, e áudio curto ou ruidoso sai em outra língua. Medido em
+   * produção (2026-10-08, Açaí Delícia): um áudio em português virou texto em
+   * tailandês, e o agente respondeu a algo que o cliente não disse.
+   */
+  language?: string;
+}
+
+/**
+ * Idioma da transcrição a partir do locale da organização (`organizations.locale`,
+ * ex.: "pt-BR" → "pt"). Locale ausente ou fora do formato → `undefined`, e o
+ * modelo volta a detectar sozinho — nunca um idioma inventado.
+ */
+export function idiomaDaTranscricao(locale: string | null | undefined): string | undefined {
+  const m = /^([a-z]{2})(?:[-_][A-Za-z]{2})?$/.exec((locale ?? "").trim());
+  return m ? m[1] : undefined;
 }
 
 const DEFAULT_BASE = "https://api.openai.com";
@@ -134,6 +151,7 @@ export function apiTranscriptionProvider(
     async transcribe(audio, mime) {
       const form = new FormData();
       form.append("model", model);
+      if (creds.language) form.append("language", creds.language);
       form.append(
         "file",
         new Blob([new Uint8Array(audio)], { type: mime.split(";")[0]!.trim() }),
