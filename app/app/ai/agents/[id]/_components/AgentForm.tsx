@@ -146,7 +146,16 @@ type Props = (EditProps | CreateProps) & {
   integracoes?: IntegracaoDoAcervo[];
   /** O envio de e-mail está configurado? A verificação por código depende dele. */
   emailConfigurado?: boolean;
+  /**
+   * Avisado a cada mudança com a versão que o formulário SALVARIA — é o que o
+   * painel Testar ensaia. Testar o que está na tela, e não o último salvo, é o
+   * ponto: quem ajusta o prompt quer ver o efeito antes de decidir guardar.
+   */
+  aoMudarVersao?: (versao: VersaoDoFormulario) => void;
 };
+
+/** A versão como o formulário a salvaria (`toVersionPayload`). */
+export type VersaoDoFormulario = ReturnType<typeof toVersionPayload>;
 
 interface FormState {
   name: string;
@@ -321,6 +330,10 @@ export function AgentForm(props: Props) {
   }, [isEdit, props]);
 
   const [form, setForm] = React.useState<FormState>(baseline);
+  const aoMudarVersao = props.aoMudarVersao;
+  React.useEffect(() => {
+    aoMudarVersao?.(toVersionPayload(form));
+  }, [form, aoMudarVersao]);
   const [saving, setSaving] = React.useState(false);
   const [publishing, setPublishing] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);

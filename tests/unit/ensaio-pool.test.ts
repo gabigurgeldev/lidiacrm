@@ -91,6 +91,63 @@ describe("ensaio: fachada do pool", () => {
     expect(sql.map((s) => s.params)).toEqual([["ensaio:e1:sessao-real"], ["ensaio:e1:sessao-real"]]);
   });
 
+  it("a escrita do pool durante o envio sobrevive ao rollback do envio — como em produção", async () => {
+    // A cadeia de envio grava o rastro do veto pelo POOL (outra conexão, em
+    // produção) e só então desfaz a própria transação. O rastro tem de ficar.
+    const { cliente, sql } = clienteGravador();
+    const { pool } = poolDoEnsaio(cliente, "e1");
+    const c = await pool.connect();
+    const rastro = "insert into before_send_traces (job_id, vetoed_gate) values ($1, $2)";
+
+    await c.query("begin");
+    await pool.query("select 1 from before_send_traces where job_id = $1", ["j"]);
+    await pool.query(rastro, ["j", "pacing"]);
+    await c.query("rollback");
+
+    expect(sql).toEqual([
+      { texto: "savepoint ensaio_sp_1" },
+      { texto: "select 1 from before_send_traces where job_id = $1", params: ["j"] },
+      { texto: rastro, params: ["j", "pacing"] },
+      { texto: "rollback to savepoint ensaio_sp_1" },
+      { texto: "savepoint ensaio_reaplica" },
+      { texto: rastro, params: ["j", "pacing"] },
+      { texto: "release savepoint ensaio_reaplica" },
+    ]);
+  });
+
+  it("a escrita confirmada num savepoint interno volta se o de fora for desfeito", async () => {
+    const { cliente, sql } = clienteGravador();
+    const { pool } = poolDoEnsaio(cliente, "e1");
+    const c = await pool.connect();
+    await c.query("begin");
+    await c.query("begin");
+    await pool.query("insert into agent_inbox_items (title) values ($1)", ["teto"]);
+    await c.query("commit");
+    await c.query("rollback");
+
+    const reaplicadas = sql.filter((_, i) => i > 0 && sql[i - 1]!.texto === "savepoint ensaio_reaplica");
+    expect(reaplicadas).toEqual([{ texto: "insert into agent_inbox_items (title) values ($1)", params: ["teto"] }]);
+  });
+
+  it("reaplicação que falha não derruba o ensaio", async () => {
+    const sql: string[] = [];
+    let falhar = false;
+    const cliente = {
+      query: async (texto: string) => {
+        sql.push(texto);
+        if (falhar && texto.startsWith("insert")) throw new Error("violou");
+        return { rows: [], rowCount: 0 };
+      },
+    } as unknown as pg.PoolClient;
+    const { pool } = poolDoEnsaio(cliente, "e1");
+    const c = await pool.connect();
+    await c.query("begin");
+    await pool.query("insert into x values (1)");
+    falhar = true;
+    await expect(c.query("rollback")).resolves.toBeDefined();
+    expect(sql.at(-1)).toBe("rollback to savepoint ensaio_reaplica");
+  });
+
   it("consultas comuns passam intactas, com e sem parâmetros", async () => {
     const { cliente, sql } = clienteGravador();
     const { pool } = poolDoEnsaio(cliente, "e1");

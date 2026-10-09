@@ -45,6 +45,8 @@ const pool = new pg.Pool({
 
 const ORG = "e5e5e5e5-0000-4000-8000-000000000001";
 const SESSION = "e5e5e5e5-0000-4000-8000-000000000002";
+const AGENTE = "e5e5e5e5-0000-4000-8000-000000000003";
+const VERSAO_SALVA = "e5e5e5e5-0000-4000-8000-000000000004";
 /** Terça, 15h BRT — dentro da janela anti-ban. */
 const AGORA = new Date("2026-07-28T18:00:00Z");
 
@@ -202,6 +204,20 @@ beforeAll(async () => {
      values ($1, $2, 'WORKING') on conflict (organization_id, channel_session_id) do nothing`,
     [ORG, SESSION],
   );
+  // Um agente com versão SALVA — o caminho do onboarding (`versaoId`).
+  await pool.query(
+    `insert into ai_agents (id, organization_id, name, system_prompt, model, kind, is_active)
+     values ($1, $2, 'Agente salvo', 'Você atende a loja de teste.', 'claude-sonnet-4-6', 'mcp_agent', false)
+     on conflict (id) do nothing`,
+    [AGENTE, ORG],
+  );
+  await pool.query(
+    `insert into ai_agent_versions (id, organization_id, agent_id, version_number, status,
+       system_prompt, provider, model, credential_id, channel_session_id, tool_ids)
+     values ($1, $2, $3, 1, 'draft', 'Você atende a loja de teste. Responda curto.', 'anthropic',
+       'claude-sonnet-4-6', null, $4, '{}') on conflict (id) do nothing`,
+    [VERSAO_SALVA, ORG, AGENTE, SESSION],
+  );
   await pool.query(
     `with v as (
        insert into playbook_versions (organization_id, layer, content)
@@ -249,6 +265,42 @@ describe("o ensaio do agente", () => {
     // 2. O número real ficou livre o tempo todo.
     expect(sondas.length).toBeGreaterThan(0);
     expect(sondas.every(Boolean)).toBe(true);
+  });
+
+  it("testa uma versão JÁ salva do agente pelo mesmo caminho, sem deixar rastro", async () => {
+    const antes = await contagens();
+    const { versao: _formulario, ...semFormulario } = pedido();
+
+    const r = await m.ensaiarTurno(pool, deps(modelo([])), {
+      ...semFormulario,
+      agentId: AGENTE,
+      versaoId: VERSAO_SALVA,
+    });
+
+    expect(r.erro).toBeNull();
+    expect(r.desfecho).toBe("respondeu");
+    expect(await contagens()).toEqual(antes);
+  });
+
+  it("fora do horário de envio, o turno é adiado como em produção — e o modelo nem é chamado", async () => {
+    const antes = await contagens();
+    let chamadas = 0;
+    const contaChamadas = async () => {
+      chamadas += 1;
+      return texto(CHECKPOINT);
+    };
+
+    const r = await m.ensaiarTurno(pool, deps(contaChamadas), {
+      ...pedido(),
+      // 3h da manhã em São Paulo: antes da janela anti-ban padrão (7h–22h).
+      agora: new Date("2026-07-28T06:00:00Z"),
+    });
+
+    expect(r.desfecho).toBe("adiado");
+    expect(r.adiamento?.motivo).toMatch(/janela/);
+    expect(r.mensagens).toEqual([]);
+    expect(chamadas).toBe(0);
+    expect(await contagens()).toEqual(antes);
   });
 
   it("um segundo ensaio na mesma organização é recusado, sem esperar", async () => {
