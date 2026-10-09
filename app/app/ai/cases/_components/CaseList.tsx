@@ -13,6 +13,7 @@ import { Robot } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 import { useT } from "@/hooks/i18n/useT";
 import { CaseDetail } from "./CaseDetail";
+import { GATILHO_DA_ABA, SEGMENTADO_ABAS } from "@/components/ajustes";
 
 export function CaseList() {
   const t = useT();
@@ -24,9 +25,9 @@ export function CaseList() {
     <div className="flex min-h-0 flex-1 gap-6">
       <div className="flex w-full max-w-xs shrink-0 flex-col gap-4">
         <Tabs value={tab} onValueChange={(v) => setTab(v as "open" | "resolved")}>
-          <TabsList>
-            <TabsTrigger value="open">{t("Abertos")}{data ? ` (${data.open_count})` : ""}</TabsTrigger>
-            <TabsTrigger value="resolved">{t("Concluídos")}</TabsTrigger>
+          <TabsList className={`${SEGMENTADO_ABAS} max-w-full self-start overflow-x-auto`}>
+            <TabsTrigger value="open" className={GATILHO_DA_ABA}>{t("Abertos")}{data ? ` (${data.open_count})` : ""}</TabsTrigger>
+            <TabsTrigger value="resolved" className={GATILHO_DA_ABA}>{t("Concluídos")}</TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -48,7 +49,7 @@ export function CaseList() {
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border">
+          <ul className="ios-grupo">
             {data.cases.map((c) => (
               <CaseRow
                 key={c.id}

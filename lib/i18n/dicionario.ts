@@ -8176,6 +8176,13 @@ export const DICIONARIO: Traducoes = {
   "Tira dúvidas sobre o curso e ajuda quem quer entrar.": { es: "Resuelve dudas sobre el curso y ayuda a quien quiere inscribirse." },
   "Ajuda a escolher o produto, informa frete e acompanha o pedido.": { es: "Ayuda a elegir el producto, informa el envío y acompaña el pedido." },
   "Entende o que a pessoa precisa e responde com o material da empresa.": { es: "Entiende lo que la persona necesita y responde con el material de la empresa." },
+  // Central de IA no kit de Ajustes
+  "modelos": { es: "modelos" },
+  "em uso por 1 agente publicado": { es: "en uso por 1 agente publicado" },
+  "em uso por": { es: "en uso por" },
+  "agentes publicados": { es: "agentes publicados" },
+  "Não dá para remover: há agentes publicados usando esta chave.": { es: "No se puede eliminar: hay agentes publicados usando esta clave." },
+  "Agentes que usam esta chave vão falhar ao responder. Esta ação não pode ser desfeita.": { es: "Los agentes que usan esta clave fallarán al responder. Esta acción no se puede deshacer." },
 };
 
 /**

@@ -41,6 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
+import { PaginaAjustes } from "@/components/ajustes";
 
 interface Ponto {
   id: string;
@@ -175,17 +176,19 @@ export function PainelDeProvedores() {
   const semChave = dados.credenciais.length === 0;
 
   return (
-    <div className="mx-auto w-full max-w-5xl p-6" data-testid="painel-de-provedores">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Provedores de IA")}</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+    <PaginaAjustes
+      className="mx-auto w-full max-w-5xl"
+      testid="painel-de-provedores"
+      titulo={t("Provedores de IA")}
+      descricao={
+        <>
           {t("Seu sistema usa inteligência artificial em")} {dados.pontos.length}{" "}
           {t("lugares diferentes. Aqui você vê qual está atendendo cada um — e troca, se quiser.")}
-        </p>
-      </header>
-
+        </>
+      }
+    >
       {semChave && (
-        <Card className="mb-6 border-amber-500/40 bg-amber-500/5 p-4" data-testid="aviso-sem-chave">
+        <Card className="border-amber-500/40 bg-amber-500/5 p-4" data-testid="aviso-sem-chave">
           <p className="text-sm">
             {t(
               "Você ainda não cadastrou nenhuma chave de provedor. Enquanto isso, tudo usa a chave que veio na instalação.",
@@ -234,7 +237,7 @@ export function PainelDeProvedores() {
           </section>
         ))}
       </div>
-    </div>
+    </PaginaAjustes>
   );
 }
 

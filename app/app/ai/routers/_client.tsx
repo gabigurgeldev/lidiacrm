@@ -1,12 +1,11 @@
 "use client";
 import * as React from "react";
-import Link from "next/link";
 import { useRouter as useNextRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Grupo, Linha } from "@/components/ajustes";
 import {
   Dialog,
   DialogContent,
@@ -55,7 +54,7 @@ export function RoutersClient({ initialState, channelSessions }: Props) {
   const [createOpen, setCreateOpen] = React.useState(false);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex max-w-3xl flex-col gap-4">
       <div className="flex sm:justify-end">
         {canManagePerm && (
           <Button onClick={() => setCreateOpen(true)} className="w-full sm:w-auto">
@@ -65,7 +64,7 @@ export function RoutersClient({ initialState, channelSessions }: Props) {
       </div>
 
       {routers.length === 0 ? (
-        <Card className="flex flex-col items-center gap-3 p-10 text-center">
+        <div className="ios-grupo flex flex-col items-center gap-3 p-10 text-center">
           <Signpost size={32} className="text-muted-foreground" aria-hidden />
           <p className="max-w-md text-sm text-muted-foreground">
             {t(
@@ -77,34 +76,27 @@ export function RoutersClient({ initialState, channelSessions }: Props) {
               <Plus /> {t("Criar meu primeiro roteador")}
             </Button>
           )}
-        </Card>
+        </div>
       ) : (
-        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+        <Grupo testid="roteadores-lista">
           {routers.map((r) => (
-            <li key={r.id}>
-              <Link href={`/app/ai/routers/${r.id}`}>
-                <Card className="flex h-full flex-col gap-2 p-4 transition-colors hover:border-accent">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="truncate font-medium" title={r.name}>
-                      {r.name}
-                    </h3>
-                    <Badge variant={r.is_active ? "success" : "neutral"} className="shrink-0 text-xs">
-                      {r.is_active ? t("ativo") : t("inativo")}
-                    </Badge>
-                  </div>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {channelLabel(channelSessions, r.channel_session_id, t)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {r.member_count === 0
-                      ? t("Sem intenções configuradas")
-                      : `${r.member_count} ${r.member_count === 1 ? t("intenção") : t("intenções")}`}
-                  </p>
-                </Card>
-              </Link>
-            </li>
+            <Linha
+              key={r.id}
+              href={`/app/ai/routers/${r.id}`}
+              titulo={r.name}
+              descricao={`${channelLabel(channelSessions, r.channel_session_id, t)} · ${
+                r.member_count === 0
+                  ? t("Sem intenções configuradas")
+                  : `${r.member_count} ${r.member_count === 1 ? t("intenção") : t("intenções")}`
+              }`}
+              controle={
+                <Badge variant={r.is_active ? "success" : "neutral"} className="text-xs">
+                  {r.is_active ? t("ativo") : t("inativo")}
+                </Badge>
+              }
+            />
           ))}
-        </ul>
+        </Grupo>
       )}
 
       <CreateRouterDialog

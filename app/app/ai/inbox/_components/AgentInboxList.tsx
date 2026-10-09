@@ -12,6 +12,7 @@ import { useAgentInbox, useUpdateInboxItem, type AgentInboxItem } from "@/hooks/
 import { kindLabel, SEVERITY_LABEL, type AgentInboxSeverity } from "@/lib/ai/agent-inbox-copy";
 import { Bell, Check } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import { GATILHO_DA_ABA, SEGMENTADO_ABAS } from "@/components/ajustes";
 
 const SEVERITY_VARIANT: Record<AgentInboxSeverity, "info" | "warning" | "error"> = {
   info: "info",
@@ -28,11 +29,11 @@ export function AgentInboxList({ canResolve }: { canResolve: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <Tabs value={tab} onValueChange={(v) => setTab(v as "open" | "resolved")}>
-        <TabsList>
-          <TabsTrigger value="open">
+        <TabsList className={`${SEGMENTADO_ABAS} max-w-full self-start overflow-x-auto`}>
+          <TabsTrigger value="open" className={GATILHO_DA_ABA}>
             {t("Abertos")}{data ? ` (${data.open_count})` : ""}
           </TabsTrigger>
-          <TabsTrigger value="resolved">{t("Resolvidos")}</TabsTrigger>
+          <TabsTrigger value="resolved" className={GATILHO_DA_ABA}>{t("Resolvidos")}</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -54,7 +55,7 @@ export function AgentInboxList({ canResolve }: { canResolve: boolean }) {
           </p>
         </div>
       ) : (
-        <ul className="divide-y divide-border rounded-lg border border-border">
+        <ul className="ios-grupo">
           {data.items.map((item) => (
             <InboxRow
               key={item.id}

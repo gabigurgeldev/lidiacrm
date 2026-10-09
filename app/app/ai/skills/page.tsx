@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { SkillsState } from "@/hooks/ai/useSkills";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { SkillsClient } from "./_client";
+import { PaginaAjustes } from "@/components/ajustes";
 
 export const dynamic = "force-dynamic";
 
@@ -55,17 +56,14 @@ export default async function SkillsPage() {
   const idioma = user.idioma;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Skills da IA", idioma)}</h1>
-        <p className="text-sm text-muted-foreground">
-          {traduzir(
-            "Habilidades especializadas que seus agentes carregam só quando a conversa pede — instale prontas do catálogo ou envie a sua.",
-            idioma,
-          )}
-        </p>
-      </header>
+    <PaginaAjustes
+      titulo={traduzir("Skills da IA", idioma)}
+      descricao={traduzir(
+        "Habilidades especializadas que seus agentes carregam só quando a conversa pede — instale prontas do catálogo ou envie a sua.",
+        idioma,
+      )}
+    >
       <SkillsClient initialState={initialState} />
-    </div>
+    </PaginaAjustes>
   );
 }

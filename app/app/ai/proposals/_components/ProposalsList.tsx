@@ -18,6 +18,7 @@ import {
 } from "@/hooks/leads/useProposals";
 import { Check, X } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import { GATILHO_DA_ABA, SEGMENTADO_ABAS } from "@/components/ajustes";
 
 function quando(iso: string, locale: Locale): string {
   const d = new Date(iso);
@@ -34,11 +35,11 @@ export function ProposalsList({ canDecide }: { canDecide: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <Tabs value={tab} onValueChange={(v) => setTab(v as "pending" | "history")}>
-        <TabsList>
-          <TabsTrigger value="pending">
+        <TabsList className={`${SEGMENTADO_ABAS} max-w-full self-start overflow-x-auto`}>
+          <TabsTrigger value="pending" className={GATILHO_DA_ABA}>
             {t("Aguardando decisão")}{data ? ` (${data.pending.length})` : ""}
           </TabsTrigger>
-          <TabsTrigger value="history">{t("Já decididas")}</TabsTrigger>
+          <TabsTrigger value="history" className={GATILHO_DA_ABA}>{t("Já decididas")}</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -86,7 +87,7 @@ function Pendentes({
   }
 
   return (
-    <ul className="divide-y divide-border rounded-lg border border-border">
+    <ul className="ios-grupo">
       {itens.map((p) => (
         <li key={`${p.lead_id}-${p.seq}`} className="flex flex-col gap-3 p-4">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -150,7 +151,7 @@ function Historico({ itens }: { itens: DecisaoPassada[] }) {
   }
 
   return (
-    <ul className="divide-y divide-border rounded-lg border border-border">
+    <ul className="ios-grupo">
       {itens.map((d) => (
         <li key={d.activity_id} className="flex flex-col gap-1.5 p-4">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
