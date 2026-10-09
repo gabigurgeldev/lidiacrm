@@ -13,8 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { aiAgentDefaultSchema, type PromptTemplate } from "@/lib/schemas/onboarding";
 import { capacidadesPadraoDoOnboarding } from "@/lib/ai/agents/capacidades-padrao";
 import { publicarMemoriaDaOrg } from "@/lib/ai/memoria-da-org";
-import { escolherModeloDoProvedor } from "@/lib/ai/agents/escolher-modelo";
-import { chaveDePlataforma } from "@/lib/ai/runtime/agent";
+import { resolverProvedorDoAgente } from "@/lib/ai/agents/provedor-do-agente";
 import {
   requireOnboardingCtx,
   patchOnboardingState,
@@ -89,24 +88,6 @@ type PublishOutcome =
     }
   | { published: false; reason: "failed"; message: string };
 
-/**
- * O provedor de IA que a instalação escolheu.
- *
- * O instalador pergunta "qual inteligência artificial vai atender seus
- * clientes?" e grava a resposta em `organizations.settings.llm.provider`. Este
- * passo publicava `"anthropic"` literal, e como o provider da VERSÃO vence o da
- * organização em `resolveOrgLlmConfig`, quem escolheu outro terminava o wizard
- * com um agente "Publicado" que morre em toda mensagem pedindo uma chave que
- * ele nunca teve.
- *
- * `settings` é jsonb livre: leitura defensiva, igual à do agent-engine.
- */
-function provedorDaInstalacao(settings: unknown): string {
-  const llm = (settings as { llm?: unknown } | null)?.llm;
-  const provider = (llm as { provider?: unknown } | null | undefined)?.provider;
-  return typeof provider === "string" && provider.trim() !== "" ? provider : "anthropic";
-}
-
 function mensagemDoErro(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -153,40 +134,21 @@ async function publishFirstVersion(
   const [canal] = canais;
   if (!canal) return { published: false, reason: "no_channel" };
 
-  // Erro de leitura aqui NÃO pode virar "assume anthropic": publicar sem saber
-  // qual provedor a instalação escolheu é exatamente o defeito de origem, com
-  // outra roupa.
-  const { data: org, error: orgErr } = await admin
-    .from("organizations")
-    .select("settings")
-    .eq("id", orgId)
-    .maybeSingle();
-  if (orgErr) return { published: false, reason: "failed", message: orgErr.message };
-
-  const provider = provedorDaInstalacao(org?.settings);
-
-  // O modelo daquele provedor. Não existe fallback literal: um id de outro
-  // provedor (ou inventado) produz o pior desfecho do produto — o agente
-  // responde texto plausível e nunca cria o lead nem move o card.
-  //
-  // Buscar SÓ o `is_default_for_provider` travava a OpenRouter, que é a opção
-  // [1] do instalador: medido num ambiente real, ela chega com 400 modelos
-  // sincronizados e NENHUM marcado como padrão, porque o cron de catálogo não
-  // escreve esse campo. A regra de escolha (com o requisito de ferramentas)
-  // vive em `escolherModeloDoProvedor`.
-  const { data: modelos } = await admin
-    .from("ai_models")
-    .select("model_id, is_default_for_provider, supports_tools, input_price_per_million_cents, output_price_per_million_cents")
-    .eq("provider", provider)
-    .is("deprecated_at", null);
-
-  const escolha = escolherModeloDoProvedor(
-    (modelos ?? []) as Parameters<typeof escolherModeloDoProvedor>[0],
-  );
-  if (!escolha.escolhido) {
-    return { published: false, reason: "no_model", provider, motivo: escolha.motivo };
+  // Provedor, modelo e chave: a decisão mora em `resolverProvedorDoAgente`,
+  // compartilhada com "Criar agente com IA". Nunca um literal — publicar
+  // `"anthropic"` para quem escolheu outro provedor na instalação entregava um
+  // agente "Publicado" que morria em toda mensagem.
+  const provedor = await resolverProvedorDoAgente(admin, orgId);
+  if (!provedor.ok) {
+    if (provedor.reason === "failed") return { published: false, reason: "failed", message: provedor.message };
+    if (provedor.reason === "no_model") {
+      return { published: false, reason: "no_model", provider: provedor.provider, motivo: provedor.motivo };
+    }
+    // Sem chave utilizável não se publica: o agente responderia erro em toda
+    // mensagem e o dono só descobriria com o primeiro cliente.
+    return { published: false, reason: "sem_chave", provider: provedor.provider };
   }
-  const modelId = escolha.modelId;
+  const { provider, modelId, credentialId } = provedor;
 
   // "Em que negócios ele pode mexer". Toda organização nasce com um funil de
   // entrada, criado por gatilho no INSERT de `organizations`. Sem preencher
@@ -203,31 +165,6 @@ async function publishFirstVersion(
     .eq("is_archived", false)
     .maybeSingle();
   const pipelineIds = funil?.id ? [funil.id as string] : [];
-
-  // QUAL CHAVE ESTA VERSÃO USA — e as duas origens são legítimas.
-  //
-  // Credencial validada da organização vence (quem colou a chave no wizard, ou
-  // cadastrou pela tela); na falta dela, `credential_id: null` significa "a chave
-  // da instalação", que é o caso mais comum do kit. Sem NENHUMA das duas, não se
-  // publica: o agente responderia erro em toda mensagem e o dono só descobriria
-  // com o primeiro cliente.
-  //
-  // `validated_at` não nulo é exigência de `loadCredential`, não capricho: uma
-  // credencial que o provedor ainda não confirmou não é utilizável pelo turno.
-  const { data: credencial } = await admin
-    .from("ai_provider_credentials")
-    .select("id")
-    .eq("organization_id", orgId)
-    .eq("provider", provider)
-    .eq("is_active", true)
-    .not("validated_at", "is", null)
-    .limit(1)
-    .maybeSingle();
-
-  const credentialId = (credencial?.id as string | undefined) ?? null;
-  if (!credentialId && !chaveDePlataforma(provider)) {
-    return { published: false, reason: "sem_chave", provider };
-  }
 
   const { data: version, error: versionErr } = await admin
     .from("ai_agent_versions")

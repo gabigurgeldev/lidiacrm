@@ -128,9 +128,10 @@ describe("painel de segurança — o que se confere antes de enviar", () => {
     renderPainel();
 
     const fixas = CONFERENCIAS_DE_SAIDA.filter((c) => c.escolha === null);
-    // 9 das 10 hoje. A contagem entra na asserção de propósito: se alguém tornar
-    // uma delas "configurável", este número muda e a mudança tem de ser deliberada.
-    expect(fixas).toHaveLength(9);
+    // 10 das 11 hoje (a 11ª, `coordenacao`, entrou com o coordenador). A
+    // contagem entra na asserção de propósito: se alguém tornar uma delas
+    // "configurável", este número muda e a mudança tem de ser deliberada.
+    expect(fixas).toHaveLength(10);
     for (const c of fixas) {
       const linha = screen.getByTestId(`conferencia-${c.nome}-fixa`);
       expect(linha.textContent).toContain("não se desliga");

@@ -41,6 +41,7 @@ import type { ChannelSendResult } from '../channel-adapter';
 
 import type { Logger } from '../obs/logger';
 import { emitVetoActivity } from '@/lib/leads/veto-activity';
+import { podeFalar } from '@/lib/coordenador/estado';
 import type { Queryable } from '../queue/queue';
 import { decidePacing } from '../pacing/engine';
 import type { PacingState } from '../pacing/engine';
@@ -75,6 +76,13 @@ import type { ChannelProvider } from '@/lib/channels/capabilities';
 /** O que os gates enxergam — carregado UMA vez sob o lock, por tentativa de envio. */
 export interface GateContext {
   now: Date;
+  /**
+   * Fencing do coordenador de atendimento (migration 0229): o executor desta
+   * tentativa ainda é o dono da conversa, NA GERAÇÃO que recebeu? Lido sob o
+   * lock por `fn_coord_pode_falar`. Ausente = o envio não nasceu de uma
+   * concessão do coordenador (caminho legado) e o gate é no-op.
+   */
+  coordenacao?: { pode: boolean; motivo: string } | null;
   /** corpo candidato (para o gate de spinning). */
   body: string;
   /**
@@ -269,6 +277,30 @@ const stopGate: Gate = {
           reason:
             'o lead optou por sair do atendimento (bloqueio/opt-out irrevogável) — não é ' +
             'possível enviar nada a ele; encerre o turno sem tentar de novo.',
+        }
+      : { pass: true },
+};
+
+/**
+ * Gate do coordenador — o executor perdeu a conversa (uma pessoa assumiu, outra
+ * frente foi escolhida, a geração subiu) entre a decisão e este envio. Logo
+ * depois do stop: não é a vez dele, e nenhum outro gate tem por que gastar
+ * janela ou cap com uma fala que não vai sair.
+ *
+ * O texto volta ao modelo como erro de ensino: o turno dele acabou. Não é
+ * irrevogável como o stop — na próxima mensagem o coordenador decide de novo.
+ */
+export const coordenacaoGate: Gate = {
+  name: 'coordenacao',
+  evaluate: (ctx) =>
+    ctx.coordenacao && !ctx.coordenacao.pode
+      ? {
+          pass: false,
+          code: 'coordenador_outro_responsavel',
+          reason:
+            'esta conversa passou para outro responsável enquanto você respondia ' +
+            `(${ctx.coordenacao.motivo}) — não envie nada e encerre o turno.`,
+          detail: { motivo: ctx.coordenacao.motivo },
         }
       : { pass: true },
 };
@@ -560,13 +592,15 @@ const spinningGate: Gate = {
  * caminho do agente o arma, então, como a v5, a v6 não muda o destino de nenhum envio
  * que já existia — muda o TRACE, e passa a medir o vazamento onde há modelo para ensinar.
  */
-export const BEFORE_SEND_CHAIN_VERSION = 6;
+export const BEFORE_SEND_CHAIN_VERSION = 7;
 
 /**
  * Ordem FINAL da cadeia (F4-08/F4-09; edge-contract §before_send / blueprint órgão 5) — DADO
  * declarativo iterado pelo runner (acceptance 2). Constante de código de propósito: a
  * precedência é invariante de segurança/compliance, não config de runtime.
  *   (1) stop/opt-out/force_human — irrevogável, 1ª linha (regra dura nº 2);
+ *   (1.5) coordenacao — o executor ainda é o dono da conversa na geração que recebeu
+ *         (v7, migration 0229); no-op fora de uma concessão do coordenador;
  *   (2) lgpd — anonimização/base legal de prospecção, veto de conformidade HARD (F4-09);
  *   (3) pacing — janela/throttle/warm-up/caps anti-ban (F2-11);
  *   (4) spinning — template idêntico em massa (F2-12);
@@ -580,6 +614,7 @@ export const BEFORE_SEND_CHAIN_VERSION = 6;
  */
 export const BEFORE_SEND_GATES: readonly Gate[] = [
   stopGate,
+  coordenacaoGate,
   lgpdGate,
   pacingGate,
   messagingWindowGate,
@@ -699,6 +734,17 @@ export interface RunBeforeSendArgs {
    */
   enforceSpinning?: boolean;
   /**
+   * Concessão do coordenador de atendimento (migration 0229) que autoriza este
+   * envio. Presente = o gate `coordenacao` confere, SOB o lock, se o executor
+   * ainda é o dono na geração recebida. Ausente = caminho legado, gate no-op.
+   */
+  coordenacao?: {
+    conversationId: string;
+    executorTipo: 'agente' | 'fluxo';
+    executorId: string;
+    geracao: number;
+  };
+  /**
    * Enviado SÓ se TODOS os gates passarem — ChannelAdapter (própria tx/idempotência). Recebe o
    * corpo FINAL (o disclosureGate F4-05 pode emendá-lo via `amendBody`): quem monta o send DEVE
    * enviar este `body`, não o corpo original capturado antes da cadeia.
@@ -761,6 +807,18 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
         ? (await countPriorAcceptedSends(client, args.tenantId, args.leadId)) === 0
         : false;
 
+    // Fencing (migration 0229): lido aqui, sob o lock e colado ao envio — uma
+    // pessoa que assumiu a conversa há um segundo já invalida esta geração.
+    const coordenacao = args.coordenacao
+      ? await podeFalar(client, {
+          organizationId: args.tenantId,
+          conversationId: args.coordenacao.conversationId,
+          executorTipo: args.coordenacao.executorTipo,
+          executorId: args.coordenacao.executorId,
+          geracao: args.coordenacao.geracao,
+        })
+      : null;
+
     const lastInboundAt = await readLastInboundAt(
       client,
       args.tenantId,
@@ -770,6 +828,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
 
     const ctx: GateContext = {
       now: args.now,
+      coordenacao: coordenacao ? { pode: coordenacao.pode, motivo: coordenacao.motivo } : null,
       body: args.body,
       optedOut,
       provider,
