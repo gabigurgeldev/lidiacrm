@@ -89,6 +89,12 @@ import { capacidadesEntreguesAoOperador, catalogoEntregueAoOperador } from './en
 import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memory';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { CONVERSA_EM_ANDAMENTO_MS, montarAssunto, passaNoFiltro } from './filtro-de-assunto';
+import {
+  ferramentasDosPassos,
+  gravarRegistroDoTurno,
+  novoRegistroDoTurno,
+  type RegistroDoTurno,
+} from './registro-do-turno';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
 import { decidirResgateDoTurnoMudo, MENSAGEM_DE_RESGATE, avisarTurnoSemResposta } from './turno-mudo';
@@ -1013,6 +1019,12 @@ export function buildOpeningMessage(
 export interface AgentTurnInput {
   /** número (channel_sessions.id do CRM) — chave da serialização anti-ban do envio. */
   channelSessionId: string;
+  /**
+   * Coletor da linha de Execuções (`ai_agent_runs`) — `runAgentTurn` cria e grava
+   * no fim; o turno só preenche. Ausente no ensaio e em turno que não fala com o
+   * cliente. Ver `registro-do-turno.ts`.
+   */
+  registro?: RegistroDoTurno | null;
   /** conversa do CRM — destino do send_message. */
   conversationId: string;
   /**
@@ -1130,7 +1142,7 @@ export async function runAgentTurn(
   job: JobRow,
   pool: pg.Pool,
   ctx: { workerId: string },
-  input: AgentTurnInput,
+  inputDoJob: AgentTurnInput,
 ): Promise<void> {
   const leadIdDoJob = job.contact_id;
   if (leadIdDoJob === null) {
@@ -1141,41 +1153,72 @@ export async function runAgentTurn(
     tenant_id: job.organization_id,
     lead_id: leadIdDoJob,
   });
-  await comHandoffSeOrcamentoAcabar(
-    {
-      pool,
-      tenantId: job.organization_id,
-      leadId: leadIdDoJob,
-      conversationId: input.conversationId,
-      resumoDoCheckpoint: () =>
-        resumoDoCheckpointDuravel(pool, job.organization_id, leadIdDoJob, logDaEscolta),
-      // O canal nasce DENTRO da closure: instanciá-lo aqui faria todo turno feliz
-      // pagar por um adapter que só o caminho de erro usa. Sem `agentActorId` de
-      // propósito — quando o teto estoura antes da primeira chamada, não houve
-      // agente resolvido para creditar.
-      avisarLead: () =>
-        avisarLeadLendoOContato(
-          pool,
-          {
-            tenantId: job.organization_id,
-            leadId: leadIdDoJob,
-            conversationId: input.conversationId,
-            channelSessionId: input.channelSessionId,
-            jobId: job.id,
-          },
-          {
-            motivo: 'orcamento_de_ia',
-            channel: (deps.channel ?? ((p: pg.Pool) => canalPadraoDoTurno(p, deps.crmCfg)))(pool),
-            now: deps.clock?.() ?? new Date(),
-            log: logDaEscolta,
-            ...(deps.knobs.disclosureMode !== undefined ? { disclosureMode: deps.knobs.disclosureMode } : {}),
-            ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
-          },
-        ),
-      log: logDaEscolta,
-    },
-    () => executarTurnoDoAgente(deps, job, pool, ctx, input),
-  );
+  // Execuções do agente: uma linha por turno que fala com o cliente, gravada no
+  // fim com o desfecho. O ensaio não entra — é teste, e roda numa transação desfeita.
+  const registro = deps.ensaio === undefined && turnoVaiFalarComOLead(job) ? novoRegistroDoTurno() : null;
+  const input: AgentTurnInput = { ...inputDoJob, registro };
+  let erroDoTurno: unknown = null;
+  try {
+    await comHandoffSeOrcamentoAcabar(
+      {
+        pool,
+        tenantId: job.organization_id,
+        leadId: leadIdDoJob,
+        conversationId: input.conversationId,
+        resumoDoCheckpoint: () =>
+          resumoDoCheckpointDuravel(pool, job.organization_id, leadIdDoJob, logDaEscolta),
+        // O canal nasce DENTRO da closure: instanciá-lo aqui faria todo turno feliz
+        // pagar por um adapter que só o caminho de erro usa. Sem `agentActorId` de
+        // propósito — quando o teto estoura antes da primeira chamada, não houve
+        // agente resolvido para creditar.
+        avisarLead: () =>
+          avisarLeadLendoOContato(
+            pool,
+            {
+              tenantId: job.organization_id,
+              leadId: leadIdDoJob,
+              conversationId: input.conversationId,
+              channelSessionId: input.channelSessionId,
+              jobId: job.id,
+            },
+            {
+              motivo: 'orcamento_de_ia',
+              channel: (deps.channel ?? ((p: pg.Pool) => canalPadraoDoTurno(p, deps.crmCfg)))(pool),
+              now: deps.clock?.() ?? new Date(),
+              log: logDaEscolta,
+              ...(deps.knobs.disclosureMode !== undefined ? { disclosureMode: deps.knobs.disclosureMode } : {}),
+              ...(deps.sleep !== undefined ? { sleep: deps.sleep } : {}),
+            },
+          ),
+        log: logDaEscolta,
+      },
+      () => executarTurnoDoAgente(deps, job, pool, ctx, input),
+    );
+  } catch (err) {
+    erroDoTurno = err;
+    throw err;
+  } finally {
+    if (registro !== null) {
+      await gravarRegistroDoTurno(
+        pool,
+        {
+          tenantId: job.organization_id,
+          jobId: job.id,
+          leadId: leadIdDoJob,
+          conversationId: input.conversationId,
+          channelSessionId: input.channelSessionId,
+          inboundMessageId: input.inboundMessageId ?? null,
+        },
+        registro,
+        {
+          erro: erroDoTurno,
+          adiado: erroDoTurno instanceof JobSettledError,
+          passouParaHumano: () => isLeadInHandoff(pool, job.organization_id, leadIdDoJob),
+        },
+        logDaEscolta,
+      );
+    }
+  }
 }
 
 /**
@@ -1537,6 +1580,9 @@ async function executarTurnoDoAgente(
     return;
   }
   const agentConfig = routed.config;
+  if (agentConfig !== null && input.registro) {
+    input.registro.agente = { agentId: agentConfig.agentId, versionId: agentConfig.versionId };
+  }
   if (agentConfig !== null) {
     runLog.info('config do agente publicada em uso', {
       agent_id: agentConfig.agentId,
@@ -1558,6 +1604,7 @@ async function executarTurnoDoAgente(
   if (job.kind === 'inbound_turn' && agentConfig?.janelaDeAtendimento != null) {
     const esperaMs = msAteAJanelaAbrir(agentConfig.janelaDeAtendimento, clock());
     if (esperaMs !== null) {
+      if (input.registro) input.registro.motivo = 'fora_do_horario';
       await rescheduleJob(pool, job.id, ctx.workerId, {
         delayMs: esperaMs,
         reason: 'fora do horário de funcionamento do agente — turno adiado para a abertura da janela',
@@ -3289,6 +3336,11 @@ async function executarTurnoDoAgente(
   // terminar sem responder" já cobre o corte, e o limite nunca vira silêncio.
   const gastoDoLaco = somarGasto(GASTO_ZERO, turn.result.steps, (uso) => costCents(turn.model, uso));
   const estouro = limitesDoTurno === null ? null : estouroDoTurno(gastoDoLaco, limitesDoTurno);
+  if (input.registro) {
+    input.registro.passos = turn.result.steps.length;
+    input.registro.ferramentas = ferramentasDosPassos(turn.result.steps);
+    if (estouro !== null) input.registro.motivo = 'limite_do_turno';
+  }
   const depoisDoLimite = decidirAposOLimite({ estouro, jaRespondeu: algoSaiuNoTurno() });
   if (depoisDoLimite !== 'seguir') {
     runLog.warn('limite por atendimento alcançado — laço do agente cortado', {
@@ -3347,6 +3399,11 @@ async function executarTurnoDoAgente(
       runLog.warn('resgate do turno mudo falhou — segue para o aviso', normalizarErro(err));
     }
     if (runError !== null) throw runError;
+  }
+  if (input.registro) {
+    input.registro.enviadas = outcomes.filter(
+      (o) => o.kind === 'sent' || o.kind === 'already_sent' || o.kind === 'queued',
+    ).length;
   }
   if (resgate.acao !== 'nada' && !algoSaiuNoTurno() && !(await isLeadInHandoff(pool, tenantId, leadId))) {
     await avisarTurnoSemResposta(pool, {
