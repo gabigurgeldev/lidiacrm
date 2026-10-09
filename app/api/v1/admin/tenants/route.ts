@@ -93,6 +93,11 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient();
   const cursorPayload = cursor ? decodeCursor(cursor) : null;
 
+  // FK NOMEADA no embed de conversations: `coord_estado_conversa` (migration
+  // 0229) tem chave primária (organization_id, conversation_id), e com isso o
+  // PostgREST passou a ver DUAS relações entre organizations e conversations — a
+  // direta e uma muitos-para-muitos por ela. Sem o nome da FK, o embed falha por
+  // ambiguidade e a consulta inteira volta erro.
   let query = admin
     .from("organizations")
     .select(
@@ -107,7 +112,7 @@ export async function GET(req: NextRequest) {
       suspended_at,
       created_at,
       user_count:user_organizations(count),
-      conversations_count:conversations(count)
+      conversations_count:conversations!conversations_organization_id_fkey(count)
     `,
     )
     .order("created_at", { ascending: false })
