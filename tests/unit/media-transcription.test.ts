@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   apiTranscriptionProvider,
   escolherTranscricao,
+  idiomaDaTranscricao,
   TRANSCRICAO_PELA_OPENROUTER,
   transcricaoParaATela,
 } from "@/lib/messaging/media/transcription";
@@ -72,5 +73,33 @@ describe("transcricaoParaATela", () => {
     const t = transcricaoParaATela({ openai: false, openrouter: false });
     expect(t.modelId).toBeNull();
     expect(t.aviso).toMatch(/OpenRouter/);
+  });
+});
+
+describe("idioma da transcrição", () => {
+  // Produção, 2026-10-08: áudio em português transcrito em tailandês, porque o
+  // pedido não dizia o idioma e o modelo adivinhou pelo áudio.
+  it("manda o idioma no multipart quando há um", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ text: "oi" }), { status: 200 }));
+    const p = apiTranscriptionProvider({ apiKey: "k", language: "pt" }, fetchImpl as unknown as typeof fetch);
+    await p.transcribe(Buffer.from([1, 2, 3]), "audio/ogg; codecs=opus");
+    const form = (fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1].body as FormData;
+    expect(form.get("language")).toBe("pt");
+  });
+
+  it("sem idioma, o campo não vai (o modelo detecta sozinho, como antes)", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ text: "oi" }), { status: 200 }));
+    const p = apiTranscriptionProvider({ apiKey: "k" }, fetchImpl as unknown as typeof fetch);
+    await p.transcribe(Buffer.from([1, 2, 3]), "audio/ogg");
+    const form = (fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1].body as FormData;
+    expect(form.has("language")).toBe(false);
+  });
+
+  it("deriva o idioma do locale da organização, sem inventar", () => {
+    expect(idiomaDaTranscricao("pt-BR")).toBe("pt");
+    expect(idiomaDaTranscricao("es")).toBe("es");
+    expect(idiomaDaTranscricao("en_US")).toBe("en");
+    expect(idiomaDaTranscricao(null)).toBeUndefined();
+    expect(idiomaDaTranscricao("português")).toBeUndefined();
   });
 });

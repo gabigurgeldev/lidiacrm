@@ -1,7 +1,7 @@
 "use client";
 /**
  * Bloco "Assinatura" na tela da organização do painel da plataforma: situação,
- * datas, vínculo no Asaas e a chave "Isenta de cobrança".
+ * datas, vínculo no Asaas, a chave "Isenta de cobrança" e "Estender teste".
  *
  * Isentar libera na hora (o cache de acesso é invalidado pela rota) e fica no
  * audit como `billing.isencao_alterada`, com quem e de/para.
@@ -15,8 +15,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useT } from "@/hooks/i18n/useT";
+import { tagDeIdioma } from "@/lib/i18n/datas";
+import { useIdioma } from "@/lib/i18n/IdiomaProvider";
 import { apiClient } from "@/lib/api/client";
 import type { EstadoDeAcesso } from "@/lib/billing/acesso";
+
+import { EstenderTeste } from "./EstenderTeste";
 
 interface Resposta {
   data: {
@@ -34,10 +38,10 @@ interface Resposta {
   };
 }
 
-const data = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("pt-BR") : "—");
-
 export function AssinaturaDoTenant({ organizationId }: { organizationId: string }) {
   const t = useT();
+  const tag = tagDeIdioma(useIdioma());
+  const data = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(tag) : "—");
   const qc = useQueryClient();
   const chave = ["admin", "tenant-assinatura", organizationId] as const;
   const { data: r, isLoading } = useQuery({
@@ -106,6 +110,12 @@ export function AssinaturaDoTenant({ organizationId }: { organizationId: string 
             data-testid="switch-isenta"
           />
         </label>
+        <EstenderTeste
+          organizationId={organizationId}
+          assinatura={a}
+          temAssinaturaNoAsaas={a.asaas_subscription_id !== null}
+          chaveDaConsulta={chave}
+        />
       </CardContent>
     </Card>
   );

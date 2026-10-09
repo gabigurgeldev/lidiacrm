@@ -24,6 +24,7 @@
  */
 import { allTools } from "@/lib/mcp/tools";
 import { TOOL_CATALOG } from "@/lib/mcp/tools/catalog";
+import { PACOTES, type ToolBundle } from "@/lib/mcp/tools/pacotes";
 import { ligarPacote } from "@/lib/mcp/tools/selecao-por-pacote";
 
 /** O pacote que o primeiro agente recebe ligado. */
@@ -45,4 +46,18 @@ export function capacidadesPadraoDoOnboarding(): string[] {
   // crítico nunca entra por pacote, e a ordem é a do catálogo (para o diff de
   // versão do agente ser legível).
   return ligarPacote([], catalogo, PACOTE_PADRAO_DO_ONBOARDING);
+}
+
+/**
+ * Pacote → as capacidades que ele liga (só as automáticas: crítica nunca entra
+ * por pacote). É o mapa que "Criar agente com IA" usa para contar, na tela e na
+ * criação, quantas ferramentas cabem no teto por agente.
+ */
+export function capacidadesPorPacote(
+  catalogo: ReturnType<typeof catalogoComHandler> = catalogoComHandler(),
+): Record<ToolBundle, string[]> {
+  return Object.fromEntries(PACOTES.map((p) => [p.id, ligarPacote([], catalogo, p.id)])) as Record<
+    ToolBundle,
+    string[]
+  >;
 }
