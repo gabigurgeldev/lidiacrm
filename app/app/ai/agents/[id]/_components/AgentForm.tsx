@@ -11,54 +11,32 @@
  *   - "Publicado vN" (sem draft, valores espelham published)
  *   - "Rascunho vN+1" (sem published)
  *   - "Publicado vN + Rascunho vM" (formulário mostra a draft)
+ *
+ * Este arquivo é o ORQUESTRADOR: estado, validação, salvar e publicar. Cada
+ * seção da tela mora num arquivo em `editor/` e recebe o mesmo `PropsDaSecao`.
+ * Antes era um arquivo de 1.200 linhas com treze cartões em duas colunas; agora
+ * é uma coluna, com índice de seções ao lado e os ajustes que quase ninguém
+ * mexe atrás de "Ajustes avançados".
  */
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { Segmentado } from "@/components/ajustes";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { TokenCounter } from "@/lib/ui/TokenCounter";
-import { Info } from "@/lib/ui/icons";
+import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
-import Link from "next/link";
+import { CaretDown } from "@/lib/ui/icons";
 
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
-import { PROVEDORES } from "@/lib/ai/pontos/provedores";
-import {
-  ROTULO_DA_VOZ,
-  VOZES_DO_AGENTE,
-  VOZES_POR_SERVICO,
-  VOZ_PADRAO,
-  vozParaOServico,
-  type ServicoDeVoz,
-  type VozDoAgente,
-} from "@/lib/ai/voz/vozes";
+import type { ServicoDeVoz } from "@/lib/ai/voz/vozes";
 
-import { ConsumoPorAtendimento } from "./ConsumoPorAtendimento";
-import { ModelPicker, useModelMeta } from "./ModelPicker";
-import { CHAVE_DA_INSTALACAO, CredentialPicker, findCredential } from "./CredentialPicker";
-import { rotuloDoEstadoDoCanal } from "@/lib/channels/estado";
-import { ToolPicker } from "./ToolPicker";
-import { TriggerEditor, type TriggerValue } from "./TriggerEditor";
-import { HandoffKeywordsInput } from "./HandoffKeywordsInput";
-import { FollowupFlowPicker } from "./FollowupFlowPicker";
+import { useModelMeta } from "./ModelPicker";
+import { CHAVE_DA_INSTALACAO, findCredential } from "./CredentialPicker";
 import { PainelDoOperador } from "./PainelDoOperador";
 import { PainelDeSeguranca } from "./PainelDeSeguranca";
-import { BasesDoAgente, type MaterialDoAcervo } from "./BasesDoAgente";
-import { IntegracoesDoAgente, type IntegracaoDoAcervo } from "./IntegracoesDoAgente";
+import type { MaterialDoAcervo } from "./BasesDoAgente";
+import type { IntegracaoDoAcervo } from "./IntegracoesDoAgente";
 import { FunisDoAgente, type CoberturaPorFunil } from "./FunisDoAgente";
 import { PublishConfirmDialog } from "./PublishConfirmDialog";
 import {
@@ -67,11 +45,32 @@ import {
   createMcpAgentAction,
 } from "../_actions";
 
+import {
+  avancadoTemErro,
+  buildState,
+  toVersionPayload,
+  type FormState,
+  type PropsDaSecao,
+  type VersaoDoFormulario,
+} from "./editor/estado";
+import { NavegacaoDeSecoes } from "./editor/NavegacaoDeSecoes";
+import { AncoraDaSecao } from "./editor/pecas";
+import { SecaoAvancada } from "./editor/SecaoAvancada";
+import { SecaoCapacidades } from "./editor/SecaoCapacidades";
+import { SecaoEstilo } from "./editor/SecaoEstilo";
+import { SecaoFollowup } from "./editor/SecaoFollowup";
+import { SecaoGatilho } from "./editor/SecaoGatilho";
+import { SecaoIdentidade } from "./editor/SecaoIdentidade";
+import { SecaoInstrucoes } from "./editor/SecaoInstrucoes";
+import { SecaoInteligencia } from "./editor/SecaoInteligencia";
+import { SecaoNumero } from "./editor/SecaoNumero";
+import { SecaoPessoa } from "./editor/SecaoPessoa";
+
 import { versionCreateSchema, agentMcpCreateSchema } from "@/lib/ai/agents/validation";
 import type { SelectableChannel as ChannelSessionLite } from "@/lib/channels/selectable";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
-import type { CredentialRow, Provider } from "@/hooks/ai/useCredentials";
+import type { CredentialRow } from "@/hooks/ai/useCredentials";
 import { credentialStatus } from "@/hooks/ai/useCredentials";
 import type { FunilDaResposta } from "@/hooks/pipelines/usePipelines";
 
@@ -81,6 +80,7 @@ import type { FunilDaResposta } from "@/hooks/pipelines/usePipelines";
  * de quem monta a lista (é lá que mora o filtro de canal arquivado).
  */
 export type { ChannelSessionLite };
+export type { VersaoDoFormulario };
 
 interface BaseProps {
   credentials: CredentialRow[];
@@ -155,166 +155,11 @@ type Props = (EditProps | CreateProps) & {
   aoMudarVersao?: (versao: VersaoDoFormulario) => void;
 };
 
-/** A versão como o formulário a salvaria (`toVersionPayload`). */
-export type VersaoDoFormulario = ReturnType<typeof toVersionPayload>;
-
-interface FormState {
-  name: string;
-  description: string;
-  priority: number;
-  provider: Provider;
-  model: string;
-  credential_id: string;
-  channel_session_id: string;
-  system_prompt: string;
-  tool_ids: string[];
-  trigger_config: TriggerValue;
-  max_steps: number;
-  token_budget: number;
-  cost_budget_cents: number;
-  history_message_window: number;
-  history_token_window: number;
-  handoff_keywords: string[];
-  handoff_tool_enabled: boolean;
-  cases_enabled: boolean;
-  split_messages: boolean;
-  split_max_chars: number;
-  reply_as_audio: boolean;
-  reply_as_audio_mirror: boolean;
-  human_request_try_first: boolean;
-  audio_voice: VozDoAgente;
-  followup: FollowupValue;
-  // Papel OPERADOR (spec 16 §3.2) — o que mexe no sistema depois da conversa.
-  operator_enabled: boolean;
-  /** "" = herda o modelo do Conversador (vira null no payload). */
-  operator_model: string;
-  operator_tool_ids: string[];
-  pipeline_ids: string[];
-  knowledge_source_ids: string[];
-  api_endpoint_ids: string[];
-}
-
-interface FollowupValue {
-  enabled: boolean;
-  flow_pointer_ids: string[];
-}
-
-const DEFAULT_FOLLOWUP: FollowupValue = { enabled: false, flow_pointer_ids: [] };
-
-const DEFAULT_TRIGGER: TriggerValue = {
-  events: ["message"],
-  filters: {
-    ignore_groups: true,
-    ignore_self: true,
-    keyword_regex: null,
-    business_hours: null,
-  },
-  concurrency: "one_per_conversation",
-};
-
-function buildState(args: {
-  agent?: AgentRow;
-  version: AgentVersionRow | null;
-  servicoDeVoz?: ServicoDeVoz | null;
-}): FormState {
-  const { agent, version, servicoDeVoz } = args;
-  return {
-    name: agent?.name ?? "",
-    description: agent?.description ?? "",
-    priority: agent?.priority ?? 0,
-    provider: (version?.provider as Provider) ?? "anthropic",
-    model: version?.model ?? "",
-    // `null` gravado = a versão usa a chave da instalação. Sem esta tradução,
-    // reabrir o agente mostraria o campo em branco e pediria para escolher de novo.
-    credential_id: version ? (version.credential_id ?? CHAVE_DA_INSTALACAO) : "",
-    channel_session_id: version?.channel_session_id ?? "",
-    system_prompt:
-      version?.system_prompt ??
-      "Você é um atendente. Responda de forma educada e clara, em pt-BR.",
-    tool_ids: version?.tool_ids ?? [],
-    trigger_config: (version?.trigger_config as unknown as TriggerValue) ?? DEFAULT_TRIGGER,
-    max_steps: version?.max_steps ?? 10,
-    token_budget: version?.token_budget ?? 50_000,
-    cost_budget_cents: version?.cost_budget_cents ?? 50,
-    history_message_window: version?.history_message_window ?? 20,
-    history_token_window: version?.history_token_window ?? 8_000,
-    handoff_keywords: version?.handoff_keywords ?? [
-      "falar com humano",
-      "atendente",
-      "pessoa real",
-    ],
-    handoff_tool_enabled: version?.handoff_tool_enabled ?? true,
-    cases_enabled: version?.cases_enabled ?? false,
-    split_messages: version?.split_messages ?? false,
-    split_max_chars: version?.split_max_chars ?? 600,
-    reply_as_audio: version?.reply_as_audio ?? false,
-    reply_as_audio_mirror: version?.reply_as_audio_mirror ?? false,
-    human_request_try_first: version?.human_request_try_first ?? false,
-    // Voz fora do catálogo (vocabulário aberto no banco) abre na padrão em vez
-    // de um Select em branco que o primeiro save trocaria em silêncio.
-    // Com serviço, a voz é a do catálogo DELE (`pf_dora`, default da coluna,
-    // não existe no Grok).
-    audio_voice: servicoDeVoz
-      ? vozParaOServico(version?.audio_voice ?? "", servicoDeVoz)
-      : (VOZES_DO_AGENTE as readonly string[]).includes(version?.audio_voice ?? "")
-        ? (version?.audio_voice as VozDoAgente)
-        : VOZ_PADRAO,
-    followup: version?.followup ?? DEFAULT_FOLLOWUP,
-    operator_enabled: version?.operator_enabled ?? false,
-    // O form usa "" onde o banco usa null — Select controlado não aceita null.
-    // A conversão de volta acontece em `toVersionPayload`, num ponto só.
-    operator_model: version?.operator_model ?? "",
-    operator_tool_ids: version?.operator_tool_ids ?? [],
-    // `?? []` = nenhum funil. Agente novo nasce fechado, como o banco.
-    pipeline_ids: version?.pipeline_ids ?? [],
-    // `?? []` = nenhum material. Mesma direção segura: agir de menos.
-    knowledge_source_ids: version?.knowledge_source_ids ?? [],
-    // `?? []` = nenhum sistema externo. Mesma direção segura.
-    api_endpoint_ids: version?.api_endpoint_ids ?? [],
-  };
-}
-
-function toVersionPayload(s: FormState) {
-  return {
-    system_prompt: s.system_prompt,
-    provider: s.provider,
-    model: s.model,
-    // O token é da TELA; o contrato da versão é `null` = chave da instalação.
-    credential_id: s.credential_id === CHAVE_DA_INSTALACAO ? null : s.credential_id,
-    tool_ids: s.tool_ids,
-    trigger_config: s.trigger_config,
-    channel_session_id: s.channel_session_id,
-    max_steps: s.max_steps,
-    token_budget: s.token_budget,
-    cost_budget_cents: s.cost_budget_cents,
-    history_message_window: s.history_message_window,
-    history_token_window: s.history_token_window,
-    handoff_keywords: s.handoff_keywords,
-    handoff_tool_enabled: s.handoff_tool_enabled,
-    cases_enabled: s.cases_enabled,
-    split_messages: s.split_messages,
-    split_max_chars: s.split_max_chars,
-    reply_as_audio: s.reply_as_audio,
-    reply_as_audio_mirror: s.reply_as_audio_mirror,
-    human_request_try_first: s.human_request_try_first,
-    audio_voice: s.audio_voice,
-    followup: s.followup,
-    operator_enabled: s.operator_enabled,
-    // "" (não escolheu) → null (herda o do Conversador). São o mesmo conceito em
-    // camadas diferentes, e o mapeamento vive AQUI para não se espalhar.
-    operator_model: s.operator_model.trim() === "" ? null : s.operator_model.trim(),
-    operator_tool_ids: s.operator_tool_ids,
-    pipeline_ids: s.pipeline_ids,
-    knowledge_source_ids: s.knowledge_source_ids,
-    api_endpoint_ids: s.api_endpoint_ids,
-  };
-}
+type Papel = "conversa" | "operacao" | "seguranca";
 
 export function AgentForm(props: Props) {
   const t = useT();
   const funis = props.funis ?? [];
-  const materiais = props.materiais ?? [];
-  const integracoes = props.integracoes ?? [];
   const router = useRouter();
   const isEdit = props.mode === "edit";
   const readOnly = props.readOnly ?? false;
@@ -343,17 +188,13 @@ export function AgentForm(props: Props) {
    * navegação — o rascunho é um só, e uma URL por papel faria o usuário achar
    * que salvou um e não o outro.
    */
-  const [papel, setPapel] = React.useState<"conversa" | "operacao" | "seguranca">("conversa");
+  const [papel, setPapel] = React.useState<Papel>("conversa");
+  const [avancadoAberto, setAvancadoAberto] = React.useState(false);
 
   const dirty = JSON.stringify(form) !== JSON.stringify(baseline);
 
   function patch(p: Partial<FormState>) {
     setForm((prev) => ({ ...prev, ...p }));
-  }
-
-  // Quando provider muda, limpa credential e modelo (eles dependem do provider).
-  function changeProvider(p: Provider) {
-    patch({ provider: p, credential_id: "", model: "" });
   }
 
   const cred = findCredential(props.credentials, form.credential_id);
@@ -408,9 +249,12 @@ export function AgentForm(props: Props) {
       }
     }
     return errors;
-  }, [form, t]);
+  }, [form, t, props.provedoresDaInstalacao]);
 
   const isValid = Object.keys(validation).length === 0;
+  // Um erro num campo avançado abre a seção: esconder o campo que impede o
+  // Salvar seria pedir ao dono que conserte o que ele não vê.
+  const mostrarAvancado = avancadoAberto || avancadoTemErro(validation);
 
   const publishBlockReason = React.useMemo(() => {
     if (!isEdit) return t("Salve o agente antes de publicar.");
@@ -493,6 +337,7 @@ export function AgentForm(props: Props) {
   }
 
   const disabled = readOnly || saving || publishing;
+  const secao: PropsDaSecao = { form, patch, disabled, erros: validation };
 
   // Status badge
   const statusBadge = (() => {
@@ -539,8 +384,23 @@ export function AgentForm(props: Props) {
     return <Badge variant="outline">{t("Sem versão")}</Badge>;
   })();
 
+  // A ordem é a de quem cria o primeiro agente: quem ele é, o que ele diz, por
+  // onde atende e com qual inteligência — o resto tem padrão que serve.
+  const indice = [
+    { id: "quem", rotulo: t("Quem é") },
+    { id: "instrucoes", rotulo: t("Instruções") },
+    { id: "numero", rotulo: t("Número") },
+    { id: "inteligencia", rotulo: t("Inteligência") },
+    { id: "capacidades", rotulo: t("Capacidades") },
+    { id: "estilo", rotulo: t("Estilo de resposta") },
+    { id: "gatilho", rotulo: t("Quando atende") },
+    { id: "pessoa", rotulo: t("Passar para uma pessoa") },
+    { id: "followup", rotulo: t("Follow-up") },
+    { id: "avancado", rotulo: t("Ajustes avançados") },
+  ];
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -557,11 +417,7 @@ export function AgentForm(props: Props) {
 
         <div className="flex flex-wrap items-center gap-2">
           {isEdit ? (
-            <Button
-              variant="outline"
-              onClick={handleReset}
-              disabled={!dirty || disabled}
-            >
+            <Button variant="outline" onClick={handleReset} disabled={!dirty || disabled}>
               {t("Descartar alterações")}
             </Button>
           ) : null}
@@ -594,36 +450,20 @@ export function AgentForm(props: Props) {
 
         Os rótulos dizem o que cada papel FAZ. "Conversador"/"Operador" é o nosso
         vocabulário interno; quem configura pensa em "quem fala com meu cliente" e
-        "quem organiza minha casa".
+        "quem organiza minha casa". O terceiro — "Segurança" no nosso nome — diz
+        o que é conferido antes de a mensagem chegar ao cliente.
       */}
-      <div className="flex flex-wrap gap-1 border-b" role="tablist" aria-label={t("Papéis do agente")}>
-        {(
-          [
-            ["conversa", t("Conversa com o cliente")],
-            ["operacao", t("Organiza o sistema")],
-            // O TERCEIRO PAPEL. O rótulo diz o que ele FAZ, como os outros dois:
-            // "Segurança" é o nosso nome; quem configura quer saber o que é
-            // conferido antes de a mensagem chegar ao cliente dele.
-            ["seguranca", t("Confere antes de enviar")],
-          ] as const
-        ).map(([id, rotulo]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={papel === id}
-            data-testid={`papel-${id}`}
-            onClick={() => setPapel(id)}
-            className={
-              papel === id
-                ? "border-b-2 border-foreground px-3 py-2 text-sm font-medium"
-                : "border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
-            }
-          >
-            {t(rotulo)}
-          </button>
-        ))}
-      </div>
+      <Segmentado<Papel>
+        valor={papel}
+        aoMudar={setPapel}
+        rotuloAcessivel={t("Papéis do agente")}
+        className="self-start"
+        opcoes={[
+          { valor: "conversa", rotulo: t("Conversa com o cliente"), testid: "papel-conversa" },
+          { valor: "operacao", rotulo: t("Organiza o sistema"), testid: "papel-operacao" },
+          { valor: "seguranca", rotulo: t("Confere antes de enviar"), testid: "papel-seguranca" },
+        ]}
+      />
 
       {papel === "seguranca" ? <PainelDeSeguranca /> : null}
 
@@ -654,564 +494,84 @@ export function AgentForm(props: Props) {
         />
       ) : null}
 
-      {/* Two-column grid */}
-      <div className={papel === "conversa" ? "grid grid-cols-1 gap-4 lg:grid-cols-2" : "hidden"}>
-        {/* COLUMN 1 */}
-        <div className="space-y-4">
-          {/* Identification */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Quem é este agente")}</h3>
-            <div className="space-y-1">
-              <Label htmlFor="name">{t("Nome")}</Label>
-              <Input
-                id="name"
-                value={form.name}
-                onChange={(e) => patch({ name: e.target.value })}
-                disabled={disabled}
-                maxLength={120}
-                aria-invalid={!!validation.name}
-              />
-              {validation.name ? (
-                <p className="text-xs text-destructive">{validation.name}</p>
-              ) : null}
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="description">{t("Descrição")}</Label>
-              <Textarea
-                id="description"
-                value={form.description}
-                onChange={(e) => patch({ description: e.target.value })}
-                disabled={disabled}
-                rows={2}
-                maxLength={2000}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="priority">{t("Ordem de preferência (0 a 1000)")}</Label>
-              <Input
-                id="priority"
-                type="number"
-                min={0}
-                max={1000}
-                step={1}
-                value={form.priority}
-                onChange={(e) => patch({ priority: Number(e.target.value) })}
-                disabled={disabled}
-              />
-              <p className="text-xs text-muted-foreground">
-                {t(
-                  "Quando mais de um agente puder atender a mesma conversa, o de número maior tenta primeiro. Se você só tem um agente, pode deixar como está.",
-                )}
-              </p>
-            </div>
-          </Card>
+      {/* Escondido com `hidden`, e não desmontado: os seletores de modelo e de
+          capacidades carregam dados ao montar, e trocar de papel não deve
+          refazer a busca nem perder a rolagem. */}
+      <div
+        className={papel === "conversa" ? "grid gap-6 lg:grid-cols-[11rem_minmax(0,1fr)]" : "hidden"}
+        data-testid="editor-conversa"
+      >
+        <NavegacaoDeSecoes
+          itens={indice}
+          rotuloAcessivel={t("Seções do agente")}
+          aoEscolher={(id) => {
+            if (id === "avancado") setAvancadoAberto(true);
+          }}
+        />
 
-          {/* Provider + credential + model */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("A inteligência que ele usa")}</h3>
-            <div className="space-y-1">
-              <Label htmlFor="provider">{t("Empresa de inteligência artificial")}</Label>
-              <Select
-                value={form.provider}
-                onValueChange={(v) => changeProvider(v as Provider)}
-                disabled={disabled}
-              >
-                <SelectTrigger id="provider">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {/*
-                    Derivado de PROVEDORES, nunca escrito à mão: esta lista tinha
-                    três itens fixos enquanto o sistema executava quatro, e a
-                    OpenRouter — a opção [1] do instalador — não aparecia. Um
-                    agente publicado nela abria com o campo em BRANCO, porque
-                    nenhum item casava com o valor, e o primeiro save silencioso
-                    trocava o provedor do dono por outro.
-                  */}
-                  {PROVEDORES.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.rotulo}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <ModelPicker
-              provider={form.provider}
-              value={form.model}
-              onChange={(modelId) => patch({ model: modelId })}
-              disabled={disabled}
-              id="model"
-            />
-            {validation.model ? (
-              <p className="text-xs text-destructive">{validation.model}</p>
-            ) : null}
-
-            <CredentialPicker
-              provider={form.provider}
-              credentials={props.credentials}
-              value={form.credential_id}
-              onChange={(id) => patch({ credential_id: id })}
-              disabled={disabled}
-              id="credential_id"
+        <div className="min-w-0 max-w-3xl space-y-6">
+          <AncoraDaSecao id="quem">
+            <SecaoIdentidade {...secao} />
+          </AncoraDaSecao>
+          <AncoraDaSecao id="instrucoes">
+            <SecaoInstrucoes {...secao} janelaDeContexto={modelMeta?.context_window ?? null} />
+          </AncoraDaSecao>
+          <AncoraDaSecao id="numero">
+            <SecaoNumero {...secao} numeros={props.channelSessions} roteador={props.routerMembership ?? null} />
+          </AncoraDaSecao>
+          <AncoraDaSecao id="inteligencia">
+            <SecaoInteligencia
+              {...secao}
+              credenciais={props.credentials}
               instalacaoTemChave={(props.provedoresDaInstalacao ?? []).includes(form.provider)}
+              estadoDaCredencial={credSt}
             />
-            {validation.credential_id ? (
-              <p className="text-xs text-destructive">{validation.credential_id}</p>
-            ) : null}
-            {cred && credSt !== "validated" ? (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
-                {t("Credencial selecionada está com status")} {credSt}
-                {t(". Publicar fica bloqueado até validar.")}
-              </p>
-            ) : null}
-          </Card>
+          </AncoraDaSecao>
+          <AncoraDaSecao id="capacidades">
+            <SecaoCapacidades
+              {...secao}
+              materiais={props.materiais ?? []}
+              integracoes={props.integracoes ?? []}
+              emailConfigurado={props.emailConfigurado ?? false}
+            />
+          </AncoraDaSecao>
+          <AncoraDaSecao id="estilo">
+            <SecaoEstilo {...secao} servicoDeVoz={props.servicoDeVoz ?? null} />
+          </AncoraDaSecao>
+          <AncoraDaSecao id="gatilho">
+            <SecaoGatilho {...secao} roteador={props.routerMembership ?? null} />
+          </AncoraDaSecao>
+          <AncoraDaSecao id="pessoa">
+            <SecaoPessoa {...secao} />
+          </AncoraDaSecao>
+          <AncoraDaSecao id="followup">
+            <SecaoFollowup {...secao} />
+          </AncoraDaSecao>
 
-          {/* WhatsApp session */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Por qual número ele atende")}</h3>
-            {props.routerMembership && (
-              <div className="flex items-start gap-2 rounded-md bg-accent-soft p-3 text-xs text-text-muted">
-                <Info className="mt-0.5 shrink-0" aria-hidden />
-                <p>
-                  {t("Este agente é acionado pelo roteador")}{" "}
-                  <Link
-                    href={`/app/ai/routers/${props.routerMembership.routerId}`}
-                    className="font-medium underline underline-offset-2"
-                  >
-                    «{props.routerMembership.routerName}»
-                  </Link>{" "}
-                  {t("— o campo de número abaixo não se aplica.")}
-                </p>
-              </div>
-            )}
-            <div className="space-y-1">
-              <Label htmlFor="channel_session_id">{t("Número conectado")}</Label>
-              <Select
-                value={form.channel_session_id || undefined}
-                onValueChange={(v) => patch({ channel_session_id: v })}
-                disabled={disabled}
-              >
-                <SelectTrigger id="channel_session_id">
-                  <SelectValue placeholder={t("Selecione um número")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {props.channelSessions.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {/*
-                        O estado vinha CRU daqui — a opção lia "org_2dd5e6ea ·
-                        STARTING", juntando o identificador interno da sessão com
-                        o enum em inglês do banco. O nome agora nunca é o
-                        identificador (ver `nomeDoCanal`), e o estado passa pela
-                        mesma tradução que a tela de Conexões usa.
-                      */}
-                      {s.display_name}
-                      {s.phone_number ? ` · ${s.phone_number}` : ""} ·{" "}
-                      {rotuloDoEstadoDoCanal(s.status, t)}
-                    </SelectItem>
-                  ))}
-                  {props.channelSessions.length === 0 ? (
-                    <SelectItem value="__none__" disabled>
-                      {t("Nenhum número conectado")}
-                    </SelectItem>
-                  ) : null}
-                </SelectContent>
-              </Select>
-              {validation.channel_session_id ? (
-                <p className="text-xs text-destructive">{validation.channel_session_id}</p>
-              ) : null}
-            </div>
-          </Card>
-
-          {/* Limits */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Freios de segurança")}</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="max_steps">{t("Ações por atendimento (1 a 25)")}</Label>
-                <Input
-                  id="max_steps"
-                  type="number"
-                  min={1}
-                  max={25}
-                  value={form.max_steps}
-                  onChange={(e) => patch({ max_steps: Number(e.target.value) })}
-                  disabled={disabled}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="token_budget">{t("Volume de texto por atendimento")}</Label>
-                <Input
-                  id="token_budget"
-                  type="number"
-                  min={1000}
-                  max={500000}
-                  step={1000}
-                  value={form.token_budget}
-                  onChange={(e) => patch({ token_budget: Number(e.target.value) })}
-                  disabled={disabled}
-                />
-              </div>
-              <div className="space-y-1">
-                {/* Centavos de DÓLAR: é a unidade de `llm_calls.cost_cents`, que o motor compara. */}
-                <Label htmlFor="cost_budget_cents">{t("Custo máximo por atendimento (centavos de dólar)")}</Label>
-                <Input
-                  id="cost_budget_cents"
-                  type="number"
-                  min={1}
-                  max={10000}
-                  value={form.cost_budget_cents}
-                  onChange={(e) => patch({ cost_budget_cents: Number(e.target.value) })}
-                  disabled={disabled}
-                />
-              </div>
-              <div className="col-span-2 space-y-1">
-                <p className="text-xs text-muted-foreground">
-                  {t(
-                    "Quando um atendimento alcança o volume ou o custo, o agente para de pensar e, se ainda não respondeu, é obrigado a responder ou passar para a equipe. A Central avisa.",
-                  )}
-                </p>
-                {isEdit && props.agent ? (
-                  <ConsumoPorAtendimento
-                    agentId={props.agent.id}
-                    limites={{ tokens: form.token_budget, centavos: form.cost_budget_cents }}
-                  />
-                ) : null}
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="history_message_window">{t("Mensagens anteriores que ele lê")}</Label>
-                <Input
-                  id="history_message_window"
-                  type="number"
-                  min={0}
-                  max={200}
-                  value={form.history_message_window}
-                  onChange={(e) =>
-                    patch({ history_message_window: Number(e.target.value) })
-                  }
-                  disabled={disabled}
-                />
-              </div>
-              <div className="col-span-2 space-y-1">
-                <Label htmlFor="history_token_window">{t("Tamanho máximo desse histórico")}</Label>
-                <Input
-                  id="history_token_window"
-                  type="number"
-                  min={0}
-                  max={50000}
-                  step={500}
-                  value={form.history_token_window}
-                  onChange={(e) =>
-                    patch({ history_token_window: Number(e.target.value) })
-                  }
-                  disabled={disabled}
-                />
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {/* COLUMN 2 */}
-        <div className="space-y-4">
-          {/* Prompt */}
-          <Card className="space-y-2 p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium">{t("As instruções dele")}</h3>
-              <div className="flex items-center gap-2">
-                {/* O contador é o aviso que chega ANTES do erro: quem cola um
-                    texto grande vê na hora que ele não vai caber, em vez de
-                    descobrir depois — ou nunca. */}
-                <span
-                  data-testid="contador-do-prompt"
-                  className={
-                    form.system_prompt.trim().length > 20000
-                      ? "text-xs text-destructive"
-                      : "text-xs text-muted-foreground"
-                  }
-                >
-                  {form.system_prompt.trim().length.toLocaleString("pt-BR")}/20.000
+          <AncoraDaSecao id="avancado">
+            <button
+              type="button"
+              onClick={() => setAvancadoAberto((v) => !v)}
+              aria-expanded={mostrarAvancado}
+              data-testid="editor-avancado"
+              className="ios-grupo flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium"
+            >
+              <span>
+                {t("Ajustes avançados")}
+                <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                  {t("Ordem entre agentes, freios por atendimento e quanto da conversa ele relê.")}
                 </span>
-                <TokenCounter
-                  text={form.system_prompt}
-                  contextWindow={modelMeta?.context_window ?? null}
-                  className="text-xs"
-                />
-              </div>
-            </div>
-            <Textarea
-              value={form.system_prompt}
-              onChange={(e) => patch({ system_prompt: e.target.value })}
-              disabled={disabled}
-              rows={12}
-              /**
-               * SEM `maxLength`, e é o conserto — não um esquecimento.
-               *
-               * O navegador aplica o atributo na COLAGEM, sem evento e sem
-               * aviso: o que passa do limite não entra no campo. Cinco versões
-               * de um agente em produção foram salvas com exatamente 19.999
-               * caracteres, a última cortada no meio de uma frase, e o aviso
-               * logo acima — "passaram de 20.000" — era inalcançável, porque o
-               * estado nunca podia exceder o teto que o atributo já impunha.
-               *
-               * Sem ele o texto inteiro entra, a validação dispara e o autor lê
-               * quanto precisa cortar. Limite que recusa é honesto; limite que
-               * corta em silêncio faz o autor publicar o que não escreveu.
-               */
-              spellCheck={false}
-              className="font-mono text-xs"
-              aria-invalid={!!validation.system_prompt}
-            />
-            {validation.system_prompt ? (
-              <p className="text-xs text-destructive">{validation.system_prompt}</p>
-            ) : null}
-          </Card>
-
-          {/* Estilo de resposta (split de mensagens — Onda 4) */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Estilo de resposta")}</h3>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="split_messages"
-                checked={form.split_messages}
-                onCheckedChange={(v) => patch({ split_messages: v })}
-                disabled={disabled}
+              </span>
+              <CaretDown
+                size={14}
+                aria-hidden
+                className={mostrarAvancado ? "rotate-180 text-muted-foreground transition-transform" : "text-muted-foreground transition-transform"}
               />
-              <Label htmlFor="split_messages">
-                {t("Responder em várias mensagens curtas (como uma pessoa digita)")}
-              </Label>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                "Em vez de um bloco único, a resposta sai em bolhas separadas, espaçadas pelo mesmo ritmo anti-banimento do envio. O agente também é instruído a escrever em parágrafos curtos.",
-              )}
-            </p>
-            {form.split_messages ? (
-              <div className="space-y-1">
-                <Label htmlFor="split_max_chars">{t("Tamanho máximo por bolha (80–4000)")}</Label>
-                <Input
-                  id="split_max_chars"
-                  type="number"
-                  min={80}
-                  max={4000}
-                  step={20}
-                  value={form.split_max_chars}
-                  onChange={(e) => patch({ split_max_chars: Number(e.target.value) })}
-                  disabled={disabled}
-                  aria-invalid={!!validation.split_max_chars}
-                />
-                {validation.split_max_chars ? (
-                  <p className="text-xs text-destructive">{validation.split_max_chars}</p>
-                ) : null}
-              </div>
+            </button>
+            {mostrarAvancado ? (
+              <SecaoAvancada {...secao} agentId={isEdit ? props.agent.id : null} />
             ) : null}
-
-            {/* Responder em áudio (migration 0222) */}
-            <div className="flex items-center gap-2 border-t pt-3">
-              <Switch
-                id="reply_as_audio"
-                checked={form.reply_as_audio}
-                onCheckedChange={(v) => patch({ reply_as_audio: v })}
-                // Sem serviço instalado só dá para DESLIGAR: quem tirou o serviço
-                // depois de ligar precisa conseguir sair do estado quebrado.
-                disabled={disabled || (!props.servicoDeVoz && !form.reply_as_audio)}
-              />
-              <Label htmlFor="reply_as_audio">{t("Responder em áudio (nota de voz)")}</Label>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {props.servicoDeVoz
-                ? t(
-                    "Cada resposta do agente sai como áudio, com a voz escolhida abaixo. Mensagens com link ou muito longas continuam em texto. Se o serviço de voz falhar, o cliente recebe a resposta em texto e a Central de avisos mostra o motivo.",
-                  )
-                : t(
-                    "Para responder em áudio, cadastre a chave da OpenRouter em IA › Credenciais. A voz sai pela sua chave, sem nada rodando no servidor.",
-                  )}
-            </p>
-            {form.reply_as_audio ? (
-              <div className="space-y-1">
-                {/* Espelho (migration 0226): texto recebe texto, áudio recebe áudio. */}
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="reply_as_audio_mirror"
-                    checked={form.reply_as_audio_mirror}
-                    onCheckedChange={(v) => patch({ reply_as_audio_mirror: v })}
-                    disabled={disabled}
-                  />
-                  <Label htmlFor="reply_as_audio_mirror">{t("Só quando o cliente mandar áudio")}</Label>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {t(
-                    "Ligado: quem escreve recebe texto, quem manda áudio recebe áudio. Desligado: toda resposta sai em áudio.",
-                  )}
-                </p>
-              </div>
-            ) : null}
-            {form.reply_as_audio ? (
-              <div className="space-y-1">
-                <Label htmlFor="audio_voice">{t("Voz")}</Label>
-                <Select
-                  value={form.audio_voice}
-                  onValueChange={(v) => patch({ audio_voice: v as VozDoAgente })}
-                  disabled={disabled}
-                >
-                  <SelectTrigger id="audio_voice">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(props.servicoDeVoz ? VOZES_POR_SERVICO[props.servicoDeVoz] : VOZES_DO_AGENTE).map((voz) => (
-                      <SelectItem key={voz} value={voz}>
-                        {ROTULO_DA_VOZ[voz]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : null}
-          </Card>
-
-          {/* Capacidades */}
-          <Card className="space-y-2 p-4">
-            <h3 className="text-sm font-medium">{t("O que o agente pode fazer")}</h3>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                "Ligue por jornada de trabalho. O agente só consegue fazer o que estiver ligado aqui — e o que estiver ligado, ele fará sozinho durante o atendimento.",
-              )}
-            </p>
-            <ToolPicker
-              value={form.tool_ids}
-              onChange={(ids) => patch({ tool_ids: ids })}
-              disabled={disabled}
-            />
-            {validation.tool_ids ? (
-              <p className="text-xs text-destructive">{validation.tool_ids}</p>
-            ) : null}
-          </Card>
-
-          {/* O acervo que este assistente consulta (0181) */}
-          <BasesDoAgente
-            materiais={materiais}
-            value={form.knowledge_source_ids}
-            onChange={(ids) => patch({ knowledge_source_ids: ids })}
-            disabled={disabled}
-          />
-
-          {/* Os sistemas externos que ele consulta (Integrações via API, 0223) */}
-          <IntegracoesDoAgente
-            integracoes={integracoes}
-            emailConfigurado={props.emailConfigurado ?? false}
-            value={form.api_endpoint_ids}
-            onChange={(ids) => patch({ api_endpoint_ids: ids })}
-            disabled={disabled}
-          />
-
-          {/* Triggers */}
-          <Card className="space-y-2 p-4">
-            <h3 className="text-sm font-medium">{t("Quando ele entra em ação")}</h3>
-            <TriggerEditor
-              value={form.trigger_config}
-              onChange={(v) => patch({ trigger_config: v })}
-              disabled={disabled}
-              roteador={props.routerMembership ?? null}
-            />
-          </Card>
-
-          {/* Handoff */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Passar para uma pessoa")}</h3>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="handoff_tool_enabled"
-                checked={form.handoff_tool_enabled}
-                onCheckedChange={(v) => patch({ handoff_tool_enabled: v })}
-                disabled={disabled}
-              />
-              <Label htmlFor="handoff_tool_enabled">
-                {t("Deixar o agente chamar uma pessoa quando perceber que não é caso dele")}
-              </Label>
-            </div>
-            {form.handoff_tool_enabled ? (
-              <div className="space-y-1">
-                {/* Migration 0227: uma chance de resolver antes de passar. */}
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="human_request_try_first"
-                    checked={form.human_request_try_first}
-                    onCheckedChange={(v) => patch({ human_request_try_first: v })}
-                    disabled={disabled}
-                  />
-                  <Label htmlFor="human_request_try_first">
-                    {t("Quando o cliente pedir uma pessoa, tentar resolver uma vez antes")}
-                  </Label>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {t(
-                    "Ligado: o agente oferece ajuda uma vez; se o cliente insistir, passa na hora. Desligado: passa assim que o cliente pede. Na API oficial da Meta, o pedido de pessoa deve ser atendido sem demora — prefira desligado lá.",
-                  )}
-                </p>
-              </div>
-            ) : null}
-            <HandoffKeywordsInput
-              value={form.handoff_keywords}
-              onChange={(v) => patch({ handoff_keywords: v })}
-              disabled={disabled}
-            />
-          </Card>
-
-          {/* Casos humanos */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Pedir ajuda sem sair da conversa")}</h3>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="cases_enabled"
-                checked={form.cases_enabled}
-                onCheckedChange={(v) => patch({ cases_enabled: v })}
-                disabled={disabled}
-              />
-              <Label htmlFor="cases_enabled">
-                {t("Deixar o agente pedir uma tarefa a alguém e seguir conversando")}
-              </Label>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                "Diferente de passar a conversa: aqui o agente continua atendendo. Quando esbarra em algo que só uma pessoa resolve — aprovar um desconto, por exemplo — ele abre um pedido interno e retoma assim que for respondido.",
-              )}
-            </p>
-          </Card>
-
-          {/* Follow-up */}
-          <Card className="space-y-3 p-4">
-            <h3 className="text-sm font-medium">{t("Follow-up")}</h3>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                "Retomar sozinho quem parou de responder, para o interessado não sumir sem ninguém perceber.",
-              )}
-            </p>
-            <div className="flex items-center gap-2">
-              <Switch
-                id="followup_enabled"
-                checked={form.followup.enabled}
-                onCheckedChange={(v) =>
-                  patch({ followup: { ...form.followup, enabled: v } })
-                }
-                disabled={disabled}
-              />
-              <Label htmlFor="followup_enabled">
-                {t("Habilitar gatilhos automáticos de follow-up")}
-              </Label>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {t(
-                "Os fluxos abaixo só entram em ação para um cliente se este agente estiver publicado com follow-up habilitado.",
-              )}
-            </p>
-            <FollowupFlowPicker
-              value={form.followup.flow_pointer_ids}
-              onChange={(ids) =>
-                patch({ followup: { ...form.followup, flow_pointer_ids: ids } })
-              }
-              disabled={disabled}
-            />
-          </Card>
+          </AncoraDaSecao>
         </div>
       </div>
 
