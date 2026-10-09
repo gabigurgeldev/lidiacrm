@@ -11,9 +11,11 @@
  * 24 h (prospecção fria, reengajamento) segue barrado; e o limite diário do CRM
  * continua valendo para resposta também.
  */
-import { describe, expect, it } from 'vitest';
+import type pg from 'pg';
+import { describe, expect, it, vi } from 'vitest';
 
-import { pacingGate, type GateContext } from '@/lib/agent-engine/guardrails/before-send';
+import { pacingGate, runBeforeSend, type GateContext } from '@/lib/agent-engine/guardrails/before-send';
+import type { Logger } from '@/lib/agent-engine/obs/logger';
 import { PACING_DEFAULTS } from '@/lib/agent-engine/pacing/defaults';
 import { decidePacing } from '@/lib/agent-engine/pacing/engine';
 import { SPINNING_DEFAULTS } from '@/lib/agent-engine/spinning/defaults';
@@ -69,5 +71,59 @@ describe('warm-up × resposta a quem escreveu', () => {
     expect(v.pass).toBe(false);
     if (v.pass) throw new Error('inalcançável');
     expect(v.code).toBe('daily_cap');
+  });
+});
+
+/**
+ * O outro lado do mesmo incidente: quando o cap barra MESMO (prospecção, ou o
+ * limite diário do CRM), a IA para de enviar por aquele número até amanhã — e
+ * isso precisa aparecer na Central. Antes, o veto morria no trace.
+ */
+describe('cap do número que barra a IA abre aviso na Central', () => {
+  async function roda(sentToday: string, crmDailyLimit: number | null, lastInboundAt: Date | null) {
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        const q = String(sql);
+        if (q.includes('from channel_sessions')) return { rows: [{ provider: 'waha' }] };
+        if (q.includes('from pacing_ledger')) return { rows: [{ last_sent_at: null, sent_today: sentToday }] };
+        if (q.includes('last_inbound_at')) return { rows: lastInboundAt ? [{ last_inbound_at: lastInboundAt }] : [] };
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    };
+    const pool = { connect: vi.fn().mockResolvedValue(client), query: vi.fn().mockResolvedValue({ rows: [] }) };
+    const log: Logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const r = await runBeforeSend({
+      pool: pool as unknown as pg.Pool,
+      log,
+      tenantId: '00000000-0000-4000-8000-000000000001',
+      leadId: '00000000-0000-4000-8000-000000000002',
+      jobId: '00000000-0000-4000-8000-000000000003',
+      channelSessionId: '00000000-0000-4000-8000-000000000004',
+      body: 'oi',
+      optedOutThisTurn: false,
+      crmDailyLimit,
+      now: AGORA,
+      rng: () => 0,
+      sleep: async () => {},
+      gates: [pacingGate],
+      send: async () => ({ kind: 'sent', idempotencyKey: 'k', messageId: 'm' }),
+    });
+    const avisos = pool.query.mock.calls.filter(([sql]) => String(sql).includes("'pacing_cap'"));
+    return { r, avisos };
+  }
+
+  it('limite diário estourado: veta e abre UM aviso, com dedup pelo número', async () => {
+    const { r, avisos } = await roda('500', 500, new Date('2026-10-08T23:17:04Z'));
+    expect(r.status).toBe('vetoed');
+    expect(avisos).toHaveLength(1);
+    expect(String(avisos[0]![0])).toMatch(/where not exists/);
+    expect(avisos[0]![1]).toContain('00000000-0000-4000-8000-000000000004');
+  });
+
+  it('envio que passa não abre aviso nenhum', async () => {
+    const { r, avisos } = await roda('3', 500, new Date('2026-10-08T23:17:04Z'));
+    expect(r.status).toBe('sent');
+    expect(avisos).toHaveLength(0);
   });
 });
