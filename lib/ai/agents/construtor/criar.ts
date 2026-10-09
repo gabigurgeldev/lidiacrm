@@ -26,7 +26,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { audit } from "@/lib/audit";
 import { listSelectableChannels } from "@/lib/channels/selectable";
 import { capacidadesPorPacote, catalogoComHandler } from "@/lib/ai/agents/capacidades-padrao";
-import { linhaDeVersaoNova } from "@/lib/ai/agents/linha-da-versao";
+import { conteudoDaVersao } from "@/lib/ai/agents/conteudo-da-versao";
 import { resolverProvedorDoAgente } from "@/lib/ai/agents/provedor-do-agente";
 import { versionCreateSchema, type VersionInput } from "@/lib/ai/agents/validation";
 import { temChaveDeEmbedding } from "@/lib/ai/embeddings/chave";
@@ -185,7 +185,7 @@ export async function criarAgenteDaPrevia(
       organization_id: orgId,
       agent_id: agentId,
       version_number: 1,
-      ...linhaDeVersaoNova(v),
+      ...conteudoDaVersao(v),
       status: "draft",
       created_by: userId,
     })

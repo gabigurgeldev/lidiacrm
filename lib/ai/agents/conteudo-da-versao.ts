@@ -2,8 +2,11 @@
  * O CONTEÚDO de uma versão de agente — as colunas de `ai_agent_versions` que a
  * tela edita —, montado num lugar só.
  *
- * Três caminhos gravam versão: salvar rascunho, criar agente e reverter para uma
- * versão antiga. Cada um listava as colunas à mão, e cada lista esqueceu alguma
+ * Os caminhos que gravam versão — salvar rascunho, criar agente (pela tela, pela
+ * API e pelo construtor "Criar com IA"), reverter e aplicar proposta — passam
+ * todos por aqui. (O construtor nasceu com uma cópia própria desta lista,
+ * `linha-da-versao.ts`, campo a campo igual; ela foi absorvida aqui para não
+ * existirem duas fontes da verdade.) Cada um listava as colunas à mão, e cada lista esqueceu alguma
  * coisa em algum momento:
  *
  *  - criar agente descartava papel Operador, escopo de funil e acervo (consertado

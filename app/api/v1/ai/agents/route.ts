@@ -22,7 +22,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
 import { agentCreateSchema } from "@/lib/ai/guardrails-schema";
 import { agentMcpCreateSchema } from "@/lib/ai/agents/validation";
-import { linhaDeVersaoNova } from "@/lib/ai/agents/linha-da-versao";
+import { conteudoDaVersao } from "@/lib/ai/agents/conteudo-da-versao";
 
 export const dynamic = "force-dynamic";
 
@@ -154,9 +154,9 @@ export async function POST(req: NextRequest): Promise<Response> {
         organization_id: activeOrg.orgId,
         agent_id: agentRow.id,
         version_number: 1,
-        // A lista de colunas mora em `linhaDeVersaoNova` — o construtor de agente
-        // cria pelo mesmo mapeamento.
-        ...linhaDeVersaoNova(v),
+        // A lista de colunas mora em `conteudoDaVersao` — salvar, reverter, aplicar
+        // proposta e o construtor de agente gravam pelo mesmo mapeamento.
+        ...conteudoDaVersao(v),
         status: "draft",
         created_by: authUser.id,
       })
