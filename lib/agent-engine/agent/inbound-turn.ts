@@ -3013,7 +3013,7 @@ async function executarTurnoDoAgente(
           // O lastro é a chamada de modelo que PRODUZIU este checkpoint
           // (llm_calls.id). Sem ele a linha entraria como 'system' e perderia a
           // autoria justamente no evento mais "de IA" que existe.
-          ...(closing.callId ? { evidence: { llm_call_ids: [closing.callId] } } : {}),
+          ...(closing?.callId ? { evidence: { llm_call_ids: [closing.callId] } } : {}),
           ...(agentConfig?.agentId ? { agentId: agentConfig.agentId } : {}),
           reason: mudanca.reason,
           payload: {

@@ -876,7 +876,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
     if (veto !== null && (veto.code === 'warmup_cap' || veto.code === 'daily_cap')) {
       await avisarCapDoNumero(
         args.pool,
-        { tenantId: args.tenantId, channelSessionId: args.channelSessionId, code: veto.code, reason: veto.reason },
+        { tenantId: args.tenantId, channelSessionId: args.channelSessionId, code: veto.code, reason: veto.message },
         args.log,
       );
     }
