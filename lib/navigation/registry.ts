@@ -38,6 +38,7 @@ import {
   ScalesSimple,
   ShieldCheck,
   Signpost,
+  ArrowsMerge,
   Sparkle,
   SquaresFour,
   Storefront,
@@ -363,6 +364,17 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     section: "Montar o agente",
     minRole: "manager",
     sidebar: true,
+  },
+  {
+    // Migration 0229: a camada que decide QUEM conduz cada conversa (agente,
+    // fluxo ou equipe). Desligada por padrão; ligar é decisão do admin aqui.
+    href: "/app/ai/coordenador",
+    label: "Coordenador",
+    description: "Quem conduz cada conversa — agente, fluxo ou equipe — sem duas vozes ao mesmo tempo.",
+    icon: ArrowsMerge,
+    group: "ia",
+    section: "Montar o agente",
+    minRole: "manager",
   },
   {
     href: "/app/ai/credentials",

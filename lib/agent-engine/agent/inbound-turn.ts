@@ -135,6 +135,7 @@ import {
   NOME_DA_FERRAMENTA_DO_COORDENADOR,
 } from '@/lib/coordenador/ferramenta';
 import { carregarVersaoDaPolitica } from '@/lib/coordenador/politica/resolver';
+import { vezDoTurnoSemMensagem } from '@/lib/coordenador/vez';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
 import { sendInBubbles } from './split-message';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
@@ -751,6 +752,7 @@ export interface InboundTurnDeps {
     contactId: string;
     channelSessionId: string;
     jobId: string;
+    liberadoPorFluxo: string | null;
   }) => Promise<ResultadoDaEntrada>;
 }
 
@@ -1231,12 +1233,13 @@ async function executarTurnoDoAgente(
   // com uma pessoa no comando é ADMITIDA para ninguém automático, e não fica
   // pendente para ser relida como pergunta nova quando a equipe devolver.
   //
-  // Turno entregue por um fluxo legado (`crm.handoff_to_agent`) não passa por
-  // aqui: a delegação com retorno do coordenador entra com os nós `coord.*`.
+  // Turno entregue por um fluxo (`crm.handoff_to_agent`) também passa: a
+  // execução que entregou deixa de ser a dona, e o coordenador decide QUAL
+  // agente atende — em vez de o roteador antigo decidir por fora dele.
   let coordenacao: ResultadoDaEntrada = { modo: 'off' };
   // No ensaio o coordenador não é consultado: o teste é do agente do formulário,
   // e o decisor chamaria o modelo para talvez entregar a conversa a outro.
-  if (job.kind === 'inbound_turn' && input.entreguePorFluxo === undefined && deps.ensaio === undefined) {
+  if (job.kind === 'inbound_turn' && deps.ensaio === undefined) {
     const coordenar =
       deps.coordenar ??
       ((p: pg.Pool, e: Parameters<NonNullable<InboundTurnDeps['coordenar']>>[1]) =>
@@ -1247,12 +1250,44 @@ async function executarTurnoDoAgente(
       contactId: leadId,
       channelSessionId: input.channelSessionId,
       jobId: job.id,
+      liberadoPorFluxo: input.entreguePorFluxo ?? null,
     });
     if (coordenacao.modo === 'active' && coordenacao.acao === 'nada') {
       runLog.info('turno pulado — o coordenador não entregou a conversa a um agente', {
         motivo: coordenacao.motivo,
       });
       return;
+    }
+  } else if (turnoVaiFalarComOLead(job)) {
+    // Follow-up e resposta de caso não trazem mensagem nova: não há o que
+    // decidir, só de quem é a vez. Agente dono → fala como ele, com a geração
+    // atual. Fluxo no meio de uma etapa → adia. Pessoa → não fala.
+    const vez = await vezDoTurnoSemMensagem(pool, {
+      organizationId: tenantId,
+      conversationId: input.conversationId,
+      channelSessionId: input.channelSessionId,
+    });
+    if (vez.acao === 'pular') {
+      runLog.info('turno pulado — o coordenador não dá a vez', { kind: job.kind, motivo: vez.motivo });
+      return;
+    }
+    if (vez.acao === 'adiar') {
+      await rescheduleJob(pool, job.id, ctx.workerId, {
+        delayMs: vez.esperaMs,
+        reason: 'um fluxo está conduzindo a conversa — turno adiado pelo coordenador',
+      });
+      runLog.info('turno adiado — um fluxo está conduzindo a conversa', { kind: job.kind, espera_ms: vez.esperaMs });
+      throw new JobSettledError('fluxo conduzindo a conversa — job reagendado pelo coordenador');
+    }
+    if (vez.acao === 'seguir_como_agente') {
+      coordenacao = {
+        modo: 'active',
+        acao: 'agente',
+        agentId: vez.agentId,
+        geracao: vez.geracao,
+        politicaVersaoId: vez.politicaVersaoId,
+        motivo: 'continua_responsavel',
+      };
     }
   }
   const coordenadorConduz = coordenacao.modo === 'active' && coordenacao.acao === 'agente' ? coordenacao : null;
