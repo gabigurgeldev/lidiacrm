@@ -89,6 +89,8 @@ import { capacidadesEntreguesAoOperador, catalogoEntregueAoOperador } from './en
 import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memory';
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { CONVERSA_EM_ANDAMENTO_MS, montarAssunto, passaNoFiltro } from './filtro-de-assunto';
+import { blocoDoMomento, renderizarConversa } from './abertura-legivel';
+import { deveCompactar, lerMarcaDaCompactacao } from './marca-da-compactacao';
 import {
   ferramentasDosPassos,
   gravarRegistroDoTurno,
@@ -918,6 +920,8 @@ export function ritualBlocks(
    * consegue usar um id para alguma coisa?".
    */
   projeta = false,
+  /** Fuso do atendimento — os horários da transcrição saem nele (`abertura-legivel.ts`). */
+  fuso: string | null = null,
 ): string[] {
   const checkpointBlock = previous
     ? JSON.stringify({
@@ -958,14 +962,29 @@ export function ritualBlocks(
     '## Memória do lead (índice de notas — corpo sob demanda via get_lead_note)',
     notesIndexBlock,
     '',
-    '## Contexto do lead (contato + últimas mensagens)',
+    '## Contexto do lead (contato)',
     // A projeção (spec 16 §4) fecha a terceira porta: sem ela, `lead_id`,
     // `conversation_id` e `media_storage_path` chegam crus ao prompt — e UUID
     // cru na tela do cliente foi MEDIDO. Ela só arma quando o turno não tem
     // ferramenta de catálogo (ver `turnoProjeta`), porque é aí que esses ids
     // não têm uso nenhum. Nos demais, quem cobre é o gate de saída.
-    JSON.stringify(projeta ? projetarContexto(context) : context),
+    //
+    // As mensagens saem do JSON e viram transcrição logo abaixo: o modelo lia
+    // uma estrutura de dados e respondia como quem preenche formulário.
+    JSON.stringify(semMensagens(projeta ? projetarContexto(context) : context)),
+    '',
+    '## Conversa (da mais antiga para a mais recente)',
+    renderizarConversa((context as { messages?: LeadContext['messages'] }).messages, {
+      fuso,
+      mostrarMidia: !projeta,
+    }),
   ];
+}
+
+/** O objeto de contexto sem a lista de mensagens (que vira transcrição). */
+function semMensagens<T extends object>(ctx: T): Omit<T, 'messages' | 'mensagens'> {
+  const { messages: _m, mensagens: _n, ...resto } = ctx as T & { messages?: unknown; mensagens?: unknown };
+  return resto as Omit<T, 'messages' | 'mensagens'>;
 }
 
 /** Abertura determinística do run inbound — o ritual em texto (pt-br). */
@@ -985,6 +1004,7 @@ export function buildOpeningMessage(
    * quando limparam só a descrição (`crm_list_webhook_sources`, medido).
    */
   entregues: readonly string[] = [],
+  fuso: string | null = null,
 ): string {
   const entregue = (nome: string): boolean => entregues.includes(nome);
   return [
@@ -993,7 +1013,7 @@ export function buildOpeningMessage(
     // frase de quem escreveu três seguidas.
     'Novo turno de atendimento: o lead escreveu. As mensagens dele desde a sua última resposta estão no fim do histórico abaixo — responda a todas juntas, não só à última.',
     '',
-    ...ritualBlocks(previous, leadState, context, notesIndexBlock, projeta),
+    ...ritualBlocks(previous, leadState, context, notesIndexBlock, projeta, fuso),
     '',
     'Responda ao lead usando a tool send_message — NUNCA escreva a resposta como texto direto',
     '(texto fora de tool é descartado pelo runtime). Use get_lead_context se precisar reler o contexto.',
@@ -1067,6 +1087,8 @@ export interface AgentTurnInput {
     projeta?: boolean;
     /** ferramentas que saíram para o Operador — o prompt não pode citá-las. */
     entregues?: readonly string[];
+    /** fuso do atendimento, para os horários da transcrição. */
+    fuso?: string | null;
   }) => string;
 }
 
@@ -1403,8 +1425,12 @@ async function executarTurnoDoAgente(
   // ficava sem nada. Conferido aqui, antes de qualquer modelo: `sentToday` só
   // cresce dentro do dia, então teto atingido agora segue atingido no envio
   // (argumento inteiro em teto-do-numero.ts). Throttle continua com o gate.
+  // Fuso do atendimento (data/hora da abertura): o do número, sobrescrito pelo
+  // horário de funcionamento do agente quando ele existe — ver abertura-legivel.ts.
+  let fusoDoNumero: string | null = null;
   if (turnoVaiFalarComOLead(job)) {
     const { knobs } = await loadChannelKnobs(pool, tenantId, input.channelSessionId, runLog);
+    fusoDoNumero = knobs.timezone;
     const agora = clock();
     if (!janelaDeEnvioAberta(agora, knobs)) {
       const abertura = proximaAberturaDaJanela(agora, knobs);
@@ -1883,7 +1909,27 @@ async function executarTurnoDoAgente(
   // summary DURÁVEL segue vindo do checkpoint de fechamento; aqui ele só alimenta o prompt.
   let effectivePrevious = previous;
   let effectiveContext = openingContext.context;
-  if (deps.knobs.compaction !== undefined) {
+  // Marca-d'água (marca-da-compactacao.ts): com a janela cheia, compactar de novo
+  // só quando a conversa andou; entre uma e outra, o resumo durável do checkpoint
+  // e o histórico aparado — sem as duas chamadas de IA por mensagem.
+  const reaproveitaResumo =
+    deps.knobs.compaction !== undefined &&
+    openingContext.context.messages.length >= deps.knobs.compaction.triggerMessages &&
+    !deveCompactar({
+      mensagensNaJanela: openingContext.context.messages.length,
+      gatilho: deps.knobs.compaction.triggerMessages,
+      marca: await lerMarcaDaCompactacao(pool, { tenantId, leadId }).catch(() => ({ ultima: null, novasDesdeEla: 0 })),
+      temResumoDuravel: (previous?.rolling_summary ?? '').trim() !== '',
+    });
+  if (reaproveitaResumo && deps.knobs.compaction !== undefined) {
+    effectiveContext = {
+      ...openingContext.context,
+      messages: trimTranscriptToBudget(openingContext.context.messages, deps.knobs.compaction.transcriptMaxTokens),
+    };
+    runLog.info('compactação reaproveitada — conversa andou pouco desde a última', {
+      mensagens_na_janela: openingContext.context.messages.length,
+    });
+  } else if (deps.knobs.compaction !== undefined) {
     const compacted = await maybeCompact(
       pool,
       deps.llmCfg,
@@ -3157,6 +3203,7 @@ async function executarTurnoDoAgente(
     projeta: projetaContexto,
     mcp_tools_no_turno: mcpToolIdsDoTurno.length,
   });
+  const fusoDoTurno = agentConfig?.janelaDeAtendimento?.timezone ?? fusoDoNumero;
   const openingBase = input.buildOpening({
     previous: effectivePrevious,
     leadState,
@@ -3164,6 +3211,7 @@ async function executarTurnoDoAgente(
     notesIndexBlock,
     projeta: projetaContexto,
     entregues,
+    fuso: fusoDoTurno,
   });
   // Sufixos por-lead (situacionais, voláteis — depois do prefixo cacheável F2-17): corpos de
   // skill casadas (F3-09) + hint do classificador (F3-11) + instrução de split (F4-xx, quando
@@ -3202,6 +3250,9 @@ async function executarTurnoDoAgente(
           .catch(() => '')
       : '';
   const openingSuffixes = [
+    // Volátil por natureza (muda a cada turno): mora no sufixo, nunca no
+    // prefixo cacheável.
+    blocoDoMomento(clock(), fusoDoTurno),
     matchedSkillsBlock,
     stageHintBlock,
     retornoBlock,
@@ -3742,8 +3793,8 @@ export function createInboundTurnHandler(deps: InboundTurnDeps) {
       inboundMessageId: payload.inbound_message_id,
       ...(payload.entregue_por_fluxo !== undefined ? { entreguePorFluxo: payload.entregue_por_fluxo } : {}),
       ...(payload.coord_chamada_id !== undefined ? { retornoDaChamada: payload.coord_chamada_id } : {}),
-      buildOpening: ({ previous, leadState, context, notesIndexBlock, projeta, entregues }) =>
-        buildOpeningMessage(previous, leadState, context, notesIndexBlock, projeta, entregues),
+      buildOpening: ({ previous, leadState, context, notesIndexBlock, projeta, entregues, fuso }) =>
+        buildOpeningMessage(previous, leadState, context, notesIndexBlock, projeta, entregues, fuso ?? null),
     });
   };
 }

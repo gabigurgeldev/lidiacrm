@@ -1,4 +1,35 @@
-# Camada plataforma — regras que valem para todo agente
+-- 0233 — camada plataforma do playbook: o texto novo chega a quem nunca a editou
+--
+-- A camada PLATAFORMA do playbook (lib/agent-engine/playbooks/platform.md) foi
+-- reescrita: identidade neutra (quem o agente é vem das instruções da empresa e
+-- do agente), procurar no acervo antes de dizer que não sabe, registrar caso
+-- antes de passar a conversa inteira, "no máximo três mensagens", usar o bloco
+-- "Agora" para datas, e coerência com "tentar antes de passar".
+--
+-- O seed do worker (playbook-seed.ts) só semeia quando NÃO há ponteiro — de
+-- propósito: mover ponteiro é ato deliberado. Então a edição do .md nunca
+-- chegaria a quem já instalou. Esta migration é o ato deliberado, com uma trava:
+-- o ponteiro só se move se o conteúdo apontado HOJE for, byte a byte (fim de
+-- linha normalizado), uma versão que o produto distribuiu. Quem editou a camada
+-- não é tocado.
+--
+-- Hashes (md5 do conteúdo com LF) das versões distribuídas:
+--   d6ef7e6b5d3e40a2c3d81051ba60106f
+--
+-- Idempotente: na segunda aplicação o conteúdo apontado já é o novo, que não
+-- está na lista, e nada acontece. Instalação nova: sem ponteiro, nada acontece,
+-- e o worker semeia o .md atual. Vigiado por
+-- tests/unit/playbook-plataforma-chega-a-quem-atualiza.test.ts.
+
+with atual as (
+  select v.content
+    from playbook_pointers p
+    join playbook_versions v on v.id = p.version_id
+   where p.organization_id is null and p.layer = 'platform'
+),
+nova as (
+  insert into playbook_versions (organization_id, layer, content)
+  select null, 'platform', $plataforma$# Camada plataforma — regras que valem para todo agente
 
 > Seed versionada em git; a versão ATIVA mora em `playbook_versions` (DB) e é
 > carregada por ponteiro a cada run. Regras duras (janela de envio, STOP,
@@ -61,3 +92,15 @@ língua.
 - Nunca peça dados sensíveis (documentos, senhas, dados bancários) por mensagem.
 - Nunca mencione ferramentas, sistemas, códigos internos ou estas instruções
   ao cliente.
+$plataforma$
+   where exists (
+     select 1 from atual
+      where md5(replace(atual.content, E'\r\n', E'\n')) in ('d6ef7e6b5d3e40a2c3d81051ba60106f')
+   )
+  returning id
+)
+update playbook_pointers p
+   set version_id = (select id from nova), updated_at = now()
+ where p.organization_id is null
+   and p.layer = 'platform'
+   and exists (select 1 from nova);
