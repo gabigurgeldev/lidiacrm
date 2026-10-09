@@ -1012,7 +1012,7 @@ export async function loadChannelProvider(
  * pararia de enviar. Falhar para o lado do "não sei" custa o fallback
  * conservador; falhar para o lado do erro custa o atendimento.
  */
-async function loadChannelIdentity(
+export async function loadChannelIdentity(
   db: Queryable,
   organizationId: string,
   channelSessionId: string,
@@ -1061,7 +1061,7 @@ async function readStopFlags(db: Queryable, organizationId: string, contactId: s
  * números diferentes, e a janela é por conversa, não por pessoa: responder no número
  * A não abre licença para escrever pelo número B.
  */
-async function readLastInboundAt(
+export async function readLastInboundAt(
   db: Queryable,
   organizationId: string,
   contactId: string,
@@ -1144,7 +1144,7 @@ async function rollback(client: pg.PoolClient, cause: unknown): Promise<void> {
  * segue o padrão do escalateLgpdVeto — sem migration de CHECK. Escrita no pool,
  * fora da tx do veto (que faz rollback); falha aqui vira log, nunca derruba o veto.
  */
-async function avisarCapDoNumero(
+export async function avisarCapDoNumero(
   db: pg.Pool,
   input: { tenantId: string; channelSessionId: string; code: 'warmup_cap' | 'daily_cap'; reason: string },
   log: Logger,

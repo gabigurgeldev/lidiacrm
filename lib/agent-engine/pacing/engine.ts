@@ -138,6 +138,33 @@ export function warmupCapFor(ageDays: number, steps: WarmupStep[]): number | nul
   return cap;
 }
 
+/**
+ * De quando conta a idade do número para o aquecimento.
+ *
+ * A data declarada em `channel_knobs.number_activated_at` vence; sem ela, conta
+ * desde que a conexão foi criada no CRM (`channel_sessions.created_at`). Antes a
+ * falta de linha em `channel_knobs` — o estado de TODO número em que ninguém
+ * abriu a tela de ritmo — valia idade 0 para sempre: teto de 20 envios por dia
+ * num número de meses, e o agente calava a partir da 21ª mensagem do dia.
+ *
+ * Contar da conexão continua conservador: um número recém-conectado sobe os
+ * degraus de aquecimento a partir do dia em que começou a enviar por aqui.
+ *
+ * Regra ÚNICA para motor, automação e tela — duas cópias foi como a tela passou
+ * a prometer um teto e o motor a aplicar outro.
+ */
+export function ativacaoEfetiva(
+  declarada: Date | string | null | undefined,
+  conexaoCriadaEm: Date | string | null | undefined,
+): Date | null {
+  for (const valor of [declarada, conexaoCriadaEm]) {
+    if (valor === null || valor === undefined || valor === '') continue;
+    const data = valor instanceof Date ? valor : new Date(valor);
+    if (Number.isFinite(data.getTime())) return data;
+  }
+  return null;
+}
+
 function jitterOf(rng: () => number, knobs: PacingKnobs): number {
   return Math.floor(rng() * (knobs.jitterMaxMs + 1));
 }

@@ -3087,6 +3087,9 @@ export const DICIONARIO: Traducoes = {
     es: "día(s) de uso — ya formado. Vale solo el tope diario de abajo.",
   },
   "Hoje o aquecimento libera": { es: "Hoy el calentamiento libera" },
+  "A idade é contada desde que o número foi conectado aqui. Se ele já era usado antes, informe desde quando.": {
+    es: "La edad se cuenta desde que el número se conectó aquí. Si ya se usaba antes, indica desde cuándo.",
+  },
   "envio(s) — o número tem": { es: "envío(s) — el número tiene" },
   "dia(s) de uso. Enquanto esse número for menor que o teto diário, é ELE que limita, e mexer no teto diário não muda nada.": {
     es: "día(s) de uso. Mientras ese número sea menor que el tope diario, es ÉL quien limita, y cambiar el tope diario no cambia nada.",

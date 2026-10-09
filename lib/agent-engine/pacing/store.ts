@@ -8,7 +8,7 @@
 import type { Logger } from '../obs/logger';
 import type { Queryable } from '../queue/queue';
 import { PACING_DEFAULTS, type PacingKnobs, type WarmupStep } from './defaults';
-import { dayStartInTz, type PacingState } from './engine';
+import { ativacaoEfetiva, dayStartInTz, type PacingState } from './engine';
 
 interface ChannelKnobsRow {
   throttle_ms: number | null;
@@ -18,7 +18,9 @@ interface ChannelKnobsRow {
   allow_sunday: boolean | null;
   timezone: string | null;
   warmup_daily_caps: unknown; // jsonb — shape validado em parseWarmupCaps (nunca confiado)
-  number_activated_at: Date;
+  /** null quando a conexão não tem linha em channel_knobs (LEFT JOIN). */
+  number_activated_at: Date | null;
+  conexao_criada_em: Date | null;
 }
 
 /**
@@ -44,7 +46,7 @@ export function parseWarmupCaps(value: unknown): WarmupStep[] | null {
 
 export interface ChannelPacingConfig {
   knobs: PacingKnobs;
-  /** null = sem linha em channel_knobs → o engine trata como idade 0 (conservador). */
+  /** knobs.number_activated_at ?? channel_sessions.created_at; null = conexão inexistente (idade 0). */
   numberActivatedAt: Date | null;
 }
 
@@ -60,10 +62,17 @@ export async function loadChannelKnobs(
   logger?: Logger,
 ): Promise<ChannelPacingConfig> {
   const { rows } = await db.query<ChannelKnobsRow>(
-    `select throttle_ms, jitter_max_ms, window_start_hour, window_end_hour,
-            allow_sunday, timezone, warmup_daily_caps, number_activated_at
-     from channel_knobs
-     where organization_id = $1 and channel_session_id = $2`,
+    // LEFT JOIN a partir da conexão: número sem linha de knobs tem idade contada
+    // desde que foi conectado (`channel_sessions.created_at`). Antes, sem linha a
+    // idade era 0 PARA SEMPRE — teto de aquecimento de 20 envios/dia num número
+    // de meses, e o agente calava sem aviso depois da 20ª mensagem do dia.
+    `select k.throttle_ms, k.jitter_max_ms, k.window_start_hour, k.window_end_hour,
+            k.allow_sunday, k.timezone, k.warmup_daily_caps,
+            k.number_activated_at, s.created_at as conexao_criada_em
+     from channel_sessions s
+     left join channel_knobs k
+       on k.organization_id = s.organization_id and k.channel_session_id = s.id
+     where s.organization_id = $1 and s.id = $2`,
     [tenantId, channelSessionId],
   );
   const row = rows[0];
@@ -94,7 +103,7 @@ export async function loadChannelKnobs(
       timezone: row.timezone ?? PACING_DEFAULTS.timezone,
       warmupDailyCaps,
     },
-    numberActivatedAt: row.number_activated_at,
+    numberActivatedAt: ativacaoEfetiva(row.number_activated_at, row.conexao_criada_em),
   };
 }
 

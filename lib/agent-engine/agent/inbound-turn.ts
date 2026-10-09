@@ -90,6 +90,12 @@ import { composeSystemPrompt, loadOrgMemory, renderOrgMemory } from './org-memor
 import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
+import {
+  MENSAGEM_DO_TETO,
+  tetoDoNumeroAtingido,
+  vetoDeTetoDoNumero,
+  type TetoDoNumeroAtingido,
+} from './teto-do-numero';
 import { resolveTurnAgent, type TurnAgentResolution } from './resolve-turn-agent';
 import { loadPublishedAgentConfigById } from './agent-config';
 import {
@@ -112,7 +118,7 @@ import {
 } from './skills';
 import { readSkillReference, skillHasReferences } from './skill-references';
 import { READ_ONLY_TOOLS, wrapToolsWithBreaker, type ToolBreakerThresholds } from './tool-breaker';
-import { loadChannelProvider, runBeforeSend } from '../guardrails/before-send';
+import { avisarCapDoNumero, loadChannelProvider, runBeforeSend } from '../guardrails/before-send';
 import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
 import { coordenarTurnoDeEntrada, type ResultadoDaEntrada } from '@/lib/coordenador/entrada';
@@ -1302,9 +1308,11 @@ async function executarTurnoDoAgente(
   // anti-ban não dropa — re-agenda para a próxima abertura" (followup-turn.ts) —
   // e é essa regra que passa a valer também para a resposta do agente.
   //
-  // Só a JANELA adia. Cap diário e warm-up continuam com o gate de envio: eles
-  // dependem de quanto já saiu hoje, e antecipá-los aqui adiaria turno que, na
-  // hora do envio, teria passado.
+  // O TETO DO DIA (aquecimento por idade / teto diário) também adia — pelo
+  // mesmo motivo: no `send_message` o veto virava erro de ensino e o cliente
+  // ficava sem nada. Conferido aqui, antes de qualquer modelo: `sentToday` só
+  // cresce dentro do dia, então teto atingido agora segue atingido no envio
+  // (argumento inteiro em teto-do-numero.ts). Throttle continua com o gate.
   if (turnoVaiFalarComOLead(job)) {
     const { knobs } = await loadChannelKnobs(pool, tenantId, input.channelSessionId, runLog);
     const agora = clock();
@@ -1320,6 +1328,32 @@ async function executarTurnoDoAgente(
         abertura: abertura.toISOString(),
       });
       throw new JobSettledError('fora da janela anti-ban — job reagendado para a abertura da janela');
+    }
+
+    const teto = await tetoDoNumeroAtingido(pool, {
+      tenantId,
+      channelSessionId: input.channelSessionId,
+      contactId: leadId,
+      now: agora,
+      log: runLog,
+    });
+    if (teto !== null) {
+      await rescheduleJob(pool, job.id, ctx.workerId, {
+        delayMs: Math.max(teto.nextAllowedAt.getTime() - agora.getTime(), 1_000),
+        reason: `teto do dia do número atingido (${teto.code}) — turno adiado para a próxima abertura`,
+      });
+      // O mesmo aviso que a cadeia de envio abre quando o teto a barra — aqui ela
+      // não chega a rodar, então quem avisa é a pré-checagem.
+      await avisarCapDoNumero(
+        pool,
+        { tenantId, channelSessionId: input.channelSessionId, code: teto.code, reason: teto.reason },
+        runLog,
+      );
+      runLog.info('turno adiado — teto do dia do número atingido', {
+        code: teto.code,
+        abertura: teto.nextAllowedAt.toISOString(),
+      });
+      throw new JobSettledError('teto do dia do número atingido — job reagendado para a próxima abertura');
     }
   }
 
@@ -1815,6 +1849,10 @@ async function executarTurnoDoAgente(
   // solta o envio com registro. Por turno (closure), nunca cross-turno.
   let internalVocabularyVetoCount = 0;
   const outcomes: ChannelSendResult[] = [];
+  // O teto do dia do número vetou um envio NESTE turno (corrida: outro turno do
+  // mesmo número gastou o último envio entre a pré-checagem e aqui). Se nada saiu,
+  // o turno é adiado depois do modelo, em vez de terminar "ok" e mudo.
+  let tetoVetado: TetoDoNumeroAtingido | null = null;
   // Citações acumuladas por buscas de conhecimento DESTE turno — anexadas à
   // próxima outbound enviada (shape de lib/ai/citations/types, que a UI já lê).
   let pendingCitations: ReturnType<typeof citationsFromHits> = [];
@@ -2020,6 +2058,11 @@ async function executarTurnoDoAgente(
         });
 
         if (chain.status === 'vetoed') {
+          const teto = vetoDeTetoDoNumero(chain);
+          if (teto !== null) {
+            tetoVetado ??= teto;
+            return { ok: false, error: { code: chain.code, message: MENSAGEM_DO_TETO } };
+          }
           return { ok: false, error: { code: chain.code, message: chain.message } };
         }
         const outcome = chain.outcome;
@@ -2230,6 +2273,13 @@ async function executarTurnoDoAgente(
             });
           }
           if (chain.status === 'vetoed') {
+            // Teto do dia: não há o que o modelo reescrever — tentar de novo só
+            // gasta passos. O turno é adiado depois do modelo (ver `tetoVetado`).
+            const teto = vetoDeTetoDoNumero(chain);
+            if (teto !== null) {
+              tetoVetado ??= teto;
+              return { ok: false, error: { code: chain.code, message: MENSAGEM_DO_TETO } };
+            }
             // Erro de ENSINO pt-br (mesmo shape de get_lead_context/breaker): o
             // modelo o vê no turno seguinte. NÃO é exceção — não derruba o run.
             return { ok: false, error: { code: chain.code, message: chain.message } };
@@ -3042,6 +3092,32 @@ async function executarTurnoDoAgente(
     // ponytail: retry re-roda o run inteiro (LLM incluso); seq N re-encontra a
     // linha do ledger — 'accepted' pula, 'failed' rotaciona a key (F2-06).
     throw new Error('envio marcado como failed pelo CRM — run re-tentado pela fila');
+  }
+
+  // Teto do dia vetou e NADA saiu: o cliente ficaria sem resposta até escrever de
+  // novo. Adia o turno inteiro para a próxima abertura — sem checkpoint, porque a
+  // conversa não andou. Se algo saiu, o turno fecha normal: o cliente foi
+  // respondido. Nos dois casos o aviso na Central já foi aberto pela própria
+  // cadeia de envio, no veto (`avisarCapDoNumero`).
+  // A cópia tipada é necessária: `tetoVetado` é atribuída dentro do execute do
+  // `send_message` (closure), e o compilador, que não enxerga essa atribuição,
+  // estreitaria a variável para `null` aqui.
+  const tetoNoEnvio = tetoVetado as TetoDoNumeroAtingido | null;
+  if (tetoNoEnvio !== null) {
+    const algoSaiu = outcomes.some((o) => o.kind === 'sent' || o.kind === 'already_sent' || o.kind === 'queued');
+    if (!algoSaiu) {
+      const agora = clock();
+      await rescheduleJob(pool, job.id, ctx.workerId, {
+        delayMs: Math.max(tetoNoEnvio.nextAllowedAt.getTime() - agora.getTime(), 1_000),
+        reason: `teto do dia do número atingido no envio (${tetoNoEnvio.code}) — turno adiado para a próxima abertura`,
+      });
+      await mcpCleanup?.();
+      runLog.info('turno adiado — teto do dia atingido no envio, nada saiu', {
+        code: tetoNoEnvio.code,
+        abertura: tetoNoEnvio.nextAllowedAt.toISOString(),
+      });
+      throw new JobSettledError('teto do dia do número atingido no envio — job reagendado para a próxima abertura');
+    }
   }
 
   // F3-10: poda os tool results antigos da fita do run ANTES de reenviá-los no fechamento

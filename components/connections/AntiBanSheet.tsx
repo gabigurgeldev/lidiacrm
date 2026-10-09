@@ -40,7 +40,7 @@ interface FormState {
   daily_message_limit: string;
   allow_sunday: boolean;
   timezone: string;
-  /** `yyyy-mm-dd` do input date; '' = não declarado (o motor trata como idade 0). */
+  /** `yyyy-mm-dd` do input date; '' = não declarado (o motor conta da criação da conexão). */
   numero_em_uso_desde: string;
   pular_aquecimento: boolean;
 }
@@ -170,6 +170,9 @@ export function AntiBanSheet({ item, canWrite, onClose }: Props) {
                 : item.warmup.cap_today === null
                   ? `${t("Número com")} ${item.warmup.age_days} ${t("dia(s) de uso — já formado. Vale só o teto diário abaixo.")}`
                   : `${t("Hoje o aquecimento libera")} ${item.warmup.cap_today} ${t("envio(s) — o número tem")} ${item.warmup.age_days} ${t("dia(s) de uso. Enquanto esse número for menor que o teto diário, é ELE que limita, e mexer no teto diário não muda nada.")}`}
+              {!form.pular_aquecimento && item.warmup.age_from === "conexao"
+                ? ` ${t("A idade é contada desde que o número foi conectado aqui. Se ele já era usado antes, informe desde quando.")}`
+                : null}
             </p>
           </fieldset>
 
