@@ -74,6 +74,7 @@ export const KIND_LABEL = {
   integracao_api_falhando: "Uma integração via API está falhando e o agente parou de consultá-la",
   acao_externa_falhou: "O cliente confirmou uma correção e ela não foi aplicada",
   verificacao_bloqueada: "Alguém errou o código de verificação de uma conta várias vezes",
+  coordenador_preso: "Uma conversa ficou sem quem a conduza e precisa de alguém da equipe",
   other: "Aviso do assistente",
 } as const satisfies Record<InboxKind, string>;
 
