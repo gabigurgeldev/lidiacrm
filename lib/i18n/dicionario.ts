@@ -8020,6 +8020,9 @@ export const DICIONARIO: Traducoes = {
   "Nome do cabeçalho": { es: "Nombre del encabezado" },
   "Criar integração": { es: "Crear integración" },
   "Sistemas seus que o agente consulta — e as correções que ele aplica depois que o cliente confirma.": { es: "Tus sistemas que el agente consulta — y las correcciones que aplica después de que el cliente confirma." },
+  // Lista de organizações do admin da plataforma (erro não é lista vazia).
+  "Não foi possível carregar": { es: "No fue posible cargar" },
+  "A lista de organizações não carregou.": { es: "La lista de organizaciones no cargó." },
 };
 
 /**

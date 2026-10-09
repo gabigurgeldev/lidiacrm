@@ -97,6 +97,8 @@ export async function GET(_req: NextRequest) {
     overflowAlertsRes,
   ] = await Promise.all([
     // WAHA ban alerts with org name
+    // FK nomeada: `channel_knobs` tem chave (organization_id, channel_session_id)
+    // e é, para o PostgREST, uma segunda relação organizations↔channel_sessions.
     admin
       .from("channel_sessions")
       .select(`
@@ -105,7 +107,7 @@ export async function GET(_req: NextRequest) {
         status_reason,
         organization_id,
         updated_at,
-        organizations!inner(display_name)
+        organizations!channel_sessions_organization_id_fkey!inner(display_name)
       `)
       .or(
         `status.in.(ban_suspected,disconnected_unexpected),and(status.eq.disconnected,updated_at.gt.${cutoff24h})`,
@@ -156,7 +158,9 @@ export async function GET(_req: NextRequest) {
     // Use a raw query via rpc or aggregate in JS
     admin
       .from("conversations")
-      .select("organization_id, organizations!inner(display_name)")
+      // FK nomeada: ver o comentário em app/api/v1/admin/tenants/route.ts
+      // (coord_estado_conversa deixou o embed organizations↔conversations ambíguo).
+      .select("organization_id, organizations!conversations_organization_id_fkey!inner(display_name)")
       .eq("status", "pending")
       .limit(2000),
   ]);

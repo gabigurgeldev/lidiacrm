@@ -72,6 +72,11 @@ export async function GET(req: NextRequest) {
 
   // Build query — cross-tenant intentional, service-role bypasses RLS
   let query = admin
+    // FK NOMEADA no embed de conversations: `coord_estado_conversa` (migration
+    // 0229) tem chave primária (organization_id, conversation_id), e com isso o
+    // PostgREST passou a ver DUAS relações entre organizations e conversations — a
+    // direta e uma muitos-para-muitos por ela. Sem o nome da FK, o embed falha por
+    // ambiguidade e a consulta inteira volta erro.
     .from("conversations")
     .select(
       `
@@ -85,7 +90,7 @@ export async function GET(req: NextRequest) {
       last_message_preview,
       unread_count_for_assignee,
       created_at,
-      organizations!inner ( display_name, slug ),
+      organizations!conversations_organization_id_fkey!inner ( display_name, slug ),
       contacts ( name, phone_number )
     `,
     )
