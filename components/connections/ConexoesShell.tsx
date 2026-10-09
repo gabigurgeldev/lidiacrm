@@ -1,6 +1,7 @@
 "use client";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { GATILHO_DA_ABA, SEGMENTADO_ABAS } from "@/components/ajustes";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { CanalContaClient } from "./CanalContaClient";
@@ -11,25 +12,11 @@ import { TemplatesClient } from "./TemplatesClient";
 import { TemplatesParceiroClient } from "./TemplatesParceiroClient";
 import { useT } from "@/hooks/i18n/useT";
 
-/**
- * O trilho e o gatilho do segmented control.
- *
- * Constantes e não literais repetidos porque esta tela tem TRÊS filas de abas
- * (a de topo e uma sub-fila em cada canal conectado por credencial), e uma delas
- * ficando para trás numa mudança de estilo é o defeito visual que ninguém abre
- * issue para relatar — só acha feio.
- *
- * Só a classe, sem utilitários de anulação: `globals.css` injeta as utilities do
- * Tailwind no topo do arquivo (`@tailwind utilities`, linha 3) e `.ios-segmentado`
- * vem centenas de linhas DEPOIS com a mesma especificidade — então ela já vence
- * `bg-muted`, `rounded-lg` e `p-1` do `TabsList` por ordem de cascata. Escrever
- * `bg-transparent` aqui seria ruído que não faz nada e sugere que faz.
- *
- * O que fica de propósito: `max-w-full overflow-x-auto` do componente, que é o
- * que impede a fila de abas de fazer a PÁGINA rolar na horizontal em 390px.
- */
-const SEGMENTADO = "ios-segmentado";
-const GATILHO = "rounded-full px-3.5 py-1.5 text-[13px]";
+// Trilho e gatilho do segmentado de abas: moram no kit de Ajustes
+// (`components/ajustes/controles.tsx`, com o porquê). Esta tela tem TRÊS filas
+// de abas, e uma delas ficando para trás numa mudança de estilo era o risco.
+const SEGMENTADO = SEGMENTADO_ABAS;
+const GATILHO = GATILHO_DA_ABA;
 
 /**
  * Conexões — TODOS os canais em um lugar só.
