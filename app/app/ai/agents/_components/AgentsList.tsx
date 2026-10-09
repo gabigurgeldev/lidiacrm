@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Robot, Plus } from "@/lib/ui/icons";
+import { Robot, Plus, Sparkle } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
 import { useAgentsList } from "@/hooks/ai/useAgents";
 import type { AgentRow } from "@/hooks/ai/useAgent";
@@ -48,11 +48,18 @@ export function AgentsList({ initialData, canWrite }: Props) {
           )}
         </p>
         {canWrite && (
-          <Link href="/app/ai/agents/new">
-            <Button className="mt-1">
-              <Plus size={14} aria-hidden className="mr-2" /> {t("Novo agente")}
-            </Button>
-          </Link>
+          <div className="mt-1 flex flex-wrap justify-center gap-2">
+            <Link href="/app/ai/agents/criar-com-ia">
+              <Button data-testid="agentes-criar-com-ia">
+                <Sparkle size={14} aria-hidden className="mr-2" /> {t("Criar com IA")}
+              </Button>
+            </Link>
+            <Link href="/app/ai/agents/new">
+              <Button variant="outline">
+                <Plus size={14} aria-hidden className="mr-2" /> {t("Novo agente")}
+              </Button>
+            </Link>
+          </div>
         )}
       </Card>
     );
@@ -70,11 +77,18 @@ export function AgentsList({ initialData, canWrite }: Props) {
           onShowArchivedChange={setShowArchived}
         />
         {canWrite && (
-          <Link href="/app/ai/agents/new">
-            <Button>
-              <Plus size={14} aria-hidden className="mr-2" /> {t("Novo agente")}
-            </Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/app/ai/agents/criar-com-ia">
+              <Button variant="outline" data-testid="agentes-criar-com-ia">
+                <Sparkle size={14} aria-hidden className="mr-2" /> {t("Criar com IA")}
+              </Button>
+            </Link>
+            <Link href="/app/ai/agents/new">
+              <Button>
+                <Plus size={14} aria-hidden className="mr-2" /> {t("Novo agente")}
+              </Button>
+            </Link>
+          </div>
         )}
       </div>
 

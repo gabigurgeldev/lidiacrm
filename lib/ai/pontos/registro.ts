@@ -519,6 +519,33 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     // Mesma razão do ponto acima.
     registraEm: "nenhum",
   },
+  // Criar agente por linguagem natural, em /app/ai/agents/criar-com-ia. Mesmo
+  // papel dos dois de fluxo: é ferramenta de quem monta, não atendimento.
+  {
+    id: "agent_builder_entrevistar",
+    rotulo: "Entrevistar para criar agente",
+    oQueFaz:
+      "Lê o que você contou sobre o negócio ao criar um agente com IA e pergunta só o que falta.",
+    papel: "melhorar",
+    exige: {},
+    // Posicional em `resolverCadeia`, como `flow_ai_interpretar` — entra em
+    // FORA_DO_SEAM em tests/unit/pontos-de-ia-completude.test.ts.
+    emissor: "app/api/v1/ai/agents/construtor/entrevistar/route.ts",
+    sintomaDeFalha: "Ao criar um agente com IA, as perguntas não aparecem depois de você contar sobre o negócio.",
+    // Mesma razão dos pontos de fluxo acima.
+    registraEm: "nenhum",
+  },
+  {
+    id: "agent_builder_gerar",
+    rotulo: "Escrever o agente e os materiais",
+    oQueFaz:
+      "Escreve as instruções do agente e os materiais de conhecimento a partir do que você contou, para você revisar antes de criar.",
+    papel: "melhorar",
+    exige: {},
+    emissor: "app/api/v1/ai/agents/construtor/gerar/route.ts",
+    sintomaDeFalha: "Ao criar um agente com IA, a prévia não aparece ou vem sem materiais.",
+    registraEm: "nenhum",
+  },
 ] as const;
 
 /** Índice por id, para quem resolve um binding. */

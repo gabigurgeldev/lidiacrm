@@ -280,7 +280,9 @@ async function umaTentativa<T>(
 
 export function portaComFallback(
   cadeia: CadeiaDeModelos,
-  ctx: { organizationId: string; requestId: string; flowId: string },
+  // `flowId` é opcional desde que "Criar agente com IA" passou a falar com o
+  // provedor por esta mesma porta: lá não há fluxo, e os logs saem sem ele.
+  ctx: { organizationId: string; requestId: string; flowId?: string },
 ): PortaDeModelo {
   return {
     async objeto<T>(pedido: PedidoAoModelo<T>): Promise<ResultadoDoModelo<T>> {
