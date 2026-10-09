@@ -47,6 +47,7 @@ import {
   type VozDoAgente,
 } from "@/lib/ai/voz/vozes";
 
+import { ConsumoPorAtendimento } from "./ConsumoPorAtendimento";
 import { ModelPicker, useModelMeta } from "./ModelPicker";
 import { CHAVE_DA_INSTALACAO, CredentialPicker, findCredential } from "./CredentialPicker";
 import { rotuloDoEstadoDoCanal } from "@/lib/channels/estado";
@@ -853,7 +854,8 @@ export function AgentForm(props: Props) {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="cost_budget_cents">{t("Custo máximo por atendimento (centavos)")}</Label>
+                {/* Centavos de DÓLAR: é a unidade de `llm_calls.cost_cents`, que o motor compara. */}
+                <Label htmlFor="cost_budget_cents">{t("Custo máximo por atendimento (centavos de dólar)")}</Label>
                 <Input
                   id="cost_budget_cents"
                   type="number"
@@ -863,6 +865,19 @@ export function AgentForm(props: Props) {
                   onChange={(e) => patch({ cost_budget_cents: Number(e.target.value) })}
                   disabled={disabled}
                 />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    "Quando um atendimento alcança o volume ou o custo, o agente para de pensar e, se ainda não respondeu, é obrigado a responder ou passar para a equipe. A Central avisa.",
+                  )}
+                </p>
+                {isEdit && props.agent ? (
+                  <ConsumoPorAtendimento
+                    agentId={props.agent.id}
+                    limites={{ tokens: form.token_budget, centavos: form.cost_budget_cents }}
+                  />
+                ) : null}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="history_message_window">{t("Mensagens anteriores que ele lê")}</Label>
