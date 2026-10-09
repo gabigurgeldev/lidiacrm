@@ -126,6 +126,7 @@ import {
   NOME_DA_FERRAMENTA_DO_COORDENADOR,
 } from '@/lib/coordenador/ferramenta';
 import { carregarVersaoDaPolitica } from '@/lib/coordenador/politica/resolver';
+import { vezDoTurnoSemMensagem } from '@/lib/coordenador/vez';
 import { renderTemplateBody } from '@/lib/channels/meta/render-template';
 import { sendInBubbles } from './split-message';
 import type { DisclosureMode } from '../guardrails/disclosure/template';
@@ -1215,6 +1216,37 @@ async function executarTurnoDoAgente(
         motivo: coordenacao.motivo,
       });
       return;
+    }
+  } else if (turnoVaiFalarComOLead(job)) {
+    // Follow-up e resposta de caso não trazem mensagem nova: não há o que
+    // decidir, só de quem é a vez. Agente dono → fala como ele, com a geração
+    // atual. Fluxo no meio de uma etapa → adia. Pessoa → não fala.
+    const vez = await vezDoTurnoSemMensagem(pool, {
+      organizationId: tenantId,
+      conversationId: input.conversationId,
+      channelSessionId: input.channelSessionId,
+    });
+    if (vez.acao === 'pular') {
+      runLog.info('turno pulado — o coordenador não dá a vez', { kind: job.kind, motivo: vez.motivo });
+      return;
+    }
+    if (vez.acao === 'adiar') {
+      await rescheduleJob(pool, job.id, ctx.workerId, {
+        delayMs: vez.esperaMs,
+        reason: 'um fluxo está conduzindo a conversa — turno adiado pelo coordenador',
+      });
+      runLog.info('turno adiado — um fluxo está conduzindo a conversa', { kind: job.kind, espera_ms: vez.esperaMs });
+      throw new JobSettledError('fluxo conduzindo a conversa — job reagendado pelo coordenador');
+    }
+    if (vez.acao === 'seguir_como_agente') {
+      coordenacao = {
+        modo: 'active',
+        acao: 'agente',
+        agentId: vez.agentId,
+        geracao: vez.geracao,
+        politicaVersaoId: vez.politicaVersaoId,
+        motivo: 'continua_responsavel',
+      };
     }
   }
   const coordenadorConduz = coordenacao.modo === 'active' && coordenacao.acao === 'agente' ? coordenacao : null;

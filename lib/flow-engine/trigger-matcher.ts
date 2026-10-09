@@ -16,6 +16,8 @@ import {
   lerConfigDoGatilhoDeMensagem,
   precondicoesDaConversa,
 } from "./gatilho-de-conversa";
+import { coordenadorAtivoNoCanal } from "@/lib/coordenador/via-supabase";
+
 import { flowGraphSchema } from "./graph-schema";
 import { fluxoEhInterativo } from "./interativo";
 import { garantirNosRegistrados } from "./register-all";
@@ -88,36 +90,6 @@ function acharGatilho(
  * acento e caixa, e trazê-lo para cá espalharia a mesma regra por dois lugares.
  * Só o canal, que é comparação de id, sobe.
  */
-/**
- * O coordenador de atendimento está ATIVO para o número desta mensagem? O
- * ponteiro do número vence o da organização — a mesma precedência de
- * `carregarPoliticaEfetiva`. Falha de leitura = não ativo: o coordenador é
- * aditivo, e o matcher seguir armando é o comportamento de antes dele.
- */
-async function coordenadorAtivo(admin: SupabaseClient, organizationId: string, payload: unknown): Promise<boolean> {
-  try {
-    const canal = (payload as Record<string, unknown> | null)?.channel_session_id;
-    const { data, error } = await admin
-      .from("coord_politica_ponteiros")
-      .select("channel_session_id, versao_id")
-      .eq("organization_id", organizationId);
-    if (error !== null || !Array.isArray(data) || data.length === 0) return false;
-    const ponteiros = data as { channel_session_id: string | null; versao_id: string }[];
-    const doCanal = typeof canal === "string" ? ponteiros.find((p) => p.channel_session_id === canal) : undefined;
-    const efetivo = doCanal ?? ponteiros.find((p) => p.channel_session_id === null);
-    if (efetivo === undefined) return false;
-    const { data: versao } = await admin
-      .from("coord_politica_versoes")
-      .select("modo")
-      .eq("organization_id", organizationId)
-      .eq("id", efetivo.versao_id)
-      .maybeSingle();
-    return (versao as { modo?: string } | null)?.modo === "active";
-  } catch {
-    return false;
-  }
-}
-
 function escutaEsteCanal(config: Record<string, unknown>, payload: unknown): boolean {
   const escolhido = config.canal_id;
   if (typeof escolhido !== "string" || escolhido === "") return true;
@@ -176,7 +148,13 @@ export async function armarFluxosParaEvento(
   // Lido uma vez por evento, e só para evento de mensagem: é a única entrada
   // em que um fluxo disputa a conversa com o agente.
   const conversaCoordenada =
-    row.event_type === "message.received" ? await coordenadorAtivo(admin, row.organization_id, row.payload) : false;
+    row.event_type === "message.received"
+      ? await coordenadorAtivoNoCanal(
+          admin,
+          row.organization_id,
+          typeof row.payload?.channel_session_id === "string" ? row.payload.channel_session_id : null,
+        )
+      : false;
 
   for (const fluxo of fluxos) {
     if (causadoPorFluxo !== null && fluxo.settings?.reagir_ao_proprio_motor !== true) {
