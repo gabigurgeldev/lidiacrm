@@ -4,6 +4,9 @@
  * A aba Teste ensaia o formulário vivo (`TestPanel`, `lib/agent-engine/ensaio`).
  */
 import * as React from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+
+import { GATILHO_DA_ABA, SEGMENTADO_ABAS } from "@/components/ajustes";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useT } from "@/hooks/i18n/useT";
 import { AgentForm, type ChannelSessionLite, type VersaoDoFormulario } from "./AgentForm";
@@ -47,27 +50,57 @@ interface Props {
   readOnly?: boolean;
 }
 
+/**
+ * A aba vive na URL (`?aba=`), em português: link colado no chat abre onde
+ * deveria, e voltar do detalhe de uma execução não joga a pessoa na
+ * configuração. O valor interno segue o antigo — os e2e clicam pelo rótulo.
+ */
+const ABA_DA_URL = {
+  configuracao: "configuration",
+  teste: "test",
+  capacidades: "capacidades",
+  execucoes: "runs",
+  historico: "history",
+  propostas: "proposals",
+} as const;
+type Aba = (typeof ABA_DA_URL)[keyof typeof ABA_DA_URL];
+const URL_DA_ABA = Object.fromEntries(Object.entries(ABA_DA_URL).map(([u, a]) => [a, u])) as Record<Aba, string>;
+
+export function abaDaUrl(valor: string | null): Aba {
+  return valor !== null && valor in ABA_DA_URL ? ABA_DA_URL[valor as keyof typeof ABA_DA_URL] : "configuration";
+}
+
 export function AgentTabs(props: Props) {
   const t = useT();
-  const [tab, setTab] = React.useState<
-    "configuration" | "test" | "capacidades" | "runs" | "history" | "proposals"
-  >("configuration");
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const tab = abaDaUrl(params.get("aba"));
+  const setTab = (proxima: Aba) => {
+    const q = new URLSearchParams(params.toString());
+    if (proxima === "configuration") q.delete("aba");
+    else q.set("aba", URL_DA_ABA[proxima]);
+    const qs = q.toString();
+    // `scroll: false`: trocar de aba não é ir para outra página.
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
   // O que o formulário salvaria agora — é o que a aba Teste ensaia, sem salvar.
   const [versaoDoFormulario, setVersaoDoFormulario] = React.useState<VersaoDoFormulario | null>(null);
 
   return (
     <Tabs
       value={tab}
-      onValueChange={(v) => setTab(v as typeof tab)}
+      onValueChange={(v) => setTab(v as Aba)}
       className="flex flex-col gap-4"
     >
-      <TabsList>
-        <TabsTrigger value="configuration">{t("Configuração")}</TabsTrigger>
-        <TabsTrigger value="test">{t("Teste")}</TabsTrigger>
-        <TabsTrigger value="capacidades">{t("Capacidades")}</TabsTrigger>
-        <TabsTrigger value="runs">{t("Execuções")}</TabsTrigger>
-        <TabsTrigger value="history">{t("Histórico")}</TabsTrigger>
-        <TabsTrigger value="proposals">{t("Propostas")}</TabsTrigger>
+      {/* No segmentado do kit de Ajustes. */}
+      <TabsList className={SEGMENTADO_ABAS}>
+        <TabsTrigger value="configuration" className={GATILHO_DA_ABA}>{t("Configuração")}</TabsTrigger>
+        <TabsTrigger value="test" className={GATILHO_DA_ABA}>{t("Teste")}</TabsTrigger>
+        <TabsTrigger value="capacidades" className={GATILHO_DA_ABA}>{t("Capacidades")}</TabsTrigger>
+        <TabsTrigger value="runs" className={GATILHO_DA_ABA}>{t("Execuções")}</TabsTrigger>
+        <TabsTrigger value="history" className={GATILHO_DA_ABA}>{t("Histórico")}</TabsTrigger>
+        <TabsTrigger value="proposals" className={GATILHO_DA_ABA}>{t("Propostas")}</TabsTrigger>
       </TabsList>
 
       {/*

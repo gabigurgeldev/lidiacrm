@@ -413,7 +413,7 @@ export function AgentForm(props: Props) {
   const isValid = Object.keys(validation).length === 0;
 
   const publishBlockReason = React.useMemo(() => {
-    if (!isEdit) return t("Salve o agent antes de publicar.");
+    if (!isEdit) return t("Salve o agente antes de publicar.");
     if (!props.draft) return t("Sem rascunho para publicar.");
     if (!isValid) return t("Resolva os erros do formulário.");
     if (dirty) return t("Salve o rascunho antes de publicar.");
@@ -463,7 +463,7 @@ export function AgentForm(props: Props) {
           toast.error(res.message ?? `${t("Erro")}: ${res.error}`);
           return;
         }
-        toast.success(t("Agent criado."));
+        toast.success(t("Agente criado."));
         router.push(`/app/ai/agents/${res.data!.agent_id}`);
       }
     } finally {
@@ -763,7 +763,7 @@ export function AgentForm(props: Props) {
             {cred && credSt !== "validated" ? (
               <p className="text-xs text-amber-600 dark:text-amber-400">
                 {t("Credencial selecionada está com status")} {credSt}
-                {t(". Publish bloqueado até validar.")}
+                {t(". Publicar fica bloqueado até validar.")}
               </p>
             ) : null}
           </Card>

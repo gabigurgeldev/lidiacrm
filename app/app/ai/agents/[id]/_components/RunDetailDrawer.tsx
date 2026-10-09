@@ -62,7 +62,7 @@ export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
             ) : null}
             {run?.is_dry_run ? (
               <Badge variant="outline" className="text-xs">
-                dry-run
+                {t("teste")}
               </Badge>
             ) : null}
           </SheetTitle>
@@ -83,7 +83,7 @@ export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
               </Cell>
               <Cell label={t("Custo")}>{fmtCost(run.cost_cents)}</Cell>
               <Cell label={t("Latência")}>{fmtLatency(run.latency_ms)}</Cell>
-              <Cell label={t("Steps")}>{run.steps_count ?? 0}</Cell>
+              <Cell label={t("Passos")}>{run.steps_count ?? 0}</Cell>
             </dl>
 
             {run.error_code || run.error_message ? (
@@ -116,7 +116,7 @@ export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
 
             <div>
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t("Trace")}
+                {t("Passo a passo")}
               </p>
               <RunTrace toolCalls={run.tool_calls} />
             </div>
