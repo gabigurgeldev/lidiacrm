@@ -20,6 +20,7 @@ import { checkDailyLimit, espacarEnvio } from "@/lib/automation/throttle";
 import { reportarEnvio, type MensagemEnviada } from "@/lib/automation/desfecho-do-envio";
 import { dadosDoFormularioDoContexto } from "@/lib/automation/dados-do-formulario";
 import { checarGuardasDeContato } from "@/lib/automation/guarda-do-contato";
+import { adiamentoPorFluxoConduzindo } from "@/lib/coordenador/via-supabase";
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { gerarAbordagemDeFormulario } from "@/lib/agent-engine/agent/abordagem-de-formulario";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
@@ -35,7 +36,14 @@ async function postponeUntil(ctx: ActionCtx, config: Record<string, unknown>): P
   const foraDaJanela = await adiarAteAJanelaAbrir(ctx.admin, ctx.organizationId, sessionId);
   if (foraDaJanela) return foraDaJanela;
   const daily = await checkDailyLimit(ctx.admin, ctx.organizationId, sessionId);
-  return daily.allowed ? null : (daily.retry_at ?? null);
+  if (!daily.allowed) return daily.retry_at ?? null;
+
+  // Coordenador ativo: não cair no meio da etapa de um fluxo com o cliente.
+  return adiamentoPorFluxoConduzindo(ctx.admin, {
+    organizationId: ctx.organizationId,
+    contactId: (ctx.context as { contact?: { id?: string } | null }).contact?.id ?? null,
+    channelSessionId: sessionId,
+  });
 }
 
 async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise<ActionResultDetail> {

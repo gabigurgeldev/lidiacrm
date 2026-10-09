@@ -78,6 +78,8 @@ import { createPool } from '@/lib/agent-engine/db/pool';
 import { runDrainLoop } from '@/lib/agent-engine/edge/crm/drain';
 import { runEventLogDrainLoop } from '@/lib/event-log/drain-loop';
 import { runFlowEngineLoop } from '@/lib/flow-engine/loop';
+import { vigiarCoordenador } from '@/lib/coordenador/vigia';
+import { insertInboxItem } from '@/lib/agent-engine/db/repository';
 import { enforceHolds, sessionHealthMetrics } from '@/lib/agent-engine/edge/crm/session-watchdog';
 import { runSessionWatchdogLoop } from '@/lib/agent-engine/edge/crm/session-reconciler';
 import { runHealthLoop } from '@/lib/agent-engine/health/circuit';
@@ -266,6 +268,35 @@ export async function startWorker(
         if (held + released > 0) log.info('holds de sessão aplicados', { held, released });
       })
       .catch((err: unknown) => log.error('enforceHolds falhou', { error: errMsg(err) }));
+  }, env.QUEUE_REAPER_INTERVAL_MS);
+
+  // Vigia do coordenador de atendimento (migration 0229/0230): expira chamada
+  // vencida e avisa na Central sobre conversa que ficou sem ninguém conduzindo.
+  // Sem política `active` em lugar nenhum, as duas consultas voltam vazias.
+  const vigiaTimer = setInterval(() => {
+    vigiarCoordenador(pool, async (organizationId, aviso) => {
+      const item = await insertInboxItem(
+        pool,
+        organizationId,
+        {
+          kind: 'coordenador_preso',
+          severity: 'warn',
+          title: 'Uma conversa ficou sem ninguém conduzindo',
+          body:
+            aviso.motivo === 'sem_destino_seguro'
+              ? 'O coordenador não encontrou um agente ou fluxo seguro para esta conversa. Assuma pela inbox ou ajuste os destinos em IA › Coordenador.'
+              : 'O cliente escreveu e o agente responsável não respondeu em 10 minutos. Abra a conversa e assuma, ou confira o agente.',
+          refKind: 'conversation',
+          refId: aviso.conversationId,
+        },
+        'kind_e_ref',
+      );
+      return item !== null;
+    })
+      .then((r) => {
+        if (r.expiradas + r.presas > 0) log.info('vigia do coordenador agiu', { ...r });
+      })
+      .catch((err: unknown) => log.error('vigia do coordenador falhou', { error: errMsg(err) }));
   }, env.QUEUE_REAPER_INTERVAL_MS);
 
   const loopsAbort = new AbortController();
@@ -504,6 +535,7 @@ export async function startWorker(
     });
     clearInterval(reaperTimer);
     clearInterval(holdsTimer);
+    clearInterval(vigiaTimer);
     server.close();
     server.closeIdleConnections();
     loopsAbort.abort();

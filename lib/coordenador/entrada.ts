@@ -51,6 +51,12 @@ export interface EntradaDoTurno {
   contactId: string;
   channelSessionId: string;
   jobId: string | null;
+  /**
+   * Execução de fluxo que ENTREGOU esta conversa ao atendimento automático
+   * (`crm.handoff_to_agent`). Se ela é a dona, deixou de ser: o fluxo terminou
+   * a parte dele, e a conversa volta à decisão.
+   */
+  liberadoPorFluxo?: string | null;
 }
 
 interface MensagemDoLote {
@@ -98,8 +104,11 @@ async function lerFatos(
           )
         ).rows[0] ?? null
       : null;
+  // O fluxo que entregou a conversa não a conduz mais, mesmo que a execução
+  // ainda rode os blocos seguintes (registrar, marcar, avisar).
+  const donaConduz = dona?.viva === true && dona.id !== (e.liberadoPorFluxo ?? null);
   const legado =
-    dona?.viva === true
+    donaConduz
       ? null
       : (
           await db.query<{ id: string; flow_id: string }>(
@@ -110,7 +119,7 @@ async function lerFatos(
             [e.organizationId, e.contactId],
           )
         ).rows[0] ?? null;
-  const conduzindo = dona?.viva === true ? dona : legado;
+  const conduzindo = donaConduz ? dona : legado;
 
   return {
     humanoNoComando: f?.humano === true,
@@ -118,7 +127,7 @@ async function lerFatos(
     agenteFixadoLegado: f?.active_ai_agent_id ?? null,
     fluxoVivoLegado: legado ? { executionId: legado.id } : null,
     flowIdConduzindo: conduzindo?.flow_id ?? null,
-    ...(estado?.dono_tipo === "fluxo" ? { fluxoDoDonoVivo: dona?.viva === true } : {}),
+    ...(estado?.dono_tipo === "fluxo" ? { fluxoDoDonoVivo: donaConduz } : {}),
   };
 }
 

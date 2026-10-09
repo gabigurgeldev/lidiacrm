@@ -35,6 +35,7 @@ import {
   type LeadCheckpointRow,
 } from './inbound-turn';
 import { isLeadInHandoff } from './human-handoff';
+import { vezDoTurnoSemMensagem } from '@/lib/coordenador/vez';
 import type { LeadStateRow } from './lead-state';
 import { loadReentryTemplate, pickReentryVariant } from './reentry-template';
 import {
@@ -614,6 +615,30 @@ async function sendFixedOutbound(
     return false;
   }
 
+  // Coordenador ativo (migration 0229): o envio fixo não pode cair no meio da
+  // etapa de um fluxo, nem falar por cima da equipe. Com um agente dono, sai
+  // em nome dele e com a geração atual — o gate `coordenacao` confere.
+  const vez = await vezDoTurnoSemMensagem(pool, { organizationId: tenantId, conversationId, channelSessionId });
+  if (vez.acao === 'pular') {
+    runLog.info('envio fixo pulado — o coordenador não dá a vez', { motivo: vez.motivo });
+    return false;
+  }
+  if (vez.acao === 'adiar') {
+    await rescheduleReentry(pool, {
+      tenantId,
+      leadId,
+      jobId: job.id,
+      at: new Date(clock().getTime() + vez.esperaMs),
+      payload: job.payload,
+    });
+    runLog.info('envio fixo adiado — um fluxo está conduzindo a conversa', { espera_ms: vez.esperaMs });
+    return false;
+  }
+  const concessao =
+    vez.acao === 'seguir_como_agente'
+      ? { conversationId, executorTipo: 'agente' as const, executorId: vez.agentId, geracao: vez.geracao }
+      : null;
+
   const context = await getLeadContext(pool, deps.crmCfg, { tenantId, leadId }, {
     historyLimit: deps.knobs.historyLimit,
     maxTokens: deps.knobs.maxContextTokens,
@@ -647,6 +672,7 @@ async function sendFixedOutbound(
     now: clock(),
     sleep: deps.sleep,
     lgpd: context.lgpd,
+    ...(concessao !== null ? { coordenacao: concessao } : {}),
     ...(deps.knobs.disclosureMode !== undefined ? { disclosureMode: deps.knobs.disclosureMode } : {}),
     ...(camadaSemanticaLigada
       ? {
