@@ -260,6 +260,9 @@ export const AUDIT_ACTIONS = [
   "ai.router_created",
   "ai.router_updated",
   "ai.router_deleted",
+  // Coordenador de atendimento (migration 0229): cada publicação é uma versão
+  // nova da política; o ponteiro move junto.
+  "coordenador.politica_publicada",
   "ai.router_members_updated",
   "followup_flow.created",
   "followup_flow.updated",
