@@ -15,6 +15,8 @@ function fakeConfig(agentId: string): PublishedAgentConfig {
     model: 'claude-haiku-4-5',
     credentialId: null,
     maxSteps: 5,
+    tokenBudget: 50000,
+    costBudgetCents: 50,
     historyMessageWindow: 20,
     historyTokenWindow: 4000,
     handoffKeywords: [],

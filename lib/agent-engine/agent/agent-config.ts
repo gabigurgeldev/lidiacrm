@@ -26,6 +26,10 @@ export interface PublishedAgentConfig {
   model: string;
   credentialId: string | null;
   maxSteps: number;
+  /** Limite por atendimento (`orcamento-do-turno.ts`): tokens novos do laço do agente. */
+  tokenBudget: number;
+  /** Limite por atendimento: centavos de dólar do laço do agente. */
+  costBudgetCents: number;
   historyMessageWindow: number;
   historyTokenWindow: number;
   handoffKeywords: string[];
@@ -119,6 +123,8 @@ interface Row {
   model: string;
   credential_id: string | null;
   max_steps: number;
+  token_budget: number;
+  cost_budget_cents: number;
   history_message_window: number;
   history_token_window: number;
   handoff_keywords: string[] | null;
@@ -153,6 +159,8 @@ const SELECT_AGENT_CONFIG_COLUMNS = `a.id as agent_id,
             v.model,
             v.credential_id,
             v.max_steps,
+            v.token_budget,
+            v.cost_budget_cents,
             v.history_message_window,
             v.history_token_window,
             v.handoff_keywords,
@@ -203,6 +211,8 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     model: r.model,
     credentialId: r.credential_id,
     maxSteps: r.max_steps,
+    tokenBudget: r.token_budget,
+    costBudgetCents: r.cost_budget_cents,
     historyMessageWindow: r.history_message_window,
     historyTokenWindow: r.history_token_window,
     handoffKeywords: (r.handoff_keywords ?? []).map((k) => k.toLowerCase().trim()).filter((k) => k !== ''),

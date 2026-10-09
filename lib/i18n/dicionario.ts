@@ -8071,6 +8071,20 @@ export const DICIONARIO: Traducoes = {
   "Escolha o número de WhatsApp do agente.": { es: "Elige el número de WhatsApp del agente." },
   "As instruções do agente precisam de pelo menos 10 caracteres.": { es: "Las instrucciones del agente necesitan al menos 10 caracteres." },
   "Escolha o modelo de IA.": { es: "Elige el modelo de IA." },
+  // Limites por atendimento (ConsumoPorAtendimento, AgentForm).
+  "Custo máximo por atendimento (centavos de dólar)": { es: "Costo máximo por atención (centavos de dólar)" },
+  "Quando um atendimento alcança o volume ou o custo, o agente para de pensar e, se ainda não respondeu, é obrigado a responder ou passar para a equipe. A Central avisa.": { es: "Cuando una atención alcanza el volumen o el costo, el agente deja de pensar y, si todavía no respondió, está obligado a responder o pasar al equipo. La Central avisa." },
+  "Lendo quanto este agente costuma gastar…": { es: "Leyendo cuánto suele gastar este agente…" },
+  "Não foi possível ler o consumo deste agente.": { es: "No fue posible leer el consumo de este agente." },
+  "Ainda sem atendimentos medidos. Depois dos primeiros, aparece aqui quanto cada um gastou.": { es: "Todavía no hay atenciones medidas. Después de las primeras, aquí aparece cuánto gastó cada una." },
+  "Nos últimos": { es: "En los últimos" },
+  "dias,": { es: "días," },
+  "atendimentos. Metade gastou até": { es: "atenciones. La mitad gastó hasta" },
+  "tokens e": { es: "tokens y" },
+  "95% até": { es: "el 95% hasta" },
+  "Com os limites acima,": { es: "Con los límites de arriba," },
+  "deles teriam sido cortados.": { es: "de ellas habrían sido cortadas." },
+  "Com os limites acima, nenhum deles teria sido cortado.": { es: "Con los límites de arriba, ninguna habría sido cortada." },
 };
 
 /**

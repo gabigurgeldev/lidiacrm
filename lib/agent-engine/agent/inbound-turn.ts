@@ -91,6 +91,15 @@ import { msAteAJanelaAbrir } from './janela-de-atendimento';
 import { janelaDeEnvioAberta, proximaAberturaDaJanela } from '../pacing/engine';
 import { loadChannelKnobs } from '../pacing/store';
 import { decidirResgateDoTurnoMudo, MENSAGEM_DE_RESGATE, avisarTurnoSemResposta } from './turno-mudo';
+import { avisarLimiteDoTurno } from './aviso-do-limite-do-turno';
+import {
+  decidirAposOLimite,
+  estouroDoTurno,
+  GASTO_ZERO,
+  somarGasto,
+  type LimitesDoTurno,
+} from './orcamento-do-turno';
+import { costCents } from '../edge/llm/pricing';
 import {
   MENSAGEM_DO_TETO,
   tetoDoNumeroAtingido,
@@ -3109,6 +3118,11 @@ async function executarTurnoDoAgente(
   // este corpo inteiro. Escoltar aqui deixaria de fora as chamadas de modelo dos
   // auxiliares (`classifyStage`, `maybeCompact`), que rodam ANTES desta e por
   // isso são as que estouram primeiro.
+  // Limite por atendimento (`orcamento-do-turno.ts`): o laço para no passo em que
+  // o gasto alcança o limite da versão. Turno sem agente resolvido não tem limite
+  // próprio — o orçamento mensal da organização continua valendo.
+  const limitesDoTurno: LimitesDoTurno | null =
+    agentConfig !== null ? { tokens: agentConfig.tokenBudget, centavos: agentConfig.costBudgetCents } : null;
   const turn = await runModelCall(
     pool,
     deps.llmCfg,
@@ -3121,6 +3135,13 @@ async function executarTurnoDoAgente(
       messages: openingMessages,
       tools,
       maxSteps,
+      agentId: agentConfig?.agentId ?? null,
+      ...(limitesDoTurno !== null
+        ? {
+            pararQuando: (passos, custo) =>
+              estouroDoTurno(somarGasto(GASTO_ZERO, passos, custo), limitesDoTurno) !== null,
+          }
+        : {}),
       ...(agentConfig !== null
         ? {
             model: agentConfig.model,
@@ -3190,6 +3211,22 @@ async function executarTurnoDoAgente(
   let mensagensDoTurno: ModelMessage[] = [...turn.result.response.messages];
   const algoSaiuNoTurno = (): boolean =>
     outcomes.some((o) => o.kind === 'sent' || o.kind === 'already_sent' || o.kind === 'queued');
+
+  // O limite cortou o laço? Medido com a MESMA soma que o `stopWhen` usou. Sem
+  // resposta, quem dá a última chamada é o resgate logo abaixo — a regra de "não
+  // terminar sem responder" já cobre o corte, e o limite nunca vira silêncio.
+  const gastoDoLaco = somarGasto(GASTO_ZERO, turn.result.steps, (uso) => costCents(turn.model, uso));
+  const estouro = limitesDoTurno === null ? null : estouroDoTurno(gastoDoLaco, limitesDoTurno);
+  const depoisDoLimite = decidirAposOLimite({ estouro, jaRespondeu: algoSaiuNoTurno() });
+  if (depoisDoLimite !== 'seguir') {
+    runLog.warn('limite por atendimento alcançado — laço do agente cortado', {
+      estouro,
+      tokens: gastoDoLaco.tokens,
+      centavos: gastoDoLaco.centavos,
+      passos: turn.result.steps.length,
+      depois: depoisDoLimite,
+    });
+  }
   const resgate = decidirResgateDoTurnoMudo({
     kind: job.kind,
     algoSaiu: algoSaiuNoTurno(),
@@ -3216,6 +3253,7 @@ async function executarTurnoDoAgente(
           leadId,
           jobId: job.id,
           purpose: 'agent_turn',
+          agentId: agentConfig?.agentId ?? null,
           system,
           messages: [...openingMessages, ...mensagensDoTurno, cobranca],
           tools: ferramentasDeResposta,
@@ -3247,6 +3285,19 @@ async function executarTurnoDoAgente(
       log: runLog,
     });
     runLog.warn('turno terminou sem resposta ao cliente', { motivo: resgate.acao, vetos: vetosDoTurno });
+  }
+
+  if (estouro !== null && agentConfig !== null && limitesDoTurno !== null) {
+    await avisarLimiteDoTurno(pool, {
+      tenantId,
+      agentId: agentConfig.agentId,
+      nomeDoAgente: agentConfig.agentName,
+      estouro,
+      gasto: gastoDoLaco,
+      limites: limitesDoTurno,
+      jaRespondeu: depoisDoLimite === 'fechar',
+      log: runLog,
+    });
   }
 
   // F3-10: poda os tool results antigos da fita do run ANTES de reenviá-los no fechamento
@@ -3284,6 +3335,7 @@ async function executarTurnoDoAgente(
         leadId,
         jobId: job.id,
         purpose: 'checkpoint',
+        agentId: agentConfig?.agentId ?? null,
         ...(agentConfig !== null
           ? {
               model: agentConfig.model,

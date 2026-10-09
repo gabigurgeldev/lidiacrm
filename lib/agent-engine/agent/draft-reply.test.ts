@@ -33,6 +33,8 @@ const AGENT: PublishedAgentConfig = {
   model: "claude-sonnet-4-6",
   credentialId: "cred-1",
   maxSteps: 8,
+  tokenBudget: 50000,
+  costBudgetCents: 50,
   historyMessageWindow: 20,
   historyTokenWindow: 1000,
   handoffKeywords: [],
