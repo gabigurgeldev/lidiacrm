@@ -284,3 +284,21 @@ Ainda não feito (próximas partes do M3): nós `coord.*` no editor de fluxo
 (fluxo chama agente com retorno, transferir, decidir destino), gatilho de fluxo
 chamável com entrada/saída declaradas, slot de interação entre frentes
 paralelas, prazo/cancelamento de chamada pelo vigia.
+
+## M4 (primeira parte) — quem mais fala com o cliente
+
+Com política `active`:
+
+| Caminho | O que muda |
+|---|---|
+| `crm.handoff_to_agent` | A execução que entregou deixa de ser dona; o coordenador escolhe o agente. |
+| Gatilho de mensagem | Não arma fluxo INTERATIVO (`whatsapp.send_to_lead`, `logic.ask`, `logic.choice_menu`) — ele pode ser destino da política. Bastidor segue armando. |
+| Ativar fluxo (botão da inbox) | Fluxo interativo vira dono pela transição `manual` (a única que tira a conversa de uma pessoa). |
+| Follow-up do agente e resposta de caso | Agente dono fala com a geração atual; fluxo vivo conduzindo → adia 15 min; pessoa → não fala. |
+| Re-entrada determinística (template) | A mesma regra, com reagendamento pela re-entrada. |
+| Automação que manda mensagem | Adia 15 min quando um fluxo vivo é dono. Agente dono ou pessoa não adiam — a automação já falava por cima deles antes, e mudar isso é decisão de produto. |
+| Vigia (worker, ritmo do reaper) | Chamada vencida: cancela o fluxo, o trigger devolve a conversa, a chamada fica `expirou`. Conversa com mensagem sem resposta e sem admissão há 10 min, sem fluxo nem pessoa conduzindo: um aviso `coordenador_preso` na Central por conversa. |
+
+Ainda não feito: o `ai-response-worker` legado (fora do agent-engine) e a
+reconciliação/drenagem ao trocar o modo da política — ambos dependem da tela
+de ativação (M5), que é onde a troca de modo acontece.
