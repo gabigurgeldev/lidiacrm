@@ -54,7 +54,62 @@ export function payloadDoAnuncio(p: {
     conversation_id: p.conversationId,
     lead_id: p.leadId,
     reason: p.reason,
+    reason_em_linhas: motivoEmLinhas(p.reason),
     summary: p.summary,
     lead_avisado: p.leadAvisado,
   };
+}
+
+/**
+ * O motivo da passagem em LINHAS, para mensagem que uma pessoa vai ler no celular
+ * (`{{event.reason_em_linhas}}` no fluxo).
+ *
+ * O agente grava o motivo numa linha só, com campos separados por `|` — é o
+ * formato que cabe nos 500 caracteres de `reason` e que o próprio modelo segue
+ * bem. Interpolado cru no WhatsApp do dono, isso virava um bloco corrido com o
+ * telefone e a chave Pix colados no meio (reclamação do Açaí Delícia, 2026-10-08).
+ *
+ * Regra, sem inventar nada que o agente não escreveu:
+ *  - cada trecho entre `|` vira uma linha;
+ *  - trecho `Rótulo: valor` vira `*Rótulo:* valor` (negrito do WhatsApp);
+ *  - o 1º trecho sem `:` (ex.: `PEDIDO CONFIRMADO`) vira título em negrito;
+ *  - valor com itens separados por `;` vira lista, um `• ` por item — só o `;`
+ *    FORA de parênteses: `Pix (manda o comprovante; chave 9499…)` é um item só.
+ * Motivo sem `|` volta como veio — texto livre de outros motivos de passagem
+ * ("cliente pediu humano") não é tocado.
+ */
+export function motivoEmLinhas(reason: string): string {
+  const trechos = reason.split("|").map((t) => t.trim()).filter((t) => t.length > 0);
+  if (trechos.length < 2) return reason.trim();
+
+  return trechos
+    .map((trecho, i) => {
+      const doisPontos = trecho.indexOf(":");
+      if (doisPontos <= 0) return i === 0 ? `*${trecho}*` : trecho;
+      const rotulo = trecho.slice(0, doisPontos).trim();
+      const valor = trecho.slice(doisPontos + 1).trim();
+      const itens = foraDeParenteses(valor, ";").map((v) => v.trim()).filter((v) => v.length > 0);
+      if (itens.length > 1) return `*${rotulo}:*\n${itens.map((v) => `• ${v}`).join("\n")}`;
+      return `*${rotulo}:* ${valor}`;
+    })
+    .join("\n");
+}
+
+/** Divide `texto` em `sep` só onde ele está fora de parênteses. */
+function foraDeParenteses(texto: string, sep: string): string[] {
+  const partes: string[] = [];
+  let nivel = 0;
+  let atual = "";
+  for (const c of texto) {
+    if (c === "(") nivel++;
+    else if (c === ")") nivel = Math.max(0, nivel - 1);
+    if (c === sep && nivel === 0) {
+      partes.push(atual);
+      atual = "";
+    } else {
+      atual += c;
+    }
+  }
+  partes.push(atual);
+  return partes;
 }
