@@ -114,3 +114,39 @@ describe("extractPdfText", () => {
     expect(Object.keys(todas)).not.toContain("@types/pdf-parse");
   });
 });
+
+describe("extractPdfText num processo filho (worker sob tsx)", () => {
+  // O worker de produção roda sob `tsx`, e lá o pdf.js leva o heap de 9 MB a
+  // 255 MB por PDF — o worker morria por OOM a cada PDF recebido no WhatsApp
+  // (2026-10-08, 255 reinícios num dia). O filho roda em `node` puro. Estes casos
+  // provam que o filho devolve EXATAMENTE o que o caminho no processo devolve —
+  // inclusive os erros —, porque é ele que roda em produção.
+  afterEach(() => {
+    delete process.env.PDF_EXTRACAO_ISOLADA;
+  });
+
+  it("extrai o mesmo texto, com acentos e páginas", async () => {
+    process.env.PDF_EXTRACAO_ISOLADA = "1";
+    const { extractPdfText, deveIsolarExtracao } = await import("@/lib/ai/rag/extractors/pdf");
+    expect(deveIsolarExtracao()).toBe(true);
+    expect(await extractPdfText(fixture("sample-text.pdf"))).toBe("DeskcommCRM RAG fixture");
+    expect(await extractPdfText(fixture("sample-acentos.pdf"))).toBe("Ação de vendas: café, órgão, três.");
+    expect(await extractPdfText(fixture("sample-multipagina.pdf"))).toBe(
+      "Pagina um linha um\nPagina um linha dois\n\nPagina dois linha um\nPagina dois linha dois",
+    );
+  });
+
+  it("traduz PDF sem texto e PDF corrompido nos mesmos erros", async () => {
+    process.env.PDF_EXTRACAO_ISOLADA = "1";
+    const { extractPdfText, PdfExtractError } = await import("@/lib/ai/rag/extractors/pdf");
+    await expect(extractPdfText(fixture("sample-sem-texto.pdf"))).rejects.toThrow(/image-only/);
+    await expect(extractPdfText(fixture("sample-corrompido.pdf"))).rejects.toBeInstanceOf(PdfExtractError);
+    await expect(extractPdfText(Buffer.from("isto não é um pdf"))).rejects.toBeInstanceOf(PdfExtractError);
+  });
+
+  it("não isola fora do tsx (app compilado) a menos que forçado", async () => {
+    process.env.PDF_EXTRACAO_ISOLADA = "0";
+    const { deveIsolarExtracao } = await import("@/lib/ai/rag/extractors/pdf");
+    expect(deveIsolarExtracao()).toBe(false);
+  });
+});
