@@ -1,11 +1,12 @@
 "use client";
 /**
  * Tabs do detalhe de agent. Wave 12 (S-13.12) entrega Test, Runs e History.
+ * A aba Teste ensaia o formulário vivo (`TestPanel`, `lib/agent-engine/ensaio`).
  */
 import * as React from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useT } from "@/hooks/i18n/useT";
-import { AgentForm, type ChannelSessionLite } from "./AgentForm";
+import { AgentForm, type ChannelSessionLite, type VersaoDoFormulario } from "./AgentForm";
 import type { CoberturaPorFunil } from "./FunisDoAgente";
 import type { MaterialDoAcervo } from "./BasesDoAgente";
 import type { IntegracaoDoAcervo } from "./IntegracoesDoAgente";
@@ -51,7 +52,8 @@ export function AgentTabs(props: Props) {
   const [tab, setTab] = React.useState<
     "configuration" | "test" | "capacidades" | "runs" | "history" | "proposals"
   >("configuration");
-  const hasVersion = !!(props.draft || props.published);
+  // O que o formulário salvaria agora — é o que a aba Teste ensaia, sem salvar.
+  const [versaoDoFormulario, setVersaoDoFormulario] = React.useState<VersaoDoFormulario | null>(null);
 
   return (
     <Tabs
@@ -61,17 +63,21 @@ export function AgentTabs(props: Props) {
     >
       <TabsList>
         <TabsTrigger value="configuration">{t("Configuração")}</TabsTrigger>
-        <TabsTrigger value="test" disabled={!hasVersion}>
-          {t("Teste")}
-        </TabsTrigger>
+        <TabsTrigger value="test">{t("Teste")}</TabsTrigger>
         <TabsTrigger value="capacidades">{t("Capacidades")}</TabsTrigger>
         <TabsTrigger value="runs">{t("Execuções")}</TabsTrigger>
         <TabsTrigger value="history">{t("Histórico")}</TabsTrigger>
         <TabsTrigger value="proposals">{t("Propostas")}</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="configuration" className="m-0">
+      {/*
+        `forceMount`: o formulário fica montado (só escondido) nas outras abas.
+        Sem isso, ir até Teste DESMONTAVA o formulário e o que estava sem salvar
+        sumia — justamente o que a aba Teste existe para experimentar.
+      */}
+      <TabsContent value="configuration" className="m-0 data-[state=inactive]:hidden" forceMount>
         <AgentForm
+          aoMudarVersao={setVersaoDoFormulario}
           mode="edit"
           agent={props.agent}
           draft={props.draft}
@@ -93,12 +99,7 @@ export function AgentTabs(props: Props) {
       </TabsContent>
 
       <TabsContent value="test" className="m-0">
-        <TestPanel
-          agent={props.agent}
-          draft={props.draft}
-          published={props.published}
-          readOnly={props.readOnly}
-        />
+        <TestPanel agent={props.agent} versao={versaoDoFormulario} readOnly={props.readOnly} />
       </TabsContent>
 
       <TabsContent value="capacidades" className="m-0">

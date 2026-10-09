@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { marcarTesteFeito, pularTeste } from "@/app/actions/onboarding/marcarTeste";
+import { lerDesfecho, type RelatorioDoEnsaio } from "@/lib/ai/agents/leitura-do-ensaio";
 
 interface Props {
   nome: string | null;
@@ -42,16 +43,20 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
     setCarregando(true);
     setDesfecho(null);
     try {
-      const res = await fetch(`/api/v1/ai/agents/${agenteId}/versions/${versaoId}/test`, {
+      // O mesmo atendimento do WhatsApp, sobre a versão publicada, dentro de uma
+      // transação desfeita no fim (`lib/agent-engine/ensaio`). O ensaio antigo
+      // (`/versions/:vid/test`) rodava outro motor: dizia "respondeu" para texto
+      // que em produção nunca sai.
+      const res = await fetch(`/api/v1/ai/agents/${agenteId}/ensaio`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sample_message: mensagem }),
+        body: JSON.stringify({ versao_id: versaoId, conversa: [{ de: "cliente", texto: mensagem.trim() }] }),
       });
-      const json = (await res.json()) as {
-        data?: { final_text?: string; status?: string; error_code?: string; error_message?: string };
+      const json = (await res.json().catch(() => ({}))) as {
+        data?: RelatorioDoEnsaio;
         error?: { message?: string };
       };
-      if (!res.ok) {
+      if (!res.ok || !json.data) {
         // A causa crua importa: quem instalou numa VPS é quem vai consertar, e
         // "não foi possível testar" não diz se falta chave, saldo ou modelo.
         setDesfecho({
@@ -60,25 +65,19 @@ export function TestarClient({ nome, agenteId, versaoId }: Props) {
         });
         return;
       }
-      // O ensaio responde 200 mesmo quando o turno FALHA — o resultado traz o
-      // status. Ler só o texto e concluir "executou e não devolveu nada" foi o
-      // que a tela fez no primeiro percurso real, enquanto a causa verdadeira
-      // era outra: a versão não tinha credencial. Mentir sobre a causa manda a
-      // pessoa procurar no lugar errado.
-      const d = json.data;
-      if (d?.status && d.status !== "completed") {
-        setDesfecho({
-          tipo: "erro",
-          mensagem: d.error_message ?? d.error_code ?? `${t("o ensaio terminou como")} "${d.status}"`,
-        });
+      const r = json.data;
+      if (r.desfecho === "respondeu") {
+        setDesfecho({ tipo: "resposta", texto: r.mensagens.map((m) => m.texto).join("\n\n") });
         return;
       }
-      const texto = d?.final_text?.trim();
-      setDesfecho(
-        texto
-          ? { tipo: "resposta", texto }
-          : { tipo: "erro", mensagem: t("Ele executou, mas não devolveu texto nenhum.") },
-      );
+      // Não respondeu: o motivo é o do turno real (barrado, adiado, falha do
+      // modelo) — dizer "não devolveu texto" mandaria a pessoa procurar no
+      // lugar errado.
+      const lido = lerDesfecho(r);
+      setDesfecho({
+        tipo: "erro",
+        mensagem: [t(lido.titulo), lido.detalhe ? t(lido.detalhe) : null].filter(Boolean).join(" — "),
+      });
     } catch (err) {
       setDesfecho({ tipo: "erro", mensagem: err instanceof Error ? err.message : String(err) });
     } finally {

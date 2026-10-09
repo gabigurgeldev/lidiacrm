@@ -158,7 +158,6 @@ const KNOWN_DEBT: { reason: string; files: string[] }[] = [
       "app/api/v1/conversations/[id]/media/route.ts",
       "app/api/v1/webhook-sources/route.ts",
       "app/api/v1/webhooks/in/[token]/route.ts",
-      "app/app/ai/agents/[id]/_components/TestPanel.tsx",
       "components/inbox/media/media-utils.ts",
       "lib/agent-engine/channel-adapter.ts",
       "lib/agent-engine/cron/scheduler.ts",

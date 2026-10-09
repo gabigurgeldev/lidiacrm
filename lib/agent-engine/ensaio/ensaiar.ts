@@ -47,8 +47,13 @@ export interface PedidoDeEnsaio {
   organizationId: string;
   /** Agente que está sendo editado; `null` quando o formulário é de criação. */
   agentId: string | null;
-  /** O formulário, já validado por `versionCreateSchema`. */
-  versao: VersionInput;
+  /**
+   * O que testar — exatamente um dos dois:
+   *  - `versao`: o formulário (salvo ou não), já validado por `versionCreateSchema`;
+   *  - `versaoId`: uma versão JÁ salva deste agente (o onboarding testa a publicada).
+   */
+  versao?: VersionInput;
+  versaoId?: string;
   /** A conversa até aqui; a última fala é do cliente e é a que o turno responde. */
   conversa: FalaDoEnsaio[];
   nomeDoContato?: string;
@@ -74,9 +79,29 @@ export interface RelatorioDoEnsaio {
   /** Por que o turno foi adiado (fora do horário, janela, teto do número). */
   adiamento: { motivo: string; ate: string | null } | null;
   erro: string | null;
-  custo: { chamadas: number; centavos: number; tokensDeEntrada: number; tokensDeSaida: number };
+  /**
+   * O que a IA custou neste teste — em CENTAVOS DE DÓLAR, fracionários (a unidade
+   * de `llm_calls.cost_cents`). `semPreco` conta chamadas de modelo sem tabela de
+   * preço: com ela acima de zero, `centavos` é um piso, não o total.
+   */
+  custo: {
+    chamadas: number;
+    centavos: number;
+    semPreco: number;
+    falhas: number;
+    tokensDeEntrada: number;
+    tokensDeSaida: number;
+  };
   esperasMs: number[];
   duracaoMs: number;
+}
+
+/** A versão pedida não é deste agente nesta organização, ou não tem número. */
+export class VersaoDoEnsaioError extends Error {
+  constructor(motivo: string) {
+    super(motivo);
+    this.name = 'VersaoDoEnsaioError';
+  }
 }
 
 export class EnsaioOcupadoError extends Error {
@@ -154,7 +179,7 @@ export async function ensaiarTurno(
 
   const capturadas: ChannelSendInput[] = [];
   const ferramentas: RelatorioDoEnsaio['ferramentas'] = [];
-  const custo = { chamadas: 0, centavos: 0, tokensDeEntrada: 0, tokensDeSaida: 0 };
+  const custo = { chamadas: 0, centavos: 0, semPreco: 0, falhas: 0, tokensDeEntrada: 0, tokensDeSaida: 0 };
   const esperasMs: number[] = [];
 
   const cliente = await poolReal.connect();
@@ -173,19 +198,40 @@ export async function ensaiarTurno(
     const db = fachada.pool;
     const org = pedido.organizationId;
 
-    // 1. O agente e a versão do formulário.
+    // 1. O agente e a versão: o formulário vira rascunho, ou a versão salva é lida.
     let agentId = pedido.agentId;
-    if (agentId === null) {
-      const { rows } = await db.query<{ id: string }>(
-        `insert into ai_agents (organization_id, name, system_prompt, model, kind, is_active, is_default)
-         values ($1, $2, $3, $4, 'mcp_agent', false, false) returning id`,
-        [org, `Ensaio ${id.slice(0, 8)}`, pedido.versao.system_prompt, pedido.versao.model],
+    let versionId: string;
+    let channelSessionId: string;
+    if (pedido.versao !== undefined) {
+      if (agentId === null) {
+        const { rows } = await db.query<{ id: string }>(
+          `insert into ai_agents (organization_id, name, system_prompt, model, kind, is_active, is_default)
+           values ($1, $2, $3, $4, 'mcp_agent', false, false) returning id`,
+          [org, `Ensaio ${id.slice(0, 8)}`, pedido.versao.system_prompt, pedido.versao.model],
+        );
+        agentId = rows[0]!.id;
+      }
+      versionId = await gravarVersaoDoFormulario(db, org, agentId, pedido.versao);
+      channelSessionId = pedido.versao.channel_session_id;
+    } else {
+      if (agentId === null || pedido.versaoId === undefined) {
+        throw new VersaoDoEnsaioError('diga o que testar: o formulário ou uma versão salva do agente');
+      }
+      const { rows } = await db.query<{ id: string; channel_session_id: string | null }>(
+        `select id, channel_session_id from ai_agent_versions
+          where organization_id = $1 and agent_id = $2 and id = $3`,
+        [org, agentId, pedido.versaoId],
       );
-      agentId = rows[0]!.id;
+      const salva = rows[0];
+      if (salva === undefined) throw new VersaoDoEnsaioError('versão não encontrada neste agente');
+      if (salva.channel_session_id === null) {
+        throw new VersaoDoEnsaioError('esta versão não tem número de WhatsApp escolhido');
+      }
+      versionId = salva.id;
+      channelSessionId = salva.channel_session_id;
     }
-    const versionId = await gravarVersaoDoFormulario(db, org, agentId, pedido.versao);
     const agente = await loadAgentConfigByVersionId(db, org, versionId);
-    if (agente === null) throw new Error('ensaio: a versão do formulário não pôde ser lida');
+    if (agente === null) throw new Error('ensaio: a versão não pôde ser lida');
 
     // 2. O cliente do teste e a conversa.
     const telefone = `+5500${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`;
@@ -194,17 +240,26 @@ export async function ensaiarTurno(
       [org, pedido.nomeDoContato?.trim() || 'Cliente do teste', telefone],
     );
     const contactId = contato[0]!.id;
-    const channelSessionId = pedido.versao.channel_session_id;
+    const agora = pedido.agora ?? new Date();
+    const horaDaFala = (i: number) => new Date(agora.getTime() - (pedido.conversa.length - i) * 30_000);
+    const ultimaDe = (de: FalaDoEnsaio['de']) => {
+      const i = pedido.conversa.map((f) => f.de).lastIndexOf(de);
+      return i === -1 ? null : horaDaFala(i);
+    };
+    // Os carimbos que a ingestão grava na conversa de verdade. Sem eles a janela
+    // de 24 h lê "o cliente nunca escreveu": o teto de aquecimento passaria a
+    // valer para a resposta, e o canal oficial barraria o envio — o ensaio
+    // reprovaria o que a produção deixa sair.
     const { rows: conversa } = await db.query<{ id: string }>(
-      `insert into conversations (organization_id, contact_id, channel_session_id, status, is_group)
-       values ($1, $2, $3, 'ai_handling', false) returning id`,
-      [org, contactId, channelSessionId],
+      `insert into conversations (organization_id, contact_id, channel_session_id, status, is_group,
+         last_inbound_at, last_outbound_at, last_message_at)
+       values ($1, $2, $3, 'ai_handling', false, $4, $5, $6) returning id`,
+      [org, contactId, channelSessionId, ultimaDe('cliente'), ultimaDe('agente'), horaDaFala(pedido.conversa.length - 1)],
     );
     const conversationId = conversa[0]!.id;
-    const agora = pedido.agora ?? new Date();
     let ultimaMensagemId = '';
     for (const [i, fala] of pedido.conversa.entries()) {
-      const enviadaEm = new Date(agora.getTime() - (pedido.conversa.length - i) * 30_000);
+      const enviadaEm = horaDaFala(i);
       const { rows } = await db.query<{ id: string }>(
         `insert into messages (organization_id, conversation_id, channel_session_id, contact_id,
            type, direction, status, body, sent_via, sent_at)
@@ -254,6 +309,8 @@ export async function ensaiarTurno(
           aoRegistrar: (c) => {
             custo.chamadas += 1;
             custo.centavos += c.costCents ?? 0;
+            if (c.costCents === null) custo.semPreco += 1;
+            if (c.status === 'erro') custo.falhas += 1;
             custo.tokensDeEntrada += c.inputTokens;
             custo.tokensDeSaida += c.outputTokens;
           },

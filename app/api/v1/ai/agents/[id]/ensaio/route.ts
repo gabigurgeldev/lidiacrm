@@ -7,7 +7,9 @@
  * fica registrado em `llm_calls` com o propósito prefixado `ensaio:`. O como e o
  * porquê estão em `lib/agent-engine/ensaio/ensaiar.ts`.
  *
- * `:id` é o agente em edição, ou `novo` para o formulário de criação.
+ * `:id` é o agente em edição, ou `novo` para o formulário de criação. O corpo
+ * traz o que testar: `versao` (o formulário, salvo ou não) ou `versao_id` (uma
+ * versão já salva do agente — o onboarding testa a publicada).
  *
  * Substitui `/versions/:vid/test`, que ensaiava OUTRO motor (o runtime antigo):
  * outro prompt, sem as conferências de envio, e com as capacidades de escrita
@@ -24,7 +26,7 @@ import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo"
 import { versionCreateSchema } from "@/lib/ai/agents/validation";
 import { montarDepsDoTurno } from "@/lib/agent-engine/agent/deps-do-turno";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
-import { ensaiarTurno, EnsaioOcupadoError } from "@/lib/agent-engine/ensaio/ensaiar";
+import { ensaiarTurno, EnsaioOcupadoError, VersaoDoEnsaioError } from "@/lib/agent-engine/ensaio/ensaiar";
 import { loadEnv } from "@/lib/agent-engine/env";
 import { createLogger } from "@/lib/agent-engine/obs/logger";
 import { logger } from "@/lib/logger";
@@ -38,7 +40,8 @@ const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 const pedidoSchema = z
   .object({
-    versao: versionCreateSchema,
+    versao: versionCreateSchema.optional(),
+    versao_id: z.string().regex(UUID_RX).optional(),
     conversa: z
       .array(
         z
@@ -55,7 +58,10 @@ const pedidoSchema = z
     /** ISO — "testar como se fosse este instante" (horário de funcionamento, janela). */
     agora: z.string().datetime({ offset: true }).optional(),
   })
-  .strict();
+  .strict()
+  .refine((p) => (p.versao === undefined) !== (p.versao_id === undefined), {
+    message: "envie o formulário (versao) ou uma versão salva (versao_id), não os dois",
+  });
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
   const requestId = randomUUID();
@@ -82,26 +88,32 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const admin = createAdminClient();
   const v = parsed.data.versao;
-
-  // O número e o escopo vêm do CORPO: o ensaio roda com eles (ritmo, saúde e
-  // provedor do número; funis, materiais e integrações do agente), então cada
-  // id tem de ser desta organização — a mesma conferência de quem salva.
-  const { data: numero } = await admin
-    .from("channel_sessions")
-    .select("id")
-    .eq("id", v.channel_session_id)
-    .eq("organization_id", org.orgId)
-    .maybeSingle();
-  if (!numero) {
-    return fail("validation_failed", "Escolha um número conectado desta organização.", 422, { requestId });
+  if (v === undefined && agentId === null) {
+    return fail("validation_failed", "Uma versão salva só existe num agente já criado.", 422, { requestId });
   }
-  const escopo = await validarEscopoDaVersao(admin, org.orgId, {
-    pipeline_ids: v.pipeline_ids,
-    knowledge_source_ids: v.knowledge_source_ids,
-    api_endpoint_ids: v.api_endpoint_ids,
-  });
-  if (!escopo.ok) {
-    return fail("validation_failed", mensagemDoEscopo(escopo), 422, { requestId });
+
+  // O número e o escopo do FORMULÁRIO vêm do corpo: o ensaio roda com eles
+  // (ritmo, saúde e provedor do número; funis, materiais e integrações do
+  // agente), então cada id tem de ser desta organização — a mesma conferência
+  // de quem salva. Uma versão salva já passou por ela.
+  if (v !== undefined) {
+    const { data: numero } = await admin
+      .from("channel_sessions")
+      .select("id")
+      .eq("id", v.channel_session_id)
+      .eq("organization_id", org.orgId)
+      .maybeSingle();
+    if (!numero) {
+      return fail("validation_failed", "Escolha um número conectado desta organização.", 422, { requestId });
+    }
+    const escopo = await validarEscopoDaVersao(admin, org.orgId, {
+      pipeline_ids: v.pipeline_ids,
+      knowledge_source_ids: v.knowledge_source_ids,
+      api_endpoint_ids: v.api_endpoint_ids,
+    });
+    if (!escopo.ok) {
+      return fail("validation_failed", mensagemDoEscopo(escopo), 422, { requestId });
+    }
   }
 
   // O agente em edição é desta organização e não está arquivado. O id vem do
@@ -134,7 +146,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const relatorio = await ensaiarTurno(pool, depsBase, {
       organizationId: org.orgId,
       agentId,
-      versao: parsed.data.versao,
+      ...(v !== undefined ? { versao: v } : {}),
+      ...(parsed.data.versao_id !== undefined ? { versaoId: parsed.data.versao_id } : {}),
       conversa: parsed.data.conversa,
       ...(parsed.data.nome_do_contato !== undefined ? { nomeDoContato: parsed.data.nome_do_contato } : {}),
       ...(parsed.data.agora !== undefined ? { agora: new Date(parsed.data.agora) } : {}),
@@ -157,6 +170,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
     return ok(relatorio, { requestId });
   } catch (err) {
+    if (err instanceof VersaoDoEnsaioError) {
+      return fail("not_found", err.message, 404, { requestId });
+    }
     if (err instanceof EnsaioOcupadoError) {
       return fail("state_conflict", err.message, 409, { requestId });
     }
