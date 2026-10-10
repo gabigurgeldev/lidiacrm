@@ -286,6 +286,23 @@ function causaDoBanco(err: unknown): string {
 }
 
 /**
+ * Só o PADRÃO declarado da organização (provedor e modelo), sem credencial.
+ *
+ * Existe para `runModelCall` decidir o ponto mesmo quando o provedor padrão não
+ * tem chave: a escolha do ponto pode apontar para outro provedor que tem. Ver o
+ * comentário no uso.
+ */
+export async function lerPadraoDaOrg(
+  db: pg.Pool,
+  organizationId: string,
+): Promise<{ provider: string; defaultModel: string | null }> {
+  const { rows } = await db.query<LinhaDeConfig>(SQL_CONFIG_LEGADO, [organizationId]);
+  if (rows.length === 0) throw new Error('organização inexistente ao resolver config LLM');
+  const settings = llmSettingsSchema.parse(rows[0]?.llm ?? {});
+  return { provider: settings.provider, defaultModel: settings.default_model ?? null };
+}
+
+/**
  * Resolve a config LLM da org: knobs de organizations.settings->'llm' + credencial
  * BYOK mais recente ativa/validada de ai_provider_credentials (decifrada com
  * aes_gcm). Sem BYOK → fallback cfg.anthropicApiKey (só anthropic). Sem nada →

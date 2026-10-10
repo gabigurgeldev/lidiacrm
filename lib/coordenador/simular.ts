@@ -87,13 +87,23 @@ export async function simular(args: {
     proposta.acao === "destino" || proposta.acao === "manter"
       ? { chave: proposta.destino.chave, nome: proposta.destino.nome, tipo: proposta.destino.tipo }
       : null;
-  const motivo = "motivo" in proposta ? proposta.motivo : "decisor_falhou";
+  // Sem o modelo ligado na simulação, ninguém falhou: o modelo só não foi
+  // perguntado. Dizer "o modelo de decisão falhou" aqui mandava quem testava
+  // caçar um defeito que não existia — e escondia o que existia.
+  const naoConsultado = precisouDoModelo && args.decisor === null;
+  const motivo = naoConsultado
+    ? "modelo_nao_consultado"
+    : "motivo" in proposta
+      ? proposta.motivo
+      : "decisor_falhou";
   return {
     acao: proposta.acao,
     destino,
     categoria: proposta.acao === "destino" || proposta.acao === "manter" ? proposta.categoria : null,
     motivo,
-    motivo_legivel: rotuloDoMotivo(motivo),
+    motivo_legivel: naoConsultado
+      ? "Simulação sem o modelo: seguiu o destino padrão. Ligue “Consultar o modelo de verdade” para ver a escolha real."
+      : rotuloDoMotivo(motivo),
     usou_modelo: decisao !== null,
     precisou_do_modelo: precisouDoModelo,
     decisor: decisao

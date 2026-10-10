@@ -35,6 +35,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
+import { ModeloDoPonto } from "@/app/app/ai/providers/_components/ModeloDoPonto";
 import { apiClient } from "@/lib/api/client";
 import type { LinhaDeAtividade, Painel } from "@/lib/coordenador/painel";
 import {
@@ -494,13 +495,25 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
             />
             <Label htmlFor="usar-modelo">{t("Usar o modelo quando as regras não bastarem")}</Label>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {t("O modelo é o que você escolher em")}{" "}
-            <Link href="/app/ai/providers" className="underline">
-              {t("IA › Provedores")}
-            </Link>{" "}
-            {t("no ponto \"Escolher quem conduz a conversa\".")}
-          </p>
+        </Card>
+
+        {/* Sempre visível: escondido atrás do interruptor, quem procurava o
+            modelo de decisão não o achava (2026-10-10). */}
+        <Card className="flex flex-col gap-2 p-4" data-testid="modelo-do-decisor">
+          <div className="flex flex-col">
+            <span className="text-sm font-medium">{t("Modelo de decisão")}</span>
+            <span className="text-xs text-muted-foreground">
+              {t(
+                "O modelo que escolhe quem conduz quando as regras não bastam. Na OpenRouter, os roteadores (como jev-router e auto) aparecem no topo da lista.",
+              )}
+            </span>
+            {!config.decisor.usar_modelo && (
+              <span className="text-xs text-amber-600 dark:text-amber-500">
+                {t("Desligado: ligue “Usar o modelo quando as regras não bastarem” acima para ele ser consultado.")}
+              </span>
+            )}
+          </div>
+          <ModeloDoPonto pontoId="coordenador_decidir" />
         </Card>
 
         {agentesNaPolitica.length > 0 && politica.destinos.length > 1 && (
