@@ -58,7 +58,7 @@ import { buildNativeMediaParts } from './media-parts';
 import { enqueueJob, rescheduleJob, type JobRow, type Queryable } from '../queue/queue';
 import { applyLeadStateUpdate, getLeadState, type LeadStage, type LeadStateRow } from './lead-state';
 import { applySaveLeadNote, buildNotesIndexBlock, getLeadNoteBody } from './lead-notes';
-import { emOrdem } from './em-ordem';
+import { emOrdem, novaFilaDeEnvio } from './em-ordem';
 import { applyScheduleFollowup, type FollowupWindowKnobs } from './schedule-followup';
 import {
   avisarLeadDaEscalacao,
@@ -2170,6 +2170,8 @@ async function executarTurnoDoAgente(
    */
   const mcpToolIdsDoTurno: string[] = [];
 
+  // Texto e opções saem na MESMA fila: a ordem do turno vale entre as duas.
+  const filaDeEnvioDoTurno = novaFilaDeEnvio();
   const rawTools: ToolSet = {
     get_lead_context: tool({
       ...AGENT_TOOL_DEFS.get_lead_context,
@@ -2370,7 +2372,8 @@ async function executarTurnoDoAgente(
     }),
     send_options: tool({
       ...AGENT_TOOL_DEFS.send_options,
-      execute: async ({ pergunta, opcoes, formato }) => {
+      // Na mesma fila do send_message (ver `FilaDeEnvio` em `em-ordem.ts`).
+      execute: emOrdem(async ({ pergunta, opcoes, formato }: { pergunta: string; opcoes: string[]; formato?: 'enquete' | 'lista' }) => {
         if (seq >= maxSendsPerTurn) {
           return {
             ok: false,
@@ -2471,7 +2474,7 @@ async function executarTurnoDoAgente(
           };
         }
         return { ok: true, status: 'aceita_aguardando_canal' };
-      },
+      }, filaDeEnvioDoTurno),
     }),
     send_message: tool({
       ...AGENT_TOOL_DEFS.send_message,
@@ -2718,7 +2721,7 @@ async function executarTurnoDoAgente(
             error: { code: 'internal_error', message: 'erro interno no envio — encerre o turno agora.' },
           };
         }
-      }),
+      }, filaDeEnvioDoTurno),
     }),
     update_lead_state: tool({
       ...AGENT_TOOL_DEFS.update_lead_state,

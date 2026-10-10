@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { emOrdem } from './em-ordem';
+import { emOrdem, novaFilaDeEnvio } from './em-ordem';
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -50,6 +50,30 @@ describe('send_message do turno passa pela fila', () => {
     const fonte = readFileSync(join(__dirname, 'inbound-turn.ts'), 'utf-8');
     const i = fonte.indexOf('    send_message: tool({');
     expect(i).toBeGreaterThan(-1);
+    expect(fonte.slice(i, i + 300)).toMatch(/execute: emOrdem\(/);
+  });
+});
+
+describe('texto e opções dividem a fila do turno', () => {
+  it('duas funções na MESMA fila saem na ordem pedida, mesmo a primeira sendo mais lenta', async () => {
+    const fila = novaFilaDeEnvio();
+    const saida: string[] = [];
+    const texto = emOrdem(async (s: string) => {
+      await new Promise((r) => setTimeout(r, 30));
+      saida.push(s);
+    }, fila);
+    const opcoes = emOrdem(async (s: string) => {
+      saida.push(s);
+    }, fila);
+    await Promise.all([texto('Perfeito, anotado!'), opcoes('enquete')]);
+    expect(saida).toEqual(['Perfeito, anotado!', 'enquete']);
+  });
+
+  it('send_message e send_options usam a fila do turno', () => {
+    const fonte = readFileSync(join(__dirname, 'inbound-turn.ts'), 'utf-8');
+    const usos = fonte.split('}, filaDeEnvioDoTurno),').length - 1;
+    expect(usos).toBe(2);
+    const i = fonte.indexOf('    send_options: tool({');
     expect(fonte.slice(i, i + 300)).toMatch(/execute: emOrdem\(/);
   });
 });
