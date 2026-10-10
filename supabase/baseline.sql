@@ -9504,9 +9504,13 @@ do $$ begin
       'text', 'image', 'video', 'audio', 'document', 'sticker',
       'location', 'contact', 'reaction', 'system',
       -- novo: envio de template aprovado (canal oficial, fora da janela de 24h)
-      'template'
+      'template',
+      -- (migration 0236) opções tocáveis mandadas por nós; a resposta volta como
+      -- 'text'. Entram NESTE bloco, e não no apêndice da 0236: duas reconstruções
+      -- da mesma constraint fazem a primeira desfazer a segunda num update.
+      'poll', 'list'
     ]));
-end $$;
+end $;
 
 -- Nome do template disparado. Fica em coluna, não só em `metadata`, porque é o que
 -- responde "quanto gastei com o template X?" sem varrer jsonb — e porque `metadata`
@@ -21801,19 +21805,13 @@ revoke insert, update, delete on public.backoffice_tenants from authenticated, a
 
 -- ---- enquete e lista viram tipos de mensagem; o agente ganha a chave (migration 0236) ----
 --
--- Antes da VARREDURA anon, como a 0227: CHECK de messages.type só ACRESCENTA
--- valores (todo dado antigo continua válido), coluna nova com default e o
--- trigger de imutabilidade que passa a vigiá-la. Idempotente.
-do $$ begin
-  alter table public.messages drop constraint if exists messages_type_check;
-  alter table public.messages add constraint messages_type_check
-    check (type = any (array[
-      'text', 'image', 'video', 'audio', 'document', 'sticker',
-      'location', 'contact', 'reaction', 'system', 'template',
-      -- novos: opções interativas mandadas por nós (a resposta volta como text)
-      'poll', 'list'
-    ]));
-end $$;
+-- Antes da VARREDURA anon, como a 0227: coluna nova com default e o trigger de
+-- imutabilidade que passa a vigiá-la. Idempotente.
+--
+-- 'poll' e 'list' em messages_type_check estão no bloco ÚNICO da constraint
+-- (o da migration 0091, acima), e o kind 'escolha_nao_lida' no bloco único de
+-- agent_inbox_items_kind_check — reconstruir aqui de novo seria o que
+-- `baseline-constraint-reconstruida.test.ts` reprova.
 
 alter table public.ai_agent_versions
   add column if not exists interactive_options_enabled boolean not null default true;

@@ -22,7 +22,7 @@ const FONTE = fs.readFileSync(path.join(process.cwd(), "lib/agent-engine/agent/i
 function corpoDoExecute(): string {
   const i = FONTE.indexOf("send_options: tool({");
   expect(i, "âncora `send_options: tool({` sumiu do turno").toBeGreaterThan(-1);
-  const j = FONTE.indexOf("search_knowledge: tool({", i);
+  const j = FONTE.indexOf("send_message: tool({", i);
   expect(j, "âncora de fim (a tool seguinte) sumiu").toBeGreaterThan(i);
   return FONTE.slice(i, j);
 }

@@ -2334,6 +2334,39 @@ async function executarTurnoDoAgente(
         return { ok: true, status: 'aceita_aguardando_canal' };
       },
     }),
+    search_knowledge: tool({
+      ...AGENT_TOOL_DEFS.search_knowledge,
+      execute: async ({ query }) => {
+        const fontes = agentConfig?.knowledgeSourceIds ?? [];
+        if (fontes.length === 0 && agentConfig?.activeKbVersionId == null) {
+          return {
+            ok: false,
+            error: { code: 'no_knowledge_base', message: 'este agente não tem material de consulta habilitado — siga sem ele.' },
+          };
+        }
+        const out = await searchKnowledge(pool, {
+          organizationId: tenantId,
+          knowledgeSourceIds: fontes,
+          kbVersionId: agentConfig?.activeKbVersionId ?? null,
+          query,
+          topK: agentConfig?.ragTopK ?? 5,
+          threshold: agentConfig?.ragSimilarityThreshold ?? 0.4,
+          jobId: job.id,
+          agentId: agentConfig?.agentId ?? null,
+        }, { log: runLog });
+        if (out.ok && out.results.length > 0) {
+          // As citações são montadas AQUI, pelo código, a partir do resultado
+          // cru — é por isso que os ids podem sair do que vai ao modelo sem
+          // perder nada: quem precisa deles é esta linha, não o modelo.
+          pendingCitations = citationsFromHits(out.results);
+        }
+        // `chunk_id` e `knowledge_source_id` viajavam CRUS para o modelo em toda
+        // busca com RAG — dois UUIDs por resultado, sem uso nenhum do lado dele
+        // (nenhuma ferramenta os aceita como argumento). UUID cru na resposta ao
+        // cliente foi MEDIDO nesta base; esta era uma fonte silenciosa dele.
+        return turnoProjeta(mcpToolIdsDoTurno) ? projetarRetornoDeTool(out) : out;
+      },
+    }),
     send_options: tool({
       ...AGENT_TOOL_DEFS.send_options,
       execute: async ({ pergunta, opcoes, formato }) => {
@@ -2437,39 +2470,6 @@ async function executarTurnoDoAgente(
           };
         }
         return { ok: true, status: 'aceita_aguardando_canal' };
-      },
-    }),
-    search_knowledge: tool({
-      ...AGENT_TOOL_DEFS.search_knowledge,
-      execute: async ({ query }) => {
-        const fontes = agentConfig?.knowledgeSourceIds ?? [];
-        if (fontes.length === 0 && agentConfig?.activeKbVersionId == null) {
-          return {
-            ok: false,
-            error: { code: 'no_knowledge_base', message: 'este agente não tem material de consulta habilitado — siga sem ele.' },
-          };
-        }
-        const out = await searchKnowledge(pool, {
-          organizationId: tenantId,
-          knowledgeSourceIds: fontes,
-          kbVersionId: agentConfig?.activeKbVersionId ?? null,
-          query,
-          topK: agentConfig?.ragTopK ?? 5,
-          threshold: agentConfig?.ragSimilarityThreshold ?? 0.4,
-          jobId: job.id,
-          agentId: agentConfig?.agentId ?? null,
-        }, { log: runLog });
-        if (out.ok && out.results.length > 0) {
-          // As citações são montadas AQUI, pelo código, a partir do resultado
-          // cru — é por isso que os ids podem sair do que vai ao modelo sem
-          // perder nada: quem precisa deles é esta linha, não o modelo.
-          pendingCitations = citationsFromHits(out.results);
-        }
-        // `chunk_id` e `knowledge_source_id` viajavam CRUS para o modelo em toda
-        // busca com RAG — dois UUIDs por resultado, sem uso nenhum do lado dele
-        // (nenhuma ferramenta os aceita como argumento). UUID cru na resposta ao
-        // cliente foi MEDIDO nesta base; esta era uma fonte silenciosa dele.
-        return turnoProjeta(mcpToolIdsDoTurno) ? projetarRetornoDeTool(out) : out;
       },
     }),
     send_message: tool({

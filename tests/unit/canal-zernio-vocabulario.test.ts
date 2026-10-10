@@ -34,6 +34,10 @@ describe("capabilities do canal intermediado", () => {
       voiceNote: "opus-only",
       groups: "limited",
       costPerMessage: true,
+      // Não medido no transporte deste canal: texto numerado até alguém medir.
+      // Divergir do oficial aqui é deliberado — o PERMITIDO pela Meta inclui a
+      // lista, mas o que o intermediário entrega dela ninguém conferiu.
+      opcoesInterativas: { enquete: false, lista: false },
     });
   });
 
@@ -128,7 +132,9 @@ describe("o envelope carrega a thread do provider", () => {
     // para obrigar quem acrescenta um call site novo a DECIDIR se ele também
     // carrega a thread — foi assim que este caso pegou a rama de modelo, que a
     // princípio não precisaria dela mas precisa quando o provider reaproveita a
-    // conversa existente, e foi assim que ele pegou a de contato agora.
+    // conversa existente, e foi assim que ele pegou a de contato agora — e a
+    // de enquete/lista (migration 0236), que no canal oficial sai como lista
+    // interativa e precisa continuar a mesma conversa pelo mesmo motivo.
     //
     // A resposta para o cartão de contato é a mesma das outras três: o canal
     // oficial endereça por thread própria, e um cartão enviado sem ela abriria
@@ -136,8 +142,8 @@ describe("o envelope carrega a thread do provider", () => {
     const passagens = [...fonte.matchAll(/providerConversationId:\s*c\.provider_conversation_id/g)];
     expect(
       passagens.length,
-      "todos os call sites (texto, mídia, modelo e contato) precisam passar",
-    ).toBe(4);
+      "todos os call sites (texto, mídia, modelo, contato e opções) precisam passar",
+    ).toBe(5);
   });
 });
 
