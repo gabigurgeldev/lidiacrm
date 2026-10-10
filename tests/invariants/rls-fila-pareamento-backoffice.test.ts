@@ -86,6 +86,22 @@ beforeAll(() => {
   `);
 });
 
+/**
+ * A escrita foi BLOQUEADA? Duas formas contam, e só elas: a RLS recusar a linha
+ * (`writeCountAs` devolve 0) ou o privilégio de escrita ter sido revogado do
+ * papel (`permission denied`, o que a 0235 faz). O helper compartilhado relança
+ * o segundo caso — e afrouxá-lo lá mudaria o que todo invariante mede.
+ */
+function escritaBloqueada(usuario: string, dml: string): boolean {
+  try {
+    return writeCountAs(usuario, dml) === 0;
+  } catch (err) {
+    const stderr = (err as { stderr?: string }).stderr ?? "";
+    if (stderr.includes("permission denied for table")) return true;
+    throw err;
+  }
+}
+
 const conta = (usuario: string, tabela: string, org: string) =>
   countAs(usuario, `select count(*) from public.${tabela} where organization_id = '${org}';`);
 
@@ -126,19 +142,19 @@ describe("channel_pairing_links — link de pareamento (0213, papel na 0235)", (
   });
   it("ninguém cria link pela API direta — nem na própria organização", () => {
     expect(
-      writeCountAs(
+      escritaBloqueada(
         GERENTE_A,
         `insert into public.channel_pairing_links (organization_id, channel_session_id, expires_at) values ('${ORG_A}', '${CANAL_A}', now() + interval '30 minutes')`,
       ),
-    ).toBe(0);
+    ).toBe(true);
   });
   it("o gerente da A não cria link de pareamento para o número da B", () => {
     expect(
-      writeCountAs(
+      escritaBloqueada(
         GERENTE_A,
         `insert into public.channel_pairing_links (organization_id, channel_session_id, expires_at) values ('${ORG_B}', '${CANAL_B}', now() + interval '30 minutes')`,
       ),
-    ).toBe(0);
+    ).toBe(true);
   });
 });
 
@@ -154,15 +170,15 @@ describe("backoffice_tenants — vínculo com o Back Office (0216, papel na 0235
   });
   it("nem o admin da A altera a própria linha pela API direta", () => {
     expect(
-      writeCountAs(ADMIN_A, `update public.backoffice_tenants set plan_name = 'mexido' where organization_id = '${ORG_A}'`),
-    ).toBe(0);
+      escritaBloqueada(ADMIN_A, `update public.backoffice_tenants set plan_name = 'mexido' where organization_id = '${ORG_A}'`),
+    ).toBe(true);
   });
   it("o membro da A não altera a linha da B", () => {
     expect(
-      writeCountAs(
+      escritaBloqueada(
         GERENTE_A,
         `update public.backoffice_tenants set plan_name = 'invadido' where organization_id = '${ORG_B}'`,
       ),
-    ).toBe(0);
+    ).toBe(true);
   });
 });
