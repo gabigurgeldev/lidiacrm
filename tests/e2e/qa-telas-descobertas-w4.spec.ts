@@ -38,7 +38,7 @@ const ts = Date.now();
 async function login(page: Page): Promise<void> {
   await page.goto(`${APP_URL}/login`);
   await page.getByLabel(/e-?mail/i).fill(creds.users.manager!.email);
-  await page.getByLabel(/senha/i).fill(creds.password);
+  await page.getByLabel("Senha", { exact: true }).fill(creds.password);
   await page.getByRole("button", { name: /entrar/i }).click();
   await page.waitForURL(/\/app(\/|$)/, { timeout: 20_000 });
 }
