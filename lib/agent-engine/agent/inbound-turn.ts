@@ -58,6 +58,7 @@ import { buildNativeMediaParts } from './media-parts';
 import { enqueueJob, rescheduleJob, type JobRow, type Queryable } from '../queue/queue';
 import { applyLeadStateUpdate, getLeadState, type LeadStage, type LeadStateRow } from './lead-state';
 import { applySaveLeadNote, buildNotesIndexBlock, getLeadNoteBody } from './lead-notes';
+import { emOrdem } from './em-ordem';
 import { applyScheduleFollowup, type FollowupWindowKnobs } from './schedule-followup';
 import {
   avisarLeadDaEscalacao,
@@ -2345,7 +2346,8 @@ async function executarTurnoDoAgente(
     }),
     send_message: tool({
       ...AGENT_TOOL_DEFS.send_message,
-      execute: async ({ body }) => {
+      // Um envio por vez, na ordem que o modelo escreveu (ver `em-ordem.ts`).
+      execute: emOrdem(async ({ body }: { body: string }) => {
         if (seq >= maxSendsPerTurn) {
           return {
             ok: false,
@@ -2587,7 +2589,7 @@ async function executarTurnoDoAgente(
             error: { code: 'internal_error', message: 'erro interno no envio — encerre o turno agora.' },
           };
         }
-      },
+      }),
     }),
     update_lead_state: tool({
       ...AGENT_TOOL_DEFS.update_lead_state,
