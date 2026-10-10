@@ -4,8 +4,8 @@ secao: adicionado
 titulo: Enquete e lista — o cliente toca na opção em vez de digitar
 ---
 
-Perguntas com escolhas fechadas agora podem sair como **enquete** ou **lista de
-opções** do WhatsApp, em três lugares:
+Perguntas com escolhas fechadas agora podem sair como **enquete** ou como
+**lista de opções** do WhatsApp, em três lugares:
 
 - **Fluxos** — o bloco "Esperar uma escolha" ganhou "Como mostrar as opções"
   (Para tocar, Enquete, Lista ou Texto numerado). Blocos novos já nascem "Para
