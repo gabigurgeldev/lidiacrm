@@ -485,7 +485,24 @@ export interface PortaDeCanal {
      * fechou, e o bloco de envio é justamente o que roda sem ninguém olhando.
      */
     modelo?: ModeloDeEnvio;
+    /**
+     * Quando presente, a pergunta sai como OPÇÕES TOCÁVEIS (enquete ou lista),
+     * e `texto` é o que sai se o canal não desenhar nenhuma das duas — quem
+     * decide é a capability da conexão, longe daqui. O bloco não sabe, e não
+     * pode saber, qual canal desenha o quê.
+     */
+    opcoes?: OpcoesDoFluxo;
   }): Promise<DesfechoDeEnvio>;
+}
+
+/** Uma pergunta com opções tocáveis, no vocabulário do motor. */
+export interface OpcoesDoFluxo {
+  /** `automatico` = o melhor que a conexão desenhar. */
+  formato: "enquete" | "lista" | "automatico";
+  pergunta: string;
+  opcoes: { id: string; label: string }[];
+  /** Texto do botão que abre a lista. */
+  botao?: string;
 }
 
 /**

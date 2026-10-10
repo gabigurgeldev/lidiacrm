@@ -32,6 +32,9 @@
 
 import { z } from "zod";
 
+import { listaNumerada } from "@/lib/channels/opcoes-interativas";
+import { opcoesInterativasSchema } from "@/lib/schemas";
+
 import {
   ramoDeExcecao,
   ramoPadrao,
@@ -39,6 +42,7 @@ import {
   type FlowExecutionContext,
   type FlowNodeDefinition,
   type NodeExecutionResult,
+  type OpcoesDoFluxo,
 } from "../types";
 
 /** Onde o acordador deixa o payload do evento. Igual ao do `logic.await_event`. */
@@ -296,18 +300,30 @@ export const menuConfigSchema = z.strictObject({
     .regex(/^[a-z][a-z0-9_]{0,39}$/u, "Use letras minúsculas, números e _ (ex.: sistema).")
     .nullable()
     .default(null),
+  /**
+   * COMO a pergunta mostra as opções, quando o menu a manda.
+   *
+   * `texto` (o de sempre, default para todo fluxo já publicado) = lista numerada
+   * no corpo. `enquete`/`lista` = opções tocáveis; `automatico` = o melhor que a
+   * conexão desenhar. Nos três tocáveis, conexão que não desenha o formato
+   * recebe o outro, ou a mesma pergunta numerada — quem decide é a capability
+   * do canal, e o casamento da resposta aceita o toque e o número digitado.
+   */
+  formato: z.enum(["texto", "enquete", "lista", "automatico"]).default("texto"),
+  /** Texto do botão que abre a lista (vazio = "Ver opções"). Até 20 caracteres. */
+  texto_do_botao: z.string().max(20).default(""),
 });
 export type MenuConfig = z.infer<typeof menuConfigSchema>;
 
 /** A saída de quando a pergunta do próprio bloco não saiu. */
 export const RAMO_PERGUNTA_NAO_SAIU = "nao_saiu";
 
-const EMOJI_DO_NUMERO = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
-
-/** "1️⃣ Suporte" / "2️⃣ Financeiro", uma por linha — a lista que acompanha a pergunta. */
-export function listaNumerada(rotulos: readonly string[]): string {
-  return rotulos.map((r, i) => `${EMOJI_DO_NUMERO[i] ?? `${i + 1}.`} ${r}`).join("\n");
-}
+/**
+ * "1️⃣ Suporte" / "2️⃣ Financeiro", uma por linha — a lista que acompanha a
+ * pergunta. Mora em `lib/channels/opcoes-interativas.ts` porque é TAMBÉM o
+ * rebaixamento de enquete/lista para texto: as duas listas precisam ser a mesma.
+ */
+export { listaNumerada };
 
 /**
  * A resposta escolhe a opção de posição `indice` (base 0) pelo número? Aceita
@@ -318,6 +334,29 @@ export function respostaEhONumero(texto: string, indice: number): boolean {
   if (limpo === "") return false;
   if (indice === 9 && texto.trim() === "🔟") return true;
   return limpo === String(indice + 1);
+}
+
+/**
+ * As opções do menu como pedido de opções TOCÁVEIS, ou `null` quando o menu
+ * deve seguir pelo texto numerado de sempre.
+ *
+ * `null` também quando as opções não formam uma escolha válida para o canal —
+ * uma opção só, ou dois rótulos que ficam iguais sem acento: a enquete os
+ * recusaria (ou mostraria duas opções idênticas, e a resposta seria ambígua).
+ * O texto numerado não tem esse problema, porque a pessoa responde o NÚMERO.
+ */
+export function opcoesTocaveisDoMenu(
+  config: MenuConfig,
+  perguntaRenderizada: string,
+): OpcoesDoFluxo | null {
+  if (config.formato === "texto") return null;
+  const pedido = {
+    pergunta: perguntaRenderizada,
+    opcoes: config.opcoes.map((o) => ({ id: o.id, label: o.label })),
+    ...(config.texto_do_botao.trim() !== "" ? { botao: config.texto_do_botao.trim() } : {}),
+  };
+  if (!opcoesInterativasSchema.safeParse(pedido).success) return null;
+  return { formato: config.formato, ...pedido };
 }
 
 export const RAMO_NAO_RESPONDEU = "nao_respondeu";
@@ -352,10 +391,15 @@ export const logicChoiceMenu: FlowNodeDefinition<MenuConfig> = {
       }
 
       const texto = textoDoEvento(evento as Record<string, unknown>);
+      // Com opções tocáveis, o número e o rótulo valem SEMPRE: o toque devolve o
+      // rótulo como texto, e a conexão que rebaixou para a lista numerada faz a
+      // pessoa responder o número — exigir `aceitar_numero` ligado deixaria o
+      // menu surdo justamente para a resposta que ele mesmo pediu.
+      const aceitaNumeroERotulo = config.aceitar_numero || config.formato !== "texto";
       const escolhida = config.opcoes.find(
         (o, i) =>
           mensagemCasa(texto, o.aceita, config.modo) ||
-          (config.aceitar_numero &&
+          (aceitaNumeroERotulo &&
             (respostaEhONumero(texto, i) || normalizar(texto) === normalizar(o.label))),
       );
 
@@ -384,8 +428,15 @@ export const logicChoiceMenu: FlowNodeDefinition<MenuConfig> = {
 
     // Com `pergunta`, o menu manda a própria pergunta antes de esperar.
     if (config.pergunta.trim() !== "") {
-      const lista = config.aceitar_numero ? listaNumerada(config.opcoes.map((o) => o.label)) : "";
-      const naoSaiu = await mandarPergunta(ctx, config.pergunta, config.canal_id, lista);
+      // Opções tocáveis sempre levam a lista numerada no texto de reserva: se a
+      // conexão rebaixar, a pessoa precisa ver os números para responder.
+      const lista =
+        config.aceitar_numero || config.formato !== "texto"
+          ? listaNumerada(config.opcoes.map((o) => o.label))
+          : "";
+      const naoSaiu = await mandarPergunta(ctx, config.pergunta, config.canal_id, lista, (p) =>
+        opcoesTocaveisDoMenu(config, p),
+      );
       if (naoSaiu !== null) {
         return { kind: "advance", branch_id: RAMO_PERGUNTA_NAO_SAIU, vars: { envio_recusado: naoSaiu } };
       }
@@ -420,16 +471,22 @@ export async function mandarPergunta(
   pergunta: string,
   canalId: string | null,
   lista: string,
+  /** Opções tocáveis; recebem a pergunta JÁ renderizada. */
+  tocaveis?: (perguntaRenderizada: string) => OpcoesDoFluxo | null,
 ): Promise<string | null> {
   const texto = ctx.render(pergunta).trim();
   if (texto === "" && lista === "") return null;
   const contato = ctx.fatos.contact;
   if (contato === null || contato.phone_number === null) return "sem_telefone_do_cliente";
+  const opcoes = texto !== "" && tocaveis ? tocaveis(texto) : null;
   const desfecho = await ctx.canal.enviarParaContato({
     contactId: contato.id,
     tipo: "texto",
+    // Com opções tocáveis, este texto é o RESERVA: é o que sai se a conexão não
+    // desenhar enquete nem lista — e é a mesma pergunta numerada de sempre.
     texto: lista === "" ? texto : `${texto}\n\n${lista}`,
     channelSessionId: canalId,
+    ...(opcoes ? { opcoes } : {}),
   });
   return desfecho.kind === "recusado" ? desfecho.motivo : null;
 }

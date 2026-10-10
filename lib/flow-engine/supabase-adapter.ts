@@ -38,6 +38,7 @@ import type {
   EsperaEmCurso,
   FatosDaExecucao,
   ModeloDeEnvio,
+  OpcoesDoFluxo,
   PedidoDeDisparo,
   TipoDeMensagemDoFluxo,
 } from "./types";
@@ -757,7 +758,7 @@ export function criarPortas(
         });
       },
 
-      async enviarParaContato({ contactId, tipo, texto, mediaUrl, channelSessionId, modelo }) {
+      async enviarParaContato({ contactId, tipo, texto, mediaUrl, channelSessionId, modelo, opcoes }) {
         return enviarParaContatoDoFunil(admin, orgId, {
           contactId,
           tipo,
@@ -765,6 +766,7 @@ export function criarPortas(
           mediaUrl,
           channelSessionId,
           modelo,
+          opcoes,
           exec,
         });
       },
@@ -1166,6 +1168,7 @@ function corpoParaOHandler(input: {
   texto: string;
   mediaUrl?: string;
   modelo?: ModeloDeEnvio;
+  opcoes?: OpcoesDoFluxo;
 }): Record<string, unknown> {
   if (input.modelo) {
     return {
@@ -1174,6 +1177,20 @@ function corpoParaOHandler(input: {
       template_name: input.modelo.nome,
       template_language: input.modelo.idioma,
       template_values: input.modelo.valores,
+    };
+  }
+  if (input.opcoes) {
+    // O PEDIDO. O handler decide pela capability da conexão se sai enquete,
+    // lista ou a pergunta numerada — "automatico" pede enquete, que rebaixa
+    // para lista e depois para texto.
+    return {
+      conversation_id: input.conversationId,
+      type: input.opcoes.formato === "lista" ? "list" : "poll",
+      opcoes: {
+        pergunta: input.opcoes.pergunta,
+        opcoes: input.opcoes.opcoes,
+        ...(input.opcoes.botao ? { botao: input.opcoes.botao } : {}),
+      },
     };
   }
   return {
@@ -1197,6 +1214,7 @@ async function enviarParaContatoDoFunil(
     mediaUrl?: string;
     channelSessionId: string | null;
     modelo?: ModeloDeEnvio;
+    opcoes?: OpcoesDoFluxo;
     exec: FlowExecutionRow;
   },
 ): Promise<DesfechoDeEnvio> {
@@ -1222,6 +1240,7 @@ async function enviarParaContatoDoFunil(
         texto: input.texto,
         mediaUrl: input.mediaUrl,
         modelo: input.modelo,
+        opcoes: input.opcoes,
       }) as Parameters<typeof sendMessageHandler>[2],
     )) as unknown as MensagemEnviada;
 

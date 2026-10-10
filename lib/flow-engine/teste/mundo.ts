@@ -28,6 +28,7 @@ import type {
   DesfechoDeEnvio,
   FatosDaExecucao,
   ModeloDeEnvio,
+  OpcoesDoFluxo,
 } from "../types";
 
 const ORG = "org-1";
@@ -114,6 +115,8 @@ export interface Mundo {
      * texto" produzem a mesma mensagem na tela do falso.
      */
     modelo?: ModeloDeEnvio;
+    /** A pergunta como opções tocáveis, quando o menu pediu. */
+    opcoes?: OpcoesDoFluxo;
   }>;
   avisos: Array<{ titulo: string; corpo: string }>;
   elegiveis: AtendenteElegivel[];
@@ -516,7 +519,7 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
         });
         return mundo.desfechoDoEnvio;
       },
-      enviarParaContato: async ({ contactId, tipo, texto, mediaUrl, channelSessionId, modelo }) => {
+      enviarParaContato: async ({ contactId, tipo, texto, mediaUrl, channelSessionId, modelo, opcoes }) => {
         mundo.enviadosAoCliente.push({
           contactId,
           tipo,
@@ -524,6 +527,7 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
           mediaUrl,
           channelSessionId,
           modelo,
+          ...(opcoes ? { opcoes } : {}),
         });
         return mundo.desfechoDoEnvio;
       },

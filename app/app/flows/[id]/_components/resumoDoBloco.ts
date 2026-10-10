@@ -279,7 +279,17 @@ export function resumoDoBloco(
     case "logic.choice_menu": {
       const nomes = rotulos(lista(config, "opcoes"));
       if (nomes.length === 0) return { chave: "Sem opção escrita" };
-      return { chave: "Espera a escolha: {opcoes}", valores: { opcoes: encurtar(nomes.join(", ")) } };
+      const opcoes = encurtar(nomes.join(", "));
+      // O formato só importa quando o próprio menu manda a pergunta.
+      if (texto(config, "pergunta") !== null) {
+        const formato = texto(config, "formato");
+        if (formato === "enquete") return { chave: "Pergunta em enquete: {opcoes}", valores: { opcoes } };
+        if (formato === "lista") return { chave: "Pergunta em lista: {opcoes}", valores: { opcoes } };
+        if (formato === "automatico") {
+          return { chave: "Pergunta com opções tocáveis: {opcoes}", valores: { opcoes } };
+        }
+      }
+      return { chave: "Espera a escolha: {opcoes}", valores: { opcoes } };
     }
     case "logic.ask": {
       const v = texto(config, "variavel");

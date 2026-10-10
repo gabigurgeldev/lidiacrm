@@ -39,6 +39,9 @@ export function LogicChoiceMenuForm({ config, aoMudarConfig }: PropsDoFormulario
   const mudar = (patch: Record<string, unknown>) => aoMudarConfig({ ...config, ...patch });
   const opcoes = Array.isArray(config.opcoes) ? (config.opcoes as Opcao[]) : [];
   const horas = Math.round(Number(config.prazo_ms ?? 3_600_000) / 3_600_000);
+  const temPergunta = String(config.pergunta ?? "").trim() !== "";
+  // Fluxo publicado antes do campo não o tem: é o texto numerado de sempre.
+  const formato = typeof config.formato === "string" ? config.formato : "texto";
 
   const trocar = (novas: Opcao[]) => mudar({ opcoes: novas });
 
@@ -67,16 +70,49 @@ export function LogicChoiceMenuForm({ config, aoMudarConfig }: PropsDoFormulario
             )}
           />
         </Campo>
-        <div className="flex items-center gap-2">
-          <Switch
-            id="menu-aceitar-numero"
-            checked={config.aceitar_numero === true}
-            onCheckedChange={(v) => mudar({ aceitar_numero: v })}
-          />
-          <label htmlFor="menu-aceitar-numero" className="text-sm">
-            {t("Numerar as opções (1️⃣ 2️⃣ 3️⃣) e aceitar o número")}
-          </label>
-        </div>
+        {temPergunta ? (
+          <Campo rotulo={t("Como mostrar as opções")}>
+            <Select value={formato} onValueChange={(v) => mudar({ formato: v })}>
+              <SelectTrigger data-testid="campo-formato-do-menu">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="automatico">{t("Para tocar — o melhor que o número suportar")}</SelectItem>
+                <SelectItem value="enquete">{t("Enquete")}</SelectItem>
+                <SelectItem value="lista">{t("Lista de opções")}</SelectItem>
+                <SelectItem value="texto">{t("Texto numerado (1️⃣ 2️⃣ 3️⃣)")}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Dica
+              texto={t(
+                "Enquete funciona no número conectado por QR; lista funciona no QR (só em conversa individual) e no número oficial. Onde o formato não existir, a mesma pergunta sai numerada — o cliente toca ou digita o número, e o fluxo entende os dois.",
+              )}
+            />
+          </Campo>
+        ) : null}
+        {temPergunta && (formato === "lista" || formato === "automatico") ? (
+          <Campo rotulo={t("Texto do botão da lista (opcional)")}>
+            <Input
+              value={String(config.texto_do_botao ?? "")}
+              maxLength={20}
+              placeholder={t("Ver opções")}
+              onChange={(e) => mudar({ texto_do_botao: e.target.value })}
+              data-testid="campo-botao-da-lista"
+            />
+          </Campo>
+        ) : null}
+        {formato === "texto" ? (
+          <div className="flex items-center gap-2">
+            <Switch
+              id="menu-aceitar-numero"
+              checked={config.aceitar_numero === true}
+              onCheckedChange={(v) => mudar({ aceitar_numero: v })}
+            />
+            <label htmlFor="menu-aceitar-numero" className="text-sm">
+              {t("Numerar as opções (1️⃣ 2️⃣ 3️⃣) e aceitar o número")}
+            </label>
+          </div>
+        ) : null}
         <Campo rotulo={t("Guardar a escolha em (opcional)")}>
           <Input
             value={String(config.guardar_em ?? "")}
@@ -124,7 +160,7 @@ export function LogicChoiceMenuForm({ config, aoMudarConfig }: PropsDoFormulario
         </Campo>
       </Secao>
 
-      {String(config.pergunta ?? "").trim() !== "" ? (
+      {temPergunta ? (
         <div className="space-y-1.5">
           <p className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {t("Por onde enviar")}

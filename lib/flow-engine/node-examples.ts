@@ -123,6 +123,10 @@ export function configExemploDoTipo(tipo: string): Record<string, unknown> {
         // `exata` por padrão: com `contem`, "10 reais" escolheria a opção "1".
         modo: "exata",
         prazo_ms: 3_600_000,
+        // Bloco NOVO já nasce tocável: enquete no número por QR, lista no
+        // oficial, numerado onde nenhum dos dois existe. Fluxo já publicado não
+        // tem o campo e segue no default do schema (`texto`).
+        formato: "automatico",
       };
     case "logic.ask":
       return { pergunta: "Qual é o seu nome?", canal_id: null, variavel: "nome", prazo_ms: 3_600_000 };

@@ -143,6 +143,8 @@ describe("logic.choice_menu com o payload REAL", () => {
     canal_id: null,
     aceitar_numero: false,
     guardar_em: null,
+    formato: "texto" as const,
+    texto_do_botao: "",
   };
 
   it("⭐ reconhece a opção que veio em `body_preview`", async () => {
@@ -170,6 +172,97 @@ describe("logic.choice_menu com o payload REAL", () => {
       // depois quais respostas o menu não previu.
       expect(r.vars?.menu_resposta).toBe("quero outra coisa");
     }
+  });
+});
+
+describe("logic.choice_menu com opções tocáveis (enquete/lista)", () => {
+  const BASE = {
+    pergunta: "Qual setor?",
+    opcoes: [
+      { id: "op1", label: "Falar com vendas", aceita: ["vendas"] },
+      { id: "op2", label: "Suporte", aceita: ["suporte"] },
+    ],
+    modo: "exata" as const,
+    prazo_ms: 10 * 60_000,
+    canal_id: null,
+    // DESLIGADO de propósito: com opções tocáveis, rótulo e número valem mesmo assim.
+    aceitar_numero: false,
+    guardar_em: null,
+    formato: "enquete" as const,
+    texto_do_botao: "",
+  };
+
+  function ctxQueEnvia() {
+    const enviados: Array<Record<string, unknown>> = [];
+    const c = {
+      escopo: { event: PAYLOAD_REAL, frame: { vars: {} } },
+      render: (t: string) => t,
+      agora: () => new Date("2026-09-04T13:31:15.000Z"),
+      esperaEmCurso: null,
+      fatos: { contact: { id: "contato-1", phone_number: "+5531999998888" } },
+      canal: {
+        enviarParaContato: async (input: Record<string, unknown>) => {
+          enviados.push(input);
+          return { kind: "enviado", messageId: "m1" };
+        },
+      },
+    } as unknown as FlowExecutionContext;
+    return { c, enviados };
+  }
+
+  it("⭐ manda a pergunta como opções tocáveis, com a lista numerada como reserva", async () => {
+    const { c, enviados } = ctxQueEnvia();
+    const r = await logicChoiceMenu.execute(c, BASE);
+    expect(r.kind).toBe("await_event");
+    expect(enviados).toHaveLength(1);
+    expect(enviados[0]).toMatchObject({
+      tipo: "texto",
+      texto: "Qual setor?\n\n1️⃣ Falar com vendas\n2️⃣ Suporte",
+      opcoes: {
+        formato: "enquete",
+        pergunta: "Qual setor?",
+        opcoes: [
+          { id: "op1", label: "Falar com vendas" },
+          { id: "op2", label: "Suporte" },
+        ],
+      },
+    });
+  });
+
+  it("formato texto continua mandando só texto — fluxo publicado não muda", async () => {
+    const { c, enviados } = ctxQueEnvia();
+    await logicChoiceMenu.execute(c, { ...BASE, formato: "texto" });
+    expect(enviados[0]?.opcoes).toBeUndefined();
+    expect(enviados[0]?.texto).toBe("Qual setor?");
+  });
+
+  it("opções que não formam escolha válida (rótulos iguais sem acento) caem no texto numerado", async () => {
+    const { c, enviados } = ctxQueEnvia();
+    await logicChoiceMenu.execute(c, {
+      ...BASE,
+      opcoes: [
+        { id: "op1", label: "Não", aceita: ["n"] },
+        { id: "op2", label: "nao", aceita: ["x"] },
+      ],
+    });
+    expect(enviados[0]?.opcoes).toBeUndefined();
+    expect(enviados[0]?.texto).toContain("1️⃣ Não");
+  });
+
+  it("⭐ o toque volta como o RÓTULO e escolhe o ramo, mesmo sem `aceitar_numero`", async () => {
+    const r = await logicChoiceMenu.execute(
+      ctx(PAYLOAD_REAL, { evento: { ...PAYLOAD_REAL, body_preview: "Falar com vendas" } }),
+      BASE,
+    );
+    expect(r).toMatchObject({ kind: "advance", branch_id: "op1" });
+  });
+
+  it("⭐ conexão que rebaixou para texto: o número digitado também escolhe", async () => {
+    const r = await logicChoiceMenu.execute(
+      ctx(PAYLOAD_REAL, { evento: { ...PAYLOAD_REAL, body_preview: "2" } }),
+      BASE,
+    );
+    expect(r).toMatchObject({ kind: "advance", branch_id: "op2" });
   });
 });
 
