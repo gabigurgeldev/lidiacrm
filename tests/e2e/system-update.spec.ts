@@ -38,7 +38,7 @@ import * as path from "node:path";
 
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 
-import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
+import { codigoInedito, esperarProximaJanela } from "./utils/totp-inedito";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const SECRET = process.env.INTERNAL_SECRET ?? "";
@@ -95,11 +95,10 @@ async function loginWithTotp(page: Page, email: string, secret: string): Promise
 
   // Até 2 tentativas: um código pode expirar na borda da janela de 30s.
   for (let attempt = 0; attempt < 2; attempt++) {
-    if (msUntilNextTotpWindow() < 3_000) {
-      await page.waitForTimeout(msUntilNextTotpWindow() + 200);
-    }
-    const code = generateTotp(secret);
     const firstDigit = page.locator('input[aria-label="Dígito 1"]');
+    await firstDigit.waitFor({ state: "visible", timeout: 15_000 });
+    // Código inédito em TODA a suíte (o GoTrue recusa replay) — ver utils/totp-inedito.ts.
+    const code = await codigoInedito(page, secret);
     await firstDigit.click();
     await page.keyboard.type(code, { delay: 40 });
     try {
@@ -107,7 +106,7 @@ async function loginWithTotp(page: Page, email: string, secret: string): Promise
       return;
     } catch {
       // código rejeitado — espera a próxima janela e tenta de novo
-      await page.waitForTimeout(msUntilNextTotpWindow() + 200);
+      await esperarProximaJanela(page);
     }
   }
   throw new Error("MFA challenge failed after 2 TOTP attempts");

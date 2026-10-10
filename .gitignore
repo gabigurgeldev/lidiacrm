@@ -118,3 +118,5 @@ evidence/.sonda-score-residuo.json
 # Docker de todo self-hoster (`Dockerfile:79`). A origem fica no disco de quem
 # trabalha; só a saída comprimida é commitada e distribuída.
 assets-fonte/
+.e2e-totp-usados.json
+.e2e-admin-sessao.json

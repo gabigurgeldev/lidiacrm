@@ -6,7 +6,8 @@
  * 1. **O código TOTP não pode ser reusado.** Ele vale pela janela de 30 s, mas o
  *    servidor aceita cada um UMA vez (proteção contra replay). Testes que logam
  *    em sequência caem na mesma janela e mandam o mesmo código; o segundo é
- *    recusado. Por isso o último código enviado fica guardado no módulo.
+ *    recusado. Por isso o último código enviado fica guardado em arquivo
+ *    (`utils/totp-inedito.ts`), compartilhado por todos os helpers de MFA.
  *
  * 2. **O segredo pode ter sido rotacionado por outra sessão.**
  *    `seed-e2e-credentials.ts` remove e reenrola o fator TOTP do admin, e várias
@@ -20,9 +21,9 @@ import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { type BrowserContext, expect, type Page } from "@playwright/test";
 
-import { generateTotp, msUntilNextTotpWindow } from "../utils/totp";
+import { codigoInedito, esperarProximaJanela } from "../utils/totp-inedito";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 
@@ -66,37 +67,40 @@ export function semearCredenciais(): CredsE2E {
   return JSON.parse(fs.readFileSync(CREDS_PATH, "utf8")) as CredsE2E;
 }
 
-let ultimoCodigoEnviado: string | null = null;
-
 /**
- * Cookies da última sessão de admin que passou pelo MFA, para o próximo teste
- * do MESMO worker reaproveitar.
+ * Sessão de admin que já passou pelo MFA, para o próximo teste reaproveitar.
  *
  * Sem isto, todo teste que loga como admin paga um código TOTP novo — e código
  * novo só existe na janela seguinte (até 30 s de espera, porque o anterior não
  * pode ser reusado). Medido no CI em 2026-10-09: 13 specs morrendo em
  * `keyboard.type: Test timeout of 30000ms exceeded`, com o teto inteiro do teste
- * gasto esperando a janela, e sete specs de fluxo seguidas somando minutos só
- * nisso — parte do motivo de as duas partes do e2e estourarem os 30 min do job.
+ * gasto esperando a janela — parte do motivo de as duas partes do e2e
+ * estourarem os 30 min do job.
+ *
+ * Em ARQUIVO, e não na memória do módulo: o Playwright reinicia o worker depois
+ * de todo teste que falha, e a sessão guardada em memória morria justamente
+ * quando a suíte já estava em apuros. Ver também `utils/totp-inedito.ts`.
  */
-let sessaoDoAdmin: Awaited<ReturnType<BrowserContext["storageState"]>> | null = null;
+const SESSAO_PATH = path.join(process.cwd(), ".e2e-admin-sessao.json");
+type Sessao = Awaited<ReturnType<BrowserContext["storageState"]>>;
 
-/** A espera pela janela TOTP é do protocolo, não da tela: o teste ganha esse tempo de volta. */
-async function esperarJanela(page: Page): Promise<void> {
-  const ms = msUntilNextTotpWindow() + 300;
-  const info = test.info();
-  info.setTimeout(info.timeout + ms);
-  await page.waitForTimeout(ms);
+function lerSessao(): Sessao | null {
+  try {
+    return JSON.parse(fs.readFileSync(SESSAO_PATH, "utf8")) as Sessao;
+  } catch {
+    return null;
+  }
 }
 
 async function reaproveitarSessao(page: Page): Promise<boolean> {
-  if (sessaoDoAdmin === null) return false;
-  await page.context().addCookies(sessaoDoAdmin.cookies);
+  const sessao = lerSessao();
+  if (sessao === null) return false;
+  await page.context().addCookies(sessao.cookies);
   await page.goto("/app/inbox");
   // Sessão revogada (logout, troca de senha, seed novo) cai no /login: aí o
   // login completo é que vale, e a sessão guardada é descartada.
   if (/\/login/.test(new URL(page.url()).pathname)) {
-    sessaoDoAdmin = null;
+    fs.rmSync(SESSAO_PATH, { force: true });
     await page.context().clearCookies();
     return false;
   }
@@ -105,26 +109,23 @@ async function reaproveitarSessao(page: Page): Promise<boolean> {
 
 async function tentarMfa(page: Page, secret: string, tentativas: number): Promise<boolean> {
   for (let i = 0; i < tentativas; i++) {
-    if (msUntilNextTotpWindow() < 3_000 || generateTotp(secret) === ultimoCodigoEnviado) {
-      await esperarJanela(page);
-    }
-    const codigo = generateTotp(secret);
-    ultimoCodigoEnviado = codigo;
-
     const digito = page.locator('input[aria-label="Dígito 1"]');
     await digito.waitFor({ state: "visible", timeout: 15_000 });
     // O campo desabilita enquanto o código anterior é verificado.
     for (let espera = 0; espera < 20 && (await digito.isDisabled()); espera++) {
       await page.waitForTimeout(500);
     }
+    // O código sai por último, já com o campo pronto: esperar a janela depois
+    // de gerá-lo o deixaria vencer no caminho.
+    const codigo = await codigoInedito(page, secret);
     await digito.click();
     await page.keyboard.type(codigo, { delay: 40 });
     try {
       await page.waitForURL(/\/app\//, { timeout: 10_000 });
-      sessaoDoAdmin = await page.context().storageState();
+      fs.writeFileSync(SESSAO_PATH, JSON.stringify(await page.context().storageState()));
       return true;
     } catch {
-      await esperarJanela(page);
+      await esperarProximaJanela(page);
     }
   }
   return false;
@@ -153,7 +154,6 @@ export async function loginComoAdmin(page: Page, creds: CredsE2E): Promise<Creds
       // UMA vez e tenta de novo — na segunda falha o problema é outro e o teste
       // deve morrer dizendo isso, em vez de re-semear em círculo.
       atuais = semearCredenciais();
-      ultimoCodigoEnviado = null;
     }
   }
 
