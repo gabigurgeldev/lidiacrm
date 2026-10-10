@@ -81,21 +81,40 @@ export interface PerguntaDaEntrevista {
 
 export type EntrevistaNormalizada =
   | { kind: "perguntar"; perguntas: PerguntaDaEntrevista[]; nicho: string | null }
-  | { kind: "pronto"; resumo: string; nicho: string | null };
+  | {
+      kind: "pronto";
+      resumo: string;
+      nicho: string | null;
+      /** Presente quando o modelo não mandou o que prometeu e a rodada foi encerrada por nós. Só vai a log. */
+      degradada?: "pronto_sem_resumo" | "perguntar_sem_pergunta";
+    };
+
+/** O resumo quando o modelo encerra sem dizer o que vai montar. */
+export const RESUMO_PADRAO =
+  "Já tenho o suficiente para montar o agente. O que ficou em aberto vira assunto para a equipe.";
 
 /**
- * Apara e confere a resposta da entrevista. `null` = incoerente.
+ * Apara e confere a resposta da entrevista. NUNCA devolve "incoerente".
  *
  * Pergunta sem texto, ou fechada com menos de 2 opções, é DESCARTADA — não
- * derruba a rodada inteira. Só quando nenhuma sobra a rodada é incoerente:
- * mandar à tela uma pergunta de múltipla escolha sem escolhas é pior que erro,
- * porque não parece erro.
+ * derruba a rodada inteira. Mandar à tela uma pergunta de múltipla escolha sem
+ * escolhas é pior que erro, porque não parece erro.
+ *
+ * Quando nada sobra (ou o modelo diz `pronto` sem resumo), a entrevista ENCERRA
+ * em vez de falhar. Era 502 — medido em produção (2026-10-10, org de
+ * floricultura): três tentativas seguidas com o mesmo material, todas
+ * "resposta sem pergunta válida e sem resumo", e a pessoa presa na primeira
+ * tela sem ter como passar. Encerrar é seguro pelo mesmo motivo que o teto de
+ * rodadas já encerra: o que faltou vira lacuna, e o agente passa esse assunto
+ * para uma pessoa. A pergunta não feita custa menos que o agente não criado.
  */
-export function normalizarEntrevista(s: SaidaDaEntrevista): EntrevistaNormalizada | null {
+export function normalizarEntrevista(s: SaidaDaEntrevista): EntrevistaNormalizada {
   const nicho = s.nicho ?? null;
+  const resumo = (s.resumo ?? "").trim().slice(0, 400);
   if (s.kind === "pronto") {
-    const resumo = (s.resumo ?? "").trim().slice(0, 400);
-    return resumo.length > 0 ? { kind: "pronto", resumo, nicho } : null;
+    return resumo.length > 0
+      ? { kind: "pronto", resumo, nicho }
+      : { kind: "pronto", resumo: RESUMO_PADRAO, nicho, degradada: "pronto_sem_resumo" };
   }
   const perguntas: PerguntaDaEntrevista[] = [];
   for (const p of s.perguntas ?? []) {
@@ -116,7 +135,13 @@ export function normalizarEntrevista(s: SaidaDaEntrevista): EntrevistaNormalizad
     });
     if (perguntas.length === MAX_PERGUNTAS_POR_RODADA) break;
   }
-  return perguntas.length > 0 ? { kind: "perguntar", perguntas, nicho } : null;
+  if (perguntas.length > 0) return { kind: "perguntar", perguntas, nicho };
+  return {
+    kind: "pronto",
+    resumo: resumo.length > 0 ? resumo : RESUMO_PADRAO,
+    nicho,
+    degradada: "perguntar_sem_pergunta",
+  };
 }
 
 // ──────────────────────────────── geração ───────────────────────────────────

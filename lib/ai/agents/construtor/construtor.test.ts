@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { pacotesQueCabem, type MapaDePacotes } from "./capacidades";
 import { metaPromptDoAgente, metaPromptDosMateriais, SECOES_OBRIGATORIAS } from "./doutrina";
 import { MAX_PERGUNTAS_POR_RODADA, MAX_RODADAS, promptDaEntrevista } from "./entrevista";
-import { normalizarEntrevista, normalizarGeracao, previaSchema } from "./esquemas";
+import { normalizarEntrevista, normalizarGeracao, previaSchema, RESUMO_PADRAO } from "./esquemas";
 import { NICHOS, nichoDoTexto } from "./nicho";
 
 /**
@@ -85,9 +85,34 @@ describe("entrevista", () => {
     );
   });
 
-  it("incoerente: perguntar sem pergunta, ou pronto sem resumo", () => {
-    expect(normalizarEntrevista({ kind: "perguntar", perguntas: [] })).toBeNull();
-    expect(normalizarEntrevista({ kind: "pronto", resumo: " " })).toBeNull();
+  // Era `null` → 502, e a pessoa ficava presa na primeira tela (produção, 2026-10-10).
+  it("perguntar sem pergunta válida encerra a entrevista em vez de falhar", () => {
+    expect(normalizarEntrevista({ kind: "perguntar", perguntas: [] })).toEqual({
+      kind: "pronto",
+      resumo: RESUMO_PADRAO,
+      nicho: null,
+      degradada: "perguntar_sem_pergunta",
+    });
+    expect(normalizarEntrevista({ kind: "perguntar" })?.kind).toBe("pronto");
+    expect(normalizarEntrevista({ kind: "perguntar", perguntas: [{ pergunta: "   " }] })?.kind).toBe("pronto");
+  });
+
+  it("perguntar sem pergunta mas com resumo aproveita o resumo do modelo", () => {
+    const r = normalizarEntrevista({ kind: "perguntar", perguntas: [], resumo: " Agente da floricultura. ", nicho: "loja" });
+    expect(r).toEqual({ kind: "pronto", resumo: "Agente da floricultura.", nicho: "loja", degradada: "perguntar_sem_pergunta" });
+  });
+
+  it("pronto sem resumo usa o resumo padrão", () => {
+    expect(normalizarEntrevista({ kind: "pronto", resumo: " " })).toEqual({
+      kind: "pronto",
+      resumo: RESUMO_PADRAO,
+      nicho: null,
+      degradada: "pronto_sem_resumo",
+    });
+  });
+
+  it("caminho feliz não leva marca de degradação", () => {
+    expect(normalizarEntrevista({ kind: "pronto", resumo: "Agente X." })).not.toHaveProperty("degradada");
   });
 });
 

@@ -24,6 +24,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import {
   entradaDaEntrevistaSchema,
   normalizarEntrevista,
+  RESUMO_PADRAO,
   saidaDaEntrevistaSchema,
 } from "@/lib/ai/agents/construtor/esquemas";
 import { MAX_RODADAS, promptDaEntrevista } from "@/lib/ai/agents/construtor/entrevista";
@@ -108,23 +109,27 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     let saida = normalizarEntrevista(resposta.objeto);
     // Última rodada: o servidor encerra mesmo que o modelo queira perguntar.
-    if (saida !== null && saida.kind === "perguntar" && rodada >= MAX_RODADAS) {
-      saida = {
-        kind: "pronto",
-        resumo: "Já tenho o suficiente para montar o agente. O que ficou em aberto vira assunto para a equipe.",
-        nicho: saida.nicho,
-      };
+    if (saida.kind === "perguntar" && rodada >= MAX_RODADAS) {
+      saida = { kind: "pronto", resumo: RESUMO_PADRAO, nicho: saida.nicho };
     }
-    if (saida === null) {
-      logger.error("agent_builder.entrevistar.incoerente", {
+    if (saida.kind === "pronto" && saida.degradada !== undefined) {
+      // Não é mais erro para a pessoa (ver `normalizarEntrevista`), mas segue
+      // sendo o modelo descumprindo o contrato — e quem ajusta o prompt precisa
+      // ver com que frequência. Só a FORMA vai a log: o material é do cliente.
+      const bruto = resposta.objeto;
+      logger.warn("agent_builder.entrevistar.encerrada_sem_contrato", {
         organizationId: orgId,
         requestId,
-        ms: Date.now() - t0,
-        causa: "resposta sem pergunta válida e sem resumo",
+        rodada,
+        motivo: saida.degradada,
+        kind_do_modelo: bruto.kind,
+        perguntas_recebidas: bruto.perguntas?.length ?? 0,
+        resumo_chars: (bruto.resumo ?? "").trim().length,
+        modeloCanonico: resposta.modeloUsado,
         finishReason: resposta.finishReason,
-        warnings: resposta.avisos,
       });
-      return fail("ai_provider_error", "A resposta da IA veio incompleta. Tente de novo.", 502, { requestId });
+      const { degradada: _degradada, ...semMarca } = saida;
+      saida = semMarca;
     }
 
     logger.info("agent_builder.entrevistar.fim", {
