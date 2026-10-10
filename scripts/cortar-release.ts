@@ -19,7 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { calcularBump, type Fragmento, parseFragmento, proximaVersao } from "../lib/release/fragmento";
-import { aplicarNoChangelog, montarSecao } from "../lib/release/montar-secao";
+import { aplicarNoChangelog, caminhoDasNotas, montarSecao } from "../lib/release/montar-secao";
 
 const RAIZ = path.resolve(__dirname, "..");
 const DIR_FRAGMENTOS = path.join(RAIZ, ".changes");
@@ -145,6 +145,12 @@ function main(argv: readonly string[]): number {
   }
 
   fs.writeFileSync(CHANGELOG, aplicarNoChangelog(changelog, secao, base, compararUrl));
+  // As notas COMPLETAS (corpo inteiro de cada fragmento) vão para um arquivo
+  // próprio: o CHANGELOG leva a forma curta, que cabe no corte da VPS, e aponta
+  // para cá. Sem isto, apagar os fragmentos apagaria a explicação longa.
+  const notas = path.join(RAIZ, caminhoDasNotas(versao));
+  fs.mkdirSync(path.dirname(notas), { recursive: true });
+  fs.writeFileSync(notas, `${montarSecao(fragmentos, versao, hoje(), "completa").texto}\n`);
   for (const f of fragmentos) fs.rmSync(path.join(DIR_FRAGMENTOS, f.arquivo));
   process.stdout.write(`\nCHANGELOG.md atualizado; ${fragmentos.length} fragmento(s) consumido(s).\n`);
   process.stdout.write("A tag NÃO é criada aqui — ela nasce no CI, do merge do PR de release.\n");
