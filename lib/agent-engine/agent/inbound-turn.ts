@@ -94,6 +94,7 @@ import { resolveTurnAgent, type TurnAgentResolution } from './resolve-turn-agent
 import { loadPublishedAgentConfigById } from './agent-config';
 import {
   hasOpenCaseForContact,
+  casoAguardandoHumano,
   getCaseAwaitingLead,
   openCase,
   provideCaseUpdate,
@@ -1264,6 +1265,17 @@ async function executarTurnoDoAgente(
   // do force_human do CRM) e só o humano/CRM libera — o agente nunca reassume (regra dura 2).
   if (await isLeadInHandoff(pool, tenantId, leadId)) {
     runLog.info('turno pulado — lead em handoff humano (bot silenciado)', { kind: job.kind });
+    return;
+  }
+
+  // Follow-up NÃO cobra de quem está esperando a equipe. Caso aberto em
+  // 'awaiting_human' = a bola está com o humano; o cliente já foi avisado. Sem
+  // esta trava o agente agendava o próprio retorno a cada follow-up (o guard de
+  // `agendaRetorno` só enxerga retorno VIVO, e o que disparou já morreu) e a
+  // pessoa recebia o mesmo "estou passando para o responsável" a cada hora útil.
+  // O caso fechar/virar 'awaiting_lead' libera o follow-up de novo.
+  if (job.kind === 'followup_turn' && (await casoAguardandoHumano(pool, tenantId, input.conversationId))) {
+    runLog.info('follow-up pulado — caso aberto aguardando a equipe', { kind: job.kind });
     return;
   }
 

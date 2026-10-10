@@ -95,6 +95,27 @@ export async function hasOpenCaseForContact(
   return rows[0]?.open === true;
 }
 
+/**
+ * True se a conversa tem caso em 'awaiting_human' — a equipe ainda não agiu.
+ * Mais estreito que `hasOpenCaseForContact`: 'awaiting_lead' NÃO conta, porque
+ * ali é o cliente quem deve a próxima fala e o follow-up é legítimo.
+ */
+export async function casoAguardandoHumano(
+  db: Queryable,
+  tenantId: string,
+  conversationId: string,
+): Promise<boolean> {
+  const { rows } = await db.query<{ open: boolean }>(
+    `select exists (
+       select 1 from agent_cases
+        where organization_id = $1 and conversation_id = $2
+          and status = 'awaiting_human'
+     ) as open`,
+    [tenantId, conversationId],
+  );
+  return rows[0]?.open === true;
+}
+
 export interface CaseAwaitingLead {
   id: string;
   /** O que o HUMANO pediu ao lead (body do evento need_lead_info mais recente) —
