@@ -228,7 +228,13 @@ test.describe("IA 360 W3 — o agente para, a pessoa continua, o agente retoma s
       page.getByTestId("badge-atendimento-humano"),
       "conversa com o robô calado não pode ter a mesma cara de uma conversa normal",
     ).toBeVisible({ timeout: 30_000 });
+    // Uma ação principal por vez no cabeçalho (`ConversationHeader`): sem dono
+    // é "Assumir", e "Devolver ao automático" mora no menu ⋮. Com dono, é o
+    // botão principal. A porta de volta tem de existir nos DOIS casos.
     const botaoDevolver = page.getByTestId("devolver-ao-automatico");
+    if (!(await botaoDevolver.isVisible())) {
+      await page.getByTestId("menu-acoes-conversa").click();
+    }
     await expect(
       botaoDevolver,
       "a rota de devolver existia desde a IA-06 e nenhuma tela a chamava",
