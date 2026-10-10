@@ -407,6 +407,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         }}
       />
       <OpcoesDialog
+        key={opcoesOpen ? "aberto" : "fechado"}
         open={opcoesOpen}
         onOpenChange={setOpcoesOpen}
         sending={send.isPending}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +30,9 @@ interface Props {
 const VAZIO = ["", ""];
 
 /**
+ * O estado nasce limpo a cada abertura porque quem monta dá uma `key` nova —
+ * resetar dentro de um efeito pintaria o formulário velho por um quadro.
+ *
  * Montar uma enquete ou lista à mão, pelo "+" do campo de escrever.
  *
  * Não pergunta QUAL canal é: o envio decide pela conexão da conversa. Por isso
@@ -42,14 +45,6 @@ export function OpcoesDialog({ open, onOpenChange, sending, onEnviar }: Props) {
   const [formato, setFormato] = useState<"enquete" | "lista">("enquete");
   const [pergunta, setPergunta] = useState("");
   const [opcoes, setOpcoes] = useState<string[]>(VAZIO);
-
-  useEffect(() => {
-    if (!open) {
-      setFormato("enquete");
-      setPergunta("");
-      setOpcoes(VAZIO);
-    }
-  }, [open]);
 
   const preenchidas = opcoes.map((o) => o.trim()).filter((o) => o !== "");
   const pedido = {
