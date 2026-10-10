@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Opções tocáveis — enquete e lista",
+    "subtitle": "três entradas (menu do fluxo, agente, composer) pedem opções em forma neutra; a capability da sessão decide enquete → lista → texto numerado; o voto/seleção volta como texto com o rótulo e acorda quem esperava",
+    "output": "opcoes-interativas.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "entrada", "label": "Quem pergunta" },
+    { "id": "decisao", "label": "Decisão de formato" },
+    { "id": "canal", "label": "Canal" },
+    { "id": "volta", "label": "Volta da escolha" },
+    { "id": "dados", "label": "Banco" },
+    { "id": "retorno", "label": "Laço de retorno" }
+  ],
+  "mainPath": ["menu", "handler", "formato", "waha_send", "voto", "neutro", "mensagens", "acordador"],
+  "nodes": [
+    {
+      "id": "menu",
+      "lane": "entrada",
+      "col": 0,
+      "type": "module",
+      "label": "logic.choice_menu (formato)",
+      "sublabel": "lib/flow-engine/nodes/gatilhos-e-menu.ts — texto (default) | enquete | lista | automatico; reserva numerada sempre"
+    },
+    {
+      "id": "agente",
+      "lane": "entrada",
+      "col": 1,
+      "type": "tool",
+      "label": "send_options",
+      "sublabel": "lib/agent-engine/agent/inbound-turn.ts — passa pela cadeia before_send com o corpo numerado; some sem interactive_options_enabled"
+    },
+    {
+      "id": "composer",
+      "lane": "entrada",
+      "col": 2,
+      "type": "component",
+      "label": "Inbox › + › Enquete ou lista",
+      "sublabel": "components/inbox/composer/OpcoesDialog.tsx"
+    },
+    {
+      "id": "handler",
+      "lane": "decisao",
+      "col": 1,
+      "type": "route",
+      "label": "sendMessageHandler (type poll | list)",
+      "sublabel": "app/api/v1/messages/_handler.ts — decide ANTES do insert; grava tipo efetivo, corpo numerado e metadata.opcoes"
+    },
+    {
+      "id": "formato",
+      "lane": "decisao",
+      "col": 2,
+      "type": "lib",
+      "label": "formatoDasOpcoes",
+      "sublabel": "lib/channels/opcoes-interativas.ts — capability opcoesInterativas; lista nunca em grupo"
+    },
+    {
+      "id": "waha_send",
+      "lane": "canal",
+      "col": 3,
+      "type": "service",
+      "label": "QR: sendPoll / sendList",
+      "sublabel": "lib/waha/opcoes.ts — rowId = id da opção"
+    },
+    {
+      "id": "meta_send",
+      "lane": "canal",
+      "col": 4,
+      "type": "service",
+      "label": "Oficial: interactive list",
+      "sublabel": "lib/channels/cloud-api/corpo.ts — id da linha = id da opção"
+    },
+    {
+      "id": "voto",
+      "lane": "volta",
+      "col": 3,
+      "type": "service",
+      "label": "poll.vote / listResponseMessage",
+      "sublabel": "lib/waha/resposta-interativa.ts + ingest.ts — conversa da PERGUNTA, não do from"
+    },
+    {
+      "id": "meta_volta",
+      "lane": "volta",
+      "col": 4,
+      "type": "service",
+      "label": "list_reply / button_reply / button",
+      "sublabel": "lib/channels/meta/webhook.ts — antes era perdido (CHECK do tipo)"
+    },
+    {
+      "id": "neutro",
+      "lane": "volta",
+      "col": 5,
+      "type": "lib",
+      "label": "respostaDaEscolha",
+      "sublabel": "lib/channels/resposta-interativa.ts — rótulo COMPLETO lido de metadata.opcoes"
+    },
+    {
+      "id": "mensagens",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "messages",
+      "sublabel": "poll/list (migration 0236) na saída; text + metadata.resposta_interativa na entrada; metadata.escolha na pergunta"
+    },
+    {
+      "id": "versao",
+      "lane": "dados",
+      "col": 1,
+      "type": "table",
+      "label": "ai_agent_versions.interactive_options_enabled",
+      "sublabel": "migration 0236; imutável depois de publicada"
+    },
+    {
+      "id": "acordador",
+      "lane": "retorno",
+      "col": 6,
+      "type": "service",
+      "label": "message.received → acordarFrentesQueEsperam",
+      "sublabel": "o menu casa o rótulo ou o número; o agente lê frameOpcoes no histórico"
+    },
+    {
+      "id": "central",
+      "lane": "retorno",
+      "col": 4,
+      "type": "table",
+      "label": "agent_inbox_items · escolha_nao_lida",
+      "sublabel": "poll.vote.failed — o voto chegou sem a opção decifrada"
+    },
+    {
+      "id": "bolha",
+      "lane": "retorno",
+      "col": 7,
+      "type": "component",
+      "label": "OpcoesCard / SeloDeEscolha",
+      "sublabel": "components/inbox/media/OpcoesCard.tsx — pergunta, opções e o que foi escolhido"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "menu", "to": "handler", "label": "pede poll/list com reserva numerada" },
+    { "id": "e2", "from": "agente", "to": "handler", "label": "send_options depois da cadeia before_send" },
+    { "id": "e3", "from": "composer", "to": "handler", "label": "POST /api/v1/messages type poll|list" },
+    { "id": "e4", "from": "versao", "to": "agente", "label": "liga ou tira a tool do turno" },
+    { "id": "e5", "from": "handler", "to": "formato", "label": "capability da sessão" },
+    { "id": "e6", "from": "formato", "to": "waha_send", "label": "enquete ou lista (1:1)" },
+    { "id": "e7", "from": "formato", "to": "meta_send", "label": "lista" },
+    { "id": "e8", "from": "handler", "to": "mensagens", "label": "grava tipo efetivo + metadata.opcoes" },
+    { "id": "e9", "from": "waha_send", "to": "voto", "label": "cliente toca" },
+    { "id": "e10", "from": "meta_send", "to": "meta_volta", "label": "cliente toca" },
+    { "id": "e11", "from": "voto", "to": "neutro", "label": "id da pergunta + opção votada" },
+    { "id": "e12", "from": "meta_volta", "to": "neutro", "label": "context.id + id da linha" },
+    { "id": "e13", "from": "neutro", "to": "mensagens", "label": "lê metadata.opcoes; grava a resposta e a escolha" },
+    { "id": "e14", "from": "mensagens", "to": "acordador", "label": "trg_messages_emit_event" },
+    { "id": "e15", "from": "voto", "to": "central", "label": "poll.vote.failed" },
+    { "id": "e16", "from": "mensagens", "to": "bolha", "label": "tela da conversa" }
+  ]
+}

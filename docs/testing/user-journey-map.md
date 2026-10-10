@@ -1223,6 +1223,47 @@ automação: quando ele erra, não há operador na tela para perceber e corrigir
   entrega.
 
 
+## J35 — Oferecer opções para o cliente tocar (enquete e lista) `[P1]` (2026-10-10)
+
+Toda escolha do cliente era texto numerado: o menu do fluxo mandava 1️⃣ 2️⃣ 3️⃣
+no corpo e casava o que a pessoa digitava. O WhatsApp tem duas formas nativas de
+oferecer opções — enquete (número por QR) e lista (QR e oficial) — e a pessoa
+toca em vez de digitar. Botão de resposta NÃO entra: no QR o transporte o marca
+como quebrado.
+
+**O que muda no risco:** a volta. O voto da enquete não chega como mensagem
+(`poll.vote` é evento próprio, que a instalação nem assinava), e a resposta de
+lista no número oficial era **descartada** pelo CHECK de `messages.type` com a
+rota respondendo 2xx. Sem a volta, o menu espera para sempre e ninguém vê erro.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J35.1 | Decisão de formato | enquete → lista → texto numerado; lista nunca em grupo | **PASS** (unit `opcoes-interativas.test`) |
+| J35.2 | Envio pelo QR | `sendPoll` com escolha única; `sendList` com `rowId` = id da opção | **PASS** (unit `opcoes-interativas-envio`) |
+| J35.3 | Envio pelo oficial | `interactive/list` com id da opção | **PASS** (unit, payload da doc Graph) |
+| J35.4 | Linha gravada | tipo efetivo, corpo numerado, `metadata.opcoes` | **PASS** (unit `messages-handler-opcoes`) |
+| J35.5 | Voto volta como texto na conversa da PERGUNTA | rótulo completo + procedência | **PASS** (unit `ingest-resposta-interativa`; sabotado: vermelho) |
+| J35.6 | Voto não decifrado | aviso `escolha_nao_lida` na Central | **PASS** (unit) |
+| J35.7 | Resposta de lista/botão no oficial | entra como texto, não some | **PASS** (unit, payload da doc Graph) |
+| J35.8 | Menu → enquete → voto → ramo, no motor real | segue a saída do rótulo | **PASS** (unit `jornada-menu-enquete`; sabotado: vermelho) |
+| J35.9 | Agente com a chave ligada | `send_options` passa pela cadeia before_send | **PASS** (guard `send-options-wiring`) |
+| J35.10 | A enquete DESENHA no Android e no iPhone | opções tocáveis aparecem | **NÃO MEDIDO** |
+| J35.11 | O payload real de `listResponseMessage` do NOWEB | casa com a extração | **NÃO MEDIDO** |
+| J35.12 | Prova pela tela (menu, editor do agente, composer) | um leigo monta e envia | **NÃO MEDIDO** |
+
+### O que ficou NÃO MEDIDO, e por quê
+
+- **O aparelho.** Nenhum número real foi pareado nesta sessão. A doc do
+  transporte diz que a enquete é estável e a lista é "frágil"; isso não foi
+  confirmado num celular.
+- **O formato da seleção de lista do NOWEB.** O transporte não o documenta; a
+  extração segue o proto do WhatsApp. Capturar um evento real e fixar como
+  fixture é o primeiro passo de quem retomar.
+- **A tela.** O E2E local não sobe nesta máquina (sem CLI do Supabase); as telas
+  têm testes de componente, não Playwright.
+
+---
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

@@ -65,6 +65,15 @@ Uma capability nunca é um booleano solto. Ela diz de que família é, porque is
 - **Verificação:** a matriz de capabilities é exaustiva — capability sem linha para algum
   provider reprova o CI. Capability que nenhum provider declara é código morto e sai.
 
+#### Capability de FORMA: o que o canal desenha (2026-10-10)
+
+`opcoesInterativas` (`{ enquete, lista }`) não é restrição de nenhuma das duas famílias: ela
+diz que forma de mensagem o canal desenha. Quando ela "barra", a resposta é a do lado
+hetero — **mudar a forma** —, e nunca adiar: `formatoDasOpcoes`
+(`lib/channels/opcoes-interativas.ts`) rebaixa enquete → lista → texto numerado, que todo
+canal entrega. Quem pede (menu do fluxo, agente, composer) não sabe qual saiu, e não
+precisa: a volta casa o toque e o número digitado igual.
+
 #### A unidade de análise é a SESSÃO, não o provider (revisto em 2026-09-01)
 
 As duas famílias continuam mutuamente exclusivas: nenhum canal REAL é ao mesmo tempo
