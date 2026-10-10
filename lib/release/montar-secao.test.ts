@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { extractChangelogSection, markdownParaTextoSimples } from "../system/changelog";
 import { parseFragmento } from "./fragmento";
-import { aplicarNoChangelog, montarSecao } from "./montar-secao";
+import { aplicarNoChangelog, caminhoDasNotas, LIMITE_DO_RESUMO, montarSecao } from "./montar-secao";
 
 /** URL sintética: este arquivo é varrido pela catraca de marca e não nomeia o repo. */
 const comparar = (de: string, para: string) => `https://exemplo.test/compare/${de}...${para}`;
@@ -63,7 +63,7 @@ describe("montarSecao — o que a TELA da VPS vai mostrar", () => {
 
   it("nenhuma marcação sobra depois da conversão que a tela faz", () => {
     const secao = montarSecao(
-      [frag({ titulo: "Conserto", corpo: "Mexe em `fn_user_org_ids()` e no *fluxo* de envio." })],
+      [frag({ impacto: "capacidade_nova", titulo: "Conserto", corpo: "Mexe em `fn_user_org_ids()` e no *fluxo* de envio." })],
       "1.6.1",
       "2026-08-27",
     );
@@ -77,7 +77,7 @@ describe("montarSecao — o que a TELA da VPS vai mostrar", () => {
 
   it("preserva o corpo verbatim, sem refluir — negrito partido chegaria com asterisco à mostra", () => {
     const corpo = "Primeira linha do parágrafo,\nsegunda linha que continua a frase.";
-    const secao = montarSecao([frag({ corpo })], "1.6.1", "2026-08-27");
+    const secao = montarSecao([frag({ impacto: "capacidade_nova", corpo })], "1.6.1", "2026-08-27");
     expect(secao.texto).toContain("segunda linha que continua a frase.");
     const s = extractChangelogSection(aplicarNoChangelog(CABECALHO, secao, "1.6.0", comparar), "1.6.1")!;
     expect(markdownParaTextoSimples(s.body)).toContain("segunda linha que continua a frase.");
@@ -96,7 +96,12 @@ describe("montarSecao — o que a TELA da VPS vai mostrar", () => {
 
   it("prosa com `$&` e crase invertida sai idêntica — `replace` com string a corromperia", () => {
     const corpo = "O padrão $& e o `$`' do shell aparecem literais aqui.";
-    const texto = aplicarNoChangelog(CABECALHO, montarSecao([frag({ corpo })], "1.6.1", "2026-08-27"), "1.6.0", comparar);
+    const texto = aplicarNoChangelog(
+      CABECALHO,
+      montarSecao([frag({ impacto: "capacidade_nova", corpo })], "1.6.1", "2026-08-27"),
+      "1.6.0",
+      comparar,
+    );
     expect(texto).toContain("O padrão $& e o");
     expect(texto).not.toContain("## [Não lançado]## [Não lançado]");
   });
@@ -113,5 +118,49 @@ describe("montarSecao — o que a TELA da VPS vai mostrar", () => {
     expect(() => aplicarNoChangelog("# Changelog\n", montarSecao([frag({})], "1.6.1", "2026-08-27"), "1.6.0", comparar)).toThrow(
       /Não lançado/,
     );
+  });
+});
+
+describe("montarSecao — a forma curta (tela) e a completa (notas)", () => {
+  const longo = [
+    "Primeiro parágrafo, que diz o efeito para quem opera a VPS e cabe no resumo.",
+    "",
+    "Segundo parágrafo com a explicação longa, que só interessa a quem escreveu o código.",
+  ].join("\n");
+
+  it("na tela, nada_mudou sai só com o título", () => {
+    const secao = montarSecao([frag({ impacto: "nada_mudou", titulo: "Ajuste interno", corpo: longo })], "1.6.1", "2026-08-27");
+    expect(secao.texto).toContain("- **Ajuste interno**");
+    expect(secao.texto).not.toContain("Primeiro parágrafo");
+  });
+
+  it("na tela, capacidade nova leva só o primeiro parágrafo", () => {
+    const secao = montarSecao([frag({ impacto: "capacidade_nova", corpo: longo })], "1.6.1", "2026-08-27");
+    expect(secao.texto).toContain("Primeiro parágrafo");
+    expect(secao.texto).not.toContain("Segundo parágrafo");
+  });
+
+  it("o resumo corta em fim de LINHA, nunca no meio — negrito não se parte", () => {
+    const linhas = Array.from({ length: 12 }, (_, i) => `Linha ${i} com **negrito inteiro** e texto até encher bastante espaço.`);
+    const secao = montarSecao([frag({ impacto: "capacidade_nova", corpo: linhas.join("\n") })], "1.6.1", "2026-08-27");
+    const doItem = secao.texto.split("\n").filter((l) => /Linha \d+/.test(l));
+    expect(doItem.length).toBeGreaterThan(0);
+    expect(doItem.length).toBeLessThan(12);
+    for (const l of doItem) expect((l.match(/\*\*/g) ?? []).length % 2).toBe(0);
+    expect(new TextEncoder().encode(doItem.join("\n")).length).toBeLessThanOrEqual(LIMITE_DO_RESUMO + 200);
+  });
+
+  it("o aviso de atenção sai INTEIRO na tela", () => {
+    const atencao = ["Rode o comando A.", "", "Depois confira B."].join("\n");
+    const secao = montarSecao([frag({ impacto: "exige_acao", atencao })], "2.0.0", "2026-08-27");
+    expect(secao.texto).toContain("Depois confira B.");
+  });
+
+  it("a tela aponta para as notas completas, e a completa leva o corpo inteiro", () => {
+    const tela = montarSecao([frag({ impacto: "capacidade_nova", corpo: longo })], "1.6.1", "2026-08-27");
+    expect(tela.texto).toContain(caminhoDasNotas("1.6.1"));
+    const completa = montarSecao([frag({ impacto: "nada_mudou", corpo: longo })], "1.6.1", "2026-08-27", "completa");
+    expect(completa.texto).toContain("Segundo parágrafo");
+    expect(completa.texto).not.toContain("Notas completas");
   });
 });

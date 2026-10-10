@@ -30,6 +30,46 @@ const TITULO_DA_SECAO: Record<Secao, string> = {
 };
 
 /**
+ * DUAS formas da mesma seção.
+ *
+ * - `tela` — o que vai para o `CHANGELOG.md`, que o agente da VPS corta em
+ *   30.000 bytes crus (`hostgator-setup-kit/agent.sh`) antes de o app extrair a
+ *   seção. Cada item sai com o título e o PRIMEIRO parágrafo do corpo (é onde o
+ *   fragmento diz o efeito para o operador); `nada_mudou` sai só com o título.
+ *   O aviso de atenção sai sempre inteiro.
+ * - `completa` — o corpo inteiro de cada fragmento, para
+ *   `docs/releases/v<versão>.md`. É onde a explicação longa continua existindo.
+ *
+ * Por que a forma curta virou regra de MONTAGEM e não pedido de "escreva menos":
+ * medido em 2026-10-09, 107 fragmentos acumulados davam 148 KB de seção contra o
+ * teto de 30 KB — a tela da VPS receberia o texto decapitado, e enxugar 107
+ * notas à mão só adiaria o estouro até a próxima leva. Com a regra, o mesmo
+ * conjunto cabe em cerca de um terço disso.
+ */
+export type FormaDaSecao = "tela" | "completa";
+
+/** Teto do resumo de um item, em bytes. Corta só em fim de LINHA (ver `item`). */
+export const LIMITE_DO_RESUMO = 240;
+
+/**
+ * O primeiro parágrafo, em linhas INTEIRAS, até `LIMITE_DO_RESUMO` bytes — a
+ * primeira linha entra sempre. Cortar no meio de uma linha poderia partir um
+ * `**negrito**`, que o validador só garante fechar na mesma linha.
+ */
+function resumo(corpo: string): string {
+  const paragrafo = corpo.split(/\n\s*\n/)[0] ?? "";
+  const saida: string[] = [];
+  let bytes = 0;
+  for (const linha of paragrafo.split("\n")) {
+    const tamanho = new TextEncoder().encode(linha).length + 1;
+    if (saida.length > 0 && bytes + tamanho > LIMITE_DO_RESUMO) break;
+    saida.push(linha);
+    bytes += tamanho;
+  }
+  return saida.join("\n");
+}
+
+/**
  * Um item vira `- **titulo** corpo`, com as quebras de linha do fragmento
  * PRESERVADAS e a continuação indentada em dois espaços.
  *
@@ -37,10 +77,17 @@ const TITULO_DA_SECAO: Record<Secao, string> = {
  * single-line, então um negrito partido entre duas linhas chega à tela com os
  * asteriscos literais.
  */
-function item(f: Fragmento): string {
-  const [primeira, ...resto] = f.corpo.split("\n");
+function item(f: Fragmento, forma: FormaDaSecao): string {
+  if (forma === "tela" && f.impacto === "nada_mudou") return `- **${f.titulo}**`;
+  const corpo = forma === "tela" ? resumo(f.corpo) : f.corpo;
+  const [primeira, ...resto] = corpo.split("\n");
   const continuacao = resto.map((l) => (l.trim() === "" ? "" : `  ${l}`));
   return [`- **${f.titulo}** ${primeira ?? ""}`.trimEnd(), ...continuacao].join("\n");
+}
+
+/** Onde a forma `completa` da versão é gravada. */
+export function caminhoDasNotas(versao: string): string {
+  return `docs/releases/v${versao}.md`;
 }
 
 export interface SecaoMontada {
@@ -51,11 +98,13 @@ export interface SecaoMontada {
 /**
  * @param data no formato `YYYY-MM-DD` — vem de fora porque o módulo é puro e
  *   porque um teste que chama `new Date()` mede o relógio, não a montagem.
+ * @param forma `tela` (padrão) para o `CHANGELOG.md`; `completa` para as notas.
  */
 export function montarSecao(
   fragmentos: readonly Fragmento[],
   versao: string,
   data: string,
+  forma: FormaDaSecao = "tela",
 ): SecaoMontada {
   if (fragmentos.length === 0) {
     throw new Error("montarSecao sem fragmento: não há seção a escrever");
@@ -82,9 +131,13 @@ export function montarSecao(
     if (daSecao.length === 0) continue;
     partes.push(TITULO_DA_SECAO[secao], "");
     for (const f of daSecao) {
-      partes.push(item(f), "");
+      partes.push(item(f, forma), "");
     }
   }
+
+  // A forma curta diz onde mora a longa: quem quer o porquê de um item sabe
+  // onde procurar, em vez de concluir que ele não tem explicação.
+  if (forma === "tela") partes.push(`Notas completas desta versão: \`${caminhoDasNotas(versao)}\`.`);
 
   return { versao, texto: partes.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() };
 }

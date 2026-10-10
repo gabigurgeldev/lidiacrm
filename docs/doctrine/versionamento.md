@@ -172,6 +172,20 @@ Aqui isso não serve, e a razão é do produto, não de gosto: **o `CHANGELOG.md
 da VPS. É prosa longa em português — média de cerca de cem linhas por versão — escrita para
 quem não leu o diff. Nenhum gerador produz isso a partir de `fix(scope): ...`.
 
+**A tela tem teto, e por isso a seção tem DUAS formas** (`lib/release/montar-secao.ts`).
+O agente da VPS corta o `CHANGELOG.md` em 30.000 bytes crus antes de o app extrair a seção
+(`hostgator-setup-kit/agent.sh`). Em 2026-10-09, 107 fragmentos acumulados davam uma seção de
+148 KB — a tela receberia o texto decapitado. Desde então:
+
+- o `CHANGELOG.md` leva a forma **tela**: `exige_acao` com o aviso inteiro, `capacidade_nova`
+  e correções com o título e o primeiro parágrafo (em linhas inteiras, até 240 bytes),
+  `nada_mudou` só com o título — e uma linha apontando para as notas completas;
+- `scripts/cortar-release.ts` grava a forma **completa** (o corpo inteiro de cada fragmento)
+  em `docs/releases/v<versão>.md`, para a explicação longa não morrer junto com os fragmentos.
+
+Para medir a seção da próxima versão em vez de confiar neste número:
+`pnpm vitest run tests/unit/changelog-cabe-na-tela-da-vps.test.ts`.
+
 O que se adota dessas ferramentas é a **ideia** — fragmento por PR, número derivado, release
 por PR acumulativo —, não o gerador de texto.
 
