@@ -491,20 +491,21 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
             <Switch
               id="usar-modelo"
               checked={config.decisor.usar_modelo}
-              onCheckedChange={(v) => setConfig({ decisor: { usar_modelo: v } })}
+              onCheckedChange={(v) => setConfig({ decisor: { ...config.decisor, usar_modelo: v } })}
             />
             <Label htmlFor="usar-modelo">{t("Usar o modelo quando as regras não bastarem")}</Label>
           </div>
         </Card>
 
-        {/* Sempre visível: escondido atrás do interruptor, quem procurava o
-            modelo de decisão não o achava (2026-10-10). */}
-        <Card className="flex flex-col gap-2 p-4" data-testid="modelo-do-decisor">
+        {/* O coordenador É o modelo de decisão: a escolha dos dois modelos fica
+            aqui, sempre visível (2026-10-10: escondida atrás do interruptor e em
+            IA › Provedores, ninguém a achava). */}
+        <Card className="flex flex-col gap-3 p-4" data-testid="modelo-do-decisor">
           <div className="flex flex-col">
             <span className="text-sm font-medium">{t("Modelo de decisão")}</span>
             <span className="text-xs text-muted-foreground">
               {t(
-                "O modelo que escolhe quem conduz quando as regras não bastam. Na OpenRouter, os roteadores (como jev-router e auto) aparecem no topo da lista.",
+                "Recebe a mensagem e o contexto da conversa e devolve só a decisão: qual agente ou fluxo conduz. Na OpenRouter, os roteadores (como jev-router e auto) aparecem no topo da lista.",
               )}
             </span>
             {!config.decisor.usar_modelo && (
@@ -513,7 +514,38 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
               </span>
             )}
           </div>
-          <ModeloDoPonto pontoId="coordenador_decidir" />
+          <div className="flex flex-col gap-1 sm:max-w-sm">
+            <Label>{t("Quando consultar")}</Label>
+            <Select
+              value={config.decisor.quando}
+              onValueChange={(v) =>
+                setConfig({ decisor: { ...config.decisor, quando: v as Politica["config"]["decisor"]["quando"] } })
+              }
+            >
+              <SelectTrigger aria-label={t("Quando consultar")} data-testid="decisor-quando">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sempre">{t("Toda mensagem (com o contexto da conversa)")}</SelectItem>
+                <SelectItem value="quando_regras_nao_bastam">{t("Só quando as regras não decidem")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium">{t("1º — modelo de decisão")}</span>
+              <ModeloDoPonto pontoId="coordenador_decidir" />
+            </div>
+            <div className="flex flex-col gap-1" data-testid="segundo-ajudante">
+              <span className="text-xs font-medium">{t("2º — segundo ajudante")}</span>
+              <span className="text-xs text-muted-foreground">
+                {t(
+                  "Só é chamado quando o 1º não consegue distinguir (fica em dúvida ou decide com confiança abaixo da mínima). Sem modelo escolhido aqui, fica a decisão do 1º.",
+                )}
+              </span>
+              <ModeloDoPonto pontoId="coordenador_decidir_reserva" />
+            </div>
+          </div>
         </Card>
 
         {agentesNaPolitica.length > 0 && politica.destinos.length > 1 && (
@@ -689,7 +721,12 @@ interface ResultadoDaSimulacao {
   motivo_legivel: string;
   usou_modelo: boolean;
   precisou_do_modelo: boolean;
-  decisor: { status: string; modelo: string | null; confianca: number | null } | null;
+  decisor: {
+    status: string;
+    modelo: string | null;
+    confianca: number | null;
+    ajudante?: { decidiu: boolean; primeiro: { modelo: string | null; escolha: string | null; confianca: number | null } };
+  } | null;
 }
 
 function Simulacao({ politica, painel }: { politica: Politica; painel: Painel }) {
@@ -785,6 +822,18 @@ function Simulacao({ politica, painel }: { politica: Politica; painel: Painel })
             <span className="text-xs text-muted-foreground">
               {t("Modelo")}: {resultado.decisor.modelo ?? "—"} · {resultado.decisor.status}
               {resultado.decisor.confianca !== null ? ` · ${Math.round(resultado.decisor.confianca * 100)}%` : ""}
+            </span>
+          )}
+          {resultado.decisor?.ajudante && (
+            <span className="text-xs text-muted-foreground" data-testid="sim-ajudante">
+              {resultado.decisor.ajudante.decidiu
+                ? t("O 1º modelo não distinguiu; quem decidiu foi o segundo ajudante.")
+                : t("O 1º modelo não distinguiu e o segundo ajudante também não; ficou a decisão do 1º.")}{" "}
+              ({t("1º")}: {resultado.decisor.ajudante.primeiro.modelo ?? "—"} → {resultado.decisor.ajudante.primeiro.escolha ?? "—"}
+              {resultado.decisor.ajudante.primeiro.confianca !== null
+                ? ` · ${Math.round(resultado.decisor.ajudante.primeiro.confianca * 100)}%`
+                : ""}
+              )
             </span>
           )}
         </div>

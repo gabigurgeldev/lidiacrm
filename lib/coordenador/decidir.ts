@@ -8,8 +8,10 @@
  *   2. continuidade: fluxo conduzindo → a mensagem é dele;
  *   3. regra explícita publicada que casa de forma inequívoca → destino;
  *   4. continuidade do agente atual quando não há ambiguidade (mensagem curta,
- *      um só candidato, modelo desligado);
- *   5. modelo, só entre os elegíveis, e só quando os degraus acima não bastam;
+ *      um só candidato, modelo desligado) — com `decisor.quando = "sempre"`
+ *      mensagem curta NÃO dispensa o modelo: ele vê o contexto e decide;
+ *   5. modelo de decisão, só entre os elegíveis (e, se ele não distinguir, o
+ *      segundo ajudante — `decisor/llm.ts`);
  *   6. fallback declarado.
  *
  * O modelo SUGERE (`aplicarVeredito`); a decisão final e a revalidação são
@@ -185,7 +187,10 @@ export function decidir(args: {
   // 4. Continuidade sem ambiguidade.
   if (atual) {
     const semAlternativa = candidatos.filter((c) => c.id !== atual.id).length === 0;
-    if (semAlternativa || !politica.config.decisor.usar_modelo || ehMensagemCurta(texto)) {
+    // Com `sempre`, mensagem curta não dispensa o modelo: ele vê o contexto e
+    // sabe que "sim" responde ao que o agente perguntou (devolve "manter").
+    const sempre = politica.config.decisor.quando === "sempre";
+    if (semAlternativa || !politica.config.decisor.usar_modelo || (!sempre && ehMensagemCurta(texto))) {
       return {
         acao: adotado ? "destino" : "manter",
         destino: atual,

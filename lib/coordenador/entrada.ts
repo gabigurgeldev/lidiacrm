@@ -26,7 +26,7 @@ import {
   type FatosDaConversa,
   type Proposta,
 } from "./decidir";
-import { TETO_DA_MENSAGEM, type CandidatoDoDecisor, type Decisao, type Decisor } from "./decisor/contrato";
+import { TETO_DA_MENSAGEM, TETO_DO_CONTEXTO, type CandidatoDoDecisor, type Decisao, type Decisor } from "./decisor/contrato";
 import { admitir, lerEstado, transicionar, type EstadoDaConversa } from "./estado";
 import { avaliarLimites, decisorPodeChamar, type TransicaoRecente } from "./limites";
 import type { Motivo } from "./motivos";
@@ -185,6 +185,32 @@ async function decisoesNaUltimaHora(db: Consulta, e: EntradaDoTurno): Promise<nu
   return Number(rows[0]?.n ?? 0);
 }
 
+/**
+ * As últimas falas ANTES do lote, mais antigas primeiro — o que o modelo de
+ * decisão precisa para saber se "sim" responde ao agente ou abre assunto novo.
+ *
+ * Era `[]`: o decisor decidia lendo só a mensagem nova, sem a conversa. Nunca
+ * lança — sem contexto ele ainda decide, só decide pior.
+ */
+async function lerContexto(db: Consulta, e: EntradaDoTurno, primeiraDoLote: string | null): Promise<string[]> {
+  try {
+    const { rows } = await db.query<{ direction: string; body: string | null }>(
+      `select direction, body from public.messages
+        where organization_id = $1 and conversation_id = $2
+          and body is not null and body <> ''
+          and ($3::uuid is null or created_at < (select created_at from public.messages where id = $3::uuid))
+        order by created_at desc
+        limit $4`,
+      [e.organizationId, e.conversationId, primeiraDoLote, TETO_DO_CONTEXTO],
+    );
+    return rows
+      .reverse()
+      .map((m) => `${m.direction === "inbound" ? "Cliente" : "Atendimento"}: ${m.body ?? ""}`);
+  } catch {
+    return [];
+  }
+}
+
 function paraCandidato(d: DestinoEfetivo): CandidatoDoDecisor {
   return { chave: d.chave, nome: d.nome, quando_usar: d.quando_usar, exemplos: d.exemplos, nao_usar: d.nao_usar };
 }
@@ -199,6 +225,11 @@ function decisorNoDetalhe(d: Decisao | null): Record<string, unknown> {
       ms: d.ms,
       custo_cents: d.custoCents,
       confianca: d.confianca,
+      escolha: d.escolha,
+      // O erro só ia ao log do worker, que some a cada deploy: sem ele aqui,
+      // "o modelo de decisão falhou" no diário não tinha como ser investigado.
+      ...(d.erro !== undefined ? { erro: d.erro } : {}),
+      ...(d.ajudante !== undefined ? { ajudante: d.ajudante } : {}),
     },
   };
 }
@@ -436,10 +467,11 @@ async function coordenarComPolitica(
           contactId: e.contactId,
           jobId: e.jobId,
           mensagem: texto,
-          contexto: [],
+          contexto: await lerContexto(pool, e, lote[0]?.id ?? null),
           atual: consulta.atual ? paraCandidato(consulta.atual) : null,
           candidatos: consulta.candidatos.map(paraCandidato),
           timeoutMs: politica.config.limites.decisor_timeout_ms,
+          confiancaMinima: politica.config.limites.confianca_minima,
         })
       : null;
     proposta = aplicarVeredito(

@@ -108,8 +108,17 @@ export const configDaPoliticaSchema = z.strictObject({
     .strictObject({
       /** Sem modelo: só regras e continuidade decidem; ambiguidade cai no padrão. */
       usar_modelo: z.boolean().default(true),
+      /**
+       * `sempre`: toda mensagem vai ao modelo de decisão com o contexto da
+       * conversa — inclusive quando um agente já conduz (ele pode manter ou
+       * trocar). Só regra explícita e fluxo esperando resposta passam antes.
+       * `quando_regras_nao_bastam`: o comportamento de antes — continuidade e
+       * mensagem curta ficam com quem já conduz sem perguntar.
+       * O default preserva quem já publicou política.
+       */
+      quando: z.enum(["sempre", "quando_regras_nao_bastam"]).default("quando_regras_nao_bastam"),
     })
-    .default({ usar_modelo: true }),
+    .default({ usar_modelo: true, quando: "quando_regras_nao_bastam" }),
 });
 
 export type ConfigDaPolitica = z.infer<typeof configDaPoliticaSchema>;

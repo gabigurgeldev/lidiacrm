@@ -233,14 +233,26 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
   },
   {
     id: "coordenador_decidir",
-    rotulo: "Escolher quem conduz a conversa",
+    rotulo: "Modelo de decisão do coordenador",
     oQueFaz:
-      "Quando a mensagem do cliente não casa com nenhuma regra do coordenador, escolhe entre os agentes e fluxos permitidos qual deve conduzir.",
+      "Recebe a mensagem do cliente e o contexto da conversa e decide qual agente ou fluxo deve conduzir. Não escreve resposta: devolve só a decisão.",
     papel: "entender",
     exige: {},
     emissor: "lib/coordenador/decisor/llm.ts",
     sintomaDeFalha:
       "As conversas ficam com quem já estava atendendo ou caem no destino padrão do coordenador, mesmo quando o assunto mudou.",
+    registraEm: "llm_calls",
+  },
+  {
+    id: "coordenador_decidir_reserva",
+    rotulo: "Segundo ajudante do coordenador",
+    oQueFaz:
+      "Quando o modelo de decisão não consegue distinguir (fica em dúvida ou decide com pouca confiança), recebe a mesma pergunta e o mesmo contexto e decide no lugar dele.",
+    papel: "entender",
+    exige: {},
+    emissor: "lib/coordenador/decisor/llm.ts",
+    sintomaDeFalha:
+      "Nas mensagens em que o primeiro modelo fica em dúvida, a conversa fica com quem já conduzia ou cai no destino padrão, sem uma segunda opinião.",
     registraEm: "llm_calls",
   },
   {

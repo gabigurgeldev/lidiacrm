@@ -32,6 +32,8 @@ export interface PedidoDeDecisao {
   atual: CandidatoDoDecisor | null;
   candidatos: CandidatoDoDecisor[];
   timeoutMs: number;
+  /** Abaixo disto o primeiro modelo "não distinguiu" e o segundo ajudante é chamado. */
+  confiancaMinima?: number;
 }
 
 export interface Decisao {
@@ -46,6 +48,16 @@ export interface Decisao {
   /** null = custo DESCONHECIDO (não zero). */
   custoCents: number | null;
   erro?: string;
+  /**
+   * Presente quando o primeiro modelo não distinguiu e o segundo ajudante foi
+   * chamado. `decidiu` = a escolha acima é a dele; senão ficou a do primeiro.
+   */
+  ajudante?: {
+    usado: true;
+    decidiu: boolean;
+    primeiro: Pick<Decisao, "status" | "escolha" | "confianca" | "modelo" | "ms">;
+    segundo_status?: Decisao["status"];
+  };
 }
 
 export interface Decisor {

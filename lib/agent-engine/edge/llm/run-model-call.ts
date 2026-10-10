@@ -131,6 +131,7 @@ const PURPOSES_CLASSIFICADORES = new Set([
   'followup_classify',
   'classify',
   'coordenador_decidir',
+  'coordenador_decidir_reserva',
 ]);
 /** Resumos rodam DEPOIS da resposta: não atrasam o cliente, mas seguram o job. */
 const PURPOSES_RESUMO = new Set(['checkpoint', 'compaction', 'flush']);

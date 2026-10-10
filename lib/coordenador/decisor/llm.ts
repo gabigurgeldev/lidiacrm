@@ -1,6 +1,7 @@
 /**
- * Decisor pelo seam de LLM do worker (`runModelCall`, finalidade
- * `coordenador_decidir`).
+ * Decisor pelo seam de LLM do worker (`runModelCall`, finalidades
+ * `coordenador_decidir` e, quando o primeiro não distingue, o segundo ajudante
+ * `coordenador_decidir_reserva`).
  *
  * Herda, sem código novo: modelo e chave escolhidos no painel de provedores
  * (OpenRouter incluído), orçamento (bloqueio antes de gastar), registro em
@@ -89,6 +90,22 @@ export function lerDecisao(
     : { escolha: null, confianca: null };
 }
 
+/** O ponto de IA do segundo ajudante — escolhido na tela do coordenador. */
+export const FINALIDADE_DO_AJUDANTE = "coordenador_decidir_reserva";
+
+/**
+ * O primeiro modelo NÃO DISTINGUIU: disse "esclarecer", respondeu fora da lista
+ * (`recusou`) ou decidiu com confiança abaixo da mínima da política. Falha de
+ * rede, chave ou tempo NÃO conta — não é dúvida, é ausência de resposta, e o
+ * coordenador já tem fallback para ela.
+ */
+export function naoDistinguiu(d: Decisao, confiancaMinima: number): boolean {
+  if (d.status === "recusou") return true;
+  if (d.status !== "ok") return false;
+  if (d.escolha === "esclarecer") return true;
+  return d.confianca !== null && d.confianca < confiancaMinima;
+}
+
 export function decisorPorLlm(
   db: pg.Pool,
   llmCfg: LlmEdgeConfig,
@@ -96,73 +113,103 @@ export function decisorPorLlm(
 ): Decisor {
   const chamar = deps.runModelCall ?? runModelCall;
   const agora = deps.agora ?? (() => Date.now());
+
+  /** Uma consulta, com o teto de tempo da política por cima. Nunca lança. */
+  async function consultar(p: PedidoDeDecisao, qual: "principal" | "ajudante"): Promise<Decisao> {
+    const t0 = agora();
+    const { system, user } = promptDoDecisor(p);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const estouro = new Promise<"timeout">((resolve) => {
+      timer = setTimeout(() => resolve("timeout"), p.timeoutMs);
+    });
+    const base = {
+      tenantId: p.organizationId,
+      leadId: p.contactId,
+      jobId: p.jobId,
+      system,
+      messages: [{ role: "user" as const, content: user }],
+    };
+    try {
+      // Duas chamadas literais, uma por ponto: é a forma que a varredura de
+      // `pontos-de-ia-completude` reconhece como emissão de cada um.
+      const chamada =
+        qual === "principal"
+          ? chamar(db, llmCfg, { ...base, purpose: 'coordenador_decidir' }, { log: deps.log })
+          : chamar(db, llmCfg, { ...base, purpose: 'coordenador_decidir_reserva' }, { log: deps.log });
+      const resposta = await Promise.race([chamada, estouro]);
+      if (resposta === "timeout") {
+        return { status: "timeout", escolha: null, confianca: null, provedor: null, modelo: null, ms: agora() - t0, custoCents: null };
+      }
+      const lido = lerDecisao(resposta.result.text, p.candidatos);
+      return {
+        status: lido.escolha === null ? "recusou" : "ok",
+        escolha: lido.escolha,
+        confianca: lido.confianca,
+        provedor: resposta.provider ?? null,
+        modelo: resposta.model ?? null,
+        ms: agora() - t0,
+        custoCents: typeof resposta.costCents === "number" ? resposta.costCents : null,
+      };
+    } catch (err) {
+      // Orçamento esgotado, modelo não habilitado, 429, rede: tudo vira
+      // `falhou` — o coordenador aplica o fallback, nunca um destino arbitrário.
+      deps.log.warn("coordenador: decisor falhou — fallback", {
+        qual,
+        error: err instanceof Error ? err.message.slice(0, 200) : String(err),
+      });
+      return {
+        status: "falhou",
+        escolha: null,
+        confianca: null,
+        provedor: null,
+        modelo: null,
+        ms: agora() - t0,
+        custoCents: null,
+        erro: err instanceof Error ? err.message.slice(0, 200) : "erro desconhecido",
+      };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  /** Só chama o ajudante se ele foi ESCOLHIDO — nunca cai no padrão da org às cegas. */
+  async function ajudanteConfigurado(organizationId: string): Promise<boolean> {
+    try {
+      const { rows } = await db.query<{ ok: boolean }>(
+        `select exists (select 1 from ai_purpose_bindings
+                         where organization_id = $1 and purpose = $2 and is_enabled) as ok`,
+        [organizationId, FINALIDADE_DO_AJUDANTE],
+      );
+      return rows[0]?.ok === true;
+    } catch {
+      return false;
+    }
+  }
+
   return {
     async decidir(p: PedidoDeDecisao): Promise<Decisao> {
-      const t0 = agora();
-      const { system, user } = promptDoDecisor(p);
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const estouro = new Promise<"timeout">((resolve) => {
-        timer = setTimeout(() => resolve("timeout"), p.timeoutMs);
-      });
-      try {
-        const resposta = await Promise.race([
-          chamar(
-            db,
-            llmCfg,
-            {
-              tenantId: p.organizationId,
-              leadId: p.contactId,
-              jobId: p.jobId,
-              // Literal, não a constante: é a forma que a varredura de
-              // `pontos-de-ia-completude` reconhece como emissão do ponto.
-              purpose: 'coordenador_decidir',
-              system,
-              messages: [{ role: "user", content: user }],
-            },
-            { log: deps.log },
-          ),
-          estouro,
-        ]);
-        if (resposta === "timeout") {
-          return {
-            status: "timeout",
-            escolha: null,
-            confianca: null,
-            provedor: null,
-            modelo: null,
-            ms: agora() - t0,
-            custoCents: null,
-          };
-        }
-        const lido = lerDecisao(resposta.result.text, p.candidatos);
-        return {
-          status: lido.escolha === null ? "recusou" : "ok",
-          escolha: lido.escolha,
-          confianca: lido.confianca,
-          provedor: resposta.provider ?? null,
-          modelo: resposta.model ?? null,
-          ms: agora() - t0,
-          custoCents: typeof resposta.costCents === "number" ? resposta.costCents : null,
-        };
-      } catch (err) {
-        // Orçamento esgotado, modelo não habilitado, 429, rede: tudo vira
-        // `falhou` — o coordenador aplica o fallback, nunca um destino arbitrário.
-        deps.log.warn("coordenador: decisor falhou — fallback", {
-          error: err instanceof Error ? err.message.slice(0, 200) : String(err),
-        });
-        return {
-          status: "falhou",
-          escolha: null,
-          confianca: null,
-          provedor: null,
-          modelo: null,
-          ms: agora() - t0,
-          custoCents: null,
-          erro: err instanceof Error ? err.message.slice(0, 200) : "erro desconhecido",
-        };
-      } finally {
-        if (timer) clearTimeout(timer);
+      const primeiro = await consultar(p, "principal");
+      const minima = p.confiancaMinima ?? 0.6;
+      if (!naoDistinguiu(primeiro, minima) || !(await ajudanteConfigurado(p.organizationId))) {
+        return primeiro;
       }
+      const segundo = await consultar(p, "ajudante");
+      const resumo = {
+        status: primeiro.status,
+        escolha: primeiro.escolha,
+        confianca: primeiro.confianca,
+        modelo: primeiro.modelo,
+        ms: primeiro.ms,
+      };
+      // Vale a decisão do ajudante quando ele decidiu de fato; se ele também
+      // não distinguiu (ou falhou), fica a do primeiro — que o coordenador já
+      // sabe tratar (manter quem conduz ou ir ao padrão).
+      const ajudanteDecidiu = segundo.status === "ok" && segundo.escolha !== "esclarecer";
+      const custo =
+        primeiro.custoCents !== null && segundo.custoCents !== null ? primeiro.custoCents + segundo.custoCents : null;
+      return ajudanteDecidiu
+        ? { ...segundo, ms: primeiro.ms + segundo.ms, custoCents: custo, ajudante: { usado: true, decidiu: true, primeiro: resumo } }
+        : { ...primeiro, ms: primeiro.ms + segundo.ms, custoCents: custo, ajudante: { usado: true, decidiu: false, primeiro: resumo, segundo_status: segundo.status } };
     },
   };
 }

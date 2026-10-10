@@ -29,7 +29,7 @@ export interface ResultadoDaSimulacao {
   usou_modelo: boolean;
   /** As regras não bastaram: a decisão real consultaria o modelo. */
   precisou_do_modelo: boolean;
-  decisor: Pick<Decisao, "status" | "escolha" | "confianca" | "modelo" | "ms" | "custoCents"> | null;
+  decisor: Pick<Decisao, "status" | "escolha" | "confianca" | "modelo" | "ms" | "custoCents" | "ajudante"> | null;
 }
 
 function candidato(d: DestinoEfetivo): CandidatoDoDecisor {
@@ -74,6 +74,7 @@ export async function simular(args: {
           atual: consulta.atual ? candidato(consulta.atual) : null,
           candidatos: consulta.candidatos.map(candidato),
           timeoutMs: politica.config.limites.decisor_timeout_ms,
+          confiancaMinima: politica.config.limites.confianca_minima,
         })
       : null;
     proposta = aplicarVeredito(
@@ -114,6 +115,7 @@ export async function simular(args: {
           modelo: decisao.modelo,
           ms: decisao.ms,
           custoCents: decisao.custoCents,
+          ...(decisao.ajudante !== undefined ? { ajudante: decisao.ajudante } : {}),
         }
       : null,
   };
