@@ -2,7 +2,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Grupo } from "@/components/ajustes";
 import { Plus } from "@/lib/ui/icons";
 import { PROVEDORES } from "@/lib/ai/pontos/provedores";
 import { useCredentialsList, type CredentialRow, type Provider } from "@/hooks/ai/useCredentials";
@@ -44,7 +44,7 @@ export function CredentialsList({ initialData, canWrite, usageMap }: Props) {
   if (credentials.length === 0) {
     return (
       <>
-        <Card className="flex flex-col items-center gap-3 p-10 text-center">
+        <div className="ios-grupo flex flex-col items-center gap-3 p-10 text-center">
           <h2 className="font-medium">{t("Nenhuma chave cadastrada ainda")}</h2>
           <p className="max-w-md text-sm text-muted-foreground">
             {t(
@@ -56,14 +56,14 @@ export function CredentialsList({ initialData, canWrite, usageMap }: Props) {
               <Plus size={14} aria-hidden className="mr-2" /> {t("Adicionar credencial")}
             </Button>
           )}
-        </Card>
+        </div>
         <AddCredentialDialog open={addOpen} onOpenChange={setAddOpen} />
       </>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex max-w-3xl flex-col gap-6">
       <div className="flex sm:justify-end">
         {canWrite && (
           <Button onClick={() => setAddOpen(true)} className="w-full sm:w-auto">
@@ -78,22 +78,16 @@ export function CredentialsList({ initialData, canWrite, usageMap }: Props) {
         const rows = grouped[p] ?? [];
         if (rows.length === 0) return null;
         return (
-          <section key={p} className="space-y-2">
-            <h2 className="text-sm font-medium text-muted-foreground">
-              {PROVIDER_LABELS[p]}
-            </h2>
-            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {rows.map((row) => (
-                <li key={row.id}>
-                  <CredentialCard
-                    credential={row}
-                    canWrite={canWrite}
-                    usageCount={usageMap[row.id] ?? 0}
-                  />
-                </li>
-              ))}
-            </ul>
-          </section>
+          <Grupo key={p} titulo={PROVIDER_LABELS[p]} testid={`credenciais-${p}`}>
+            {rows.map((row) => (
+              <CredentialCard
+                key={row.id}
+                credential={row}
+                canWrite={canWrite}
+                usageCount={usageMap[row.id] ?? 0}
+              />
+            ))}
+          </Grupo>
         );
       })}
 

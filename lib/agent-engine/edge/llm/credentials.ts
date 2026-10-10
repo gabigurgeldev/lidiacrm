@@ -29,9 +29,39 @@ import {
 import type { CacheTtl } from './stable-prefix';
 
 /** Config da camada LLM montada do env validado (padrão crmEdgeConfigFromEnv). */
+/**
+ * Para onde vai a contabilidade das chamadas de IA quando o turno roda dentro de
+ * uma transação que será DESFEITA — o ensaio do agente (`lib/agent-engine/ensaio`).
+ *
+ * O custo do ensaio é real e precisa ficar registrado; e o `insert` em
+ * `llm_calls` aciona um gatilho que trava a linha de orçamento da organização
+ * até o fim da transação — dentro do ensaio, essa trava seguraria o registro
+ * dos atendimentos REAIS da mesma organização enquanto o teste durasse. Por
+ * isso orçamento e `llm_calls` vão por OUTRA conexão, em autocommit.
+ */
+export interface ContabilidadeSeparada {
+  /** Pool real — fora da transação do turno. */
+  db: pg.Pool;
+  /** Prefixo do `purpose` gravado (ex.: `ensaio:`), para o custo do teste não se misturar ao de atendimento. */
+  prefixoDoProposito: string;
+  /** Avisado a cada chamada registrada — é de onde o relatório do ensaio tira custo e tempo. */
+  aoRegistrar?: (chamada: {
+    purpose: string;
+    provider: string;
+    model: string;
+    status: 'ok' | 'erro';
+    inputTokens: number;
+    outputTokens: number;
+    costCents: number | null;
+    latencyMs: number;
+  }) => void;
+}
+
 export interface LlmEdgeConfig {
   /** chave de plataforma (fallback quando a org não tem BYOK). Opcional no boot. */
   anthropicApiKey?: string;
+  /** Só o ensaio passa — ver `ContabilidadeSeparada`. Ausente = contabiliza no `db` do turno. */
+  contabilidade?: ContabilidadeSeparada;
   /**
    * Mesma ideia para OpenAI. Existia só a da Anthropic, e isso quebrava a
    * transcrição de áudio: o Whisper é da OpenAI, mas a org que usa Anthropic

@@ -56,14 +56,14 @@ export function PublishConfirmDialog({
           <AlertDialogDescription>
             {t("Esta versão se tornará a ativa no atendimento. A versão atual (")}
             {published ? `v${published.version_number}` : t("nenhuma")}
-            {t(") será marcada como superseded.")}
+            {t(") deixa de valer.")}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
         <div className="space-y-2 rounded-md border border-border/60 p-3 text-xs">
           {providerChanged ? (
             <p>
-              <strong>{t("Provider:")}</strong>{" "}
+              <strong>{t("Empresa de IA:")}</strong>{" "}
               {published ? `${published.provider} → ${draft.provider}` : draft.provider}
             </p>
           ) : null}
@@ -75,16 +75,16 @@ export function PublishConfirmDialog({
           ) : null}
           {toolsDiff.added.length > 0 ? (
             <p>
-              <strong>{t("Tools adicionadas:")}</strong> {toolsDiff.added.join(", ")}
+              <strong>{t("Capacidades ligadas:")}</strong> {toolsDiff.added.join(", ")}
             </p>
           ) : null}
           {toolsDiff.removed.length > 0 ? (
             <p>
-              <strong>{t("Tools removidas:")}</strong> {toolsDiff.removed.join(", ")}
+              <strong>{t("Capacidades desligadas:")}</strong> {toolsDiff.removed.join(", ")}
             </p>
           ) : null}
           <p>
-            <strong>{t("Prompt:")}</strong>{" "}
+            <strong>{t("Instruções:")}</strong>{" "}
             {promptDeltaChars > 0
               ? `+${promptDeltaChars} ${t("chars")}`
               : promptDeltaChars < 0

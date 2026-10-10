@@ -13,6 +13,7 @@ import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
 import { IDS_DE_PROVEDOR } from "@/lib/ai/pontos/provedores";
 import { VOZES_DO_AGENTE, VOZ_PADRAO } from "@/lib/ai/voz/vozes";
 import { TETO_ENDPOINTS_POR_AGENTE } from "@/lib/ai/integracoes/schema";
+import { explicarProblemaDoPadrao, problemaDoPadrao } from "@/lib/regex/segura";
 
 /**
  * Derivado de `lib/ai/pontos/provedores.ts` (a lista única desde a 0127). Como
@@ -32,7 +33,19 @@ const triggerConfigSchema = z
       .object({
         ignore_groups: z.boolean().default(true),
         ignore_self: z.boolean().default(true),
-        keyword_regex: z.string().nullable().optional().default(null),
+        // "Só responder sobre…". Recusa na hora de salvar o padrão que trava o
+        // worker (`lib/regex/segura.ts`); vazio vale como "sem filtro".
+        keyword_regex: z
+          .string()
+          .superRefine((padrao, ctx) => {
+            const problema = problemaDoPadrao(padrao);
+            if (problema !== null && problema !== "vazio") {
+              ctx.addIssue({ code: "custom", message: explicarProblemaDoPadrao(problema) });
+            }
+          })
+          .nullable()
+          .optional()
+          .default(null),
         business_hours: z
           .object({
             timezone: z.string(),
@@ -200,6 +213,7 @@ export const agentMcpCreateSchema = z
   })
   .strict();
 
+/** Identidade do agente (colunas de `ai_agents`: nome, descrição, ordem) — o que o editor salva junto do rascunho. */
 export const agentMcpPatchSchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),

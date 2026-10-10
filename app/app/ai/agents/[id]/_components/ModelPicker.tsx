@@ -137,7 +137,7 @@ export function ModelPicker({ provider, value, onChange, disabled, id, placehold
           {models.map((m) => (
             <SelectItem key={m.model_id} value={m.model_id}>
               {m.display_name}
-              {m.is_default_for_provider ? ` · ${t("default")}` : ""}
+              {m.is_default_for_provider ? ` · ${t("padrão")}` : ""}
             </SelectItem>
           ))}
           {estado === "erro" ? (

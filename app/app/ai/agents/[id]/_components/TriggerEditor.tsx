@@ -4,14 +4,9 @@ import * as React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
+import { padraoParaPalavras, palavrasParaPadrao } from "@/lib/ai/agents/filtro-em-palavras";
+import { problemaDoPadrao } from "@/lib/regex/segura";
 
 export interface BusinessHoursValue {
   timezone: string;
@@ -20,6 +15,20 @@ export interface BusinessHoursValue {
   weekdays: number[];
 }
 
+/**
+ * A forma gravada em `trigger_config`. A tela edita o filtro de assunto e o
+ * horário de funcionamento — o resto passa intacto, para não reescrever dado
+ * de quem já salvou. Os outros campos existiam como controles e nenhum mudava
+ * nada no atendimento real (o motor canônico não os lê):
+ *
+ *  - `events`: só existe um evento, mensagem recebida;
+ *  - `ignore_groups`: grupo NUNCA aciona o agente (`edge/crm/drain.ts`);
+ *  - `ignore_self`: só mensagem RECEBIDA aciona o agente;
+ *  - `concurrency`: a fila já atende um cliente por vez e junta a rajada.
+ *
+ * `keyword_regex` é o "Só responder sobre…", que o motor aplica
+ * (`lib/agent-engine/agent/filtro-de-assunto.ts`).
+ */
 export interface TriggerValue {
   events: ("message")[];
   filters: {
@@ -35,6 +44,8 @@ interface Props {
   value: TriggerValue;
   onChange: (v: TriggerValue) => void;
   disabled?: boolean;
+  /** Membro de roteador: quem escolhe o agente é o roteador, e o filtro de assunto não vale. */
+  roteador?: { routerName: string } | null;
 }
 
 const WEEKDAYS = [
@@ -47,8 +58,18 @@ const WEEKDAYS = [
   { id: 6, label: "Sáb" },
 ];
 
-export function TriggerEditor({ value, onChange, disabled }: Props) {
+export function TriggerEditor({ value, onChange, disabled, roteador }: Props) {
   const t = useT();
+  // O padrão salvo é a fonte; a lista de palavras é só como a tela o mostra.
+  // Padrão que não é lista de palavras abre direto no modo avançado.
+  const palavrasIniciais = padraoParaPalavras(value.filters.keyword_regex);
+  const [modoDoFiltro, setModoDoFiltro] = React.useState<"palavras" | "avancado">(
+    palavrasIniciais === null ? "avancado" : "palavras",
+  );
+  const [textoDasPalavras, setTextoDasPalavras] = React.useState((palavrasIniciais ?? []).join(", "));
+  const filtro = value.filters.keyword_regex;
+  const problemaDoFiltro = filtro === null ? null : problemaDoPadrao(filtro);
+  const palavrasDoFiltro = padraoParaPalavras(filtro);
   function patchFilters(p: Partial<TriggerValue["filters"]>) {
     onChange({ ...value, filters: { ...value.filters, ...p } });
   }
@@ -82,94 +103,85 @@ export function TriggerEditor({ value, onChange, disabled }: Props) {
 
   return (
     <div className="space-y-4">
-      <div>
-        <Label>{t("O que faz ele responder")}</Label>
-        <div className="mt-1 flex flex-wrap gap-2">
-          {(["message"] as const).map((ev) => {
-            const checked = value.events.includes(ev);
-            return (
-              <label
-                key={ev}
-                className="flex cursor-pointer items-center gap-2 rounded border border-border/60 px-2 py-1 text-xs"
-              >
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 accent-primary"
-                  checked={checked}
-                  onChange={() =>
-                    onChange({
-                      ...value,
-                      events: checked
-                        ? (value.events.filter((e) => e !== ev) as TriggerValue["events"])
-                        : ([...value.events, ev] as TriggerValue["events"]),
-                    })
-                  }
-                  disabled={disabled}
-                />
-                {/* `message` é o nome do evento no wire; na tela vale o que ele
-                    significa para quem lê. */}
-                {ev === "message" ? t("Uma mensagem nova do cliente") : ev}
-              </label>
-            );
-          })}
-        </div>
-      </div>
+      <p className="text-xs leading-snug text-muted-foreground" data-testid="gatilho-explicacao">
+        {t(
+          "Ele responde às mensagens que os clientes mandam para o número dele. Mensagens seguidas do mesmo cliente viram uma resposta só. Grupos de WhatsApp e mensagens enviadas por você mesmo nunca acionam o agente.",
+        )}
+      </p>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={value.filters.ignore_groups}
-            onCheckedChange={(v) => patchFilters({ ignore_groups: v })}
+      <div className="space-y-2" data-testid="filtro-de-assunto">
+        <Label htmlFor={modoDoFiltro === "palavras" ? "filtro_palavras" : "keyword_regex"}>
+          {t("Só responder sobre… (opcional)")}
+        </Label>
+        {roteador ? (
+          <p className="rounded-md bg-accent-soft p-2 text-xs text-text-muted" data-testid="filtro-de-assunto-roteador">
+            {t("Este agente é escolhido pelo roteador")} «{roteador.routerName}» —{" "}
+            {t("lá quem decide o assunto é o roteador, e este filtro não vale.")}
+          </p>
+        ) : null}
+        {modoDoFiltro === "palavras" ? (
+          <Input
+            id="filtro_palavras"
+            value={textoDasPalavras}
+            onChange={(e) => {
+              setTextoDasPalavras(e.target.value);
+              patchFilters({ keyword_regex: palavrasParaPadrao(e.target.value) });
+            }}
+            placeholder={t("Ex.: pedido, entrega, segunda via")}
             disabled={disabled}
-            id="ignore_groups"
           />
-          <Label htmlFor="ignore_groups">{t("Não responder em grupos")}</Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={value.filters.ignore_self}
-            onCheckedChange={(v) => patchFilters({ ignore_self: v })}
+        ) : (
+          <Input
+            id="keyword_regex"
+            value={filtro ?? ""}
+            onChange={(e) =>
+              patchFilters({ keyword_regex: e.target.value.trim() === "" ? null : e.target.value })
+            }
+            placeholder={t("Ex.: pedidos?|entrega|2a via")}
             disabled={disabled}
-            id="ignore_self"
+            spellCheck={false}
+            aria-invalid={problemaDoFiltro !== null && problemaDoFiltro !== "vazio"}
           />
-          <Label htmlFor="ignore_self">{t("Não responder às mensagens que saem do seu próprio número")}</Label>
-        </div>
-      </div>
-
-      <div className="space-y-1">
-        <Label htmlFor="keyword_regex">{t("Só responder quando a mensagem falar de algo específico (opcional)")}</Label>
-        <Input
-          id="keyword_regex"
-          value={value.filters.keyword_regex ?? ""}
-          onChange={(e) =>
-            patchFilters({ keyword_regex: e.target.value.trim() === "" ? null : e.target.value })
-          }
-          placeholder={t("Ex.: pedido|status|orçamento")}
-          disabled={disabled}
-          spellCheck={false}
-        />
+        )}
+        {problemaDoFiltro !== null && problemaDoFiltro !== "vazio" ? (
+          <p className="text-xs text-destructive" role="alert" data-testid="filtro-de-assunto-erro">
+            {problemaDoFiltro === "longo_demais"
+              ? t("O filtro passou de 200 caracteres.")
+              : problemaDoFiltro === "invalido"
+                ? t("O filtro tem um erro de escrita (parêntese ou colchete sem par, por exemplo).")
+                : problemaDoFiltro === "quantificador_aninhado"
+                  ? t("O filtro repete um trecho que já se repete, como (a+)+. Isso pode travar o atendimento — simplifique.")
+                  : t("O filtro usa referência a um trecho anterior. Isso não é aceito aqui.")}
+          </p>
+        ) : null}
         <p className="text-xs text-muted-foreground">
-          {t(
-            "Deixe em branco para o agente responder a tudo. Se preencher, ele só entra quando a mensagem contiver uma dessas palavras — separe por barra vertical (|). Aceita expressão regular, para quem já conhece.",
-          )}
+          {modoDoFiltro === "palavras"
+            ? t(
+                "Em branco, ele responde a tudo. Preenchido, ele só entra numa conversa nova quando o cliente falar de uma dessas palavras (separe por vírgula; acento e maiúscula não importam). Conversa que ele já atende continua com ele.",
+              )
+            : t(
+                "Expressão regular contra o que o cliente escreveu desde a última resposta, sem acento e em minúsculas.",
+              )}
         </p>
-      </div>
-
-      <div className="space-y-1">
-        <Label>{t("Quantos atendimentos ao mesmo tempo")}</Label>
-        <Select
-          value={value.concurrency}
-          onValueChange={(v) => onChange({ ...value, concurrency: v as TriggerValue["concurrency"] })}
-          disabled={disabled}
+        <button
+          type="button"
+          className="text-xs font-medium text-primary underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={disabled || (modoDoFiltro === "avancado" && palavrasDoFiltro === null)}
+          onClick={() => {
+            if (modoDoFiltro === "palavras") {
+              setModoDoFiltro("avancado");
+              return;
+            }
+            setTextoDasPalavras((palavrasDoFiltro ?? []).join(", "));
+            setModoDoFiltro("palavras");
+          }}
         >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="one_per_conversation">{t("Um de cada vez por conversa")}</SelectItem>
-            <SelectItem value="one_per_contact">{t("Um de cada vez por cliente")}</SelectItem>
-          </SelectContent>
-        </Select>
+          {modoDoFiltro === "palavras"
+            ? t("Usar expressão regular (avançado)")
+            : palavrasDoFiltro === null
+              ? t("Esta expressão não é uma lista de palavras")
+              : t("Voltar para lista de palavras")}
+        </button>
       </div>
 
       <div className="space-y-2 rounded-md border border-border/60 p-3">

@@ -65,6 +65,9 @@ const A_CAMADA_DE_DATA = new Set([
 const FORA_DE_INTERFACE: Record<string, string> = {
   "app/api/v1/admin/dashboard/kpis/route.ts":
     "monta o texto do aviso no momento em que ele nasce — é conteúdo gravado, não interface",
+  "lib/agent-engine/agent/abertura-legivel.ts":
+    "é o bloco \"Agora\" do texto que vai para o MODELO, não para a tela: o texto-base do agente " +
+    "(playbooks/platform.md) é todo em português, e a data acompanha a língua dele",
 
   // ─── E-mail: sai do produto e não tem provider de idioma ───
   //

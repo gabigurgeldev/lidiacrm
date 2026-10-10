@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 
 import { useAgentRuns, type AgentRunRow } from "@/hooks/ai/useAgentRuns";
+import { lerExecucao, type TomDaExecucao } from "@/lib/ai/agents/leitura-da-execucao";
 import { useT } from "@/hooks/i18n/useT";
 import { RunDetailDrawer } from "./RunDetailDrawer";
 
@@ -26,13 +27,11 @@ interface Props {
   active: boolean;
 }
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  pending: "outline",
-  running: "secondary",
-  completed: "default",
-  failed: "destructive",
-  aborted: "destructive",
-  timeout: "destructive",
+/** Cor da pílula pelo tom do desfecho (`lerExecucao`). */
+const VARIANTE_DO_TOM: Record<TomDaExecucao, "default" | "secondary" | "destructive"> = {
+  ok: "default",
+  atencao: "secondary",
+  erro: "destructive",
 };
 
 function fmtLatency(ms: number | null): string {
@@ -89,7 +88,7 @@ export function RunsTable({ agentId, active }: Props) {
               <TableHead>{t("Tokens (in/out)")}</TableHead>
               <TableHead>{t("Custo")}</TableHead>
               <TableHead>{t("Latência")}</TableHead>
-              <TableHead>{t("Steps")}</TableHead>
+              <TableHead>{t("Passos")}</TableHead>
               <TableHead className="text-right">{t("Ações")}</TableHead>
             </TableRow>
           </TableHeader>
@@ -115,8 +114,12 @@ export function RunsTable({ agentId, active }: Props) {
                   {new Date(r.started_at).toLocaleString()}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={STATUS_VARIANT[r.status] ?? "outline"} className="text-xs">
-                    {r.status}
+                  <Badge
+                    variant={VARIANTE_DO_TOM[lerExecucao(r.status, r.abort_reason).tom]}
+                    className="text-xs"
+                    data-testid="execucao-desfecho"
+                  >
+                    {t(lerExecucao(r.status, r.abort_reason).rotulo)}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-xs">

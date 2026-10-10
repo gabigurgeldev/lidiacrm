@@ -75,6 +75,8 @@ export const KIND_LABEL = {
   acao_externa_falhou: "O cliente confirmou uma correção e ela não foi aplicada",
   verificacao_bloqueada: "Alguém errou o código de verificação de uma conta várias vezes",
   coordenador_preso: "Uma conversa ficou sem quem a conduza e precisa de alguém da equipe",
+  // (migration 0231) Diz o que o CLIENTE vive: escreveu e ficou sem resposta.
+  turno_sem_resposta: "Um cliente ficou sem resposta do agente",
   other: "Aviso do assistente",
 } as const satisfies Record<InboxKind, string>;
 

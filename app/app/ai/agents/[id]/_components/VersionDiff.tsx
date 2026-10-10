@@ -151,7 +151,7 @@ export function VersionDiff({ versionA, versionB }: Props) {
         )}
       </Section>
 
-      <Section title={t("Tools")}>
+      <Section title={t("Capacidades")}>
         <Pills label={t("Adicionadas")} tone="add" items={tools.added} />
         <Pills label={t("Removidas")} tone="del" items={tools.removed} />
         {tools.added.length === 0 && tools.removed.length === 0 ? (
@@ -189,7 +189,7 @@ export function VersionDiff({ versionA, versionB }: Props) {
         ) : null}
       </Section>
 
-      <Section title={t("System prompt")}>
+      <Section title={t("Instruções")}>
         <pre className="max-h-96 overflow-auto rounded-md border border-border/60 bg-muted/30 p-2 font-mono text-xs leading-relaxed">
           {lines.map((l, idx) => {
             const cls =

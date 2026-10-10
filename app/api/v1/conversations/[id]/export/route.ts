@@ -26,6 +26,7 @@ import {
   type MensagemParaExportar,
 } from "@/lib/conversas/exportar";
 import { gerarPdfDaConversa, gerarXlsxDaConversa } from "@/lib/conversas/exportar-arquivos";
+import { tagDeIdioma } from "@/lib/i18n/datas";
 import { createClient } from "@/lib/supabase/server";
 import { nomesDosAtendentes } from "@/lib/users/nome-do-atendente";
 
@@ -109,14 +110,16 @@ export async function GET(
   const nomes = new Map<string, string>();
   for (const [uid, nome] of nomesBrutos) if (nome) nomes.set(uid, nome);
 
-  const linhas = linhasDaConversa(mensagens, fuso, nomes);
+  // As datas do arquivo saem no idioma de quem baixa, como na tela.
+  const tag = tagDeIdioma(user.idioma);
+  const linhas = linhasDaConversa(mensagens, fuso, nomes, tag);
   const nomeDoContato = rotuloDoContato(contato);
   const agora = new Date();
   const cab = {
     contato: nomeDoContato,
     telefone: contato?.phone_number ? phoneForDisplay(contato.phone_number) : null,
     canal: canal?.phone_number ?? canal?.display_name ?? null,
-    geradoEm: new Intl.DateTimeFormat("pt-BR", {
+    geradoEm: new Intl.DateTimeFormat(tag, {
       timeZone: fuso,
       dateStyle: "short",
       timeStyle: "short",

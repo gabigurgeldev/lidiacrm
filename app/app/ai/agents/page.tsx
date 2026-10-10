@@ -1,4 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
+
+import { Button } from "@/components/ui/button";
+import { Plus, Sparkle } from "@/lib/ui/icons";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
@@ -7,6 +11,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import { AgentsList } from "./_components/AgentsList";
 import { logger } from "@/lib/logger";
+import { listSelectableChannels } from "@/lib/channels/selectable";
+import { PaginaAjustes } from "@/components/ajustes";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +24,7 @@ export const dynamic = "force-dynamic";
  */
 const AGENT_COLUMNS =
   "id, organization_id, name, description, model, system_prompt, is_active, is_default, kind, priority, published_version_id, archived_at, config, guardrails, active_kb_version_id, created_at, updated_at, " +
-  "versao_publicada:ai_agent_versions!ai_agents_published_version_id_fkey(provider, model)";
+  "versao_publicada:ai_agent_versions!ai_agents_published_version_id_fkey(provider, model, channel_session_id)";
 
 export default async function AgentsListPage() {
   const user = await requireAuth();
@@ -29,11 +35,16 @@ export default async function AgentsListPage() {
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("ai_agents")
-    .select(AGENT_COLUMNS)
-    .eq("organization_id", activeOrg.orgId)
-    .order("created_at", { ascending: false });
+  const [{ data, error }, numeros] = await Promise.all([
+    supabase
+      .from("ai_agents")
+      .select(AGENT_COLUMNS)
+      .eq("organization_id", activeOrg.orgId)
+      .order("created_at", { ascending: false }),
+    // Os números vêm com a página: a lista é agrupada por eles, e um número
+    // conectado sem agente nenhum é a informação mais importante da tela.
+    listSelectableChannels(supabase, activeOrg.orgId),
+  ]);
 
   // Sem ler o `error`, "não consegui perguntar" e "você não tem agente nenhum"
   // pintam a MESMA tela — e a segunda é uma afirmação forte sobre o trabalho de
@@ -53,16 +64,27 @@ export default async function AgentsListPage() {
   const idioma = user.idioma;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
-      <header className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{traduzir("Agents de IA", idioma)}</h1>
-          <p className="text-sm text-muted-foreground">
-            {traduzir("Configure o comportamento dos agents que respondem no WhatsApp.", idioma)}
-          </p>
-        </div>
-      </header>
-      <AgentsList initialData={agents} canWrite={canWrite} />
-    </div>
+    <PaginaAjustes
+      titulo={traduzir("Agentes de IA", idioma)}
+      descricao={traduzir("Quem atende seus clientes no WhatsApp, número por número. Clique num agente para mudar o que ele faz.", idioma)}
+      acoes={
+        canWrite ? (
+          <>
+            <Link href="/app/ai/agents/criar-com-ia">
+              <Button variant="outline" data-testid="agentes-criar-com-ia">
+                <Sparkle size={14} aria-hidden className="mr-2" /> {traduzir("Criar com IA", idioma)}
+              </Button>
+            </Link>
+            <Link href="/app/ai/agents/new">
+              <Button>
+                <Plus size={14} aria-hidden className="mr-2" /> {traduzir("Novo agente", idioma)}
+              </Button>
+            </Link>
+          </>
+        ) : undefined
+      }
+    >
+      <AgentsList initialData={agents} numeros={numeros} canWrite={canWrite} />
+    </PaginaAjustes>
   );
 }

@@ -31,6 +31,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { PACING_DEFAULTS, type PacingKnobs } from "@/lib/agent-engine/pacing/defaults";
 import {
+  ativacaoEfetiva,
   janelaDeEnvioAberta,
   proximaAberturaDaJanela,
 } from "@/lib/agent-engine/pacing/engine";
@@ -60,8 +61,32 @@ interface LinhaDeKnobs {
  */
 export interface ConfigDePacingDoCanal {
   knobs: PacingKnobs;
-  /** null = sem linha em `channel_knobs`; o motor trata como idade 0 (conservador). */
+  /**
+   * `ativacaoEfetiva`: a data declarada em `channel_knobs`, senão a criação da
+   * conexão. null só quando nem a conexão foi lida — idade 0 (conservador).
+   */
   numberActivatedAt: Date | null;
+}
+
+/**
+ * Quando a conexão foi criada no CRM — o piso da idade do número quando ninguém
+ * declarou a ativação. Leitura de melhor esforço: falhar aqui devolve null e o
+ * motor segue no degrau conservador, como sempre fez.
+ */
+async function criacaoDaConexao(
+  admin: SupabaseClient,
+  organizationId: string,
+  channelSessionId: string,
+): Promise<string | null> {
+  const { data, error } = await admin
+    .from("channel_sessions")
+    .select("created_at")
+    .eq("organization_id", organizationId)
+    .eq("id", channelSessionId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const criadaEm = (data as { created_at?: unknown }).created_at;
+  return typeof criadaEm === "string" ? criadaEm : null;
 }
 
 /**
@@ -95,7 +120,14 @@ export async function configDePacingDoCanal(
     return { knobs: { ...PACING_DEFAULTS }, numberActivatedAt: null };
   }
   const linha = data as LinhaDeKnobs | null;
-  if (!linha) return { knobs: { ...PACING_DEFAULTS }, numberActivatedAt: null };
+  // Só pergunta pela conexão quando a data declarada falta — o caso de quem
+  // nunca abriu a tela de ritmo, que é o da maioria.
+  const conexaoCriadaEm = linha?.number_activated_at
+    ? null
+    : await criacaoDaConexao(admin, organizationId, channelSessionId);
+  if (!linha) {
+    return { knobs: { ...PACING_DEFAULTS }, numberActivatedAt: ativacaoEfetiva(null, conexaoCriadaEm) };
+  }
 
   const caps = linha.warmup_daily_caps === null ? null : parseWarmupCaps(linha.warmup_daily_caps);
   return {
@@ -109,7 +141,7 @@ export async function configDePacingDoCanal(
       warmupDailyCaps: caps ?? PACING_DEFAULTS.warmupDailyCaps,
     },
     // PostgREST devolve timestamptz como string ISO; o motor quer Date.
-    numberActivatedAt: linha.number_activated_at ? new Date(linha.number_activated_at) : null,
+    numberActivatedAt: ativacaoEfetiva(linha.number_activated_at, conexaoCriadaEm),
   };
 }
 

@@ -113,6 +113,15 @@ fonte só (`lib/onboarding/passos.ts`) — eram três listas que discordavam. Ga
 | J3.14 | Ver se o que está ligado está funcionando (aba Capacidades) | usos, falhas, quantos vieram de teste, última vez — e o que fazer com cada número · **PASS** (números escritos pelo emissor real de audit) |
 | J3.15 | O teto recusa a passagem, explicando em português | **PASS** — exercitável desde que o catálogo cresceu (57 capacidades). `capacidades-do-agente.spec.ts` liga "Atender" sobre as 8 do seed e prova a recusa por 1 vaga. A afirmação "não exercitável hoje, com 16 capacidades no catálogo" VENCEU |
 | J3.16 | Usar no agente um modelo da OpenRouter lançado hoje (o cron diário ainda não trouxe) | busca embaixo de "Modelo" consulta a OpenRouter ao vivo; colar o código exato ou escolher um resultado CONFERE na origem, grava em `ai_models` com preço real e seleciona — sem isso a publicação recusa com `model_not_found`. Código com erro de digitação é 404 com o motivo · **PASS** unit (`tests/unit/ai-providers-models-post-route.test.ts`, `ai-providers-models-search-route.test.ts`, `catalogo-openrouter-busca.test.ts`, `ModelPicker.test.tsx`) + busca medida contra a OpenRouter real (464 modelos, 2026-09-30). **NÃO MEDIDO pela tela** em instalação fresca: o E2E local não sobe nesta máquina |
+| J3.17 `[P0]` | Testar o agente antes de publicar, com o que está na tela (sem salvar) | roda o MESMO atendimento do WhatsApp (`/api/v1/ai/agents/:id/ensaio`): resposta em bolhas "não enviada", conferências antes de enviar com o veredito de cada uma, ações do CRM como "simuladas", custo real de IA; a conversa continua; nada fica no CRM e a edição sobrevive à troca de aba · unit (`teste-do-agente-ensaia-o-formulario.test.tsx`, `leitura-do-ensaio.test.ts`, `ensaio-pool.test.ts`) + invariante `ensaio-nao-deixa-rastro` + e2e `agente-testa-sem-salvar.spec.ts`. **NÃO MEDIDO**: com IA real (o CI não tem chave; a spec exige resposta só com `E2E_ENSAIO_COM_IA=1`) |
+| J3.18 | Os limites por atendimento valem, e a tela mostra quanto o agente gasta | o laço do agente para ao alcançar volume (tokens novos) ou custo da versão; sem resposta, o resgate obriga responder ou passar; a Central recebe UM aviso por agente; ao lado dos campos, p50/p95 dos últimos 30 dias e quantos o limite do formulário cortaria · unit (`limite-por-atendimento.test.ts`, `consumo-por-atendimento.test.tsx`) + invariante `limite-por-atendimento-corta-e-responde`. **NÃO MEDIDO**: com IA real numa VPS (calibragem dos padrões 50.000 / 50 centavos de dólar) |
+| J3.19 | "Só responder sobre…" escolhe quem atende (dois agentes no mesmo número, sem roteador) | lista de palavras por vírgula (expressão regular como avançado, padrão que trava o worker recusado ao salvar); o assunto é a rajada desde a última resposta, sem acento; o primeiro por prioridade que aceita atende e a conversa fica com ele (24 h); ninguém aceita ⇒ ninguém responde e a conversa fica na Inbox; o Testar mostra "Este agente não responderia"; membro de roteador vê que o filtro não vale · unit (`filtro-de-assunto.test.ts`, `regex-segura.test.ts`, `filtro-em-palavras.test.ts`, `resolve-turn-agent.test.ts`) + invariante `filtro-de-assunto-escolhe-o-agente`. **NÃO MEDIDO** pela tela: o E2E local não sobe nesta máquina; e o turno pulado não aparece em Execuções (`ai_agent_runs` exige agente, e nenhum foi escolhido) — só no log do worker |
+| J3.20 | A aba Execuções mostra os atendimentos reais | uma linha por turno que fala com o cliente (agente publicado), gravada no fim: "Respondeu", "Passou para uma pessoa", "Adiado: fora do horário", "Ficou sem resposta", "Respondeu, cortado pelo limite"; tokens e custo somados de TODAS as chamadas de IA do turno; ferramentas no trace · unit (`registro-do-turno.test.ts`) + invariante `execucoes-registram-o-turno`. **NÃO MEDIDO** pela tela (E2E local não sobe aqui). Turno pulado por assunto, por fluxo no comando ou pelo teto do número ANTES de escolher o agente não gera linha: a tabela exige agente |
+| J3.21 | O agente responde sabendo que dia é, e lendo a conversa | abertura com bloco "Agora" (dia da semana, data, hora no fuso do horário do agente ou do número); histórico como transcrição "Cliente (ter 28/07 14:02): …" / "Nós (…): …", sem JSON; texto-base da plataforma reescrito chega a quem nunca o editou (migration 0233, travada por hash); compactação só refaz quando a conversa andou · unit (`abertura-legivel.test.ts`, `marca-da-compactacao.test.ts`, `playbook-plataforma-chega-a-quem-atualiza.test.ts`). **NÃO MEDIDO** com IA real (qualidade da resposta com o texto novo) nem pela tela |
+| J3.22 | Ver quem atende cada número na lista de agentes | um grupo por número conectado (agentes na ordem do motor, rodapé explicando quando há mais de um), número sem agente com o aviso de que as mensagens ficam só na Inbox, rascunhos em "Sem número no ar", arquivados sob filtro; abas do editor no segmentado e na URL (`?aba=`); nenhum jargão em inglês nas telas de agente · unit (`agentes-lista-por-numero.test.tsx`, `agentes-sem-jargao.test.ts`). **NÃO MEDIDO** pela tela (E2E local não sobe aqui; as specs de agente clicam nas abas pelo rótulo, que não mudou) |
+| J3.23 | Configurar um agente numa coluna só, com índice | editor em seções (quem é, instruções, número, inteligência, capacidades, estilo, quando atende, passar para pessoa, follow-up) no kit de Ajustes; índice ao lado em tela larga; papéis num segmentado (testids `papel-*` mantidos); ordem entre agentes, freios e memória atrás de "Ajustes avançados", que abre sozinho quando um desses campos tem erro · unit (`editor-de-agente-por-secoes.test.tsx`). **NÃO MEDIDO** pela tela (E2E local não sobe aqui; ids e rótulos que as specs usam foram mantidos) |
+| J3.24 | Criar um agente a partir de um modelo do ramo | na tela de novo agente, um modelo por ramo do quadro pronto (clínica, imobiliária, serviços, curso, loja, outro) e o jeito de falar do onboarding; o modelo preenche nome, descrição, instruções (o que faz, o que nunca faz, quando chamar uma pessoa), capacidades e palavras de passagem (somadas às de sempre); escolha na URL (`?modelo=&tom=`), URL desconhecida abre em branco · unit (`modelos-de-agente-por-nicho.test.tsx`: todo modelo × tom passa no `versionCreateSchema`). **NÃO MEDIDO** pela tela nem com IA real (qualidade das respostas com cada modelo) |
+| J3.25 | Navegar pela Central de IA com uma linguagem só | as telas de `app/app/ai/` usam o cabeçalho `PaginaAjustes`; chaves de acesso agrupadas por provedor em linhas; roteadores, integrações e skills como listas agrupadas; abas no segmentado do kit · unit (`central-de-ia-no-kit.test.ts`: nenhum `<h1>` à mão fora da allowlist de telas de detalhe). **NÃO MEDIDO** pela tela (E2E local não sobe aqui) |
 
 ## J4 — CRM e Pipelines `[P1]`
 
@@ -1141,7 +1150,7 @@ descoberta de "falta escolher" acontecia no erro de publicação, longe do bloco
 
 ---
 
-## J26 — O fluxo respeita o expediente, sabe as variáveis e entrega fora das 24h `[P1]` (2026-09-12)
+## J34 — O fluxo respeita o expediente, sabe as variáveis e entrega fora das 24h `[P1]` (2026-09-12)
 
 Três buracos do editor de fluxos, com o mesmo formato de falha: nada na tela
 dizia que existiam.
@@ -1155,34 +1164,34 @@ dizia que existiam.
    então a mensagem sai com um buraco, para o cliente, em silêncio.
 3. **Modelo aprovado.** Fora da janela de 24h uma conexão oficial não entrega
    texto livre. Só o disparo em massa sabia mandar modelo — e mesmo ele estava
-   quebrado (ver J26.9).
+   quebrado (ver J34.9).
 
 **O que muda no risco:** os três acontecem sem ninguém olhando. Um fluxo é
 automação: quando ele erra, não há operador na tela para perceber e corrigir.
 
 | # | Caso | Expectativa | Resultado |
 |---|------|-------------|-----------|
-| J26.1 | Dentro do expediente | segue pela saída de sempre | **PASS** (unit, motor real) |
-| J26.2 | Fora, modo "desviar" | sai AGORA pela outra saída, com quanto falta para abrir | **PASS** (unit) |
-| J26.3 | Fora, modo "esperar" | ninguém é marcado; a execução dorme até a abertura | **PASS** (unit) |
-| J26.4 | Acordada cedo, ainda fechado | volta a dormir na MESMA hora — não reinicia | **PASS** (unit) |
-| J26.5 | Domingo 09:00 | fechado: o dia da semana conta, não só a hora | **PASS** (unit) |
-| J26.6 | Fuso com acento (`America/Asunción`) | execução morre com `grafo_invalido`, e a tela recusa antes | **PASS** (unit) |
-| J26.7 | Botão de variável em campo que interpola | presente em TODO bloco que chama `ctx.render` | **PASS** (unit — varre o registry por definição) |
-| J26.8 | Campo da regra do "Decidir" | insere caminho CRU, sem chaves | **PASS** (unit) |
-| J26.9 | Lista de modelos do disparo por fluxo | aparece — lia o payload no formato errado e dizia "nenhum modelo aprovado nesta conta" | **PASS** (unit RTL, com o formato real da rota) |
-| J26.10 | Modelo numa conexão intermediada | sai pelo gateway DELA, não pelo número da plataforma direta | **PASS** (unit) |
-| J26.11 | Modelo numa conexão por QR | recusa com nome próprio, sem chamar a rede | **PASS** (unit) |
-| J26.12 | Parâmetros do modelo | ordem NUMÉRICA (`10` depois de `2`), e passam por `render` | **PASS** (unit) |
-| J26.13 | Número por QR em conta intermediada | deixa de ser anunciado como "só envia modelo aprovado" | **PASS** (unit — `capabilitiesOfSession` na rota de conexões) |
-| J26.17 | Escolher o número não esvazia a lista | recorta pela CONTA da conexão, não por `channel_session_id` | **PASS** (unit `modelo-aprovado-chega-na-tela`) — **era regressão nossa, relatada pelo dono** |
-| J26.18 | Nome do modelo escrito à mão | SAI; quem recusa é a plataforma, com o código dela | **PASS** (unit) — **era regressão nossa, relatada pelo dono** |
-| J26.19 | Definição espelhada e reprovada | continua barrada antes de gastar | **PASS** (unit) |
-| J26.20 | Listar modelos da conexão intermediada | `GET /v1/templates` do gateway, corpo cru `{data:[…]}` | **PASS** (unit `stevo-lista-templates`) |
-| J26.21 | Espelho vazio | a lista é perguntada à plataforma, e o GET não grava | **PASS** (unit `templates-do-parceiro`) |
-| J26.14 | Montar o bloco de horário pela TELA | paleta → painel → dias e horário → publica | **NÃO MEDIDO NA TELA** — spec escrita (`flow-horario-variaveis-modelo.spec.ts`), registrada no CI |
-| J26.15 | Inserir variável pela TELA | popover abre, escolhe, texto entra no cursor | **NÃO MEDIDO NA TELA** — idem |
-| J26.16 | Escolher modelo pela TELA | seletor aparece, um campo por lacuna | **NÃO MEDIDO NA TELA** — idem |
+| J34.1 | Dentro do expediente | segue pela saída de sempre | **PASS** (unit, motor real) |
+| J34.2 | Fora, modo "desviar" | sai AGORA pela outra saída, com quanto falta para abrir | **PASS** (unit) |
+| J34.3 | Fora, modo "esperar" | ninguém é marcado; a execução dorme até a abertura | **PASS** (unit) |
+| J34.4 | Acordada cedo, ainda fechado | volta a dormir na MESMA hora — não reinicia | **PASS** (unit) |
+| J34.5 | Domingo 09:00 | fechado: o dia da semana conta, não só a hora | **PASS** (unit) |
+| J34.6 | Fuso com acento (`America/Asunción`) | execução morre com `grafo_invalido`, e a tela recusa antes | **PASS** (unit) |
+| J34.7 | Botão de variável em campo que interpola | presente em TODO bloco que chama `ctx.render` | **PASS** (unit — varre o registry por definição) |
+| J34.8 | Campo da regra do "Decidir" | insere caminho CRU, sem chaves | **PASS** (unit) |
+| J34.9 | Lista de modelos do disparo por fluxo | aparece — lia o payload no formato errado e dizia "nenhum modelo aprovado nesta conta" | **PASS** (unit RTL, com o formato real da rota) |
+| J34.10 | Modelo numa conexão intermediada | sai pelo gateway DELA, não pelo número da plataforma direta | **PASS** (unit) |
+| J34.11 | Modelo numa conexão por QR | recusa com nome próprio, sem chamar a rede | **PASS** (unit) |
+| J34.12 | Parâmetros do modelo | ordem NUMÉRICA (`10` depois de `2`), e passam por `render` | **PASS** (unit) |
+| J34.13 | Número por QR em conta intermediada | deixa de ser anunciado como "só envia modelo aprovado" | **PASS** (unit — `capabilitiesOfSession` na rota de conexões) |
+| J34.17 | Escolher o número não esvazia a lista | recorta pela CONTA da conexão, não por `channel_session_id` | **PASS** (unit `modelo-aprovado-chega-na-tela`) — **era regressão nossa, relatada pelo dono** |
+| J34.18 | Nome do modelo escrito à mão | SAI; quem recusa é a plataforma, com o código dela | **PASS** (unit) — **era regressão nossa, relatada pelo dono** |
+| J34.19 | Definição espelhada e reprovada | continua barrada antes de gastar | **PASS** (unit) |
+| J34.20 | Listar modelos da conexão intermediada | `GET /v1/templates` do gateway, corpo cru `{data:[…]}` | **PASS** (unit `stevo-lista-templates`) |
+| J34.21 | Espelho vazio | a lista é perguntada à plataforma, e o GET não grava | **PASS** (unit `templates-do-parceiro`) |
+| J34.14 | Montar o bloco de horário pela TELA | paleta → painel → dias e horário → publica | **NÃO MEDIDO NA TELA** — spec escrita (`flow-horario-variaveis-modelo.spec.ts`), registrada no CI |
+| J34.15 | Inserir variável pela TELA | popover abre, escolhe, texto entra no cursor | **NÃO MEDIDO NA TELA** — idem |
+| J34.16 | Escolher modelo pela TELA | seletor aparece, um campo por lacuna | **NÃO MEDIDO NA TELA** — idem |
 
 ### O que ficou NÃO MEDIDO, e por quê
 
@@ -1202,13 +1211,13 @@ automação: quando ele erra, não há operador na tela para perceber e corrigir
   contrato está preso por teste com `fetch` falso, e nenhuma conta real
   respondeu nesta sessão.
 
-- **Os dois defeitos de J26.17 e J26.18 eram NOSSOS, e passaram pela entrega
+- **Os dois defeitos de J34.17 e J34.18 eram NOSSOS, e passaram pela entrega
   anterior.** Vale escrever por que: os dois estavam cobertos por teste de
   unidade que media a REGRA (o recorte existe; o pré-voo deixa passar) e nenhum
   media o CAMINHO INTEIRO até a tela. O sintoma dos dois era uma lista vazia ou
   um envio que não sai — os dois com frase que culpava a conta do operador. É
   exatamente o vão que a doutrina de QA Visual descreve, e a prova pela tela
-  continua devendo (J26.14–16).
+  continua devendo (J34.14–16).
 - **Envio real de um modelo por WhatsApp.** Nenhuma mensagem de verdade saiu
   nesta sessão. O que está provado é o corpo do pedido e o destino dele, não a
   entrega.
@@ -1690,6 +1699,20 @@ tempo todo. É a jornada `J3`/`J8` vista de perto, e o padrão é sempre o mesmo
 | 4 | `agent/agent-config.ts` | **Horário de funcionamento** da versão publicada (08:00–18:00 seg–sex) não era lido por ninguém vivo — só pelo dispatcher legado, hoje NO-OP | agente respondendo 21:55 de uma terça | janela lida no turno; fora dela, adia |
 | 5 | `followup/node-handlers.ts` | Enrollment morria com `action_turn_never_completed` em ~25 min esperando a janela abrir | enrollment `dead` no nó de abertura com o worker vivo | backoff + orçamento de ~11h |
 | 6 | `ai/log-invocation.ts` + card do agente | Duas telas mentindo: `erro_legado` no lugar de `limite_ou_saldo` (chave sem saldo), e o card anunciando o modelo da **criação** (`claude-sonnet-5`) enquanto o motor rodava o da **versão publicada** (`nvidia/nemotron-…:free`) | `/app/ai/runs` + `GET /versions` | `normalizarErro` no caminho legado; card lê a versão publicada |
+
+**Sétima causa — achada por leitura de código em 2026-10-08, NÃO medida numa
+VPS.** Mesmo padrão da causa 3, no teto de aquecimento em vez da janela: a idade
+do número vinha só de `channel_knobs.number_activated_at`, e sem linha ali (todo
+número em que ninguém salvou Conexões › Proteção de envio) a idade era 0 para
+sempre — teto de 20 envios/dia. Batido o teto, o veto do `pacingGate` virava
+erro de ensino e o turno terminava `ok` sem envio. Desde o PR #34, resposta a
+quem escreveu nas últimas 24 h não consome o aquecimento; o teto segue valendo
+para quem fala sem ter sido chamado (follow-up). Correção: idade conta da
+criação da conexão (`ativacaoEfetiva`), e o turno com teto atingido é adiado
+para a próxima abertura, com o mesmo aviso `pacing_cap` que a cadeia de envio
+abre. Prova contra Postgres real:
+`tests/invariants/teto-do-numero-adia-e-avisa.test.ts`. O que falta medir: uma
+VPS real com um número sem knobs passando da 20ª mensagem no dia.
 
 **Lição para o mapa:** nenhum desses casos falha com tela vermelha. Todos falham
 com **status verde e mensagem ausente**. Um caso de jornada que só verifica "a
@@ -2319,7 +2342,7 @@ máquina (Docker Desktop local com erro de inicialização); a prova é o CI. O
 ciclo real no WhatsApp depende de `SUPORTE_V1_SECRET` na VPS e de e-mail
 configurado.
 
-## J13 — A primeira tela: entrar e criar conta `[P0]`
+## J33 — A primeira tela: entrar e criar conta `[P0]`
 
 Contexto do código: as seis telas do grupo `app/(public)/` são uma **cena 3D em
 vidro ocupando a tela inteira** (`components/auth/CenaDeVidro.tsx`), com o
@@ -2344,18 +2367,18 @@ Specs: `tests/e2e/auth.spec.ts` (inclui `axe`), `tests/e2e/icone-da-marca.spec.t
 
 | # | Caso | Expectativa | Resultado |
 |---|------|-------------|-----------|
-| J13.1 | A cena chega e roda | `<canvas>` com área depois da carga preguiçosa; `requestAnimationFrame` avança entre duas amostras | PASS — 1440×900, 12→13 quadros |
-| J13.2 | O cartão cabe em toda largura | cabe na viewport com respiro em 1440/1024/768/390; o fundo cobre a tela | PASS — 432px em 768, 358px em 390 |
-| J13.3 | O texto passa no piso de contraste **no pior caso de cena** | título e apoio ≥4,5:1 contra o cartão composto sobre PRETO | PASS — 12,62:1 e 5,31:1 sobre `rgb(219,219,219)` |
-| J13.4 | O rótulo sobe ao digitar | o `<label>` muda de caixa ao preencher o campo | PASS — sobe 13px, altura 21→16 |
-| J13.5 | O olho revela a senha | `type` vai de `password` para `text` | PASS |
-| J13.6 | O medidor só aparece com senha digitada | ausente com o campo vazio, presente e proporcional depois | PASS — 221px |
-| J13.7 | O nome da marca não está escrito na tela | o logo diz a marca; o `.env` continua observável em `data-marca-do-ambiente` | PASS |
-| J13.8 | `prefers-reduced-motion` NÃO monta a cena | zero `<canvas>` e **zero** `requestAnimationFrame` na página | PASS — 0 e 0 |
-| J13.9 | O vidro é vidro | alfa ≥0,8 e `backdrop-filter` diferente de `none` | PASS — alfa 0,86, `blur(16px)` |
-| J13.10 | O ícone do campo reage ao foco | a matriz de `transform` muda ao focar | PASS — `matrix` → `matrix3d` |
-| J13.11 | Sem WebGL a tela continua utilizável | a cena se declara ausente, o fundo CSS fica, o formulário aceita digitação | PASS — `data-estado="sem-webgl"` |
-| J13.12 | Entrar de verdade, com banco | credencial válida leva ao `/app` | **NÃO EXECUTADO** aqui — só o job `e2e` do CI |
+| J33.1 | A cena chega e roda | `<canvas>` com área depois da carga preguiçosa; `requestAnimationFrame` avança entre duas amostras | PASS — 1440×900, 12→13 quadros |
+| J33.2 | O cartão cabe em toda largura | cabe na viewport com respiro em 1440/1024/768/390; o fundo cobre a tela | PASS — 432px em 768, 358px em 390 |
+| J33.3 | O texto passa no piso de contraste **no pior caso de cena** | título e apoio ≥4,5:1 contra o cartão composto sobre PRETO | PASS — 12,62:1 e 5,31:1 sobre `rgb(219,219,219)` |
+| J33.4 | O rótulo sobe ao digitar | o `<label>` muda de caixa ao preencher o campo | PASS — sobe 13px, altura 21→16 |
+| J33.5 | O olho revela a senha | `type` vai de `password` para `text` | PASS |
+| J33.6 | O medidor só aparece com senha digitada | ausente com o campo vazio, presente e proporcional depois | PASS — 221px |
+| J33.7 | O nome da marca não está escrito na tela | o logo diz a marca; o `.env` continua observável em `data-marca-do-ambiente` | PASS |
+| J33.8 | `prefers-reduced-motion` NÃO monta a cena | zero `<canvas>` e **zero** `requestAnimationFrame` na página | PASS — 0 e 0 |
+| J33.9 | O vidro é vidro | alfa ≥0,8 e `backdrop-filter` diferente de `none` | PASS — alfa 0,86, `blur(16px)` |
+| J33.10 | O ícone do campo reage ao foco | a matriz de `transform` muda ao focar | PASS — `matrix` → `matrix3d` |
+| J33.11 | Sem WebGL a tela continua utilizável | a cena se declara ausente, o fundo CSS fica, o formulário aceita digitação | PASS — `data-estado="sem-webgl"` |
+| J33.12 | Entrar de verdade, com banco | credencial válida leva ao `/app` | **NÃO EXECUTADO** aqui — só o job `e2e` do CI |
 
 **Bug de produto achado ao executar (2026-09-15), e que segue valendo.** `GET
 /gestalt-3d.glb` respondia **307 para `/login`**: o `matcher` de `proxy.ts`
@@ -2374,7 +2397,7 @@ suporta mais `-webkit-backdrop-filter`** (`CSS.supports(...)` devolve `false`,
 medido). Resultado: `.ios-vidro`, `.app-header` e `.nav-drawer-overlay` sem
 desfoque nenhum em produção, silenciosamente, incluindo o redesenho iOS das
 Conexões. Conserto: inverter a ordem das declarações (prefixada primeiro, padrão
-por último) nos cinco pares do arquivo. Vigiado por J13.9.
+por último) nos cinco pares do arquivo. Vigiado por J33.9.
 
 ⚠️ **Descartado por medição:** declarar `browserslist` no `package.json` NÃO
 resolve — foi testado com `safari >= 16.4` e com `safari >= 18`, e o build
@@ -2399,5 +2422,5 @@ delas é a do CI.
 
 **NÃO MEDIDO, declarado:** o `axe` de `tests/e2e/auth.spec.ts` roda o ruleset
 completo em `/login` e é o gate que pegaria contraste insuficiente sobre o vidro.
-Ele não roda nesta máquina; a prova é a do CI. O cálculo de J13.3 é o que
+Ele não roda nesta máquina; a prova é a do CI. O cálculo de J33.3 é o que
 sustenta a expectativa até lá.

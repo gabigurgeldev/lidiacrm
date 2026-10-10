@@ -20,6 +20,7 @@ import { Plus } from "@/lib/ui/icons";
 import { SeloDeSaude } from "../../_components/ListaDeIntegracoes";
 import { EndpointEditor } from "./EndpointEditor";
 import { TestarEndpoint } from "./TestarEndpoint";
+import { GATILHO_DA_ABA, SEGMENTADO_ABAS } from "@/components/ajustes";
 
 interface Props {
   integracao: IntegracaoRow;
@@ -37,10 +38,10 @@ export function PainelDaIntegracao({ integracao, endpoints, podeEscrever }: Prop
         {integracao.tipo === "suporte_v1" ? <Badge variant="info">{t("Contrato de Suporte v1")}</Badge> : null}
       </header>
       <Tabs defaultValue="endpoints">
-        <TabsList>
-          <TabsTrigger value="endpoints">{t("Endpoints")}</TabsTrigger>
-          <TabsTrigger value="conexao">{t("Conexão")}</TabsTrigger>
-          <TabsTrigger value="atividade">{t("Atividade")}</TabsTrigger>
+        <TabsList className={`${SEGMENTADO_ABAS} max-w-full self-start overflow-x-auto`}>
+          <TabsTrigger value="endpoints" className={GATILHO_DA_ABA}>{t("Endpoints")}</TabsTrigger>
+          <TabsTrigger value="conexao" className={GATILHO_DA_ABA}>{t("Conexão")}</TabsTrigger>
+          <TabsTrigger value="atividade" className={GATILHO_DA_ABA}>{t("Atividade")}</TabsTrigger>
         </TabsList>
         <TabsContent value="endpoints">
           <AbaEndpoints integracao={integracao} endpoints={endpoints} podeEscrever={podeEscrever} />

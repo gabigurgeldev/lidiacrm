@@ -281,6 +281,25 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     tabela: "flow_execution_events",
     razao: "tests/invariants/flow-engine-isolamento.test.ts — mesmo arquivo da linha acima.",
   },
+  {
+    tabela: "flow_routing_cursors",
+    razao:
+      "tests/invariants/rls-fila-pareamento-backoffice.test.ts prova a leitura cross-org com " +
+      "controle positivo, o pedido da tabela inteira, o gate de papel (o atendente não lê; a " +
+      "policy exige manager) e a escrita cruzada bloqueada.",
+  },
+  {
+    tabela: "channel_pairing_links",
+    razao:
+      "tests/invariants/rls-fila-pareamento-backoffice.test.ts prova a leitura cross-org com " +
+      "controle positivo e que o membro da A não cria link para o número da B.",
+  },
+  {
+    tabela: "backoffice_tenants",
+    razao:
+      "tests/invariants/rls-fila-pareamento-backoffice.test.ts prova a leitura cross-org com " +
+      "controle positivo e que o membro da A não altera a linha da B.",
+  },
 ];
 
 /**

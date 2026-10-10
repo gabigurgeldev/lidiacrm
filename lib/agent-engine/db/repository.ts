@@ -81,6 +81,9 @@ export type InboxKind =
   // conversa: chamada vencida sem consumidor, troca cujo executor não começou,
   // ou laço de transferências contido.
   | 'coordenador_preso'
+  // (migration 0231) O agente terminou um turno de resposta sem enviar nada ao
+  // cliente — nem depois de ser cobrado, ou com todas as tentativas barradas.
+  | 'turno_sem_resposta'
   | 'other';
 
 export interface InboxItemRow {

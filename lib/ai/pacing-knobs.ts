@@ -12,7 +12,7 @@ import {
   PACING_DEFAULTS,
   type PacingKnobs,
 } from "@/lib/agent-engine/pacing/defaults";
-import { warmupCapFor } from "@/lib/agent-engine/pacing/engine";
+import { ativacaoEfetiva, warmupCapFor } from "@/lib/agent-engine/pacing/engine";
 import { parseWarmupCaps } from "@/lib/agent-engine/pacing/store";
 
 function isValidTimezone(tz: string): boolean {
@@ -86,7 +86,7 @@ export interface ChannelKnobsRow {
   allow_sunday: boolean | null;
   timezone: string | null;
   warmup_daily_caps: unknown;
-  /** idade do número p/ warm-up (linha ausente = engine trata como idade 0). */
+  /** idade do número p/ warm-up; ausente = conta da criação da conexão (`ativacaoEfetiva`). */
   number_activated_at?: string | null;
 }
 
@@ -151,11 +151,19 @@ export function warmupEstaPulado(row: ChannelKnobsRow | null): boolean {
   return caps?.length === 1 && caps[0]?.minAgeDays === 0 && caps[0]?.cap === null;
 }
 
-/** Dias completos desde a ativação do número. Sem data = 0 (o motor é conservador). */
-export function idadeEmDias(row: ChannelKnobsRow | null, agora: Date = new Date()): number {
-  const iso = row?.number_activated_at;
-  if (!iso) return 0;
-  const ms = agora.getTime() - new Date(iso).getTime();
+/**
+ * Dias completos desde a ativação do número — pela MESMA regra do motor
+ * (`ativacaoEfetiva`): a data declarada, senão a criação da conexão. Sem
+ * nenhuma das duas = 0 (o motor é conservador).
+ */
+export function idadeEmDias(
+  row: ChannelKnobsRow | null,
+  agora: Date = new Date(),
+  conexaoCriadaEm: string | null = null,
+): number {
+  const ativacao = ativacaoEfetiva(row?.number_activated_at, conexaoCriadaEm);
+  if (!ativacao) return 0;
+  const ms = agora.getTime() - ativacao.getTime();
   return Number.isFinite(ms) ? Math.max(0, Math.floor(ms / 86_400_000)) : 0;
 }
 
@@ -168,9 +176,13 @@ export function idadeEmDias(row: ChannelKnobsRow | null, agora: Date = new Date(
  * era o teto por IDADE. Agora o número que decide aparece ao lado do que o
  * decide.
  */
-export function knobsView(row: ChannelKnobsRow | null, agora: Date = new Date()) {
+export function knobsView(
+  row: ChannelKnobsRow | null,
+  agora: Date = new Date(),
+  conexaoCriadaEm: string | null = null,
+) {
   const efetivo = effectiveKnobs(row);
-  const dias = idadeEmDias(row, agora);
+  const dias = idadeEmDias(row, agora, conexaoCriadaEm);
   return {
     effective: efetivo,
     overrides: row,
@@ -178,6 +190,8 @@ export function knobsView(row: ChannelKnobsRow | null, agora: Date = new Date())
     bounds: { ...KNOB_BOUNDS, daily_limit: DAILY_LIMIT_BOUNDS },
     warmup: {
       number_activated_at: row?.number_activated_at ?? null,
+      /** De onde a idade saiu: data declarada ou criação da conexão. */
+      age_from: row?.number_activated_at ? ("declarada" as const) : conexaoCriadaEm ? ("conexao" as const) : null,
       age_days: dias,
       skipped: warmupEstaPulado(row),
       /** Teto de HOJE pelo aquecimento. null = sem teto (formado ou pulado). */

@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
+import { PaginaAjustes } from "@/components/ajustes";
 
 /**
  * O MESMO formato da tela de Uso — as duas leem `llm_calls.cost_cents`, que é
@@ -120,18 +121,16 @@ export function ExecucoesDeIa() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl p-6" data-testid="execucoes-de-ia">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Execuções de IA")}</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          {t(
-            "Tudo que a inteligência artificial fez por aqui — e, quando algo falhou, o que aconteceu e o que fazer.",
-          )}
-        </p>
-      </header>
-
+    <PaginaAjustes
+      className="mx-auto w-full max-w-5xl"
+      testid="execucoes-de-ia"
+      titulo={t("Execuções de IA")}
+      descricao={t(
+        "Tudo que a inteligência artificial fez por aqui — e, quando algo falhou, o que aconteceu e o que fazer.",
+      )}
+    >
       {/* O resumo responde "está tudo bem?" antes da lista. */}
-      <Card className="mb-6 p-4" data-testid="resumo">
+      <Card className="p-4" data-testid="resumo">
         {resumo.erros === 0 ? (
           <p className="text-sm">
             <span className="font-medium text-emerald-600 dark:text-emerald-500">
@@ -243,6 +242,6 @@ export function ExecucoesDeIa() {
           ))}
         </div>
       )}
-    </div>
+    </PaginaAjustes>
   );
 }

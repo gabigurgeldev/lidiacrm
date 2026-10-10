@@ -15,7 +15,15 @@
  * cacheWriteTokens}. Validado no ai@7 via scripts/smoke-llm.sh (modelo real) —
  * upgrade de major re-valida esses paths pelo mesmo gate (regra dura 16).
  */
-import { generateText, stepCountIs, type ModelMessage, type ToolSet } from 'ai';
+import {
+  generateText,
+  stepCountIs,
+  type LanguageModelUsage,
+  type ModelMessage,
+  type StopCondition,
+  type ToolChoice,
+  type ToolSet,
+} from 'ai';
 import type pg from 'pg';
 import { z } from 'zod';
 
@@ -35,7 +43,7 @@ import {
   SQL_ORCAMENTO,
   type ChaveDeOrcamento,
 } from './orcamento';
-import { costCents } from './pricing';
+import { costCents, type TokenUsage } from './pricing';
 import { createDefaultRegistry, type ProviderRegistry } from './providers';
 import { buildStablePrefix } from './stable-prefix';
 
@@ -173,6 +181,30 @@ export interface RunModelCallInput {
    * agente), nunca constante.
    */
   maxSteps?: number;
+  /**
+   * Obriga (ou proíbe) o modelo a chamar ferramenta. Ausente = o default do SDK
+   * ('auto'). Quem usa: o passo de resgate do turno mudo (inbound-turn.ts), que
+   * precisa que o modelo responda por `send_message` ou passe a conversa — e
+   * não que escreva texto solto, que o runtime descarta.
+   */
+  toolChoice?: ToolChoice<ToolSet>;
+  /**
+   * Condição EXTRA de parada do laço de ferramentas, avaliada a cada passo com
+   * os passos até ali e o preço do modelo já resolvido (null = sem tabela). Só
+   * vale junto de `maxSteps`, que continua sendo o teto duro. Quem usa: o limite
+   * por atendimento do agente (`agent/orcamento-do-turno.ts`) — a regra mora lá,
+   * este seam só a consulta.
+   */
+  pararQuando?: (
+    passos: readonly { usage: LanguageModelUsage }[],
+    custo: (uso: TokenUsage) => number | null,
+  ) => boolean;
+  /**
+   * O agente que fez a chamada — vai para `llm_calls.agent_id`, que é o que deixa
+   * a tela mostrar custo POR AGENTE. Ausente = chamada sem agente (classificador
+   * da org, teste de conexão).
+   */
+  agentId?: string | null;
   /**
    * Override de provider/credencial vindo da versão PUBLICADA do agente (Fase
    * 2B) — resolvido no seam, nunca no call site. Sem ele, config da org.
@@ -358,6 +390,15 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   const registry = deps.registry ?? createDefaultRegistry();
   const purpose = input.purpose ?? 'agent_turn';
 
+  // Contabilidade separada (só o ensaio): orçamento e `llm_calls` por outra
+  // conexão, sem contato nem job — eles só existem dentro da transação que será
+  // desfeita, e uma FK para eles quebraria o insert de fora.
+  const contabil = cfg.contabilidade;
+  const dbDaConta = contabil?.db ?? db;
+  const inputDaConta: RunModelCallInput =
+    contabil === undefined ? input : { ...input, leadId: null, jobId: null, variantId: null, agentId: null };
+  const purposeDaConta = contabil === undefined ? purpose : `${contabil.prefixoDoProposito}${purpose}`;
+
   // A config da org é lida ANTES da decisão porque o resolvedor precisa dela
   // como último degrau da precedência (o padrão, quando ninguém mais opinou).
   const padrao = await resolveOrgLlmConfig(db, cfg, input.tenantId, input.llmOverride);
@@ -434,7 +475,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   // Continua ANTES de qualquer byte ao provedor, que é a propriedade que
   // importa: bloqueio custa zero token.
   await aplicarOrcamento({
-    db,
+    db: dbDaConta,
     organizationId: input.tenantId,
     orcamentoDaConfig: config.orcamento,
     orcamentoIndisponivelPorque: config.orcamentoIndisponivelPorque,
@@ -443,7 +484,7 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     provider: config.provider,
     model,
     origem: decisao.origem,
-    input,
+    input: inputDaConta,
     ...(deps.log ? { log: deps.log } : {}),
   });
 
@@ -456,6 +497,18 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     tools: input.tools,
     cacheTtl: cfg.cacheTtl ?? '1h',
   });
+
+  const pararQuando = input.pararQuando;
+  const paradas: Array<StopCondition<ToolSet>> | undefined =
+    input.maxSteps === undefined
+      ? undefined
+      : [
+          stepCountIs(input.maxSteps),
+          ...(pararQuando === undefined
+            ? []
+            : [({ steps }: { steps: readonly { usage: LanguageModelUsage }[] }) =>
+                pararQuando(steps, (uso) => costCents(model, uso))]),
+        ];
 
   const startedAt = Date.now();
   const limiteMs = tempoMaximoDaChamadaMs(purpose, cfg);
@@ -472,7 +525,8 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       system: prefix.system,
       messages: input.messages,
       tools: prefix.tools,
-      stopWhen: input.maxSteps === undefined ? undefined : stepCountIs(input.maxSteps),
+      stopWhen: paradas,
+      ...(input.toolChoice !== undefined ? { toolChoice: input.toolChoice } : {}),
       temperature,
       topP,
       topK,
@@ -499,9 +553,19 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
     // Grava e RELANÇA: quem chama continua decidindo o que fazer com a falha
     // (o worker reagenda, o dry-run mostra na tela). Engolir aqui trocaria uma
     // falha invisível por uma silenciosa, que é pior.
-    await registrarFalha(db, {
-      input,
+    contabil?.aoRegistrar?.({
       purpose,
+      provider: config.provider,
+      model,
+      status: 'erro',
+      inputTokens: 0,
+      outputTokens: 0,
+      costCents: null,
+      latencyMs: Date.now() - startedAt,
+    });
+    await registrarFalha(dbDaConta, {
+      input: inputDaConta,
+      purpose: purposeDaConta,
       provider: config.provider,
       model,
       origem: decisao.origem,
@@ -531,19 +595,19 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   };
   const cost = costCents(model, usage);
 
-  const { rows } = await db.query<{ id: string }>(
+  const { rows } = await dbDaConta.query<{ id: string }>(
     `insert into llm_calls
        (organization_id, contact_id, job_id, variant_id, purpose, provider, model,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_cents, latency_ms,
-        status, origem_da_escolha)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'ok', $14)
+        status, origem_da_escolha, agent_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'ok', $14, $15)
      returning id`,
     [
-      input.tenantId,
-      input.leadId ?? null,
-      input.jobId ?? null,
-      input.variantId ?? null,
-      purpose,
+      inputDaConta.tenantId,
+      inputDaConta.leadId ?? null,
+      inputDaConta.jobId ?? null,
+      inputDaConta.variantId ?? null,
+      purposeDaConta,
       config.provider,
       model,
       usage.inputTokens,
@@ -553,8 +617,20 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       cost,
       latencyMs,
       decisao.origem,
+      inputDaConta.agentId ?? null,
     ],
   );
+
+  contabil?.aoRegistrar?.({
+    purpose,
+    provider: config.provider,
+    model,
+    status: 'ok',
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    costCents: cost,
+    latencyMs,
+  });
 
   // Só métricas — nunca conteúdo de mensagem (PII) nem chave.
   deps.log?.info('llm: chamada concluída', {
@@ -711,8 +787,8 @@ async function registrarFalha(
     `insert into llm_calls
        (organization_id, contact_id, job_id, variant_id, purpose, provider, model,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_cents, latency_ms,
-        status, error_code, error_message, http_status, origem_da_escolha)
-     values ($1, $2, $3, $4, $5, $6, $7, 0, 0, 0, 0, null, $8, 'erro', $9, $10, $11, $12)`,
+        status, error_code, error_message, http_status, origem_da_escolha, agent_id)
+     values ($1, $2, $3, $4, $5, $6, $7, 0, 0, 0, 0, null, $8, 'erro', $9, $10, $11, $12, $13)`,
     [
       d.input.tenantId,
       d.input.leadId ?? null,
@@ -726,6 +802,7 @@ async function registrarFalha(
       error_message,
       http_status,
       d.origem,
+      d.input.agentId ?? null,
     ],
   );
 }

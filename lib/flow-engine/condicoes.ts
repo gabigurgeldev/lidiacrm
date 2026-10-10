@@ -23,6 +23,8 @@
 
 import { z } from "zod";
 
+import { LIMITE_DO_ASSUNTO, LIMITE_DO_PADRAO } from "@/lib/regex/segura";
+
 // ────────────────────────────── vocabulário ──────────────────────────────────
 
 export const OPERADORES = [
@@ -61,8 +63,8 @@ const SEM_VALOR: ReadonlySet<Operador> = new Set(["empty", "not_empty"]);
  * próprio worker. Num SaaS multi-tenant a conta seria outra, e este comentário
  * é o aviso para quem for por esse caminho.
  */
-const LIMITE_DO_PADRAO = 200;
-const LIMITE_DO_ASSUNTO = 1000;
+// Os tetos (`LIMITE_DO_PADRAO`, `LIMITE_DO_ASSUNTO`) moram em `lib/regex/segura.ts`:
+// o filtro de assunto do agente usa os mesmos.
 
 export const regraSchema = z.strictObject({
   /** Caminho por ponto no escopo: `lead.score`, `vars.tentativas`. */

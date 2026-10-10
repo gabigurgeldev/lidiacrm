@@ -656,6 +656,12 @@ function triggerMatches(config: TriggerConfig, msg: Message): boolean {
 }
 ```
 
+> **Estado atual (2026-10):** este helper é do dispatcher legado, que hoje é NO-OP. No
+> motor vivo, `business_hours` é lido por `lib/agent-engine/agent/janela-de-atendimento.ts`
+> (adia o turno) e `keyword_regex` por `lib/agent-engine/agent/filtro-de-assunto.ts`
+> (escolhe, entre os agentes publicados no número, quem aceita o assunto da rajada; sem
+> roteador). O padrão é validado ao salvar por `lib/regex/segura.ts`.
+
 ---
 
 ## 6. Runtime — Endpoint `/api/internal/agents/run`

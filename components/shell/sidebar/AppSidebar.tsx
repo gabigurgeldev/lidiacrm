@@ -303,9 +303,11 @@ export function AppSidebar({
         // que é a assinatura de servidor e navegador terem pintado estados
         // diferentes — e `AppShell` e `Sidebar` são ambos `"use client"`.
         //
-        // `sticky top-0 h-screen` dá o mesmo efeito visual (a barra não rola com
+        // `sticky top-0 h-full` dá o mesmo efeito visual (a barra não rola com
         // a página) e ela VOLTA a ocupar lugar: sobra para o conteúdo exatamente
-        // o que ela não usou, e não há segunda medida para discordar.
+        // o que ela não usou, e não há segunda medida para discordar. `h-full`
+        // e não `h-screen`: a altura vem do contêiner do layout, que divide a
+        // janela com os avisos do topo.
         //
         // `shrink-0` porque item de flex encolhe por padrão, e uma barra de 60
         // espremida para caber é o mesmo defeito por outro caminho.

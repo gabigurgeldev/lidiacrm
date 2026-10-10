@@ -15,6 +15,7 @@
  */
 import type pg from 'pg';
 
+import { lerFiltroDeAssunto } from './filtro-de-assunto';
 import { lerJanelaDeAtendimento, type JanelaDeAtendimento } from './janela-de-atendimento';
 
 export interface PublishedAgentConfig {
@@ -26,6 +27,10 @@ export interface PublishedAgentConfig {
   model: string;
   credentialId: string | null;
   maxSteps: number;
+  /** Limite por atendimento (`orcamento-do-turno.ts`): tokens novos do laço do agente. */
+  tokenBudget: number;
+  /** Limite por atendimento: centavos de dólar do laço do agente. */
+  costBudgetCents: number;
   historyMessageWindow: number;
   historyTokenWindow: number;
   handoffKeywords: string[];
@@ -105,6 +110,12 @@ export interface PublishedAgentConfig {
    * conserta (o campo existia na tela e nenhum leitor vivo o consultava).
    */
   janelaDeAtendimento: JanelaDeAtendimento | null;
+  /**
+   * "Só responder sobre…" (`trigger_config.filters.keyword_regex`), cru como foi
+   * salvo. `null` = responde a qualquer assunto. Quem obedece é a escolha do
+   * agente sem roteador — ver `filtro-de-assunto.ts`.
+   */
+  filtroDeAssunto: string | null;
   /** criadores (p/ mint do token efêmero de audit — padrão do runtime nativo). */
   versionCreatedBy: string | null;
   agentCreatedBy: string | null;
@@ -119,6 +130,8 @@ interface Row {
   model: string;
   credential_id: string | null;
   max_steps: number;
+  token_budget: number;
+  cost_budget_cents: number;
   history_message_window: number;
   history_token_window: number;
   handoff_keywords: string[] | null;
@@ -153,6 +166,8 @@ const SELECT_AGENT_CONFIG_COLUMNS = `a.id as agent_id,
             v.model,
             v.credential_id,
             v.max_steps,
+            v.token_budget,
+            v.cost_budget_cents,
             v.history_message_window,
             v.history_token_window,
             v.handoff_keywords,
@@ -203,6 +218,8 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     model: r.model,
     credentialId: r.credential_id,
     maxSteps: r.max_steps,
+    tokenBudget: r.token_budget,
+    costBudgetCents: r.cost_budget_cents,
     historyMessageWindow: r.history_message_window,
     historyTokenWindow: r.history_token_window,
     handoffKeywords: (r.handoff_keywords ?? []).map((k) => k.toLowerCase().trim()).filter((k) => k !== ''),
@@ -237,16 +254,22 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     // Leitura DEFENSIVA e que falha ABERTA: jsonb livre com shape estranho vira
     // `null` (sem janela ⇒ atende sempre), nunca uma mordaça acidental.
     janelaDeAtendimento: lerJanelaDeAtendimento(r.trigger_config),
+    filtroDeAssunto: lerFiltroDeAssunto(r.trigger_config),
     versionCreatedBy: r.version_created_by,
     agentCreatedBy: r.agent_created_by,
   };
 }
 
-export async function loadPublishedAgentConfig(
+/**
+ * Todos os agentes publicados no número, do mais prioritário ao menos. A escolha
+ * entre eles (filtro de assunto, conversa em andamento) é de
+ * `filtro-de-assunto.ts`; aqui é só leitura.
+ */
+export async function loadPublishedAgentCandidates(
   db: pg.Pool,
   organizationId: string,
   channelSessionId: string,
-): Promise<PublishedAgentConfig | null> {
+): Promise<PublishedAgentConfig[]> {
   const { rows } = await db.query<Row>(
     `select ${SELECT_AGENT_CONFIG_COLUMNS}
      from ai_agents a
@@ -258,13 +281,20 @@ export async function loadPublishedAgentConfig(
        -- dispatcher nativo do CRM — pausar = despublicar).
        and v.status = 'published'
        and v.channel_session_id = $2
-     order by a.priority desc, a.created_at asc
-     limit 1`,
+     order by a.priority desc, a.created_at asc`,
     [organizationId, channelSessionId],
   );
-  const r = rows[0];
-  if (r === undefined) return null;
-  return mapAgentConfigRow(r);
+  return rows.map(mapAgentConfigRow);
+}
+
+/** O mais prioritário do número, sem olhar assunto (rascunho de resposta, queda do roteador). */
+export async function loadPublishedAgentConfig(
+  db: pg.Pool,
+  organizationId: string,
+  channelSessionId: string,
+): Promise<PublishedAgentConfig | null> {
+  const candidatos = await loadPublishedAgentCandidates(db, organizationId, channelSessionId);
+  return candidatos[0] ?? null;
 }
 
 /**
@@ -287,6 +317,31 @@ export async function loadPublishedAgentConfigById(
        and v.status = 'published'
        and a.id = $2`,
     [organizationId, agentId],
+  );
+  const r = rows[0];
+  if (r === undefined) return null;
+  return mapAgentConfigRow(r);
+}
+
+/**
+ * Variante por VERSÃO, qualquer status — só o ensaio do agente usa
+ * (`lib/agent-engine/ensaio`). O ensaio grava o formulário como rascunho dentro
+ * da transação desfeita no fim e lê por aqui, com a MESMA lista de colunas e o
+ * MESMO mapeamento da produção: um segundo mapeamento "do formulário para a
+ * config" seria o lugar exato em que o teste passaria a divergir do atendimento.
+ */
+export async function loadAgentConfigByVersionId(
+  db: pg.Pool,
+  organizationId: string,
+  versionId: string,
+): Promise<PublishedAgentConfig | null> {
+  const { rows } = await db.query<Row>(
+    `select ${SELECT_AGENT_CONFIG_COLUMNS}
+     from ai_agent_versions v
+     join ai_agents a on a.id = v.agent_id
+     where v.organization_id = $1
+       and v.id = $2`,
+    [organizationId, versionId],
   );
   const r = rows[0];
   if (r === undefined) return null;

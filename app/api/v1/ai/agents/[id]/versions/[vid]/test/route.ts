@@ -1,6 +1,15 @@
 /**
  * POST /api/v1/ai/agents/:id/versions/:vid/test (admin)
  *
+ * ⚠️ SEM CHAMADOR NA TELA. O botão Testar do editor e o passo de teste do
+ * onboarding usam `POST /api/v1/ai/agents/:id/ensaio`, que roda o turno de
+ * PRODUÇÃO numa transação desfeita. Esta rota roda o runtime antigo: outro
+ * prompt, sem as conferências antes de enviar, e as capacidades de escrita
+ * mexem no CRM de verdade. Ela segue de pé só porque
+ * `tests/e2e/qa-agente-usa-as-maos.spec.ts` (instrumento de QA sob demanda)
+ * mede justamente esses efeitos reais; quando ele migrar para o ensaio, esta
+ * rota vira 410. Não acrescente chamadores.
+ *
  * Spec 10 §4.4. Cria ai_agent_runs com is_dry_run=true e executa o runtime
  * real (S-13.08) via `callInternalRuntime` → `runAgent`. Esse é o default.
  *

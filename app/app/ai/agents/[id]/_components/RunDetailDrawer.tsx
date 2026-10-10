@@ -21,6 +21,7 @@ import { useT } from "@/hooks/i18n/useT";
 
 import { RunTrace } from "./RunTrace";
 import type { AgentRunRow } from "@/hooks/ai/useAgentRuns";
+import { lerExecucao, type TomDaExecucao } from "@/lib/ai/agents/leitura-da-execucao";
 
 interface Props {
   run: AgentRunRow | null;
@@ -39,13 +40,11 @@ function fmtLatency(ms: number | null): string {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  pending: "outline",
-  running: "secondary",
-  completed: "default",
-  failed: "destructive",
-  aborted: "destructive",
-  timeout: "destructive",
+/** Cor da pílula pelo tom do desfecho (`lerExecucao`). */
+const VARIANTE_DO_TOM: Record<TomDaExecucao, "default" | "secondary" | "destructive"> = {
+  ok: "default",
+  atencao: "secondary",
+  erro: "destructive",
 };
 
 export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
@@ -57,13 +56,13 @@ export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
           <SheetTitle className="flex items-center gap-2 text-base">
             <span>{t("Execução")}</span>
             {run ? (
-              <Badge variant={STATUS_VARIANT[run.status] ?? "outline"} className="text-xs">
-                {run.status}
+              <Badge variant={VARIANTE_DO_TOM[lerExecucao(run.status, run.abort_reason).tom]} className="text-xs">
+                {t(lerExecucao(run.status, run.abort_reason).rotulo)}
               </Badge>
             ) : null}
             {run?.is_dry_run ? (
               <Badge variant="outline" className="text-xs">
-                dry-run
+                {t("teste")}
               </Badge>
             ) : null}
           </SheetTitle>
@@ -84,7 +83,7 @@ export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
               </Cell>
               <Cell label={t("Custo")}>{fmtCost(run.cost_cents)}</Cell>
               <Cell label={t("Latência")}>{fmtLatency(run.latency_ms)}</Cell>
-              <Cell label={t("Steps")}>{run.steps_count ?? 0}</Cell>
+              <Cell label={t("Passos")}>{run.steps_count ?? 0}</Cell>
             </dl>
 
             {run.error_code || run.error_message ? (
@@ -117,7 +116,7 @@ export function RunDetailDrawer({ run, open, onOpenChange }: Props) {
 
             <div>
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t("Trace")}
+                {t("Passo a passo")}
               </p>
               <RunTrace toolCalls={run.tool_calls} />
             </div>

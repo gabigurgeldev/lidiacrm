@@ -8,6 +8,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { Button } from "@/components/ui/button";
 import { CircleNotch, Copy } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
+import { copyToClipboard } from "@/lib/clipboard";
 
 /**
  * "Enviar link para o cliente" — gera o link público de pareamento.
@@ -62,14 +63,11 @@ export function LinkDePareamento({
 
   async function copiar() {
     if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success(t("Link copiado."));
-    } catch {
-      // Fora de contexto seguro (http) a área de transferência não existe. O
-      // link continua na tela, selecionável — dizer "copiado" seria mentir.
-      toast.error(t("Não deu para copiar. Selecione o link e copie à mão."));
-    }
+    // `copyToClipboard` tem o caminho de fora do contexto seguro (http). Se
+    // nem ele copiar, o link continua na tela, selecionável — dizer "copiado"
+    // seria mentir.
+    if (await copyToClipboard(url)) toast.success(t("Link copiado."));
+    else toast.error(t("Não deu para copiar. Selecione o link e copie à mão."));
   }
 
   if (!url) {

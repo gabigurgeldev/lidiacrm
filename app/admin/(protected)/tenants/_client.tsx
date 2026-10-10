@@ -15,7 +15,7 @@ export function TenantsClient() {
   const t = useT();
   const [filters, setFilters] = useState<AdminTenantsFilters>({});
 
-  const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } =
+  const { data, isLoading, isError, error, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useAdminTenants(filters);
 
   const rows = data?.pages.flatMap((p) => p.data ?? []) ?? [];
@@ -28,7 +28,11 @@ export function TenantsClient() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">{t("Tenants")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {isLoading ? t("Carregando...") : `${total} tenant${total !== 1 ? "s" : ""}${hasNextPage ? "+" : ""}`}
+            {isLoading
+              ? t("Carregando...")
+              : isError
+                ? t("Não foi possível carregar")
+                : `${total} tenant${total !== 1 ? "s" : ""}${hasNextPage ? "+" : ""}`}
           </p>
         </div>
         <Button asChild size="sm" className="shrink-0">
@@ -43,8 +47,25 @@ export function TenantsClient() {
       <TenantsFilters filters={filters} onChange={setFilters} />
 
       {/* Table */}
+      {/*
+        Erro NÃO é lista vazia. Antes, uma consulta que falhava caía aqui como
+        "0 tenants / Nenhum tenant encontrado" — e quem administra a instalação
+        concluía que não havia organização nenhuma.
+      */}
       {isLoading ? (
         <TenantsTableSkeleton />
+      ) : isError ? (
+        <div
+          role="alert"
+          data-testid="tenants-erro"
+          className="rounded-lg border border-destructive/50 bg-destructive/5 p-6 text-sm"
+        >
+          <p className="font-medium">{t("A lista de organizações não carregou.")}</p>
+          <p className="mt-1 text-muted-foreground">{error instanceof Error ? error.message : String(error)}</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => void refetch()}>
+            {t("Tentar de novo")}
+          </Button>
+        </div>
       ) : (
         <TenantsTable
           data={rows}
