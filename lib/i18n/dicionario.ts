@@ -4887,6 +4887,7 @@ export const DICIONARIO: Traducoes = {
   "O 1º modelo não distinguiu; quem decidiu foi o segundo ajudante.": { es: "El 1º modelo no distinguió; quien decidió fue el segundo ayudante." },
   "O 1º modelo não distinguiu e o segundo ajudante também não; ficou a decisão do 1º.": { es: "El 1º modelo no distinguió y el segundo ayudante tampoco; quedó la decisión del 1º." },
   "1º": { es: "1º" },
+  "Modelos de decisão (respondem só a decisão, sem texto)": { es: "Modelos de decisión (responden solo la decisión, sin texto)" },
   "O modelo de decisão falhou; seguiu a regra de segurança": { es: "El modelo de decisión falló; siguió la regla de seguridad" },
   "Simulação sem o modelo: seguiu o destino padrão. Ligue “Consultar o modelo de verdade” para ver a escolha real.": { es: "Simulación sin el modelo: siguió el destino predeterminado. Activa “Consultar el modelo de verdad” para ver la elección real." },
   "Destino indisponível (não publicado ou desativado)": { es: "Destino no disponible (no publicado o desactivado)" },

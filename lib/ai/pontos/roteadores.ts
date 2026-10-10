@@ -53,3 +53,10 @@ export function separarModelos<T extends ModeloDoCatalogo>(
     modelos: filtrados.filter((m) => !ehRoteador(m)),
   };
 }
+
+/**
+ * Pontos que DECIDEM em vez de escrever — os únicos em que um modelo da
+ * categoria Decisions da OpenRouter serve (o código que os chama sabe usar a
+ * API de decisões; os outros pontos só falam chat).
+ */
+export const PONTOS_DE_DECISAO: ReadonlySet<string> = new Set(["coordenador_decidir", "coordenador_decidir_reserva"]);

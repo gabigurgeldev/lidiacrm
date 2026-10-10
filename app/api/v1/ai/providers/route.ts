@@ -30,6 +30,26 @@ import { PROVEDORES, ehProvedorSuportado } from "@/lib/ai/pontos/provedores";
 import { validarBinding } from "@/lib/ai/pontos/validar-binding";
 import { transcricaoParaATela } from "@/lib/messaging/media/transcription";
 import { createClient } from "@/lib/supabase/server";
+import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
+import { llmEdgeConfigFromEnv, resolveOrgLlmConfig } from "@/lib/agent-engine/edge/llm/credentials";
+import { listarModelosDeDecisao, pareceModeloDeDecisao } from "@/lib/ai/decisoes/openrouter";
+import { PONTOS_DE_DECISAO } from "@/lib/ai/pontos/roteadores";
+import { env } from "@/lib/env";
+
+/**
+ * Os modelos da categoria Decisions da OpenRouter, com a chave que a
+ * organização usaria. Lista ao vivo (não há catálogo deles no banco: o
+ * `sync-model-catalog` só baixa modelos de texto). Sem chave ou sem rede →
+ * lista vazia, e a tela segue com os modelos de sempre.
+ */
+async function modelosDeDecisaoDaOrg(orgId: string): Promise<string[]> {
+  try {
+    const cfg = await resolveOrgLlmConfig(getRequestPool(), llmEdgeConfigFromEnv(env), orgId, { provider: "openrouter" });
+    return [...(await listarModelosDeDecisao(cfg.apiKey))].sort();
+  } catch {
+    return [];
+  }
+}
 
 export const dynamic = "force-dynamic";
 
@@ -211,6 +231,7 @@ export async function GET(): Promise<Response> {
 
   return ok({
     papeis: PAPEIS,
+    modelosDeDecisao: await modelosDeDecisaoDaOrg(org.orgId),
     pontos,
     provedores: PROVEDORES,
     credenciais: credsRes.data ?? [],
@@ -348,5 +369,13 @@ export async function PUT(req: NextRequest): Promise<Response> {
     },
   });
 
-  return ok({ binding: gravado, avisos: validacao.avisos });
+  // Modelo de DECISÃO num ponto que decide: ele não está no catálogo de texto
+  // por natureza, e o aviso "não conseguimos verificar" mandaria a pessoa
+  // desconfiar justamente da escolha certa.
+  const ehDecisao =
+    PONTOS_DE_DECISAO.has(corpo.purpose) && corpo.provider === "openrouter" && pareceModeloDeDecisao(corpo.model_id);
+  return ok({
+    binding: gravado,
+    avisos: ehDecisao ? [] : validacao.avisos,
+  });
 }

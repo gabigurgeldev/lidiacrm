@@ -45,7 +45,7 @@ import {
 } from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
 import { PaginaAjustes } from "@/components/ajustes";
-import { separarModelos } from "@/lib/ai/pontos/roteadores";
+import { PONTOS_DE_DECISAO, separarModelos } from "@/lib/ai/pontos/roteadores";
 
 export interface Ponto {
   id: string;
@@ -94,6 +94,8 @@ interface Provedor {
 
 export interface Dados {
   papeis: Record<string, { rotulo: string; explicacao: string }>;
+  /** Categoria Decisions da OpenRouter (lista ao vivo); vazia sem chave. */
+  modelosDeDecisao?: string[];
   pontos: Ponto[];
   provedores: Provedor[];
   credenciais: Credencial[];
@@ -292,7 +294,21 @@ export function CartaoDoPonto({
   const modelosDoProvider = dados.modelos.filter((m) => m.provider === provider);
   // Roteadores primeiro e busca por texto: a OpenRouter tem ~500 modelos, e uma
   // lista única sem busca escondia exatamente os que escolhem sozinhos.
-  const separados = separarModelos(modelosDoProvider, busca, modelId);
+  const separadosBrutos = separarModelos(modelosDoProvider, busca, modelId);
+  // Modelos de DECISÃO só nos pontos que decidem, e só na OpenRouter: num ponto
+  // que precisa de texto eles não respondem nada.
+  const decisoes =
+    provider === "openrouter" && PONTOS_DE_DECISAO.has(ponto.id)
+      ? (dados.modelosDeDecisao ?? []).filter(
+          (id) => id === modelId || busca.trim() === "" || id.toLowerCase().includes(busca.trim().toLowerCase()),
+        )
+      : [];
+  // Um mesmo id não pode aparecer duas vezes no seletor (o Select usa o valor como chave).
+  const jaListados = new Set(decisoes);
+  const separados = {
+    roteadores: separadosBrutos.roteadores.filter((m) => !jaListados.has(m.model_id)),
+    modelos: separadosBrutos.modelos.filter((m) => !jaListados.has(m.model_id)),
+  };
   const credsDoProvider = dados.credenciais.filter((c) => c.provider === provider);
   // Endpoint próprio só faz sentido em provedor compatível com a API da OpenAI
   // — é a mesma condição que `lib/ai/pontos/provedores.ts` declara e que o
@@ -460,6 +476,17 @@ export function CartaoDoPonto({
                     <SelectValue placeholder={t("escolha")} />
                   </SelectTrigger>
                   <SelectContent>
+                    {decisoes.length > 0 && (
+                      <SelectGroup>
+                        <SelectLabel>{t("Modelos de decisão (respondem só a decisão, sem texto)")}</SelectLabel>
+                        {decisoes.map((id) => (
+                          <SelectItem key={`dec-${id}`} value={id}>
+                            {id}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    )}
+                    {decisoes.length > 0 && <SelectSeparator />}
                     {separados.roteadores.length > 0 && (
                       <SelectGroup>
                         <SelectLabel>{t("Roteadores (escolhem o modelo sozinhos)")}</SelectLabel>
@@ -482,7 +509,7 @@ export function CartaoDoPonto({
                         ))}
                       </SelectGroup>
                     )}
-                    {separados.roteadores.length === 0 && separados.modelos.length === 0 && (
+                    {decisoes.length === 0 && separados.roteadores.length === 0 && separados.modelos.length === 0 && (
                       <div className="px-2 py-1.5 text-sm text-muted-foreground">{t("Nenhum modelo com esse nome.")}</div>
                     )}
                   </SelectContent>
