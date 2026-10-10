@@ -29,6 +29,7 @@ function montar(onRascunho = vi.fn(), extra: Partial<React.ComponentProps<typeof
         desabilitado={false}
         onArquivo={vi.fn()}
         onContato={vi.fn()}
+        onOpcoes={vi.fn()}
         onMensagensProntas={vi.fn()}
         onRascunho={onRascunho}
         onAlternarNota={vi.fn()}

@@ -23,6 +23,8 @@ interface SendArgs {
   /** A mensagem citada — id da NOSSA linha; o handler traduz para o do canal. */
   reply_to_message_id?: string;
   metadata?: Record<string, unknown>;
+  /** Só em `type: "poll" | "list"` — o handler decide o que o canal desenha. */
+  opcoes?: { pergunta: string; opcoes: { id: string; label: string }[]; botao?: string };
 }
 
 interface MessagesPage {
@@ -37,7 +39,16 @@ export function useSendMessage() {
     mutationFn: async (input: SendArgs) =>
       apiClient.post<{ data: Message }>("/api/v1/messages", input),
     onMutate: async (args) => {
-      if (args.media_storage_path || args.media_url || args.type === "contact") return {};
+      // Opções: o tipo e o corpo saem do servidor (o canal pode rebaixar para
+      // texto), então o otimista mentiria — espera a resposta, como o contato.
+      if (
+        args.media_storage_path ||
+        args.media_url ||
+        args.type === "contact" ||
+        args.type === "poll" ||
+        args.type === "list"
+      )
+        return {};
 
       const queryKey = ["messages", args.conversation_id];
       await qc.cancelQueries({ queryKey });

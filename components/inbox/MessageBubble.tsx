@@ -12,6 +12,7 @@ import { TipoDeCanal } from "@/components/channels/TipoDeCanal";
 import { conexaoNaTela } from "@/lib/channels/tipo-de-conexao";
 import { MediaRenderer } from "@/components/inbox/media/MediaRenderer";
 import { ContactCard } from "@/components/inbox/media/ContactCard";
+import { OpcoesCard, SeloDeEscolha } from "@/components/inbox/media/OpcoesCard";
 import { extractCitations, isAiGeneratedMessage } from "@/lib/ai/citations/types";
 
 interface Props {
@@ -96,6 +97,9 @@ export function MessageBubble({
       typeof (message.metadata as Record<string, unknown> | null)?.midia_do_disparo === "string",
   );
   const isContact = message.type === "contact";
+  // Enquete/lista que NÓS mandamos (migration 0236): desenhada como cartão de
+  // opções, nunca como o corpo numerado que fica guardado para a prévia.
+  const isOpcoes = message.type === "poll" || message.type === "list";
   // Figurinha sem caption: sem moldura de bolha (padrão WhatsApp).
   const isBareSticker = hasMedia && message.type === "sticker" && !message.body;
   // Apagada pelo autor ("apagar para todos"). A linha continua no histórico —
@@ -123,7 +127,7 @@ export function MessageBubble({
    *    espaço ali daria a ela um enquadramento que ela não pede.
    */
   const horaFlutuante =
-    !hasMedia && !isContact && !apagada && !citada && Boolean(message.body?.trim());
+    !hasMedia && !isContact && !isOpcoes && !apagada && !citada && Boolean(message.body?.trim());
 
   const senderLabel = (() => {
     if (!isOutbound) return null;
@@ -274,7 +278,11 @@ export function MessageBubble({
               </div>
             )}
 
-            {message.body && !isContact && (
+            {isOpcoes && !hasMedia ? <OpcoesCard message={message} /> : null}
+
+            {!isOpcoes ? <SeloDeEscolha message={message} /> : null}
+
+            {message.body && !isContact && !isOpcoes && (
               <p
                 className={cn(
                   "whitespace-pre-wrap break-words leading-snug",

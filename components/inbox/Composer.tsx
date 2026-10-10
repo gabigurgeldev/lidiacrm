@@ -12,6 +12,7 @@ import { PaperPlaneTilt, X } from "@/lib/ui/icons";
 import { MenuDeOpcoes } from "@/components/inbox/composer/MenuDeOpcoes";
 import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentPreviewDialog";
 import { ContactPickerDialog } from "@/components/inbox/composer/ContactPickerDialog";
+import { OpcoesDialog } from "@/components/inbox/composer/OpcoesDialog";
 import { AudioRecorder } from "@/components/inbox/composer/AudioRecorder";
 import { EmojiButton } from "@/components/inbox/composer/EmojiButton";
 import { resolveSlash, TemplateMenu } from "@/components/inbox/composer/TemplateMenu";
@@ -74,6 +75,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [text, setText] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [opcoesOpen, setOpcoesOpen] = useState(false);
   const [menuDismissed, setMenuDismissed] = useState(false);
   const [mode, setMode] = useState<"reply" | "note">("reply");
   const [gravando, setGravando] = useState(false);
@@ -275,6 +277,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                 desabilitado={!!disabled || upload.isPending}
                 onArquivo={setPendingFile}
                 onContato={() => setContactPickerOpen(true)}
+                onOpcoes={() => setOpcoesOpen(true)}
                 onMensagensProntas={() => {
                   setText("/");
                   setMenuDismissed(false);
@@ -400,6 +403,17 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                   },
             },
             { onSuccess: () => setContactPickerOpen(false) },
+          );
+        }}
+      />
+      <OpcoesDialog
+        open={opcoesOpen}
+        onOpenChange={setOpcoesOpen}
+        sending={send.isPending}
+        onEnviar={(tipo, opcoes) => {
+          send.mutate(
+            { conversation_id: conversationId, type: tipo, opcoes },
+            { onSuccess: () => setOpcoesOpen(false) },
           );
         }}
       />

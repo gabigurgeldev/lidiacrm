@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type ComponentType } from "react";
 import { useT } from "@/hooks/i18n/useT";
 import { useDraftReply } from "@/hooks/inbox/useDraftReply";
 import {
+  ChartBar,
   CircleNotch,
   FileText,
   ImageSquare,
@@ -24,6 +25,8 @@ interface Props {
   desabilitado: boolean;
   onArquivo: (file: File) => void;
   onContato: () => void;
+  /** Enquete ou lista — a pergunta com opções para o cliente tocar. */
+  onOpcoes: () => void;
   onMensagensProntas: () => void;
   onRascunho: (texto: string) => void;
   onAlternarNota: () => void;
@@ -62,6 +65,7 @@ export function MenuDeOpcoes({
   desabilitado,
   onArquivo,
   onContato,
+  onOpcoes,
   onMensagensProntas,
   onRascunho,
   onAlternarNota,
@@ -123,6 +127,13 @@ export function MenuDeOpcoes({
         Icone: UserCircle,
         tom: "bg-surface-elevated text-foreground",
         acao: escolher(onContato),
+      },
+      {
+        id: "opcoes",
+        rotulo: t("Enquete ou lista"),
+        Icone: ChartBar,
+        tom: "bg-info-bg text-info",
+        acao: escolher(onOpcoes),
       },
       {
         id: "prontas",
