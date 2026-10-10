@@ -36,12 +36,16 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/hooks/i18n/useT";
 import { PaginaAjustes } from "@/components/ajustes";
+import { separarModelos } from "@/lib/ai/pontos/roteadores";
 
 export interface Ponto {
   id: string;
@@ -283,8 +287,12 @@ export function CartaoDoPonto({
   const [credentialId, setCredentialId] = useState(ponto.efetivo.credentialId ?? "");
   const [baseUrl, setBaseUrl] = useState(ponto.efetivo.baseUrl ?? "");
   const [salvando, setSalvando] = useState(false);
+  const [busca, setBusca] = useState("");
 
   const modelosDoProvider = dados.modelos.filter((m) => m.provider === provider);
+  // Roteadores primeiro e busca por texto: a OpenRouter tem ~500 modelos, e uma
+  // lista única sem busca escondia exatamente os que escolhem sozinhos.
+  const separados = separarModelos(modelosDoProvider, busca, modelId);
   const credsDoProvider = dados.credenciais.filter((c) => c.provider === provider);
   // Endpoint próprio só faz sentido em provedor compatível com a API da OpenAI
   // — é a mesma condição que `lib/ai/pontos/provedores.ts` declara e que o
@@ -437,19 +445,49 @@ export function CartaoDoPonto({
                 </p>
               </>
             ) : (
-              <Select value={modelId} onValueChange={setModelId}>
-                <SelectTrigger data-testid={`modelo-${ponto.id}`}>
-                  <SelectValue placeholder={t("escolha")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {modelosDoProvider.map((m) => (
-                    <SelectItem key={m.model_id} value={m.model_id}>
-                      {m.display_name}
-                      {ponto.exige.tools && !m.supports_tools ? ` — ${t("sem ferramentas")}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <>
+                {modelosDoProvider.length > 20 && (
+                  <Input
+                    value={busca}
+                    onChange={(e) => setBusca(e.target.value)}
+                    placeholder={t("buscar modelo (ex.: router, haiku, gpt)")}
+                    className="mb-1"
+                    data-testid={`busca-modelo-${ponto.id}`}
+                  />
+                )}
+                <Select value={modelId} onValueChange={setModelId}>
+                  <SelectTrigger data-testid={`modelo-${ponto.id}`}>
+                    <SelectValue placeholder={t("escolha")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {separados.roteadores.length > 0 && (
+                      <SelectGroup>
+                        <SelectLabel>{t("Roteadores (escolhem o modelo sozinhos)")}</SelectLabel>
+                        {separados.roteadores.map((m) => (
+                          <SelectItem key={m.model_id} value={m.model_id}>
+                            {m.display_name} <span className="text-muted-foreground">({m.model_id})</span>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    )}
+                    {separados.roteadores.length > 0 && separados.modelos.length > 0 && <SelectSeparator />}
+                    {separados.modelos.length > 0 && (
+                      <SelectGroup>
+                        {separados.roteadores.length > 0 && <SelectLabel>{t("Modelos")}</SelectLabel>}
+                        {separados.modelos.map((m) => (
+                          <SelectItem key={m.model_id} value={m.model_id}>
+                            {m.display_name}
+                            {ponto.exige.tools && !m.supports_tools ? ` — ${t("sem ferramentas")}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    )}
+                    {separados.roteadores.length === 0 && separados.modelos.length === 0 && (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">{t("Nenhum modelo com esse nome.")}</div>
+                    )}
+                  </SelectContent>
+                </Select>
+              </>
             )}
           </div>
 

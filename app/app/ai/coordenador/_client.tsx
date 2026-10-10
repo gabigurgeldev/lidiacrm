@@ -495,11 +495,25 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
             />
             <Label htmlFor="usar-modelo">{t("Usar o modelo quando as regras não bastarem")}</Label>
           </div>
-          {config.decisor.usar_modelo && (
-            <div data-testid="modelo-do-decisor">
-              <ModeloDoPonto pontoId="coordenador_decidir" />
-            </div>
-          )}
+        </Card>
+
+        {/* Sempre visível: escondido atrás do interruptor, quem procurava o
+            modelo de decisão não o achava (2026-10-10). */}
+        <Card className="flex flex-col gap-2 p-4" data-testid="modelo-do-decisor">
+          <div className="flex flex-col">
+            <span className="text-sm font-medium">{t("Modelo de decisão")}</span>
+            <span className="text-xs text-muted-foreground">
+              {t(
+                "O modelo que escolhe quem conduz quando as regras não bastam. Na OpenRouter, os roteadores (como jev-router e auto) aparecem no topo da lista.",
+              )}
+            </span>
+            {!config.decisor.usar_modelo && (
+              <span className="text-xs text-amber-600 dark:text-amber-500">
+                {t("Desligado: ligue “Usar o modelo quando as regras não bastarem” acima para ele ser consultado.")}
+              </span>
+            )}
+          </div>
+          <ModeloDoPonto pontoId="coordenador_decidir" />
         </Card>
 
         {agentesNaPolitica.length > 0 && politica.destinos.length > 1 && (
