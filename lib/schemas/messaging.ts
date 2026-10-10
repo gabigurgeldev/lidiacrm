@@ -54,7 +54,65 @@ export const messageTypeSchema = z.enum([
   // "texto com outro nome": o tipo é o que carrega custo, conformidade de janela e
   // o que o contato de fato viu (cabeçalho, rodapé, botões).
   "template",
+  // Opções tocáveis mandadas por nós (migration 0236). A RESPOSTA do cliente não
+  // tem tipo próprio: volta como `text` com o rótulo da opção no corpo.
+  "poll",
+  "list",
 ]);
+
+/** Os dois tipos que carregam `opcoes`. */
+export const TIPOS_COM_OPCOES = ["poll", "list"] as const;
+export type TipoComOpcoes = (typeof TIPOS_COM_OPCOES)[number];
+
+export function ehTipoComOpcoes(tipo: string): tipo is TipoComOpcoes {
+  return (TIPOS_COM_OPCOES as readonly string[]).includes(tipo);
+}
+
+/** Mesma normalização que o menu do fluxo usa para casar a resposta. */
+function rotuloNormalizado(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/gu, "")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Uma escolha oferecida ao cliente. `id` é estável (é o que o fluxo liga e o
+ * que a lista devolve como `rowId`); `label` é o que a pessoa lê — e é o que
+ * volta no corpo da resposta, então dois rótulos iguais tornariam a escolha
+ * ambígua.
+ */
+export const opcaoInterativaSchema = z.strictObject({
+  id: z.string().min(1).max(64),
+  label: z.string().trim().min(1).max(60),
+});
+
+/**
+ * Opções em forma NEUTRA — sem o vocabulário de nenhum canal. Quem decide se
+ * viram enquete, lista ou texto numerado é a capability da sessão.
+ *
+ * Mínimo de 2: enquete com uma opção só não é escolha, e a plataforma recusa.
+ * Máximo de 10: o teto da lista interativa, o menor dos dois formatos.
+ */
+export const opcoesInterativasSchema = z
+  .strictObject({
+    pergunta: z.string().trim().min(1).max(1000),
+    opcoes: z.array(opcaoInterativaSchema).min(2).max(10),
+    /** Texto do botão que abre a lista. Ignorado na enquete. */
+    botao: z.string().trim().min(1).max(20).optional(),
+  })
+  .refine(
+    (o) => new Set(o.opcoes.map((x) => rotuloNormalizado(x.label))).size === o.opcoes.length,
+    { message: "duas opções com o mesmo texto: a resposta ficaria ambígua", path: ["opcoes"] },
+  )
+  .refine((o) => new Set(o.opcoes.map((x) => x.id)).size === o.opcoes.length, {
+    message: "duas opções com o mesmo id",
+    path: ["opcoes"],
+  });
+
+export type OpcaoInterativa = z.infer<typeof opcaoInterativaSchema>;
+export type OpcoesInterativas = z.infer<typeof opcoesInterativasSchema>;
 
 export const messageStatusSchema = z.enum([
   "queued",
@@ -94,9 +152,16 @@ export const sendMessageSchema = z
      * o vocabulário do canal, que é justamente o que o seam existe para evitar.
      */
     reply_to_message_id: z.string().uuid().optional(),
+    /**
+     * Só em `type: "poll" | "list"`. O handler decide, pela capability da
+     * sessão, se sai no formato pedido, no outro interativo ou em texto
+     * numerado — quem pede não precisa saber o que o canal suporta.
+     */
+    opcoes: opcoesInterativasSchema.optional(),
   })
   .refine(
     (d) => {
+      if (ehTipoComOpcoes(d.type)) return d.opcoes !== undefined;
       if (d.type === "contact") {
         const id = d.metadata?.shared_contact_id;
         if (typeof id === "string" && id.length > 0) return true;
@@ -111,7 +176,7 @@ export const sendMessageSchema = z
     },
     {
       message:
-        "body, media_url, media_storage_path, metadata.shared_contact_id or metadata.shared_contact.phone_number required",
+        "body, media_url, media_storage_path, opcoes (poll/list), metadata.shared_contact_id or metadata.shared_contact.phone_number required",
       path: ["body"],
     },
   );

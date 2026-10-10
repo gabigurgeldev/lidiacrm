@@ -3,11 +3,11 @@
 // TIPO atravessa (`import type` some na compilação) — o seam não carrega código
 // do provider. Quando a Fase 3 absorver `lib/waha/`, este é o único ponteiro a
 // mudar de casa.
-import type { SendMessageInput } from "@/lib/schemas";
+import type { OpcoesInterativas, SendMessageInput } from "@/lib/schemas";
 import type { FetchedMedia } from "@/lib/messaging/media/types";
 import type { OutboundMedia } from "@/lib/waha/media-send";
 
-export type { OutboundMedia };
+export type { OutboundMedia, OpcoesInterativas };
 
 export type ChannelProvider = "waha" | "meta_cloud" | "zernio" | "stevo";
 
@@ -51,6 +51,20 @@ export interface ChannelCapabilities {
   groups: "full" | "limited" | "none";
   /** Mensagem entregue gera custo → decisões de envio precisam considerar orçamento. */
   costPerMessage: boolean;
+  /**
+   * Quais formatos NATIVOS de "escolha uma opção" o canal desenha.
+   *
+   * Dois eixos e não um booleano porque os canais divergem por formato, não em
+   * bloco: o número ligado por QR desenha enquete (estável) e lista (só em
+   * conversa 1:1, e o próprio transporte avisa que é frágil); o canal oficial
+   * desenha lista e não tem enquete. Botão de resposta NÃO entra: no QR ele não
+   * funciona (o transporte o marca como quebrado), e prometer o que não renderiza
+   * faria a mensagem sumir sem erro.
+   *
+   * Formato sem suporte não é erro: `lib/channels/opcoes-interativas.ts` rebaixa
+   * para o outro formato ou para texto numerado, que todo canal entrega.
+   */
+  opcoesInterativas: { enquete: boolean; lista: boolean };
 }
 
 /**
@@ -118,6 +132,12 @@ export interface OutboundEnvelope extends ChannelTenantScope {
   media?: OutboundMedia;
   /** Cartão de contato — preenchido quando `kind === "contact"`. */
   contact?: OutboundContact;
+  /**
+   * Opções tocáveis — preenchido quando `kind` é `"poll"` ou `"list"`. O
+   * formato já foi decidido pela capability antes de chegar aqui: o adapter só
+   * traduz, nunca rebaixa.
+   */
+  opcoes?: OpcoesInterativas;
   /**
    * Id que o PROVIDER dá a esta thread, quando ele endereça por thread própria
    * em vez de por telefone (`conversations.provider_conversation_id`).

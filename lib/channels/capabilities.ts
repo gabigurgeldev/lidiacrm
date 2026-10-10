@@ -22,6 +22,9 @@ export const CHANNEL_CAPABILITIES: Record<ChannelProvider, ChannelCapabilities> 
     voiceNote: "server-convert",
     groups: "full",
     costPerMessage: false,
+    // Enquete é estável; lista só em conversa 1:1 (quem rebaixa em grupo é
+    // `formatoDasOpcoes`). Medido na doc do transporte, versão em uso.
+    opcoesInterativas: { enquete: true, lista: true },
   },
   // Hetero-restrição: não me banem, mas a Meta me proíbe e me cobra.
   meta_cloud: {
@@ -35,6 +38,8 @@ export const CHANNEL_CAPABILITIES: Record<ChannelProvider, ChannelCapabilities> 
     voiceNote: "opus-only",
     groups: "limited",
     costPerMessage: true,
+    // Lista interativa é nativa da Graph API; enquete não existe nela.
+    opcoesInterativas: { enquete: false, lista: true },
   },
   // Mesma hetero-restrição do canal oficial, por baixo: é um BSP: a WABA é da
   // Meta, os templates são aprovados pela Meta e a janela de 24h é da Meta. O
@@ -68,6 +73,8 @@ export const CHANNEL_CAPABILITIES: Record<ChannelProvider, ChannelCapabilities> 
     voiceNote: "opus-only",
     groups: "limited",
     costPerMessage: true,
+    // Não medido no transporte deste canal: texto numerado até alguém medir.
+    opcoesInterativas: { enquete: false, lista: false },
   },
   // Intermediário de CONTA, e o primeiro canal cuja resposta depende da SESSÃO e
   // não do provider: a mesma conta hospeda instância oficial (janela de 24h,
@@ -97,6 +104,7 @@ export const CHANNEL_CAPABILITIES: Record<ChannelProvider, ChannelCapabilities> 
     voiceNote: "opus-only",
     groups: "limited",
     costPerMessage: true,
+    opcoesInterativas: { enquete: false, lista: false },
   },
 };
 
@@ -123,6 +131,7 @@ export const CAPACIDADES_POR_MODO: Partial<
       voiceNote: "opus-only",
       groups: "limited",
       costPerMessage: true,
+      opcoesInterativas: { enquete: false, lista: false },
     },
     // Número ligado por QR na conta dele: é o WhatsApp comum, com tudo o que
     // isso implica — sem janela, sem template, e com risco de banimento por
@@ -140,6 +149,7 @@ export const CAPACIDADES_POR_MODO: Partial<
       voiceNote: "opus-only",
       groups: "limited",
       costPerMessage: true,
+      opcoesInterativas: { enquete: false, lista: false },
     },
   },
 };
