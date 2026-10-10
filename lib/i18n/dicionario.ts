@@ -4872,6 +4872,7 @@ export const DICIONARIO: Traducoes = {
   "Equipe devolveu ao atendimento automático": { es: "El equipo devolvió a la atención automática" },
   "Fluxo ativado pela equipe": { es: "Flujo activado por el equipo" },
   "O modelo de decisão falhou; seguiu a regra de segurança": { es: "El modelo de decisión falló; siguió la regla de seguridad" },
+  "Simulação sem o modelo: seguiu o destino padrão. Ligue “Consultar o modelo de verdade” para ver a escolha real.": { es: "Simulación sin el modelo: siguió el destino predeterminado. Activa “Consultar el modelo de verdad” para ver la elección real." },
   "Destino indisponível (não publicado ou desativado)": { es: "Destino no disponible (no publicado o desactivado)" },
   "Limite de transferências atingido": { es: "Límite de transferencias alcanzado" },
   "Laço de transferências contido": { es: "Bucle de transferencias contenido" },

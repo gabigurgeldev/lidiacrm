@@ -35,6 +35,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
+import { ModeloDoPonto } from "@/app/app/ai/providers/_components/ModeloDoPonto";
 import { apiClient } from "@/lib/api/client";
 import type { LinhaDeAtividade, Painel } from "@/lib/coordenador/painel";
 import {
@@ -494,13 +495,11 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
             />
             <Label htmlFor="usar-modelo">{t("Usar o modelo quando as regras não bastarem")}</Label>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {t("O modelo é o que você escolher em")}{" "}
-            <Link href="/app/ai/providers" className="underline">
-              {t("IA › Provedores")}
-            </Link>{" "}
-            {t("no ponto \"Escolher quem conduz a conversa\".")}
-          </p>
+          {config.decisor.usar_modelo && (
+            <div data-testid="modelo-do-decisor">
+              <ModeloDoPonto pontoId="coordenador_decidir" />
+            </div>
+          )}
         </Card>
 
         {agentesNaPolitica.length > 0 && politica.destinos.length > 1 && (

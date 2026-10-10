@@ -31,7 +31,14 @@ import { scrubMessage } from '@/lib/sentry/scrub';
 
 import type { Logger } from '../../obs/logger';
 import { decidirParaOSeam } from './binding-do-ponto';
-import { resolveOrgLlmConfig, type LlmEdgeConfig, type OrcamentoDaOrg } from './credentials';
+import {
+  lerPadraoDaOrg,
+  LlmNotConfiguredError,
+  resolveOrgLlmConfig,
+  type LlmEdgeConfig,
+  type OrcamentoDaOrg,
+  type OrgLlmConfig,
+} from './credentials';
 import {
   AVISO_CORPO,
   AVISO_TITULO,
@@ -401,7 +408,25 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
 
   // A config da org é lida ANTES da decisão porque o resolvedor precisa dela
   // como último degrau da precedência (o padrão, quando ninguém mais opinou).
-  const padrao = await resolveOrgLlmConfig(db, cfg, input.tenantId, input.llmOverride);
+  //
+  // Sem chave para o PADRÃO, a chamada ainda pode valer: o ponto pode estar
+  // configurado para outro provedor que tem chave. Antes, o erro do padrão
+  // derrubava a chamada antes de o ponto ser consultado — medido em produção
+  // (2026-10-10): organização só com OpenRouter, ponto `coordenador_decidir`
+  // apontado para a chave OpenRouter, e toda decisão do coordenador falhava com
+  // "org sem credencial LLM utilizável". O agente escapava porque passa
+  // `llmOverride`; quem depende só do ponto, não.
+  //
+  // Com `llmOverride`, o erro é do provedor que o agente escolheu, e sobe.
+  let padrao: OrgLlmConfig | null = null;
+  let erroDoPadrao: LlmNotConfiguredError | null = null;
+  try {
+    padrao = await resolveOrgLlmConfig(db, cfg, input.tenantId, input.llmOverride);
+  } catch (err) {
+    if (!(err instanceof LlmNotConfiguredError) || input.llmOverride !== undefined) throw err;
+    erroDoPadrao = err;
+  }
+  const declarado = padrao ?? (await lerPadraoDaOrg(db, input.tenantId));
 
   // O painel de provedores entra AQUI, e é o que faz `purpose` deixar de ser
   // só um rótulo de custo e virar decisão. Sem binding configurado, `decisao`
@@ -415,11 +440,11 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
       input.llmOverride === undefined
         ? null
         : {
-            provider: input.llmOverride.provider ?? padrao.provider,
+            provider: input.llmOverride.provider ?? declarado.provider,
             credentialId: input.llmOverride.credentialId ?? null,
             model: input.model,
           },
-    padraoDaOrganizacao: { provider: padrao.provider, defaultModel: padrao.defaultModel },
+    padraoDaOrganizacao: { provider: declarado.provider, defaultModel: declarado.defaultModel },
   }, deps.log ? { log: deps.log } : {});
 
   // Só re-resolve a credencial quando a decisão aponta para OUTRA que não a já
@@ -435,15 +460,22 @@ export async function runModelCall(db: pg.Pool, cfg: LlmEdgeConfig, input: RunMo
   // comparar contra ele é comparar contra o que de fato está carregado.
   const credencialJaCarregada = input.llmOverride?.credentialId ?? null;
   const precisaOutraCredencial =
+    padrao === null ||
     decisao.provider !== padrao.provider ||
     (decisao.credentialId !== null && decisao.credentialId !== credencialJaCarregada);
 
-  const config = precisaOutraCredencial
-    ? await resolveOrgLlmConfig(db, cfg, input.tenantId, {
-        provider: decisao.provider,
-        credentialId: decisao.credentialId,
-      })
-    : padrao;
+  // Se o ponto também cai no padrão sem chave, o erro é o original — sem uma
+  // segunda ida ao banco para descobrir a mesma ausência.
+  if (erroDoPadrao !== null && decisao.provider === declarado.provider && decisao.credentialId === null) {
+    throw erroDoPadrao;
+  }
+  const config =
+    padrao === null || precisaOutraCredencial
+      ? await resolveOrgLlmConfig(db, cfg, input.tenantId, {
+          provider: decisao.provider,
+          credentialId: decisao.credentialId,
+        })
+      : padrao;
 
   const model = decisao.modelId;
   if (model === null || model === undefined) {

@@ -43,7 +43,7 @@ import {
 import { useT } from "@/hooks/i18n/useT";
 import { PaginaAjustes } from "@/components/ajustes";
 
-interface Ponto {
+export interface Ponto {
   id: string;
   rotulo: string;
   oQueFaz: string;
@@ -88,7 +88,7 @@ interface Provedor {
   aceitaEndpointProprio: boolean;
 }
 
-interface Dados {
+export interface Dados {
   papeis: Record<string, { rotulo: string; explicacao: string }>;
   pontos: Ponto[];
   provedores: Provedor[];
@@ -268,7 +268,7 @@ function ResumoDoGrupo({ pontos }: { pontos: Ponto[] }) {
   );
 }
 
-function CartaoDoPonto({
+export function CartaoDoPonto({
   ponto,
   dados,
   aoSalvar,
