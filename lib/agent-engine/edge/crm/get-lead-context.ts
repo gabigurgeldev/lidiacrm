@@ -14,6 +14,7 @@
 import type { Queryable } from '../../queue/queue';
 import type { CrmEdgeConfig } from './mcp-client';
 import { deriveLgpdFromContact, type LgpdInput } from '../../guardrails/lgpd/legal-basis';
+import { respostaInterativaDaMetadata } from '@/lib/channels/opcoes-interativas';
 
 /**
  * Heurística conservadora de contagem: ~3,5 chars/token para pt-br (BPE real fica
@@ -151,6 +152,8 @@ interface HistoryRow {
   media_mime: string | null;
   media_derived_text: string | null;
   sent_at: string;
+  /** Só para reconhecer opções tocáveis (migration 0236) — o resto não vai ao modelo. */
+  metadata?: unknown;
 }
 
 export async function getLeadContext(
@@ -208,7 +211,7 @@ export async function getLeadContext(
     ? (
         await db.query<HistoryRow>(
           `select direction, type, body, media_url, media_storage_path, media_mime,
-                  media_derived_text, sent_at::text as sent_at
+                  media_derived_text, sent_at::text as sent_at, metadata
            from messages
            where organization_id = $1 and conversation_id = $2
              and direction in ('inbound', 'outbound')
@@ -269,7 +272,7 @@ function fitToBudget(
     // "não consigo ver mídia" mesmo tendo o conteúdo. Sem derivado, marcador [tipo].
     const body = derived
       ? frameMediaBody(m.type, m.body, derived)
-      : (m.body ?? (hasMedia ? `[${m.type}]` : ''));
+      : (frameOpcoes(m) ?? m.body ?? (hasMedia ? `[${m.type}]` : ''));
     return {
       direction: m.direction,
       body,
@@ -288,6 +291,30 @@ function fitToBudget(
     messages = [{ ...messages[0]!, body: messages[0]!.body.slice(0, Math.floor(messages[0]!.body.length / 2)) }];
   }
   return build(messages);
+}
+
+/**
+ * Enquadra opções tocáveis (migration 0236) para o modelo saber o que houve.
+ *
+ * A resposta do lead chega como texto com o rótulo da opção — sem o
+ * enquadramento, "Financeiro" sozinho parece uma palavra solta, e o modelo
+ * pergunta de novo o que o lead acabou de escolher. A pergunta que NÓS
+ * mandamos idem: ela é uma enquete/lista, não um texto que o lead leu numerado.
+ * `null` = mensagem comum, segue o caminho de sempre. @internal exposto p/ teste.
+ */
+export function frameOpcoes(m: Pick<HistoryRow, 'direction' | 'type' | 'body' | 'metadata'>): string | null {
+  const resposta = respostaInterativaDaMetadata(m.metadata);
+  if (m.direction === 'inbound' && resposta) {
+    const onde = resposta.formato === 'enquete' ? 'na enquete' : resposta.formato === 'lista' ? 'na lista' : 'no botão';
+    const pergunta = resposta.pergunta ? ` "${resposta.pergunta}"` : '';
+    return `[O lead TOCOU numa opção ${onde}${pergunta}. A escolha dele foi:] ${resposta.opcao_label}`;
+  }
+  if (m.direction === 'outbound' && (m.type === 'poll' || m.type === 'list') && m.body) {
+    const como = m.type === 'poll' ? 'uma enquete' : 'uma lista de opções';
+    return `[Você mandou ${como} para o lead tocar:]
+${m.body}`;
+  }
+  return null;
 }
 
 /** Substantivo pt-br por tipo de mídia (p/ o enquadramento do derivado). */

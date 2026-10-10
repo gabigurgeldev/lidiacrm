@@ -87,6 +87,19 @@ export interface SendMessageInput {
    * falha na síntese manda o `body` em texto e abre `voz_indisponivel`.
    */
   voice?: { voiceId: string };
+  /**
+   * Presente = a pergunta sai como OPÇÕES TOCÁVEIS (migration 0236). O `body` é a
+   * pergunta numerada — identidade da intenção (hash do ledger), o que os gates
+   * avaliaram, e o que sai se a conexão não desenhar enquete nem lista.
+   */
+  opcoes?: OpcoesDoEnvio;
+}
+
+/** Pedido de opções tocáveis do agente — `tipo` é o formato PEDIDO, não o que sai. */
+export interface OpcoesDoEnvio {
+  tipo: 'poll' | 'list';
+  pergunta: string;
+  opcoes: { id: string; label: string }[];
 }
 
 /** Fallback do ator ai_agent quando não há agente publicado (cfg.agentActorId). */
@@ -146,6 +159,12 @@ export async function sendTurnMessage(
               template_language: input.template.language,
               template_values: input.template.values,
             }
+          : input.opcoes
+            ? {
+                // O handler decide pela capability da conexão o que de fato sai.
+                type: input.opcoes.tipo,
+                opcoes: { pergunta: input.opcoes.pergunta, opcoes: input.opcoes.opcoes },
+              }
           : voz?.kind === 'audio'
             ? {
                 type: 'audio' as const,

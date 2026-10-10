@@ -41,6 +41,7 @@ export interface PublishedAgentConfig {
    * passa na hora (o padrão de sempre). Regra em `decidirPedidoDeHumano`.
    */
   humanRequestTryFirst: boolean;
+  interactiveOptionsEnabled: boolean;
   splitMessages: boolean;
   splitMaxChars: number;
   /**
@@ -137,6 +138,7 @@ interface Row {
   handoff_keywords: string[] | null;
   handoff_tool_enabled: boolean;
   human_request_try_first: boolean | null;
+  interactive_options_enabled: boolean | null;
   split_messages: boolean;
   split_max_chars: number;
   reply_as_audio: boolean;
@@ -173,6 +175,7 @@ const SELECT_AGENT_CONFIG_COLUMNS = `a.id as agent_id,
             v.handoff_keywords,
             v.handoff_tool_enabled,
             v.human_request_try_first,
+            v.interactive_options_enabled,
             v.split_messages,
             v.split_max_chars,
             v.reply_as_audio,
@@ -225,6 +228,7 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     handoffKeywords: (r.handoff_keywords ?? []).map((k) => k.toLowerCase().trim()).filter((k) => k !== ''),
     handoffToolEnabled: r.handoff_tool_enabled,
     humanRequestTryFirst: r.human_request_try_first ?? false,
+    interactiveOptionsEnabled: r.interactive_options_enabled ?? true,
     splitMessages: r.split_messages,
     splitMaxChars: r.split_max_chars,
     replyAsAudio: r.reply_as_audio ?? false,

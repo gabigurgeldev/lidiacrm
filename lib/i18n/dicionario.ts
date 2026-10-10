@@ -8220,6 +8220,8 @@ export const DICIONARIO: Traducoes = {
   // Editor de agente em seções (PR11b)
   "Ordem entre agentes": { es: "Orden entre agentes" },
   "Memória da conversa": { es: "Memoria de la conversación" },
+  "Oferecer opções para o cliente tocar (enquete ou lista)": { es: "Ofrecer opciones para que el cliente toque (encuesta o lista)" },
+  "Quando houver poucas escolhas fechadas — horários, setores, planos — o agente pode mandar uma enquete ou lista em vez de pedir que o cliente digite. Onde o número não mostrar opções, a mesma pergunta sai numerada.": { es: "Cuando haya pocas opciones cerradas — horarios, sectores, planes — el agente puede enviar una encuesta o lista en lugar de pedir que el cliente escriba. Donde el número no muestre opciones, la misma pregunta sale numerada." },
   "Várias mensagens curtas": { es: "Varios mensajes cortos" },
   "A voz em que o cliente ouve as respostas.": { es: "La voz con la que el cliente escucha las respuestas." },
   "Como ele deve falar, o que pode prometer e o que nunca deve dizer. Ele lê isto antes de toda resposta.": { es: "Cómo debe hablar, qué puede prometer y qué nunca debe decir. Lo lee antes de cada respuesta." },

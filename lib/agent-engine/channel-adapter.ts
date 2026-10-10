@@ -48,6 +48,17 @@ export interface ChannelSendInput {
     /** id da voz no serviço de TTS (`lib/ai/voz/vozes.ts`). */
     voiceId: string;
   };
+  /**
+   * Presente = a pergunta sai como OPÇÕES TOCÁVEIS (enquete/lista). Opcional pelo
+   * mesmo motivo de `template`: adapter que ignore o campo envia o `body` — que é
+   * a mesma pergunta já numerada, e o lead responde o número.
+   */
+  opcoes?: {
+    /** O formato PEDIDO; a conexão pode rebaixar. */
+    tipo: 'poll' | 'list';
+    pergunta: string;
+    opcoes: { id: string; label: string }[];
+  };
 }
 
 /**

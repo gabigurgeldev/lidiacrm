@@ -58,6 +58,18 @@ export function SecaoEstilo({
         </Campo>
       ) : null}
 
+      {/* Opções tocáveis (migration 0236) */}
+      <LinhaInterruptor
+        id="interactive_options_enabled"
+        titulo={t("Oferecer opções para o cliente tocar (enquete ou lista)")}
+        descricao={t(
+          "Quando houver poucas escolhas fechadas — horários, setores, planos — o agente pode mandar uma enquete ou lista em vez de pedir que o cliente digite. Onde o número não mostrar opções, a mesma pergunta sai numerada.",
+        )}
+        ligado={form.interactive_options_enabled}
+        aoMudar={(v) => patch({ interactive_options_enabled: v })}
+        desabilitado={disabled}
+      />
+
       {/* Responder em áudio (migration 0222) */}
       <LinhaInterruptor
         id="reply_as_audio"

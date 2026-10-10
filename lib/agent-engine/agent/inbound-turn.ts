@@ -143,6 +143,8 @@ import { READ_ONLY_TOOLS, wrapToolsWithBreaker, type ToolBreakerThresholds } fro
 import { avisarCapDoNumero, loadChannelProvider, runBeforeSend } from '../guardrails/before-send';
 import { isStatusSendable } from '../../channels/meta/template-binding';
 import { capabilitiesOf } from '@/lib/channels/capabilities';
+import { textoDasOpcoes } from '@/lib/channels/opcoes-interativas';
+import { opcoesInterativasSchema } from '@/lib/schemas';
 import { coordenarTurnoDeEntrada, type ResultadoDaEntrada } from '@/lib/coordenador/entrada';
 import { decisorPorLlm } from '@/lib/coordenador/decisor/llm';
 import { blocoDoRetorno, lerChamada } from '@/lib/coordenador/chamadas';
@@ -201,6 +203,28 @@ export const AGENT_TOOL_DEFS = {
     inputSchema: z.object({
       body: z.string().min(1).describe('corpo da mensagem, em pt-br, pronto para envio'),
     }),
+  },
+  send_options: {
+    description:
+      'Envia ao lead UMA pergunta com opções para ele TOCAR (enquete ou lista no WhatsApp), em vez de ' +
+      'digitar. Use só quando houver de 2 a 10 escolhas FECHADAS e curtas (ex.: horários livres, setor, ' +
+      'plano, sim/não). Não use para perguntas abertas. Onde o número não desenhar opções, a mesma ' +
+      'pergunta sai numerada e o lead responde o número. A escolha chega na próxima mensagem do lead, ' +
+      'com o texto da opção. Depois de mandar, encerre o turno e espere a escolha.',
+    // Schema LARGO para o SDK; a validação REAL (rótulos únicos, tamanhos) é a de
+    // `opcoesInterativasSchema`, aplicada no execute — erro vira ENSINO ao modelo.
+    inputSchema: z.object({
+      pergunta: z.string().min(1).describe('a pergunta, em pt-br, curta e direta'),
+      opcoes: z
+        .array(z.string().min(1))
+        .min(2)
+        .max(10)
+        .describe('de 2 a 10 opções, cada uma com até 60 caracteres e todas diferentes entre si'),
+      formato: z
+        .enum(['enquete', 'lista'])
+        .optional()
+        .describe('enquete (padrão) ou lista; o canal pode trocar pelo formato que ele desenha'),
+    }).passthrough(),
   },
   update_lead_state: {
     description:
@@ -2310,6 +2334,111 @@ async function executarTurnoDoAgente(
         return { ok: true, status: 'aceita_aguardando_canal' };
       },
     }),
+    send_options: tool({
+      ...AGENT_TOOL_DEFS.send_options,
+      execute: async ({ pergunta, opcoes, formato }) => {
+        if (seq >= maxSendsPerTurn) {
+          return {
+            ok: false,
+            error: {
+              code: 'max_sends_per_turn',
+              message:
+                `você já enviou ${seq} mensagens neste turno (teto: ${maxSendsPerTurn}). ` +
+                'NÃO envie mais nada agora — encerre o turno e espere a resposta do lead.',
+            },
+          };
+        }
+        const pedido = opcoesInterativasSchema.safeParse({
+          pergunta,
+          opcoes: opcoes.map((label, i) => ({ id: `o${i + 1}`, label })),
+        });
+        if (!pedido.success) {
+          return {
+            ok: false,
+            error: {
+              code: 'opcoes_invalidas',
+              message:
+                'as opções não formam uma escolha válida: use de 2 a 10 opções, cada uma com até 60 ' +
+                'caracteres e todas DIFERENTES entre si (sem repetir o mesmo texto). Corrija e mande de novo.',
+            },
+          };
+        }
+        // O `body` da cadeia é a pergunta NUMERADA: é o que os gates de conteúdo
+        // (vocabulário interno, repetição, promessa) leem, e é o que sai se a
+        // conexão não desenhar enquete nem lista. Sem ele, opções seriam a forma
+        // de escapar dos guardrails de conteúdo.
+        const corpo = textoDasOpcoes(pedido.data);
+        const sufixoNumerado = corpo.slice(pedido.data.pergunta.trim().length);
+        const chain = await runBeforeSend({
+          pool,
+          log: runLog,
+          tenantId,
+          leadId,
+          jobId: job.id,
+          channelSessionId: input.channelSessionId,
+          body: corpo,
+          optedOutThisTurn,
+          crmDailyLimit: null,
+          now: clock(),
+          sleep: deps.sleep,
+          lgpd,
+          casesEnabled: agentConfig?.casesEnabled ?? false,
+          hasOpenCase:
+            agentConfig?.casesEnabled === true
+              ? await hasOpenCaseForContact(pool, tenantId, input.conversationId)
+              : false,
+          openedCaseThisTurn,
+          // Texto escrito pelo MODELO, como o do send_message: a rede de
+          // vocabulário interno vale aqui também.
+          enforceInternalVocabulary: true,
+          ...(concessaoDoEnvio !== null ? { coordenacao: concessaoDoEnvio } : {}),
+          ...(deps.knobs.disclosureMode !== undefined ? { disclosureMode: deps.knobs.disclosureMode } : {}),
+          send: (finalBody: string) => {
+            seq += 1;
+            // A cadeia pode ter PREFIXADO o corpo (aviso de que é um assistente).
+            // O que vier antes da lista numerada é a pergunta que a enquete mostra.
+            const perguntaFinal = finalBody.endsWith(sufixoNumerado)
+              ? finalBody.slice(0, finalBody.length - sufixoNumerado.length).trim()
+              : pedido.data.pergunta;
+            return channel.send({
+              tenantId,
+              leadId,
+              jobId: job.id,
+              seq,
+              conversationId: input.conversationId,
+              body: finalBody,
+              opcoes: {
+                tipo: formato === 'lista' ? 'list' : 'poll',
+                pergunta: perguntaFinal === '' ? pedido.data.pergunta : perguntaFinal,
+                opcoes: pedido.data.opcoes,
+              },
+            });
+          },
+        });
+
+        if (chain.status === 'vetoed') {
+          const teto = vetoDeTetoDoNumero(chain);
+          if (teto !== null) {
+            tetoVetado ??= teto;
+            vetosDoTurno.push(chain.code);
+            return { ok: false, error: { code: chain.code, message: MENSAGEM_DO_TETO } };
+          }
+          vetosDoTurno.push(chain.code);
+          return { ok: false, error: { code: chain.code, message: chain.message } };
+        }
+        const outcome = chain.outcome;
+        outcomes.push(outcome);
+        if (outcome.kind === 'sent' || outcome.kind === 'already_sent') {
+          return {
+            ok: true,
+            status: 'enviada',
+            message_id: outcome.messageId,
+            message: 'opções enviadas. Encerre o turno e espere a escolha do lead.',
+          };
+        }
+        return { ok: true, status: 'aceita_aguardando_canal' };
+      },
+    }),
     search_knowledge: tool({
       ...AGENT_TOOL_DEFS.search_knowledge,
       execute: async ({ query }) => {
@@ -2921,6 +3050,13 @@ async function executarTurnoDoAgente(
   // não é neutra: gasta contexto e degrada a escolha do modelo.
   if ((agentConfig?.knowledgeSourceIds?.length ?? 0) === 0 && agentConfig?.activeKbVersionId == null) {
     delete rawTools.search_knowledge;
+  }
+
+  // Opções tocáveis são escolha do dono do agente (migration 0236). A tool fica
+  // mesmo em canal que não desenha enquete nem lista: lá ela sai como pergunta
+  // numerada, que ainda é melhor que o modelo improvisar a numeração no texto.
+  if (agentConfig?.interactiveOptionsEnabled !== true) {
+    delete rawTools.send_options;
   }
 
   // A ferramenta de template só entra em canal que EXIGE template fora da janela.

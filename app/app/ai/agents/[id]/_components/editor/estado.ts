@@ -49,6 +49,7 @@ export interface FormState {
   reply_as_audio: boolean;
   reply_as_audio_mirror: boolean;
   human_request_try_first: boolean;
+  interactive_options_enabled: boolean;
   audio_voice: VozDoAgente;
   followup: FollowupValue;
   // Papel OPERADOR (spec 16 §3.2) — o que mexe no sistema depois da conversa.
@@ -120,6 +121,7 @@ export function buildState(args: {
     reply_as_audio: version?.reply_as_audio ?? false,
     reply_as_audio_mirror: version?.reply_as_audio_mirror ?? false,
     human_request_try_first: version?.human_request_try_first ?? false,
+    interactive_options_enabled: version?.interactive_options_enabled ?? true,
     // Voz fora do catálogo (vocabulário aberto no banco) abre na padrão em vez
     // de um Select em branco que o primeiro save trocaria em silêncio.
     // Com serviço, a voz é a do catálogo DELE (`pf_dora`, default da coluna,
@@ -167,6 +169,7 @@ export function toVersionPayload(s: FormState) {
     reply_as_audio: s.reply_as_audio,
     reply_as_audio_mirror: s.reply_as_audio_mirror,
     human_request_try_first: s.human_request_try_first,
+    interactive_options_enabled: s.interactive_options_enabled,
     audio_voice: s.audio_voice,
     followup: s.followup,
     operator_enabled: s.operator_enabled,
