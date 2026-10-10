@@ -33,7 +33,7 @@ function pool(pontos: Record<string, string>) {
   const inserts: unknown[][] = [];
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     if (sql.includes("from ai_purpose_bindings")) {
-      if (sql.includes("exists")) return { rows: [{ ok: params[1] in pontos }] };
+      if (sql.includes("exists")) return { rows: [{ ok: (params[1] as string) in pontos }] };
       const m = pontos[params[1] as string];
       return { rows: m ? [{ provider: "openrouter", model_id: m, credential_id: null }] : [] };
     }
