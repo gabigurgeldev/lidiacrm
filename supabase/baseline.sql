@@ -20601,7 +20601,7 @@ returns table (
 language plpgsql
 security definer
 set search_path to 'public'
-as $
+as $$
 declare
   v_agent record;
   v_version record;
@@ -20713,7 +20713,7 @@ begin
   return query
     select p_agent_id, p_version_id, v_previous_version_id, v_published_at;
 end;
-$;
+$$;
 
 comment on function public.fn_publish_ai_agent_version(uuid, uuid, uuid) is
   'Troca atômica de versão publicada do agente. 0231: credential_id nulo = chave da instalação; a cobertura (chave no .env ou credencial validada do provedor) é conferida em lib/ai/agents/publish.ts antes da chamada.';
@@ -20724,6 +20724,7 @@ comment on function public.fn_publish_ai_agent_version(uuid, uuid, uuid) is
 revoke execute on function public.fn_publish_ai_agent_version(uuid, uuid, uuid) from public, anon;
 revoke execute on function public.fn_publish_ai_agent_version(uuid, uuid, uuid) from authenticated;
 grant execute on function public.fn_publish_ai_agent_version(uuid, uuid, uuid) to service_role;
+
 
 -- ---- playbook plataforma reescrito, só para quem nunca o editou (migration 0233) ----
 -- A camada PLATAFORMA do playbook (lib/agent-engine/playbooks/platform.md) foi
