@@ -10108,6 +10108,10 @@ alter table public.agent_inbox_items
     -- tentativas foram barradas pelas conferências. Antes o turno terminava "ok"
     -- e ninguém sabia. Entra NESTA lista, no fim.
     'turno_sem_resposta',
+    -- (migration 0236) O cliente escolheu uma opção numa enquete e o WhatsApp
+    -- não entregou o voto decifrado: o fluxo/agente esperando a escolha não
+    -- sabe o que ele tocou. Entra NESTA lista, no fim.
+    'escolha_nao_lida',
     'other'
   ));
 

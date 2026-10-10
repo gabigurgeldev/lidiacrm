@@ -115,6 +115,21 @@ export interface InboundMessageEvent {
   text: string | null;
   /** Preenchido quando `type === "contact"` (cartão compartilhado). */
   sharedContact?: SharedContact | null;
+  /**
+   * O cliente TOCOU numa opção: linha de lista interativa (`list_reply`), botão
+   * de resposta (`button_reply`) ou botão de resposta rápida de modelo
+   * (`button`). Nesses casos `type` já vem `text` e `text` é o título tocado —
+   * o CHECK do banco não conhece `interactive`/`button`, e gravá-los era perder
+   * a resposta em silêncio.
+   */
+  respostaInterativa?: {
+    formato: "lista" | "botao";
+    /** O id que NÓS demos à opção (lista/botão interativo) ou o payload do modelo. */
+    id: string | null;
+    titulo: string;
+    /** `wamid` da mensagem respondida (`context.id`). */
+    respondida: string | null;
+  } | null;
   media: {
     id: string;
     /** A Meta manda URL pronta, com `ext=` de expiração — baixe na hora, não guarde. */
@@ -164,6 +179,39 @@ function str(v: unknown): string | null {
 }
 
 /**
+ * O toque numa opção, nas três formas em que a Graph API o entrega:
+ *
+ *   type: "interactive", interactive: { type: "list_reply",   list_reply:   { id, title } }
+ *   type: "interactive", interactive: { type: "button_reply", button_reply: { id, title } }
+ *   type: "button",      button:      { text, payload }   ← resposta rápida de modelo
+ *
+ * e `context.id` é o `wamid` da mensagem respondida. Forma desconhecida → null,
+ * e a mensagem segue o caminho comum.
+ */
+function lerRespostaInterativa(
+  raw: Record<string, unknown>,
+): NonNullable<InboundMessageEvent["respostaInterativa"]> | null {
+  const contexto = raw.context as Record<string, unknown> | undefined;
+  const respondida = str(contexto?.id);
+  if (raw.type === "interactive") {
+    const i = (raw.interactive ?? {}) as Record<string, unknown>;
+    const chave = i.type === "list_reply" ? "list_reply" : i.type === "button_reply" ? "button_reply" : null;
+    if (!chave) return null;
+    const r = (i[chave] ?? {}) as Record<string, unknown>;
+    const titulo = str(r.title);
+    if (!titulo) return null;
+    return { formato: chave === "list_reply" ? "lista" : "botao", id: str(r.id), titulo, respondida };
+  }
+  if (raw.type === "button") {
+    const b = (raw.button ?? {}) as Record<string, unknown>;
+    const titulo = str(b.text);
+    if (!titulo) return null;
+    return { formato: "botao", id: str(b.payload), titulo, respondida };
+  }
+  return null;
+}
+
+/**
  * Extrai os eventos que nos interessam. **Evento desconhecido é IGNORADO, não erro** —
  * a Meta re-entrega tudo que não recebe 2xx, então devolver falha para um evento que
  * não nos interessa vira auto-DDoS: ela re-tenta o mesmo payload em backoff por horas.
@@ -205,9 +253,13 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
 
           const perfil = contatos.find((c) => str(c.wa_id) === from);
           const tipo = str(raw.type) ?? "unknown";
-          const corpoMidia = tipo !== "contacts" ? (raw[tipo] as Record<string, unknown> | undefined) : undefined;
+          const respostaInterativa = lerRespostaInterativa(raw);
+          const corpoMidia =
+            tipo !== "contacts" && !respostaInterativa
+              ? (raw[tipo] as Record<string, unknown> | undefined)
+              : undefined;
           const sharedContact = tipo === "contacts" ? parseMetaInboundContact(raw) : null;
-          const tipoCrm = tipo === "contacts" ? "contact" : tipo;
+          const tipoCrm = respostaInterativa ? "text" : tipo === "contacts" ? "contact" : tipo;
 
           out.push({
             kind: "inbound_message",
@@ -219,11 +271,13 @@ export function parseMetaWebhook(envelope: MetaWebhookEnvelope): MetaWebhookEven
             // A Meta manda epoch em SEGUNDOS, string. Passar direto ao Date daria 1970.
             sentAt: new Date(Number(str(raw.timestamp) ?? "0") * 1000),
             type: tipoCrm,
-            text:
-              tipoCrm === "text"
+            text: respostaInterativa
+              ? respostaInterativa.titulo
+              : tipoCrm === "text"
                 ? str((raw.text as Record<string, unknown>)?.body)
                 : sharedContact?.name ?? null,
             ...(sharedContact ? { sharedContact } : {}),
+            ...(respostaInterativa ? { respostaInterativa } : {}),
             media:
               corpoMidia && str(corpoMidia.id)
                 ? {

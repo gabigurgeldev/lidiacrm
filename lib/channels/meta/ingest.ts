@@ -25,6 +25,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "../archived";
 import { aplicarEfeitosPosEntrada } from "../pos-entrada";
+import { marcarEscolhaNaOrigem, mensagemDeOpcoes, respostaDaEscolha } from "../resposta-interativa";
 import { encontrarContatoPorTelefone } from "../contato-por-telefone";
 import { canonicalPhoneBR, phoneLookupVariants } from "../phone-variants";
 import type { ChannelTenantScope } from "../types";
@@ -165,6 +166,19 @@ export async function ingestMetaInbound(
     return { status: "failed", reason: `conversa: ${erroConversa?.message ?? "sem id"}` };
   }
 
+  // O toque numa opção vira TEXTO com o rótulo completo — lido da pergunta, que
+  // é a fonte de verdade (a Meta devolve o título cortado em 24 caracteres).
+  // Só a lista é nossa; botão de modelo não tem pergunta gravada, e o título
+  // tocado é a resposta.
+  const toque = e.respostaInterativa ?? null;
+  const origem =
+    toque?.formato === "lista" && toque.respondida
+      ? await mensagemDeOpcoes(admin, orgId, { exato: toque.respondida })
+      : null;
+  const escolha = toque
+    ? respostaDaEscolha(toque.formato, origem, { id: toque.id, rotulo: toque.titulo })
+    : null;
+
   const { data: inserida, error: erroInsert } = await admin
     .from("messages")
     .insert({
@@ -178,13 +192,14 @@ export async function ingestMetaInbound(
       status: "delivered",
       // A Meta manda `contacts` (plural); o CHECK do banco espera `contact`.
       type: e.type === "text" ? "text" : e.type,
-      body: e.type === "contact" ? (e.sharedContact?.name ?? e.text) : e.text,
+      body: escolha ? escolha.corpo : e.type === "contact" ? (e.sharedContact?.name ?? e.text) : e.text,
       external_id: e.externalId,
       media_mime: e.media?.mime ?? null,
       sent_at: e.sentAt.toISOString(),
       metadata: {
         ...(e.media ? { meta_media_id: e.media.id, voice: e.media.voice } : {}),
         ...(e.sharedContact ? { shared_contact: e.sharedContact } : {}),
+        ...(escolha ? { resposta_interativa: escolha.resposta } : {}),
       },
     })
     .select("id")
@@ -203,9 +218,16 @@ export async function ingestMetaInbound(
   await admin.rpc("fn_mark_conversation_message" as never, {
     p_conv: conversationId as string,
     p_direction: "inbound",
-    p_preview: previewOf(e),
+    p_preview: escolha ? escolha.corpo.slice(0, 120) : previewOf(e),
     p_at: e.sentAt.toISOString(),
   } as never);
+
+  if (origem && escolha) {
+    await marcarEscolhaNaOrigem(admin, orgId, origem, {
+      opcao_id: escolha.resposta.opcao_id,
+      opcao_label: escolha.resposta.opcao_label,
+    });
+  }
 
   const messageId = (inserida as { id: string } | null)?.id ?? "";
   await aplicarEfeitosPosEntrada(admin, {
@@ -214,7 +236,8 @@ export async function ingestMetaInbound(
     conversationId: conversationId as string,
     messageId: messageId || null,
     channelSessionId: sessao.id,
-    texto: e.text ?? null,
+    // O rótulo completo, não o título cortado: é o que o menu do fluxo casa.
+    texto: escolha?.corpo ?? e.text ?? null,
     nomeDoContato: e.profileName ?? null,
     origem: "meta_webhook",
   });

@@ -101,3 +101,50 @@ drop trigger if exists trg_ai_agent_versions_content_immutable on public.ai_agen
 create trigger trg_ai_agent_versions_content_immutable
   before update on public.ai_agent_versions
   for each row execute function fn_ai_agent_version_content_immutable();
+
+-- ---- a Central aprende escolha_nao_lida ----
+-- O cliente votou numa enquete e o voto chegou sem a opção decifrada (o
+-- transporte avisa com poll.vote.failed). O fluxo ou o agente que esperava a
+-- escolha não sabe o que ele tocou — sem este aviso, a conversa fica parada
+-- até o prazo do menu vencer e ninguém entende por quê.
+--
+-- Bloco ÚNICO da constraint (issue #159): reconstrói a lista inteira, igual ao
+-- apêndice do baseline (que é editado NO bloco único, não apendado).
+alter table public.agent_inbox_items
+  drop constraint if exists agent_inbox_items_kind_check;
+
+alter table public.agent_inbox_items
+  add constraint agent_inbox_items_kind_check check (kind in (
+    'qr_rescan',
+    'job_dead',
+    'event_dead',
+    'budget_exceeded',
+    'handoff',
+    'promotion_review',
+    'judge_unaligned',
+    'followup_dead',
+    'snooze_expired',
+    'next_action_ambiguous',
+    'risk_backlog_seeded',
+    'reactivation_expired',
+    'capabilities_missing',
+    'message_send_stuck',
+    'midia_nao_lida',
+    'channel_template_review',
+    'channel_number_alert',
+    'promise_unfulfilled',
+    'contact_proposal_expired',
+    'budget_warning',
+    'conhecimento_nao_indexado',
+    'disparo_travado',
+    'voz_indisponivel',
+    'integracao_api_falhando',
+    'acao_externa_falhou',
+    'verificacao_bloqueada',
+    'coordenador_preso',
+    'turno_sem_resposta',
+    'escolha_nao_lida',
+    'other'
+  ));
+
+notify pgrst, 'reload schema';

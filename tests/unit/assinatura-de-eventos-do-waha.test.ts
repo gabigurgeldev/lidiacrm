@@ -65,5 +65,13 @@ describe("a assinatura de eventos do canal por QR", () => {
         expect(linha, `sumiu ${e}`).toContain(e);
       }
     });
+
+    it(`${arquivo}: assina os votos de enquete`, () => {
+      // O voto não chega como mensagem: sem estes dois, a enquete mandada pelo
+      // menu do fluxo ou pelo agente fica sem resposta para sempre.
+      const eventos = (linha.split('"')[1] ?? "").split(",").map((e) => e.trim());
+      expect(eventos).toContain("poll.vote");
+      expect(eventos).toContain("poll.vote.failed");
+    });
   }
 });

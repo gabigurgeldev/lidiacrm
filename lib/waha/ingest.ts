@@ -24,6 +24,13 @@ import { ackToStatus } from "@/lib/types/messaging";
 import type { WahaEnvelope, WahaPayload } from "@/lib/waha/envelope";
 import { bareWaMessageId, chatIdFromWaMessageId } from "@/lib/waha/message-id";
 import { logger } from "@/lib/logger";
+import {
+  avisarEscolhaNaoLida,
+  marcarEscolhaNaOrigem,
+  mensagemDeOpcoes,
+  respostaDaEscolha,
+} from "@/lib/channels/resposta-interativa";
+import { lerSelecaoDeLista, lerVotoDeEnquete } from "@/lib/waha/resposta-interativa";
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -480,50 +487,100 @@ async function mensagemIngeridaPorExternalId(
   return data ?? null;
 }
 
+/**
+ * Uma entrada que NÃO veio como mensagem comum — o voto de uma enquete — e cujo
+ * destino já é conhecido pela pergunta que ela responde. Pula a resolução de
+ * contato pelo `from`: o voto pode chegar por um identificador opaco que não
+ * casa com o contato da conversa, e criar um contato novo por isso partiria a
+ * resposta para longe da pergunta.
+ */
+interface EntradaConhecida {
+  contactId: string;
+  conversationId: string;
+  metadata: Record<string, unknown>;
+}
+
 async function handleInbound(
   admin: Admin,
   session: Session,
   p: WahaPayload,
   requestId: string,
+  conhecida?: EntradaConhecida,
 ): Promise<void> {
-  const chatId = p.from ?? "";
-  const parsed = parseChatId(chatId);
-  if (parsed.kind === "group") return; // grupos não fazem binding CRM
   if (!p.id) return;
   // WAHA emite eventos vazios p/ status/read-receipt/presence — não viram mensagem.
-  const texto = bodyOf(p);
-  if (!texto && !mediaUrlOf(p) && !p.hasMedia) return;
-  // Daqui para baixo era para ser uma mensagem de verdade: se o chat não é
-  // endereçável, PERDEMOS uma — e isso precisa ser contável. O aviso fica depois
-  // das guardas acima de propósito; antes delas, todo evento de presença viraria
-  // um registro, e log que enche sozinho é log que ninguém lê.
-  if (!ehEnderecavel(parsed)) {
-    await avisarChatNaoReconhecido(admin, session.organization_id, session.id, chatId, "inbound");
-    return;
+  let texto = bodyOf(p);
+  let metadataExtra: Record<string, unknown> = conhecida?.metadata ?? {};
+
+  let contactId: string;
+  let conversationId: string;
+  if (conhecida) {
+    if (!texto) return;
+    contactId = conhecida.contactId;
+    conversationId = conhecida.conversationId;
+  } else {
+    const chatId = p.from ?? "";
+    const parsed = parseChatId(chatId);
+    if (parsed.kind === "group") return; // grupos não fazem binding CRM
+
+    // Seleção numa LISTA nossa: o corpo pode vir vazio ou com o título cortado.
+    // Antes da guarda de vazio, senão a escolha some como "evento sem conteúdo".
+    const selecao = lerSelecaoDeLista(p._data?.message);
+    if (selecao) {
+      const origem = selecao.idDaLista
+        ? await mensagemDeOpcoes(admin, session.organization_id, { sufixo: bareWaMessageId(selecao.idDaLista) })
+        : null;
+      const resposta = respostaDaEscolha("lista", origem, {
+        id: selecao.idDaLinha,
+        rotulo: selecao.titulo ?? texto,
+      });
+      if (resposta) {
+        texto = resposta.corpo;
+        metadataExtra = { resposta_interativa: resposta.resposta };
+        if (origem) {
+          await marcarEscolhaNaOrigem(admin, session.organization_id, origem, {
+            opcao_id: resposta.resposta.opcao_id,
+            opcao_label: resposta.resposta.opcao_label,
+          });
+        }
+      }
+    }
+
+    if (!texto && !mediaUrlOf(p) && !p.hasMedia) return;
+    // Daqui para baixo era para ser uma mensagem de verdade: se o chat não é
+    // endereçável, PERDEMOS uma — e isso precisa ser contável. O aviso fica depois
+    // das guardas acima de propósito; antes delas, todo evento de presença viraria
+    // um registro, e log que enche sozinho é log que ninguém lê.
+    if (!ehEnderecavel(parsed)) {
+      await avisarChatNaoReconhecido(admin, session.organization_id, session.id, chatId, "inbound");
+      return;
+    }
+
+    const contato = await upsertContact(
+      admin,
+      session.organization_id,
+      parsed,
+      chatId,
+      notifyNameOf(p),
+      telefoneAlternativoDe(p),
+    );
+    if (!contato) return;
+    contactId = contato;
+
+    // Best-effort: o dado do anúncio (se houver) vai embutido na PRÓPRIA
+    // mensagem que o app do cliente manda ao clicar num anúncio "Clique para o
+    // WhatsApp" — não é exclusivo da API oficial. NUNCA verificado contra um
+    // clique real nesta instalação (ver cabeçalho de `atribuicao-de-anuncio.ts`);
+    // por isso é silencioso quando não reconhece a forma, nunca derruba o
+    // inbound. `estamparAtribuicaoDoContato` só grava na primeira vez — se o
+    // contato já tem atribuição, o UPDATE casa zero linhas.
+    const atribuicao = extrairAtribuicaoWaha(p._data?.message);
+    if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
+
+    const conversa = await upsertConversation(admin, session.organization_id, contactId, session.id);
+    if (!conversa) return;
+    conversationId = conversa;
   }
-
-  const contactId = await upsertContact(
-    admin,
-    session.organization_id,
-    parsed,
-    chatId,
-    notifyNameOf(p),
-    telefoneAlternativoDe(p),
-  );
-  if (!contactId) return;
-
-  // Best-effort: o dado do anúncio (se houver) vai embutido na PRÓPRIA
-  // mensagem que o app do cliente manda ao clicar num anúncio "Clique para o
-  // WhatsApp" — não é exclusivo da API oficial. NUNCA verificado contra um
-  // clique real nesta instalação (ver cabeçalho de `atribuicao-de-anuncio.ts`);
-  // por isso é silencioso quando não reconhece a forma, nunca derruba o
-  // inbound. `estamparAtribuicaoDoContato` só grava na primeira vez — se o
-  // contato já tem atribuição, o UPDATE casa zero linhas.
-  const atribuicao = extrairAtribuicaoWaha(p._data?.message);
-  if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
-
-  const conversationId = await upsertConversation(admin, session.organization_id, contactId, session.id);
-  if (!conversationId) return;
 
   const now = new Date().toISOString();
   const { data: insertedMessage, error: insertErr } = await admin
@@ -544,7 +601,7 @@ async function handleInbound(
       sent_via: "external_device",
       sent_at: p.timestamp ? new Date(p.timestamp * 1000).toISOString() : now,
       delivered_at: now,
-      metadata: { raw_type: p.type, ack_name: p.ackName },
+      metadata: { raw_type: p.type, ack_name: p.ackName, ...metadataExtra },
     })
     .select("id")
     .maybeSingle();
@@ -588,7 +645,10 @@ async function handleInbound(
     return;
   }
 
-  await markConversation(admin, session.organization_id, conversationId, "inbound", previewFromMessage(p), now);
+  // A escolha numa enquete/lista mostra o RÓTULO na prévia — o corpo cru do
+  // evento é vazio ou o título cortado.
+  const previa = "resposta_interativa" in metadataExtra ? (texto ?? "") : previewFromMessage(p);
+  await markConversation(admin, session.organization_id, conversationId, "inbound", previa, now);
 
   await audit({
     action: "message.received",
@@ -942,6 +1002,83 @@ async function handleMessageRevoked(
 }
 
 /**
+ * O cliente votou numa enquete NOSSA.
+ *
+ * O voto vira uma mensagem de ENTRADA comum (`text`, rótulo no corpo), gravada
+ * na conversa da PERGUNTA — não na de quem o `from` apontaria, que pode ser um
+ * identificador opaco sem contato. É o que acorda o menu do fluxo e dá ao agente
+ * a resposta para ler, sem que nenhum dos dois saiba que houve um toque.
+ *
+ * O id da entrada é o id do VOTO: trocar de opção gera voto novo (e mensagem
+ * nova, o menu já acordado ignora); o mesmo voto reentregue cai no 23505.
+ */
+async function handlePollVote(
+  admin: Admin,
+  session: Session,
+  payload: WahaPayload,
+  requestId: string,
+): Promise<void> {
+  const voto = lerVotoDeEnquete(payload as Record<string, unknown>);
+  // Voto do próprio número (o operador votando no celular) não é resposta do
+  // cliente; voto em grupo está fora do binding do CRM, como toda mensagem de grupo.
+  if (!voto || voto.doProprioNumero || voto.emGrupo) return;
+  // Sem opção votada = a pessoa retirou o voto. Não há o que responder.
+  const rotulo = voto.opcoesVotadas[0];
+  if (rotulo === undefined) return;
+
+  const origem = await mensagemDeOpcoes(admin, session.organization_id, { sufixo: bareWaMessageId(voto.idDaEnquete) });
+  if (!origem) {
+    // Enquete que não é nossa (mandada pelo celular) ou de antes desta versão:
+    // sem a pergunta não há conversa certa onde gravar — e gravar na errada é
+    // pior que não gravar.
+    logger.info("waha.ingest: voto de enquete sem a pergunta de origem", {
+      organization_id: session.organization_id,
+      poll_id: voto.idDaEnquete,
+    });
+    return;
+  }
+  const resposta = respostaDaEscolha("enquete", origem, { rotulo });
+  if (!resposta) return;
+
+  await handleInbound(
+    admin,
+    session,
+    {
+      id: voto.idDoVoto ?? `poll_vote_${bareWaMessageId(voto.idDaEnquete)}_${voto.timestamp ?? Date.now()}`,
+      from: voto.de ?? undefined,
+      body: resposta.corpo,
+      ...(voto.timestamp !== null ? { timestamp: voto.timestamp } : {}),
+    } as WahaPayload,
+    requestId,
+    {
+      contactId: origem.contact_id,
+      conversationId: origem.conversation_id,
+      metadata: { resposta_interativa: resposta.resposta },
+    },
+  );
+  await marcarEscolhaNaOrigem(admin, session.organization_id, origem, {
+    opcao_id: resposta.resposta.opcao_id,
+    opcao_label: resposta.resposta.opcao_label,
+  });
+}
+
+/**
+ * O transporte recebeu um voto e não conseguiu decifrá-lo. Ninguém sabe o que
+ * o cliente tocou — e quem esperava a escolha segue esperando. Vai à Central.
+ */
+async function handlePollVoteFailed(admin: Admin, session: Session, payload: WahaPayload): Promise<void> {
+  const voto = lerVotoDeEnquete(payload as Record<string, unknown>);
+  if (!voto || voto.doProprioNumero || voto.emGrupo) return;
+  const origem = await mensagemDeOpcoes(admin, session.organization_id, { sufixo: bareWaMessageId(voto.idDaEnquete) });
+  if (!origem) return;
+  logger.warn("waha.ingest: voto de enquete não decifrado", {
+    organization_id: session.organization_id,
+    message_id: origem.id,
+  });
+  await avisarEscolhaNaoLida(admin, session.organization_id, origem.conversation_id);
+}
+
+/**
  * Roteador único de eventos WAHA. Os dois route handlers convergem aqui após
  * resolver a sessão e validar HMAC.
  */
@@ -966,6 +1103,10 @@ export async function dispatchWahaEvent(
     await handleMessageEdited(admin, session, payload);
   } else if (eventType === "message.revoked") {
     await handleMessageRevoked(admin, session, payload);
+  } else if (eventType === "poll.vote") {
+    await handlePollVote(admin, session, payload, requestId);
+  } else if (eventType === "poll.vote.failed") {
+    await handlePollVoteFailed(admin, session, payload);
   } else if (eventType === "session.status" || eventType === "state.change") {
     await handleSessionStatus(admin, session, payload);
   }

@@ -84,6 +84,9 @@ export type InboxKind =
   // (migration 0231) O agente terminou um turno de resposta sem enviar nada ao
   // cliente — nem depois de ser cobrado, ou com todas as tentativas barradas.
   | 'turno_sem_resposta'
+  // (migration 0236) O cliente votou numa enquete e o voto chegou sem a opção
+  // decifrada — quem esperava a escolha não sabe o que ele tocou.
+  | 'escolha_nao_lida'
   | 'other';
 
 export interface InboxItemRow {

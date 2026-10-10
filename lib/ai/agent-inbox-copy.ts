@@ -77,6 +77,8 @@ export const KIND_LABEL = {
   coordenador_preso: "Uma conversa ficou sem quem a conduza e precisa de alguém da equipe",
   // (migration 0231) Diz o que o CLIENTE vive: escreveu e ficou sem resposta.
   turno_sem_resposta: "Um cliente ficou sem resposta do agente",
+  // (migration 0236) Diz o que o CLIENTE fez: tocou numa opção, e ninguém leu.
+  escolha_nao_lida: "Um cliente escolheu uma opção que não conseguimos ler",
   other: "Aviso do assistente",
 } as const satisfies Record<InboxKind, string>;
 
