@@ -30,7 +30,18 @@ import {
   parseDialablePhone,
   phoneToWhatsappId,
 } from "@/lib/messaging/contact-card";
-import type { ListMessagesQuery, SendMessageInput } from "@/lib/schemas";
+import {
+  ehTipoComOpcoes,
+  type ListMessagesQuery,
+  type OpcoesInterativas,
+  type SendMessageInput,
+} from "@/lib/schemas";
+import {
+  formatoDasOpcoes,
+  formatoDoTipo,
+  textoDasOpcoes,
+  tipoDoFormato,
+} from "@/lib/channels/opcoes-interativas";
 import { sendTemplateForSession } from "@/lib/channels/meta/send-template-for-session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Message } from "@/lib/types/messaging";
@@ -443,6 +454,47 @@ export async function sendMessageHandler(
     }
   }
 
+  // ─── OPÇÕES TOCÁVEIS: quem pediu não sabe o que o canal desenha ───────────
+  //
+  // `poll`/`list` é um PEDIDO. O que sai é decidido aqui, pela capability da
+  // SESSÃO: o formato pedido, o outro interativo, ou texto numerado — o piso que
+  // todo canal entrega. Decidido ANTES do insert porque o tipo gravado tem de ser
+  // o que o contato viu (a mesma razão do `template` na 0091): uma linha `poll`
+  // que saiu como texto mentiria para a tela e para quem procura o voto.
+  //
+  // O corpo é a pergunta com as opções numeradas, nos três desfechos: é o que a
+  // prévia, a busca e a cascata da LGPD enxergam — e, no rebaixamento, é
+  // literalmente a mensagem.
+  let tipoEfetivo: SendMessageInput["type"] = input.type;
+  let corpoEfetivo: string | null = input.body ?? null;
+  let opcoesDoEnvio: OpcoesInterativas | null = null;
+  let metadataDasOpcoes: Record<string, unknown> = {};
+  if (ehTipoComOpcoes(input.type) && input.opcoes) {
+    const pedido = formatoDoTipo(input.type);
+    const formato = formatoDasOpcoes(
+      capabilitiesOfSession({
+        provider: c.channel_sessions?.provider ?? DEFAULT_CHANNEL_PROVIDER,
+        mode: (c.channel_sessions as { provider_mode?: string | null } | null)?.provider_mode,
+      }),
+      pedido,
+      { grupo: c.is_group, quantidade: input.opcoes.opcoes.length },
+    );
+    corpoEfetivo = textoDasOpcoes(input.opcoes);
+    if (formato === "texto") {
+      tipoEfetivo = "text";
+      // Procedência, não instrução: a resposta chega digitada ("2") e quem casa
+      // é o menu/agente. Fica para a tela e o diagnóstico saberem que houve
+      // pedido de enquete/lista e por que saiu texto.
+      metadataDasOpcoes = { opcoes_em_texto: { pedido, ...input.opcoes } };
+    } else {
+      tipoEfetivo = tipoDoFormato(formato);
+      opcoesDoEnvio = input.opcoes;
+      // A fonte de verdade para traduzir o voto/seleção de volta no rótulo
+      // completo — o canal devolve o título cortado ou só o id.
+      metadataDasOpcoes = { opcoes: { formato, ...input.opcoes } };
+    }
+  }
+
   const now = new Date().toISOString();
   // ─── A CITAÇÃO, e a checagem que ela obriga ────────────────────────────────
   //
@@ -484,10 +536,10 @@ export async function sendMessageHandler(
     conversation_id: c.id,
     channel_session_id: c.channel_session_id,
     contact_id: c.contact_id,
-    type: input.type,
+    type: tipoEfetivo,
     direction: "outbound" as const,
     status: "queued",
-    body: input.body ?? null,
+    body: corpoEfetivo,
     media_url: input.media_url ?? null,
     media_mime: mimeDaMidia,
     media_storage_path: input.media_storage_path ?? null,
@@ -499,6 +551,7 @@ export async function sendMessageHandler(
       ...(input.metadata ?? {}),
       ...(ctx.actor.type === "ai_agent" ? { ai_actor_id: ctx.actor.id } : {}),
       ...(midiaCompartilhada ? { midia_do_disparo: midiaCompartilhada.path } : {}),
+      ...metadataDasOpcoes,
     },
   };
 
@@ -713,6 +766,16 @@ export async function sendMessageHandler(
           // cópia guardada no envio, que poderia divergir da linha.
           replyToExternalId: citada?.external_id ?? null,
         }));
+      } else if (opcoesDoEnvio !== null && ehTipoComOpcoes(tipoEfetivo)) {
+        ({ externalId } = await adapter.send({
+          organizationId: ctx.organization_id,
+          sessionRef: resolveSessionRef(c.channel_sessions),
+          to: chatId,
+          providerConversationId: c.provider_conversation_id,
+          kind: tipoEfetivo,
+          body: corpoEfetivo ?? "",
+          opcoes: opcoesDoEnvio,
+        }));
       } else if (input.type === "contact") {
         const sc = outboundMetadata.shared_contact as
           | { name: string; phone_number: string }
@@ -747,8 +810,10 @@ export async function sendMessageHandler(
           sessionRef: resolveSessionRef(c.channel_sessions),
           to: chatId,
           providerConversationId: c.provider_conversation_id,
-          kind: input.type,
-          body: input.body ?? "",
+          kind: tipoEfetivo,
+          // `corpoEfetivo` e não `input.body`: no rebaixamento de opções para
+          // texto, o pedido não traz corpo — a mensagem É a pergunta numerada.
+          body: corpoEfetivo ?? "",
           replyToExternalId: citada?.external_id ?? null,
         }));
       }
@@ -832,7 +897,7 @@ export async function sendMessageHandler(
     last_outbound_at: now,
     last_message_at: now,
     last_message_preview: previewFrom({
-      body: input.body,
+      body: corpoEfetivo ?? undefined,
       media_url: input.media_url,
       media_storage_path: input.media_storage_path,
       type: input.type,

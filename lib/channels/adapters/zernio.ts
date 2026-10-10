@@ -165,6 +165,12 @@ export const zernioAdapter: ChannelAdapter = {
     if (envelope.kind === "contact") {
       throw new Error("zernio_contact_not_supported: envio de cartão de contato não suportado neste canal.");
     }
+    if (envelope.kind === "poll" || envelope.kind === "list") {
+      // A capability deste canal é `false` nos dois formatos, então o handler
+      // já rebaixou para texto antes de chegar aqui. Chegar é bug de quem
+      // chamou — falhar com nome é melhor que mandar só a pergunta, sem opções.
+      throw new Error("zernio_opcoes_not_supported: enquete/lista não suportadas neste canal.");
+    }
     const admin = createAdminClient();
     const creds = await resolveZernioCreds(admin, {
       organizationId: envelope.organizationId,

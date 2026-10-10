@@ -9,6 +9,7 @@ import { wahaContactPayload } from "@/lib/waha/contact-card";
 import { fetchWahaMedia } from "@/lib/messaging/media/waha-source";
 import { getWahaClient } from "@/lib/waha/client";
 import { wahaSendPlanFor } from "@/lib/waha/media-send";
+import { wahaListPayload, wahaPollPayload } from "@/lib/waha/opcoes";
 import {
   resolveCanonicalCusChatId,
   resolveWhatsappIdForContactCard,
@@ -198,6 +199,13 @@ export const wahaAdapter: ChannelAdapter = {
         resolvedId ?? envelope.contact.whatsappId,
       );
       res = await client.sendContactVcard(envelope.sessionRef, to, [contact]);
+    } else if ((envelope.kind === "poll" || envelope.kind === "list") && envelope.opcoes) {
+      // O formato já foi decidido pela capability (`formatoDasOpcoes`); aqui só
+      // se traduz. Sem citação, como contato e mídia: `reply_to` é do sendText.
+      res =
+        envelope.kind === "poll"
+          ? await client.sendOpcoes(envelope.sessionRef, to, "sendPoll", wahaPollPayload(envelope.opcoes))
+          : await client.sendOpcoes(envelope.sessionRef, to, "sendList", wahaListPayload(envelope.opcoes));
     } else if (envelope.media) {
       res = await client.sendMedia(
         envelope.sessionRef,

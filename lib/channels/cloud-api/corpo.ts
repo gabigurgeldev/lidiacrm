@@ -18,7 +18,43 @@
  * primeira vez que um dos lados ganhasse um tipo de mídia.
  */
 import { metaContactsPayload } from "@/lib/channels/meta/contact-card";
+import { BOTAO_PADRAO_DA_LISTA, cortar, linhaDeLista } from "../opcoes-interativas";
 import type { OutboundEnvelope } from "../types";
+
+/**
+ * `kind: "list"` → lista interativa da Cloud API.
+ *
+ * Só lista: a Graph API não tem enquete, e a capability já rebaixou o pedido
+ * antes de chegar aqui. Limites da Meta (recusa com 400 acima deles): corpo
+ * 1024, botão 20, título de seção e de linha 24, descrição de linha 72.
+ */
+function corpoDeLista(env: OutboundEnvelope): Record<string, unknown> | null {
+  if (env.kind !== "list" || !env.opcoes) return null;
+  return {
+    type: "interactive",
+    interactive: {
+      type: "list",
+      body: { text: cortar(env.opcoes.pergunta, 1024) },
+      action: {
+        button: cortar(env.opcoes.botao ?? BOTAO_PADRAO_DA_LISTA, 20),
+        sections: [
+          {
+            title: "Opções",
+            rows: env.opcoes.opcoes.map((o) => {
+              const linha = linhaDeLista(o, { titulo: 24, descricao: 72 });
+              // `id` é o NOSSO id da opção — volta em `list_reply.id`.
+              return {
+                id: linha.id,
+                title: linha.titulo,
+                ...(linha.descricao ? { description: linha.descricao } : {}),
+              };
+            }),
+          },
+        ],
+      },
+    },
+  };
+}
 
 /** `kind: "contact"` → objeto `contacts` da Cloud API. */
 function corpoDeContato(env: OutboundEnvelope): Record<string, unknown> | null {
@@ -62,6 +98,8 @@ function corpoDeMidia(env: OutboundEnvelope): Record<string, unknown> | null {
  */
 export function corpoCloudApi(env: OutboundEnvelope): Record<string, unknown> {
   return (
-    corpoDeContato(env) ?? corpoDeMidia(env) ?? { type: "text", text: { body: env.body ?? "" } }
+    corpoDeContato(env) ??
+    corpoDeLista(env) ??
+    corpoDeMidia(env) ?? { type: "text", text: { body: env.body ?? "" } }
   );
 }

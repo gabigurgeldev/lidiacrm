@@ -378,6 +378,11 @@ export const stevoAdapter: ChannelAdapter = {
         "stevo_contact_not_supported: envio de cartão de contato não suportado neste canal.",
       );
     }
+    if (envelope.kind === "poll" || envelope.kind === "list") {
+      // Capability `false` nas duas modalidades (transporte não medido): o
+      // handler rebaixa para texto antes. Chegar aqui é bug de quem chamou.
+      throw new Error("stevo_opcoes_not_supported: enquete/lista não suportadas neste canal.");
+    }
 
     const admin = createAdminClient();
     // UMA consulta decide o transporte: as duas credenciais moram na mesma

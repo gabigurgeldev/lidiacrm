@@ -413,6 +413,31 @@ export class WahaClient {
     return res.json();
   }
 
+  /**
+   * Enquete (`sendPoll`) ou lista (`sendList`). Corpo montado em
+   * `lib/waha/opcoes.ts`. Erro carrega o corpo da resposta: o transporte devolve
+   * 400 com o motivo quando um limite da plataforma é estourado, e "waha_400"
+   * sozinho não diz qual.
+   */
+  async sendOpcoes(
+    session: string,
+    chatId: string,
+    endpoint: "sendPoll" | "sendList",
+    payload: Record<string, unknown>,
+  ): Promise<unknown> {
+    const res = await fetch(`${this.baseUrl}/api/${endpoint}`, {
+      signal: AbortSignal.timeout(60_000),
+      method: "POST",
+      headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ session, chatId, ...payload }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`waha_${res.status}: ${body.slice(0, 200)}`);
+    }
+    return res.json();
+  }
+
   async sendMedia(
     session: string,
     chatId: string,

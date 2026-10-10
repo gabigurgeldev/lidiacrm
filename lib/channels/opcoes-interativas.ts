@@ -80,6 +80,37 @@ export function textoDasOpcoes(o: Pick<OpcoesInterativas, "pergunta" | "opcoes">
   return `${o.pergunta.trim()}\n\n${listaNumerada(o.opcoes.map((x) => x.label))}`;
 }
 
+/**
+ * Corta para caber num limite da plataforma, com reticências. Corta por
+ * caractere visível (code point), não por unidade UTF-16: cortar no meio de um
+ * emoji deixaria um caractere quebrado no aparelho do cliente.
+ */
+export function cortar(texto: string, max: number): string {
+  const chars = Array.from(texto.trim());
+  if (chars.length <= max) return chars.join("");
+  return `${chars.slice(0, Math.max(0, max - 1)).join("").trimEnd()}…`;
+}
+
+/**
+ * Uma linha de lista: título curto e, quando o rótulo não coube, o rótulo
+ * inteiro na descrição — a pessoa lê tudo, e a seleção volta pelo `id`, que
+ * não depende do corte.
+ */
+export function linhaDeLista(
+  opcao: OpcaoInterativa,
+  limites: { titulo: number; descricao: number },
+): { id: string; titulo: string; descricao: string | null } {
+  const titulo = cortar(opcao.label, limites.titulo);
+  return {
+    id: opcao.id,
+    titulo,
+    descricao: titulo === opcao.label.trim() ? null : cortar(opcao.label, limites.descricao),
+  };
+}
+
+/** Texto padrão do botão que abre a lista, quando quem pediu não deu um. */
+export const BOTAO_PADRAO_DA_LISTA = "Ver opções";
+
 /** Sem acento e sem caixa — a mesma regra do menu do fluxo. */
 export function normalizarRotulo(texto: string): string {
   return texto
