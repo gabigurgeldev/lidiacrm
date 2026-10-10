@@ -141,7 +141,8 @@ describe("cobertura do e2e no CI", () => {
     expect(yml, "SPECS_PARTE_1 não alimenta a variável que roda").toMatch(/LISTA="\$SPECS_PARTE_1"/);
     expect(yml, "SPECS_PARTE_2 não alimenta a variável que roda").toMatch(/LISTA="\$SPECS_PARTE_2"/);
     expect(yml, "a lista escolhida não é passada ao Playwright").toMatch(
-      /playwright test --workers=1 \$LISTA/,
+      // Flags de relatório entre os dois são livres; `--workers=1` e `$LISTA`, não.
+      /playwright test --workers=1(?: --[\w=,-]+)* \$LISTA/,
     );
     // E FORA_DO_CI nunca é passada a um run — ela existe para NÃO rodar.
     expect(yml).not.toMatch(/playwright test[^\n]*\$FORA_DO_CI/);

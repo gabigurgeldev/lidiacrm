@@ -669,7 +669,13 @@ jobs:
           # o playwright rodar a suíte INTEIRA (ou nenhuma) e o job ficaria
           # verde medindo outra coisa.
           [ -n "$LISTA" ] || { echo "::error::lista da parte ${{ matrix.parte }} vazia"; exit 1; }
-          pnpm exec playwright test --workers=1 $LISTA
+          # `--reporter=list`: uma linha por teste, com nome, resultado e
+          # duração, escrita NA HORA. O padrão no CI é `dot` (um símbolo por
+          # teste, nomes só no resumo final) — e o job cancelado pelo teto de
+          # 30 min morre antes do resumo. Medido em 2026-10-09: as duas partes
+          # cancelando com dezenas de `F` e `T` no log, e nenhum nome de spec.
+          # `github` soma as anotações de falha no resumo do run.
+          pnpm exec playwright test --workers=1 --reporter=list,github $LISTA
         env:
           # Só o que NÃO vem do `.env.e2e`: isto é ajuste de CI, não config do
           # produto. CI = 1 IP para todos os specs, e o teto de produção
@@ -679,8 +685,11 @@ jobs:
           # ver o comentário do passo de build: vazio NÃO desliga.
           SENTRY_DSN: "off"
 
+      # `cancelled()` também: o teto de 30 min CANCELA o job, e cancelado não é
+      # `failure()` — era justamente no run que estourou o tempo que os traces
+      # das specs vermelhas sumiam.
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: failure() || cancelled()
         with:
           name: playwright-report-parte-${{ matrix.parte }}
           path: |

@@ -25,7 +25,7 @@ import * as path from "node:path";
 
 import { test, expect, type Page } from "@playwright/test";
 
-import { generateTotp, msUntilNextTotpWindow } from "./utils/totp";
+import { codigoInedito, esperarProximaJanela } from "./utils/totp-inedito";
 
 const CREDS_PATH = path.join(process.cwd(), ".e2e-creds.json");
 const EVIDENCIA = path.join(process.cwd(), "evidence", "admin-gestao-usuarios");
@@ -69,9 +69,11 @@ async function loginComTotp(page: Page, email: string, secret: string): Promise<
   const recusa = page.locator("form").getByRole("alert");
 
   for (let tentativa = 0; tentativa < 2; tentativa++) {
-    if (msUntilNextTotpWindow() < 3_000) await page.waitForTimeout(msUntilNextTotpWindow() + 200);
+    await digito1.waitFor({ state: "visible", timeout: 15_000 });
+    // Código inédito em TODA a suíte (o GoTrue recusa replay) — ver utils/totp-inedito.ts.
+    const codigo = await codigoInedito(page, secret);
     await digito1.click({ timeout: 15_000 });
-    await page.keyboard.type(generateTotp(secret), { delay: 40 });
+    await page.keyboard.type(codigo, { delay: 40 });
     const desfecho = await Promise.race([
       page.waitForURL(/\/app\//, { timeout: 60_000 }).then(
         () => "entrou" as const,
@@ -86,7 +88,7 @@ async function loginComTotp(page: Page, email: string, secret: string): Promise<
     if (desfecho === "sem-desfecho") {
       throw new Error(`o desafio de MFA de ${email} não terminou em 60s (url=${page.url()})`);
     }
-    await page.waitForTimeout(msUntilNextTotpWindow() + 200);
+    await esperarProximaJanela(page);
   }
   throw new Error(`MFA falhou depois de 2 tentativas para ${email} (url=${page.url()})`);
 }

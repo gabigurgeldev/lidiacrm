@@ -56,7 +56,7 @@ test("criar conta: cadastro → e-mail de confirmação → CRM → re-login", a
   await context.clearCookies();
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Senha").fill(password);
+  await page.getByLabel("Senha", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Entrar" }).click();
   await page.waitForURL(/\/app\//, { timeout: 30_000 });
   await expect(page).not.toHaveURL(/\/(login|onboarding)/);

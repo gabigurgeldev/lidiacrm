@@ -126,7 +126,7 @@ test("marcar um horário pela tela e vê-lo aparecer na grade — sem recarregar
 
   await page.goto("/login");
   await page.getByLabel(/e-?mail/i).fill(usuario.email);
-  await page.getByLabel(/senha/i).fill(creds.password);
+  await page.getByLabel("Senha", { exact: true }).fill(creds.password);
   await page.getByRole("button", { name: /entrar/i }).click();
   await page.waitForURL(/\/app(\/|$)/, { timeout: 20_000 });
 

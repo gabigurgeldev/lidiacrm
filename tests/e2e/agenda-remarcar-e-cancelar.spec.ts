@@ -76,7 +76,7 @@ async function entrar(page: import("@playwright/test").Page, creds: Creds): Prom
   if (!usuario) throw new Error(".e2e-creds.json sem o usuário `manager`");
   await page.goto("/login");
   await page.getByLabel(/e-?mail/i).fill(usuario.email);
-  await page.getByLabel(/senha/i).fill(creds.password);
+  await page.getByLabel("Senha", { exact: true }).fill(creds.password);
   await page.getByRole("button", { name: /entrar/i }).click();
   await page.waitForURL(/\/app(\/|$)/, { timeout: 20_000 });
   await page.goto("/app/agenda");

@@ -83,6 +83,24 @@ async function main(): Promise<void> {
     id = (data as { id: string }).id;
   }
 
+  // Janela de envio ABERTA o dia todo neste número. O padrão é 7h–22h no fuso
+  // da organização, e o CI roda a qualquer hora: à noite, toda automação que
+  // manda mensagem fica "Aguardando envio" (a janela adia, não tenta) e
+  // `automacao-diz-a-verdade` — que precisa da tentativa de envio falhar — via
+  // um desfecho que só depende do relógio. Medido em 2026-10-09, 22h no Brasil.
+  // A janela em si é coberta por testes de unidade do motor de ritmo.
+  const { error: erroDaJanela } = await admin.from("channel_knobs").upsert(
+    {
+      organization_id: orgId,
+      channel_session_id: id,
+      window_start_hour: 0,
+      window_end_hour: 24,
+      allow_sunday: true,
+    } as never,
+    { onConflict: "organization_id,channel_session_id" },
+  );
+  if (erroDaJanela) throw new Error(`upsert channel_knobs: ${erroDaJanela.message}`);
+
   creds.numero_conectado = { channel_session_id: id };
   fs.writeFileSync(CREDS_PATH, JSON.stringify(creds, null, 2));
   console.log(`[seed] número conectado (WORKING): ${id}`);
