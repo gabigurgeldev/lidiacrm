@@ -4873,7 +4873,6 @@ export const DICIONARIO: Traducoes = {
   "Fluxo ativado pela equipe": { es: "Flujo activado por el equipo" },
   "buscar modelo (ex.: router, haiku, gpt)": { es: "buscar modelo (ej.: router, haiku, gpt)" },
   "Roteadores (escolhem o modelo sozinhos)": { es: "Enrutadores (eligen el modelo solos)" },
-  "Modelos": { es: "Modelos" },
   "Nenhum modelo com esse nome.": { es: "Ningún modelo con ese nombre." },
   "Modelo de decisão": { es: "Modelo de decisión" },
   "O modelo que escolhe quem conduz quando as regras não bastam. Na OpenRouter, os roteadores (como jev-router e auto) aparecem no topo da lista.": { es: "El modelo que elige quién conduce cuando las reglas no bastan. En OpenRouter, los enrutadores (como jev-router y auto) aparecen al inicio de la lista." },
