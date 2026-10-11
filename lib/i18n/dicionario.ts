@@ -4822,6 +4822,9 @@ export const DICIONARIO: Traducoes = {
   "Janela (minutos)": { es: "Ventana (minutos)" },
   "Consultas ao modelo por hora, por conversa": { es: "Consultas al modelo por hora, por conversación" },
   "Prazo de uma tarefa chamada (horas)": { es: "Plazo de una tarea llamada (horas)" },
+  "Cliente que volta depois de (horas) é atendimento novo — 0 desliga": {
+    es: "Cliente que vuelve después de (horas) es una atención nueva — 0 la desactiva",
+  },
   "Há mudanças não publicadas.": { es: "Hay cambios sin publicar." },
   "Nada a publicar.": { es: "Nada para publicar." },
   "Só administradores publicam.": { es: "Solo los administradores publican." },
@@ -4866,6 +4869,10 @@ export const DICIONARIO: Traducoes = {
   "Tarefa concluída, voltou para quem chamou": { es: "Tarea concluida, volvió a quien llamó" },
   "Tarefa cancelada, voltou para quem chamou": { es: "Tarea cancelada, volvió a quien llamó" },
   "Tarefa venceu o prazo, voltou para quem chamou": { es: "La tarea venció el plazo, volvió a quien llamó" },
+  "Fluxo terminou; a conversa voltou à decisão": { es: "El flujo terminó; la conversación volvió a la decisión" },
+  "Cliente voltou depois de uma pausa longa; decidido de novo": {
+    es: "El cliente volvió después de una pausa larga; se decidió de nuevo",
+  },
   "Uma pessoa da equipe assumiu": { es: "Una persona del equipo tomó la conversación" },
   "Contato marcado para atendimento humano": { es: "Contacto marcado para atención humana" },
   "Contato bloqueado (pediu para parar)": { es: "Contacto bloqueado (pidió parar)" },

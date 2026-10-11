@@ -117,8 +117,16 @@ export const configDaPoliticaSchema = z.strictObject({
        * O default preserva quem já publicou política.
        */
       quando: z.enum(["sempre", "quando_regras_nao_bastam"]).default("quando_regras_nao_bastam"),
+      /**
+       * Cliente que volta depois de N horas sem conversa é atendimento NOVO: o
+       * dono antigo vira só preferência — o modelo é consultado mesmo com
+       * mensagem curta, e trocar não exige a confiança mínima. Sem isto, quem
+       * voltava uma semana depois com "quero cancelar" ficava com o agente de
+       * vendas da última conversa. `0` desliga.
+       */
+      reinicio_apos_horas: z.number().int().min(0).max(720).default(24),
     })
-    .default({ usar_modelo: true, quando: "quando_regras_nao_bastam" }),
+    .default({ usar_modelo: true, quando: "quando_regras_nao_bastam", reinicio_apos_horas: 24 }),
 });
 
 export type ConfigDaPolitica = z.infer<typeof configDaPoliticaSchema>;

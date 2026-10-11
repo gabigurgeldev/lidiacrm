@@ -636,6 +636,14 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
               max={168}
               onChange={(v) => setConfig({ limites: { ...config.limites, prazo_chamada_horas: v } })}
             />
+            <CampoNumero
+              id="reinicio"
+              rotulo={t("Cliente que volta depois de (horas) é atendimento novo — 0 desliga")}
+              valor={config.decisor.reinicio_apos_horas}
+              min={0}
+              max={720}
+              onChange={(v) => setConfig({ decisor: { ...config.decisor, reinicio_apos_horas: v } })}
+            />
           </div>
         </Card>
 

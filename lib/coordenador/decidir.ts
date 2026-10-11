@@ -42,6 +42,11 @@ export interface FatosDaConversa {
    * mais faria, e a conversa ficava muda.
    */
   fluxoDoDonoVivo?: boolean;
+  /**
+   * O cliente voltou depois de `decisor.reinicio_apos_horas` sem conversa.
+   * Ausente = não (quem não mediu não reinicia nada).
+   */
+  retomadaAposPausa?: boolean;
 }
 
 export type CategoriaDaProposta = "regra" | "continuidade" | "modelo" | "manual" | "fallback";
@@ -57,6 +62,8 @@ export type Proposta =
       atual: DestinoEfetivo | null;
       /** A pessoa devolveu a conversa: a transição que sair daqui é `manual`. */
       retomadaHumana: boolean;
+      /** Atendimento novo depois de uma pausa longa: o dono atual é só preferência. */
+      retomadaAposPausa?: boolean;
     }
   | { acao: "sem_destino"; motivo: Motivo };
 
@@ -190,7 +197,10 @@ export function decidir(args: {
     // Com `sempre`, mensagem curta não dispensa o modelo: ele vê o contexto e
     // sabe que "sim" responde ao que o agente perguntou (devolve "manter").
     const sempre = politica.config.decisor.quando === "sempre";
-    if (semAlternativa || !politica.config.decisor.usar_modelo || (!sempre && ehMensagemCurta(texto))) {
+    // Depois de uma pausa longa, "quero cancelar" (curta) é assunto novo, não
+    // continuação do que o dono antigo conversava dias atrás.
+    const retomada = fatos.retomadaAposPausa === true;
+    if (semAlternativa || !politica.config.decisor.usar_modelo || (!sempre && !retomada && ehMensagemCurta(texto))) {
       return {
         acao: adotado ? "destino" : "manter",
         destino: atual,
@@ -198,7 +208,7 @@ export function decidir(args: {
         motivo: adotado ? "reconciliacao" : "continua_responsavel",
       };
     }
-    return { acao: "consultar_modelo", candidatos, atual, retomadaHumana };
+    return { acao: "consultar_modelo", candidatos, atual, retomadaHumana, ...(retomada ? { retomadaAposPausa: true } : {}) };
   }
 
   // Primeira escolha.
@@ -261,6 +271,12 @@ export function aplicarVeredito(
 
   if (atual && escolhido.id === atual.id) {
     return { acao: "manter", destino: atual, categoria: "modelo", motivo: "continua_responsavel" };
+  }
+  // Retomada após pausa: é como uma primeira escolha — alguém precisa atender o
+  // assunto novo, e o dono de dias atrás não tem a seu favor a continuidade
+  // que a confiança mínima protege.
+  if (atual && consulta.retomadaAposPausa === true) {
+    return { acao: "destino", destino: escolhido, categoria: categoriaDeTroca, motivo: "retomada_apos_pausa" };
   }
   if (atual) {
     const minima = politica.config.limites.confianca_minima;

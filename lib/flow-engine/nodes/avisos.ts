@@ -220,6 +220,9 @@ export const whatsappNotifyUser: FlowNodeDefinition<NotifyUserConfig> = {
           branch_id: RAMO_NAO_SAIU,
           vars: { aviso_na_fila_por: desfecho.motivo },
         };
+      // `sem_vez` só nasce do envio ao CLIENTE (trava do coordenador); aviso à
+      // equipe não passa por ela. Se um dia passar, é recusa como outra qualquer.
+      case "sem_vez":
       case "recusado":
         await avisarQueNaoSaiu(ctx, "recusado", desfecho.motivo);
         return { kind: "advance", branch_id: RAMO_NAO_SAIU, vars: { aviso_recusado_por: desfecho.motivo } };

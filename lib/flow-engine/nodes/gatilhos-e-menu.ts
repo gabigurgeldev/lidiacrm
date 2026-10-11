@@ -36,6 +36,7 @@ import { listaNumerada } from "@/lib/channels/opcoes-interativas";
 import { opcoesInterativasSchema } from "@/lib/schemas";
 
 import {
+  fimSemVez,
   ramoDeExcecao,
   ramoPadrao,
   type FlowBranch,
@@ -437,6 +438,7 @@ export const logicChoiceMenu: FlowNodeDefinition<MenuConfig> = {
       const naoSaiu = await mandarPergunta(ctx, config.pergunta, config.canal_id, lista, (p) =>
         opcoesTocaveisDoMenu(config, p),
       );
+      if (naoSaiu !== null && typeof naoSaiu === "object") return fimSemVez(naoSaiu.semVez);
       if (naoSaiu !== null) {
         return { kind: "advance", branch_id: RAMO_PERGUNTA_NAO_SAIU, vars: { envio_recusado: naoSaiu } };
       }
@@ -464,7 +466,8 @@ export const logicChoiceMenu: FlowNodeDefinition<MenuConfig> = {
  * aqui em cima ela creditava o `ctx.render` ao gatilho de palavra-chave.
  *
  * Manda a pergunta do bloco (texto + lista), quando houver. `null` = saiu ou
- * não havia o que mandar; string = o motivo de não ter saído.
+ * não havia o que mandar; string = o motivo de não ter saído; `{ semVez }` =
+ * o coordenador tirou a conversa desta execução (ela encerra calada).
  */
 export async function mandarPergunta(
   ctx: FlowExecutionContext,
@@ -473,7 +476,7 @@ export async function mandarPergunta(
   lista: string,
   /** Opções tocáveis; recebem a pergunta JÁ renderizada. */
   tocaveis?: (perguntaRenderizada: string) => OpcoesDoFluxo | null,
-): Promise<string | null> {
+): Promise<string | { semVez: string } | null> {
   const texto = ctx.render(pergunta).trim();
   if (texto === "" && lista === "") return null;
   const contato = ctx.fatos.contact;
@@ -488,6 +491,7 @@ export async function mandarPergunta(
     channelSessionId: canalId,
     ...(opcoes ? { opcoes } : {}),
   });
+  if (desfecho.kind === "sem_vez") return { semVez: desfecho.motivo };
   return desfecho.kind === "recusado" ? desfecho.motivo : null;
 }
 

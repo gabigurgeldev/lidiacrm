@@ -1204,6 +1204,39 @@ function corpoParaOHandler(input: {
   };
 }
 
+/**
+ * Esta execução ainda pode falar com o cliente? `null` = pode; string = o
+ * motivo de o coordenador ter tirado a conversa dela (migration 0237).
+ *
+ * Só cala execução que JÁ FOI dona do coordenador e deixou de ser — a função
+ * responde `pode` para fluxo que ele nunca conduziu, então automação e fluxo
+ * de bastidor seguem como antes. Falha de leitura = pode: o coordenador é
+ * aditivo, e um soluço do banco não pode calar o fluxo de quem nunca o ligou.
+ */
+async function fluxoPodeFalar(
+  admin: SupabaseClient,
+  orgId: string,
+  conversationId: string,
+  executionId: string,
+): Promise<string | null> {
+  try {
+    const { data, error } = await admin.rpc("fn_coord_fluxo_pode_falar" as never, {
+      p_org: orgId,
+      p_conversa: conversationId,
+      p_execucao: executionId,
+    } as never);
+    if (error) throw new Error(error.message);
+    const r = (data ?? {}) as { pode?: boolean; motivo?: string };
+    return r.pode === false ? r.motivo ?? "nao_e_o_dono" : null;
+  } catch (err) {
+    logger.warn("flow-engine: trava do coordenador não foi lida — envio segue", {
+      execution_id: executionId,
+      detail: (err instanceof Error ? err.message : String(err)).slice(0, 160),
+    });
+    return null;
+  }
+}
+
 async function enviarParaContatoDoFunil(
   admin: SupabaseClient,
   orgId: string,
@@ -1227,6 +1260,8 @@ async function enviarParaContatoDoFunil(
 
   try {
     const conversationId = await ensureConversation(admin, orgId, input.contactId, sessionId);
+    const vez = await fluxoPodeFalar(admin, orgId, conversationId, input.exec.id);
+    if (vez !== null) return { kind: "sem_vez", motivo: vez };
     const mensagem = (await sendMessageHandler(
       admin,
       {

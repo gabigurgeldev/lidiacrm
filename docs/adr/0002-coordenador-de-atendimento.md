@@ -302,3 +302,36 @@ Com política `active`:
 Ainda não feito: o `ai-response-worker` legado (fora do agent-engine) e a
 reconciliação/drenagem ao trocar o modo da política — ambos dependem da tela
 de ativação (M5), que é onde a troca de modo acontece.
+
+## M4 (segunda parte) — quem fala quando um fluxo termina (migration 0237)
+
+Uma avaliação do coordenador em 2026-10-11 achou dois buracos de "quem fala
+agora", e dois de eficiência da decisão.
+
+**Quando o coordenador decide.** A cada LOTE de mensagens do cliente (o
+debounce agrupa fragmentos), no início do `inbound_turn` — não só na primeira
+mensagem. A escada de `decidir.ts` vale para todo lote; o modelo de decisão só
+entra quando os degraus de cima não resolvem (ou sempre, com `decisor.quando =
+"sempre"`). Follow-up, resposta de caso e re-entrada não decidem: perguntam de
+quem é a vez (`vez.ts`).
+
+| Situação | Antes | Agora |
+|---|---|---|
+| Fluxo DONO termina (destino escolhido, transferência definitiva, ativação manual) sem `crm.handoff_to_agent` | Estado ficava `dono=fluxo` com execução morta; ninguém falava até o cliente insistir, e o vigia não via a conversa. | `fn_coord_liberar_fluxo_encerrado`: conversa vai a `nenhum` (`concluido`, motivo `fluxo_terminou`, categoria `retorno`) e, se há fala do cliente depois da última fala da empresa e sem admissão, o turno é pedido na mesma transação. A próxima decisão cai na continuidade do espelho `active_ai_agent_id`. |
+| Fluxo que terminou com `crm.handoff_to_agent` | — | O término não pede o turno de novo (o handoff já pediu, com `entregue_por_fluxo`). |
+| Fluxo chamado com retorno termina | Volta ao agente (0230). | Igual — o laço de chamadas roda antes, e a liberação só pega execução que AINDA é dona. |
+| Dono-fluxo pausado ou estado anterior à 0237 | Preso. | O vigia libera pela mesma função. |
+| Fluxo que perdeu a conversa (interrupção, pessoa, outro dono) tenta enviar | Enviava — duas vozes. | `fn_coord_fluxo_pode_falar` no envio do fluxo: desfecho `sem_vez`, a execução encerra calada (`outcome = coordenador_outro_responsavel`), sem seguir o ramo "não saiu". Só barra execução que JÁ FOI dona; fluxo nunca coordenado fala como antes. |
+| Interrupção por regra | `interrupcao.ao_interromper` era publicado e ignorado. | Aplicado à execução antiga depois da troca (`paused` ou `cancelled`). |
+| Teto `decisor_chamadas_por_hora` | Contava `coord_transicoes` com modelo — consulta que terminava em "manter" não gravava linha, e o teto nunca batia em `active`. | Conta `llm_calls` com `purpose = 'coordenador_decidir'` do contato (o ajudante não conta: é a mesma consulta). |
+| Cliente volta depois de N horas | Mensagem curta ficava com o dono de dias atrás sem perguntar; trocar exigia confiança mínima. | `decisor.reinicio_apos_horas` (padrão 24, `0` desliga): o modelo é consultado mesmo com mensagem curta, e trocar não exige a confiança mínima (motivo `retomada_apos_pausa`). Medido por `sent_at`. |
+
+**Recusado:** uma "janela de estabilidade" que dispensasse o modelo por alguns
+minutos depois de uma decisão. Contradiz `decisor.quando = "sempre"`, que o dono
+do produto escolheu de propósito (o modelo de decisão custa centavos de
+centavo e ~400 ms) — a economia não pagava o risco de perder uma mudança de
+assunto.
+
+**Ainda mortos na política** (existem no schema, nada os lê): `permite_tarefa`,
+`profundidade_max` (o `avaliarLimites` aceita, ninguém passa) e a escolha
+`esclarecer` do modelo, que hoje vale como "manter".

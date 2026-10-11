@@ -175,14 +175,53 @@ async function lerRecentes(db: Consulta, e: EntradaDoTurno, minutos: number): Pr
   return rows;
 }
 
+/**
+ * Consultas ao modelo de decisão nesta hora, para este contato.
+ *
+ * Conta em `llm_calls` (o decisor grava TODA consulta lá, com o custo), e não
+ * em `coord_transicoes`: o diário só ganha linha quando há troca — a consulta
+ * que terminava em "manter" com o mesmo agente não deixava rastro, e o teto
+ * `decisor_chamadas_por_hora` nunca era alcançado em `active`. Só o ponto
+ * principal conta: o ajudante é a segunda metade da MESMA consulta.
+ */
 async function decisoesNaUltimaHora(db: Consulta, e: EntradaDoTurno): Promise<number> {
   const { rows } = await db.query<{ n: string }>(
-    `select count(*)::text as n from public.coord_transicoes
-      where organization_id = $1 and conversation_id = $2
-        and decisor_modelo is not null and created_at > now() - interval '1 hour'`,
-    [e.organizationId, e.conversationId],
+    `select count(*)::text as n from public.llm_calls
+      where organization_id = $1 and contact_id = $2
+        and purpose = 'coordenador_decidir' and created_at > now() - interval '1 hour'`,
+    [e.organizationId, e.contactId],
   );
   return Number(rows[0]?.n ?? 0);
+}
+
+/**
+ * O cliente voltou depois de uma pausa longa? Mede a fala (de qualquer lado)
+ * imediatamente ANTERIOR ao lote. Sem fala anterior não é retomada — é a
+ * primeira conversa, e a primeira escolha já não tem dono a preservar.
+ */
+async function voltouDepoisDePausa(
+  db: Consulta,
+  e: EntradaDoTurno,
+  primeiraDoLote: string | null,
+  horas: number,
+): Promise<boolean> {
+  if (horas <= 0 || primeiraDoLote === null) return false;
+  try {
+    const { rows } = await db.query<{ retomada: boolean }>(
+      // `sent_at` (relógio do WhatsApp, o mesmo do lote), não `created_at`: uma
+      // importação de histórico grava tudo com a hora da importação.
+      `select (max(m.sent_at) < (select sent_at from public.messages where id = $3::uuid)
+                                - make_interval(hours => $4::int)) as retomada
+         from public.messages m
+        where m.organization_id = $1 and m.conversation_id = $2
+          and m.id <> $3::uuid
+          and m.sent_at < (select sent_at from public.messages where id = $3::uuid)`,
+      [e.organizationId, e.conversationId, primeiraDoLote, horas],
+    );
+    return rows[0]?.retomada === true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -287,6 +326,41 @@ async function registrarDiario(
       JSON.stringify({ acao: proposta.acao }),
     ],
   );
+}
+
+/**
+ * A política diz o que fazer com o fluxo interrompido (`interrupcao.ao_interromper`):
+ * `pausar` deixa a execução parada onde estava; `cancelar` a encerra. Era um
+ * knob publicado que nada aplicava — a execução antiga seguia viva e falando
+ * por cima do novo dono.
+ *
+ * Nunca lança: a troca de dono JÁ foi gravada, e um erro aqui viraria "nada"
+ * no turno — o novo dono ficaria calado por causa de quem saiu. Se a parada
+ * falhar, a trava de envio do fluxo (`fn_coord_fluxo_pode_falar`, 0237) ainda
+ * cala a execução que foi dona do coordenador.
+ */
+async function pararExecucaoInterrompida(
+  db: Consulta,
+  organizationId: string,
+  executionId: string,
+  modo: "pausar" | "cancelar",
+): Promise<void> {
+  try {
+    await db.query(
+      modo === "cancelar"
+        ? `update public.flow_executions
+              set status = 'cancelled', next_eval_at = null, claimed_until = null,
+                  completed_at = now(), last_error = 'coord_interrompido', updated_at = now()
+            where organization_id = $1 and id = $2 and status in ('pending', 'running', 'waiting')`
+        : `update public.flow_executions
+              set status = 'paused', next_eval_at = null, claimed_until = null,
+                  last_error = 'coord_interrompido', updated_at = now()
+            where organization_id = $1 and id = $2 and status in ('pending', 'running', 'waiting')`,
+      [organizationId, executionId],
+    );
+  } catch {
+    // ver o comentário acima
+  }
 }
 
 /**
@@ -451,7 +525,13 @@ async function coordenarComPolitica(
     .join("\n")
     .slice(0, TETO_DA_MENSAGEM);
 
-  let proposta = decidir({ estado, politica, texto, fatos });
+  const retomadaAposPausa = await voltouDepoisDePausa(
+    pool,
+    e,
+    lote[0]?.id ?? null,
+    politica.config.decisor.reinicio_apos_horas,
+  );
+  let proposta = decidir({ estado, politica, texto, fatos: { ...fatos, retomadaAposPausa } });
   let decisao: Decisao | null = null;
 
   if (proposta.acao === "consultar_modelo") {
@@ -522,6 +602,18 @@ async function coordenarComPolitica(
 
   // ─── active ─────────────────────────────────────────────────────────────
   const detalhe = { lote: lote.length, ...decisorNoDetalhe(decisao) };
+  // A execução que a interrupção tira da conversa: a dona viva do coordenador
+  // ou, sem ela, o fluxo de triagem do legado — o mesmo que `decidir` viu.
+  const interrompida =
+    proposta.acao === "destino" && proposta.motivo === "interrupcao"
+      ? estado?.dono_tipo === "fluxo" && estado.dono_execution_id && fatos.fluxoDoDonoVivo !== false
+        ? estado.dono_execution_id
+        : fatos.fluxoVivoLegado?.executionId ?? null
+      : null;
+  const pararInterrompida = () =>
+    interrompida === null
+      ? Promise.resolve()
+      : pararExecucaoInterrompida(pool, e.organizationId, interrompida, politica.config.interrupcao.ao_interromper);
   const admitirLote = async (tipo: "agente" | "fluxo" | "nenhum", id: string | null, geracao: number) => {
     for (const m of lote) {
       await admitir(pool, {
@@ -578,7 +670,10 @@ async function coordenarComPolitica(
           ultima,
           detalhe,
         );
-        if (r.ok) await admitirLote("fluxo", r.executionId, r.geracao);
+        if (r.ok) {
+          await pararInterrompida();
+          await admitirLote("fluxo", r.executionId, r.geracao);
+        }
         return { modo: "active", acao: "nada", motivo: r.ok ? proposta.motivo : r.motivo };
       }
       const agentId = destino.agent_id!;
@@ -601,6 +696,7 @@ async function coordenarComPolitica(
         // turno decidia. O resultado é descartado — quem mudou já despachou.
         if (!r.ok) return { modo: "active", acao: "nada", motivo: r.motivo };
         geracao = r.geracao;
+        await pararInterrompida();
       }
       await admitirLote("agente", agentId, geracao);
       return {
