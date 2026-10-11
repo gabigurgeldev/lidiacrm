@@ -69,9 +69,16 @@ describe("entrevistar", () => {
     expect(corpo.data.kind).toBe("pronto");
   });
 
-  it("resposta incoerente é 502", async () => {
+  it("resposta incoerente ENCERRA a entrevista (200 `pronto`), não 502", async () => {
+    // Era 502, e em produção a pessoa ficava presa na primeira tela: três
+    // tentativas, três "resposta sem pergunta válida" (ver `normalizarEntrevista`).
+    // O que faltou vira lacuna; a marca de degradação fica no log, não na resposta.
     objeto.mockResolvedValue(resultado({ kind: "perguntar", perguntas: [] }));
-    expect((await chamar({ material: MATERIAL })).status).toBe(502);
+    const res = await chamar({ material: MATERIAL });
+    expect(res.status).toBe(200);
+    const corpo = await res.json();
+    expect(corpo.data.kind).toBe("pronto");
+    expect(corpo.data).not.toHaveProperty("degradada");
   });
 
   it("orçamento esgotado é 402, sem chamar o modelo", async () => {
