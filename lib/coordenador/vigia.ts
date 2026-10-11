@@ -1,7 +1,7 @@
 /**
  * O vigia do coordenador — o mecanismo anti-morte.
  *
- * Duas coisas que nada mais recupera:
+ * Três coisas que nada mais recupera:
  *
  *   1. CHAMADA VENCIDA. Um fluxo chamado com retorno que não termina deixaria
  *      o agente que chamou esperando para sempre. Passado o prazo, o vigia
@@ -17,6 +17,12 @@
  *      e não responde no lugar de ninguém: escolher quem fala é exatamente o
  *      que deu errado.
  *
+ *   3. FLUXO DONO QUE JÁ TERMINOU. O trigger de término (0237) libera a
+ *      conversa na hora; o vigia pega o que ele não alcança: estado anterior à
+ *      0237, execução `paused` (pausa não é término e não dispara o trigger) e
+ *      qualquer corrida. A liberação é a MESMA função do trigger, com o turno
+ *      pedido quando o cliente espera resposta.
+ *
  * Roda no worker, no ritmo do reaper. Lotes pequenos: o vigia não pode virar a
  * carga que ele vigia.
  */
@@ -29,6 +35,28 @@ const LOTE = 50;
 export interface ResultadoDoVigia {
   expiradas: number;
   presas: number;
+  /** Conversas cujo fluxo dono já tinha terminado e que voltaram à decisão. */
+  liberadas: number;
+}
+
+async function liberarFluxosEncerrados(db: Consulta): Promise<number> {
+  const { rows } = await db.query<{ organization_id: string; conversation_id: string; execution_id: string }>(
+    `select s.organization_id, s.conversation_id, s.dono_execution_id as execution_id
+       from public.coord_estado_conversa s
+       join public.flow_executions x on x.id = s.dono_execution_id and x.organization_id = s.organization_id
+      where s.dono_tipo = 'fluxo'
+        and x.status not in ('pending', 'running', 'waiting')
+      limit ${LOTE}`,
+  );
+  let liberadas = 0;
+  for (const r of rows) {
+    const { rows: res } = await db.query<{ r: { ok?: boolean } }>(
+      `select public.fn_coord_liberar_fluxo_encerrado($1, $2, $3) as r`,
+      [r.organization_id, r.conversation_id, r.execution_id],
+    );
+    if (res[0]?.r?.ok === true) liberadas += 1;
+  }
+  return liberadas;
 }
 
 /** Abre o aviso na Central; `false` = já havia um aberto para esta conversa. */
@@ -100,6 +128,7 @@ async function acharPresas(db: Consulta): Promise<{ organization_id: string; con
 
 export async function vigiarCoordenador(db: Consulta, avisar: InserirAviso): Promise<ResultadoDoVigia> {
   const expiradas = await expirarChamadas(db);
+  const liberadas = await liberarFluxosEncerrados(db);
 
   let presas = 0;
   // A política é por número: só conversa de número com coordenador ATIVO conta.
@@ -118,5 +147,5 @@ export async function vigiarCoordenador(db: Consulta, avisar: InserirAviso): Pro
     });
     if (aberto) presas += 1;
   }
-  return { expiradas, presas };
+  return { expiradas, presas, liberadas };
 }

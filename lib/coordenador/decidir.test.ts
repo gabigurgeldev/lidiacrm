@@ -223,6 +223,40 @@ describe("decidir", () => {
     });
     expect(p).toMatchObject({ acao: "destino", categoria: "manual" });
   });
+
+  it("cliente que volta depois de uma pausa longa: mensagem curta NÃO fica com o dono antigo sem perguntar", () => {
+    const base = {
+      estado: estado({ dono_tipo: "agente", dono_agent_id: COMERCIAL }),
+      politica: politica(),
+      texto: "quero cancelar",
+    };
+    // Sem pausa: "quero cancelar" (2 palavras) segue com quem conduz — o
+    // comportamento de `quando_regras_nao_bastam`.
+    expect(decidir({ ...base, fatos: semFatos })).toMatchObject({ acao: "manter", destino: { chave: "comercial" } });
+    // Depois da pausa é assunto novo: o modelo decide, sabendo que é retomada.
+    expect(decidir({ ...base, fatos: { ...semFatos, retomadaAposPausa: true } })).toMatchObject({
+      acao: "consultar_modelo",
+      atual: { chave: "comercial" },
+      retomadaAposPausa: true,
+    });
+  });
+
+  it("retomada com um só candidato ou modelo desligado: segue com quem conduz", () => {
+    const fatos = { ...semFatos, retomadaAposPausa: true };
+    const est = estado({ dono_tipo: "agente", dono_agent_id: COMERCIAL });
+    expect(
+      decidir({ estado: est, politica: politica({ destinos: [comercial] }), texto: "voltei, quero cancelar o plano", fatos }),
+    ).toMatchObject({ acao: "manter" });
+    expect(
+      decidir({ estado: est, politica: politica({}, { decisor: { usar_modelo: false } }), texto: "voltei, quero cancelar", fatos }),
+    ).toMatchObject({ acao: "manter" });
+  });
+
+  it("knob `reinicio_apos_horas`: default 24 e versão antiga sem o campo reparseia", () => {
+    expect(configDaPoliticaSchema.parse({}).decisor.reinicio_apos_horas).toBe(24);
+    expect(configDaPoliticaSchema.parse({ decisor: { usar_modelo: true } }).decisor.reinicio_apos_horas).toBe(24);
+    expect(configDaPoliticaSchema.safeParse({ decisor: { reinicio_apos_horas: -1 } }).success).toBe(false);
+  });
 });
 
 describe("aplicarVeredito", () => {
@@ -270,6 +304,24 @@ describe("aplicarVeredito", () => {
 
   it("escolha fora dos candidatos nunca vira destino", () => {
     expect(aplicarVeredito(consultaComAtual, { escolha: "agendamento", confianca: 1 }, politica())).toMatchObject({
+      acao: "manter",
+      motivo: "decisor_falhou",
+    });
+  });
+
+  it("retomada após pausa: trocar não exige a confiança mínima — e manter continua possível", () => {
+    const retomada = { ...consultaComAtual, retomadaAposPausa: true };
+    expect(aplicarVeredito(retomada, { escolha: "suporte", confianca: 0.3 }, politica())).toMatchObject({
+      acao: "destino",
+      destino: { chave: "suporte" },
+      motivo: "retomada_apos_pausa",
+    });
+    expect(aplicarVeredito(retomada, { escolha: "manter", confianca: 0.9 }, politica())).toMatchObject({
+      acao: "manter",
+      destino: { chave: "comercial" },
+    });
+    // Escolha inventada continua sem virar destino, retomada ou não.
+    expect(aplicarVeredito(retomada, { escolha: "agendamento", confianca: 1 }, politica())).toMatchObject({
       acao: "manter",
       motivo: "decisor_falhou",
     });

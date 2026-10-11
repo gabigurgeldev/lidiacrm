@@ -133,4 +133,18 @@ describe("mandar mensagem para o cliente", () => {
     const exec = [...mundo.execucoes.values()][0]!;
     expect(exec.context.envio_recusado).toBe("contato_bloqueado");
   });
+
+  it("⭐ o coordenador tirou a conversa (`sem_vez`): a execução encerra CALADA, sem a saída 'não saiu'", async () => {
+    // Interrupção, pessoa que assumiu, outro dono (migration 0237). Seguir o
+    // ramo "não saiu" faria o fluxo tentar de novo ou avisar alguém — a
+    // segunda voz que o coordenador existe para impedir.
+    mundo.desfechoDoEnvio = { kind: "sem_vez", motivo: "nao_e_o_dono" };
+    await rodarTickDeFluxos(mundo.montar(grafo({ tipo: "texto", texto: "Oi", canal_id: null })));
+
+    const exec = [...mundo.execucoes.values()][0]!;
+    expect(exec.status).toBe("completed");
+    expect(exec.outcome).toBe("coordenador_outro_responsavel");
+    expect(exec.context.coordenador_sem_vez).toBe("nao_e_o_dono");
+    expect(exec.context.envio_recusado, "não pode ter seguido a saída de envio recusado").toBeUndefined();
+  });
 });

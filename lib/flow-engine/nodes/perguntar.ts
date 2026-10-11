@@ -17,6 +17,7 @@ import { z } from "zod";
 import {
   ramoDeExcecao,
   ramoPadrao,
+  fimSemVez,
   type FlowBranch,
   type FlowNodeDefinition,
   type NodeExecutionResult,
@@ -83,6 +84,7 @@ export const logicAsk: FlowNodeDefinition<PerguntarConfig> = {
     }
 
     const naoSaiu = await mandarPergunta(ctx, config.pergunta, config.canal_id, "");
+    if (naoSaiu !== null && typeof naoSaiu === "object") return fimSemVez(naoSaiu.semVez);
     if (naoSaiu !== null) {
       return { kind: "advance", branch_id: RAMO_PERGUNTA_NAO_SAIU, vars: { envio_recusado: naoSaiu } };
     }

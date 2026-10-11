@@ -22,6 +22,8 @@ export const MOTIVOS = {
   retorno_da_chamada: "Tarefa concluída, voltou para quem chamou",
   chamada_cancelada: "Tarefa cancelada, voltou para quem chamou",
   chamada_expirou: "Tarefa venceu o prazo, voltou para quem chamou",
+  fluxo_terminou: "Fluxo terminou; a conversa voltou à decisão",
+  retomada_apos_pausa: "Cliente voltou depois de uma pausa longa; decidido de novo",
   // pessoas
   pessoa_assumiu: "Uma pessoa da equipe assumiu",
   contato_com_pessoa: "Contato marcado para atendimento humano",

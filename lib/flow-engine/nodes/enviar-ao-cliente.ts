@@ -34,6 +34,7 @@
 import { z } from "zod";
 
 import {
+  fimSemVez,
   ramoDeExcecao,
   ramoPadrao,
   TIPOS_DE_MENSAGEM_DO_FLUXO,
@@ -195,6 +196,7 @@ export const whatsappEnviarAoCliente: FlowNodeDefinition<EnviarAoClienteConfig> 
     if (desfecho.kind === "na_fila") {
       return { kind: "advance", branch_id: "else", vars: { envio_na_fila: desfecho.motivo } };
     }
+    if (desfecho.kind === "sem_vez") return fimSemVez(desfecho.motivo);
     return { kind: "advance", branch_id: RAMO_NAO_SAIU, vars: { envio_recusado: desfecho.motivo } };
   },
 };

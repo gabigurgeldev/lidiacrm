@@ -276,15 +276,22 @@ describe("0230 · chamada agente → fluxo e retorno", () => {
     expect(rows[0]?.n).toBe("0");
   });
 
-  it("transferência definitiva: o fluxo termina e a conversa não volta ao agente", async () => {
+  it("transferência definitiva: o fluxo termina e a conversa NÃO volta ao agente — volta à decisão (0237)", async () => {
     const c = await conversaComOComercial();
     const r = await chamar(c, "definitiva", `t6-${c.conversationId}`);
     if (!r.ok) throw new Error(r.motivo);
     await concluirExecucao(r.executionId!, {});
-    expect(await lerEstado(pool, ORG, c.conversationId)).toMatchObject({
-      dono_tipo: "fluxo",
-      dono_execution_id: r.executionId,
-    });
+    // Até a 0237 o estado ficava `fluxo` apontando para a execução morta, e
+    // ninguém falava. Agora vai a `nenhum`; o cliente esperava resposta, então
+    // o turno é pedido — sem a marca de chamada (não é retorno ao agente).
+    expect(await lerEstado(pool, ORG, c.conversationId)).toMatchObject({ dono_tipo: "nenhum", situacao: "concluido" });
+    const { rows } = await pool.query<{ payload: Record<string, unknown> }>(
+      `select payload from event_log
+        where event_type = 'ai_agent.dispatch_requested' and payload->>'conversation_id' = $1`,
+      [c.conversationId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.payload).not.toHaveProperty("coord_chamada_id");
   });
 
   it("follow-up sem mensagem nova: agente dono fala; fluxo no meio da etapa adia; pessoa não fala", async () => {

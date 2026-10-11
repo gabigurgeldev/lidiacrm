@@ -380,7 +380,19 @@ export type DesfechoDeEnvio =
   | { kind: "enviado"; messageId: string }
   /** Saiu da fila do CRM mas ainda não do aparelho (fora de janela, número parado). */
   | { kind: "na_fila"; motivo: string }
-  | { kind: "recusado"; motivo: string };
+  | { kind: "recusado"; motivo: string }
+  /**
+   * O coordenador de atendimento tirou a conversa desta execução (interrupção,
+   * pessoa assumiu, outro dono) — `fn_coord_fluxo_pode_falar`, migration 0237.
+   * Não é falha de canal: a execução encerra CALADA, sem seguir o ramo "não
+   * saiu" (que costuma tentar de novo ou avisar alguém).
+   */
+  | { kind: "sem_vez"; motivo: string };
+
+/** Fim da execução que perdeu a conversa para o coordenador (`sem_vez`). */
+export function fimSemVez(motivo: string): NodeExecutionResult {
+  return { kind: "complete", outcome: "coordenador_outro_responsavel", vars: { coordenador_sem_vez: motivo } };
+}
 
 /**
  * O envio por DEFINIÇÃO APROVADA, quando o bloco escolheu esse modo.

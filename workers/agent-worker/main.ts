@@ -271,8 +271,9 @@ export async function startWorker(
   }, env.QUEUE_REAPER_INTERVAL_MS);
 
   // Vigia do coordenador de atendimento (migration 0229/0230): expira chamada
-  // vencida e avisa na Central sobre conversa que ficou sem ninguém conduzindo.
-  // Sem política `active` em lugar nenhum, as duas consultas voltam vazias.
+  // vencida, devolve à decisão a conversa cujo fluxo dono já terminou (0237) e
+  // avisa na Central sobre conversa que ficou sem ninguém conduzindo.
+  // Sem política `active` em lugar nenhum, as consultas voltam vazias.
   const vigiaTimer = setInterval(() => {
     vigiarCoordenador(pool, async (organizationId, aviso) => {
       const item = await insertInboxItem(
@@ -294,7 +295,7 @@ export async function startWorker(
       return item !== null;
     })
       .then((r) => {
-        if (r.expiradas + r.presas > 0) log.info('vigia do coordenador agiu', { ...r });
+        if (r.expiradas + r.presas + r.liberadas > 0) log.info('vigia do coordenador agiu', { ...r });
       })
       .catch((err: unknown) => log.error('vigia do coordenador falhou', { error: errMsg(err) }));
   }, env.QUEUE_REAPER_INTERVAL_MS);
