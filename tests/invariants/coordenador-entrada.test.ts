@@ -337,6 +337,51 @@ describe("0229 · entrada do coordenador", () => {
     expect(r).toMatchObject({ modo: "active", acao: "agente", agentId: SUPORTE });
   });
 
+  it("o modelo mantém quem conduz: a decisão entra no diário como `mantida`, sem contar como troca", async () => {
+    const e = await conversa(SESSAO_ATIVA);
+    await fala(e, "inbound", "quero o plano", 30);
+    const decisor = new DecisorDuble({ escolha: "manter", confianca: 0.93 });
+    await coordenarTurnoDeEntrada(pool, decisor, e);
+    await fala(e, "outbound", "Temos dois planos. Mensal ou anual?", 20);
+    await fala(e, "inbound", "e como funciona a entrega para o interior do estado de vocês?");
+    const r = await coordenarTurnoDeEntrada(pool, decisor, e);
+    expect(decisor.chamadas).toHaveLength(1);
+    expect(r).toMatchObject({ acao: "agente", agentId: COMERCIAL, geracao: 1 });
+
+    const { rows } = await pool.query<{ para_id: string; status: string; decisor_modelo: string; detalhe: { decisor?: { escolha?: string } } }>(
+      `select para_id::text, status, decisor_modelo, detalhe from coord_transicoes
+        where conversation_id = $1 and status = 'mantida'`,
+      [e.conversationId],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ para_id: COMERCIAL, decisor_modelo: "dublê/decisor" });
+    expect(rows[0]?.detalhe.decisor?.escolha).toBe("manter");
+    // Troca de verdade continua uma só: os limites de transferência não veem a mantida.
+    expect(
+      await contar(`select count(*) n from coord_transicoes where conversation_id = $1 and status = 'aplicada'`, [
+        e.conversationId,
+      ]),
+    ).toBe(1);
+  });
+
+  it("o modelo falhou e a regra de segurança manteve o dono: o erro fica no diário para investigar", async () => {
+    const e = await conversa(SESSAO_ATIVA);
+    await fala(e, "inbound", "quero o plano", 30);
+    await coordenarTurnoDeEntrada(pool, nuncaChamado(), e);
+    await fala(e, "outbound", "Temos dois planos. Mensal ou anual?", 20);
+    await fala(e, "inbound", "e como funciona a entrega para o interior do estado de vocês?");
+    const decisor = new DecisorDuble({ status: "falhou", escolha: null, erro: "modelo de decisão recusou (402): sem crédito" });
+    const r = await coordenarTurnoDeEntrada(pool, decisor, e);
+    expect(r).toMatchObject({ acao: "agente", agentId: COMERCIAL });
+
+    const { rows } = await pool.query<{ motivo: string; erro: string | null }>(
+      `select motivo, detalhe->'decisor'->>'erro' as erro from coord_transicoes
+        where conversation_id = $1 and status = 'mantida'`,
+      [e.conversationId],
+    );
+    expect(rows).toEqual([{ motivo: "decisor_falhou", erro: "modelo de decisão recusou (402): sem crédito" }]);
+  });
+
   it("o lote é o que veio depois da última fala da empresa — o histórico já respondido não decide", async () => {
     const e = await conversa(SESSAO_ATIVA);
     // Antes da ativação: perguntou do plano e foi respondido pelo legado.

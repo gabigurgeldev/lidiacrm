@@ -29,7 +29,7 @@ export interface ResultadoDaSimulacao {
   usou_modelo: boolean;
   /** As regras não bastaram: a decisão real consultaria o modelo. */
   precisou_do_modelo: boolean;
-  decisor: Pick<Decisao, "status" | "escolha" | "confianca" | "modelo" | "ms" | "custoCents" | "ajudante"> | null;
+  decisor: Pick<Decisao, "status" | "escolha" | "confianca" | "modelo" | "ms" | "custoCents" | "ajudante" | "erro"> | null;
 }
 
 function candidato(d: DestinoEfetivo): CandidatoDoDecisor {
@@ -115,6 +115,8 @@ export async function simular(args: {
           modelo: decisao.modelo,
           ms: decisao.ms,
           custoCents: decisao.custoCents,
+          // Sem a causa, "o modelo falhou" na simulação não se investiga.
+          ...(decisao.erro !== undefined ? { erro: decisao.erro } : {}),
           ...(decisao.ajudante !== undefined ? { ajudante: decisao.ajudante } : {}),
         }
       : null,
