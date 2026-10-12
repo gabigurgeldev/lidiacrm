@@ -22129,7 +22129,13 @@ revoke execute on function public.fn_coord_fluxo_pode_falar(uuid, uuid, uuid)
 grant execute on function public.fn_coord_fluxo_pode_falar(uuid, uuid, uuid)
   to service_role;
 
--- ---- playbook plataforma v3: regras universais de conduta (migration 0238) ----
+-- ---- coordenador: decisão que mantém quem conduz entra no diário (migration 0238) ----
+-- Ver o cabeçalho de supabase/migrations/20261012120000_0238_coord_transicoes_mantida.sql.
+alter table public.coord_transicoes drop constraint if exists coord_transicoes_status_check;
+alter table public.coord_transicoes add constraint coord_transicoes_status_check
+  check (status in ('aplicada', 'recusada', 'obsoleta', 'falhou', 'shadow', 'mantida'));
+
+-- ---- playbook plataforma v3: regras universais de conduta (migration 0239) ----
 
 with atual as (
   select v.content

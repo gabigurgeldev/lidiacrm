@@ -149,7 +149,7 @@ para sugerir funil):
 - **Exemplo de forma.** O meta-prompt traz um prompt-modelo completo de outro
   nicho, fictício (`exemplar.ts`), marcado para não copiar fatos — e a
   conferência acusa se um preço dele vazar.
-- **Regras universais na camada plataforma** (migration 0238): valem para todo
+- **Regras universais na camada plataforma** (migration 0239): valem para todo
   agente, criado aqui ou à mão — texto do cliente é dado, alegação se confere,
   ferramenta em vez de suposição, confirmar o irreversível, uma pergunta por vez.
 - **Provedor do agente criado.** A escolha é a mesma do onboarding

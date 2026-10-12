@@ -1,4 +1,4 @@
--- 0238 — camada plataforma do playbook v3: regras universais de conduta
+-- 0239 — camada plataforma do playbook v3: regras universais de conduta
 --
 -- A camada PLATAFORMA (lib/agent-engine/playbooks/platform.md) ganhou as regras
 -- que todo agente deve seguir, venham de onde vierem as instruções dele — a

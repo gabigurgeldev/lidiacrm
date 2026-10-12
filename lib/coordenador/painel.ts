@@ -233,6 +233,11 @@ export interface LinhaDeAtividade {
   status: string;
   modelo: string | null;
   custo_cents: number | null;
+  /** O que o modelo de decisão respondeu (chave do destino, manter, esclarecer). */
+  escolha: string | null;
+  confianca: number | null;
+  /** Causa gravada quando o modelo falhou — sem ela a falha não se investiga. */
+  erro: string | null;
 }
 
 /**
@@ -243,7 +248,9 @@ export interface LinhaDeAtividade {
 export async function lerAtividade(admin: SupabaseClient, orgId: string, limite = 50): Promise<LinhaDeAtividade[]> {
   const { data } = await admin
     .from("coord_transicoes")
-    .select("id, created_at, conversation_id, de_tipo, de_id, para_tipo, para_id, categoria, motivo, status, decisor_modelo, decisor_custo_cents")
+    .select(
+      "id, created_at, conversation_id, de_tipo, de_id, para_tipo, para_id, categoria, motivo, status, decisor_modelo, decisor_custo_cents, decisor_confianca, detalhe",
+    )
     .eq("organization_id", orgId)
     .order("created_at", { ascending: false })
     .limit(Math.min(Math.max(limite, 1), 200));
@@ -260,6 +267,8 @@ export async function lerAtividade(admin: SupabaseClient, orgId: string, limite 
     status: string;
     decisor_modelo: string | null;
     decisor_custo_cents: number | string | null;
+    decisor_confianca: number | string | null;
+    detalhe: { decisor?: { escolha?: unknown; erro?: unknown } } | null;
   }[];
 
   const agentIds = new Set<string>();
@@ -309,6 +318,9 @@ export async function lerAtividade(admin: SupabaseClient, orgId: string, limite 
     status: l.status,
     modelo: l.decisor_modelo,
     custo_cents: l.decisor_custo_cents === null ? null : Number(l.decisor_custo_cents),
+    escolha: typeof l.detalhe?.decisor?.escolha === "string" ? l.detalhe.decisor.escolha : null,
+    confianca: l.decisor_confianca === null ? null : Number(l.decisor_confianca),
+    erro: typeof l.detalhe?.decisor?.erro === "string" ? l.detalhe.decisor.erro : null,
   }));
 }
 
