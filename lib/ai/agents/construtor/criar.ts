@@ -32,6 +32,7 @@ import { versionCreateSchema, type VersionInput } from "@/lib/ai/agents/validati
 import { temChaveDeEmbedding } from "@/lib/ai/embeddings/chave";
 import { criarMaterialDeTexto } from "@/lib/ai/rag/criar-material";
 import { ligarPacote } from "@/lib/mcp/tools/selecao-por-pacote";
+import { incluirAgenteNoCoordenador, type ResultadoNoCoordenador } from "@/lib/coordenador/construtor";
 
 import { pacotesQueCabem } from "./capacidades";
 import type { Previa } from "./esquemas";
@@ -45,6 +46,8 @@ export type ResultadoDaCriacao =
       materiais_com_falha: Array<{ nome: string; motivo: string }>;
       avisos: string[];
       indexacao_habilitada: boolean;
+      /** O agente no coordenador; null = a pessoa desmarcou na revisão. */
+      coordenador: ResultadoNoCoordenador | null;
     }
   | {
       ok: false;
@@ -233,6 +236,28 @@ export async function criarAgenteDaPrevia(
   }
   const indexacao = materiais.length > 0 ? await temChaveDeEmbedding(orgId) : true;
 
+  // ── 4. Coordenador ───────────────────────────────────────────────────────
+  // Depois de o agente existir, e sem poder desfazê-lo: falhar aqui vira aviso,
+  // e a pessoa ajusta na tela do coordenador. O modo da política existente
+  // nunca muda; sem política, nasce uma em Observar.
+  const coordenador =
+    previa.coordenacao?.incluir === true
+      ? await incluirAgenteNoCoordenador(
+          admin,
+          { orgId, userId, requestId },
+          { id: agentId, nome: previa.nome },
+          {
+            quando_usar: previa.coordenacao.quando_usar || previa.descricao || "",
+            exemplos: previa.coordenacao.exemplos,
+            nao_usar: previa.coordenacao.nao_usar,
+            fluxos_chamaveis: previa.coordenacao.fluxos_chamaveis,
+          },
+        )
+      : null;
+  if (coordenador !== null && !coordenador.ok) {
+    avisos.push("O agente foi criado, mas não entrou no coordenador. Adicione-o em IA › Coordenador.");
+  }
+
   return {
     ok: true,
     agent_id: agentId,
@@ -241,5 +266,6 @@ export async function criarAgenteDaPrevia(
     materiais_com_falha: materiaisComFalha,
     avisos,
     indexacao_habilitada: indexacao,
+    coordenador,
   };
 }

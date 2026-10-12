@@ -168,6 +168,13 @@ export const agenteGeradoSchema = z.object({
   lacunas: z
     .array(z.string())
     .describe("O que o dono não informou e que o agente vai passar para uma pessoa em vez de responder."),
+  coordenacao: z
+    .object({
+      quando_usar: z.string().describe("Os assuntos que são deste agente, numa frase concreta."),
+      exemplos: z.array(z.string()).describe("3 a 6 mensagens reais de cliente que são deste agente."),
+      nao_usar: z.array(z.string()).describe("2 a 4 assuntos parecidos que NÃO são deste agente."),
+    })
+    .describe("Como o coordenador de atendimento reconhece as conversas deste agente."),
 });
 
 export const materiaisGeradosSchema = z.object({
@@ -208,6 +215,20 @@ const materialDaPreviaSchema = z
     message: "Material sem conteúdo.",
   });
 
+/**
+ * O agente no coordenador de atendimento (migration 0229). `incluir: false` =
+ * a pessoa desmarcou na revisão, e a política não é tocada.
+ */
+export const coordenacaoDaPreviaSchema = z.strictObject({
+  incluir: z.boolean().default(true),
+  quando_usar: z.string().trim().max(600).default(""),
+  exemplos: z.array(z.string().trim().min(1).max(200)).max(12).default([]),
+  nao_usar: z.array(z.string().trim().min(1).max(200)).max(12).default([]),
+  fluxos_chamaveis: z.array(z.string().uuid()).max(10).default([]),
+});
+
+export type CoordenacaoDaPrevia = z.infer<typeof coordenacaoDaPreviaSchema>;
+
 export const previaSchema = z.strictObject({
   nome: z.string().trim().min(1).max(120),
   descricao: z.string().trim().max(2000).optional(),
@@ -216,6 +237,7 @@ export const previaSchema = z.strictObject({
   handoff_keywords: z.array(z.string().trim().min(1).max(60)).max(20),
   materiais: z.array(materialDaPreviaSchema).max(TETO_DE_MATERIAIS),
   channel_session_id: z.string().uuid(),
+  coordenacao: coordenacaoDaPreviaSchema.optional(),
 });
 
 export type Previa = z.infer<typeof previaSchema>;
@@ -282,5 +304,12 @@ export function normalizarGeracao(
     handoff_keywords: unicos(agente.handoff_keywords, 20, 60),
     materiais: saidaMateriais,
     lacunas: unicos(agente.lacunas, 15, 300),
+    coordenacao: {
+      incluir: true,
+      quando_usar: (agente.coordenacao?.quando_usar ?? agente.descricao).trim().slice(0, 600),
+      exemplos: unicos(agente.coordenacao?.exemplos ?? [], 12, 200),
+      nao_usar: unicos(agente.coordenacao?.nao_usar ?? [], 12, 200),
+      fluxos_chamaveis: [],
+    },
   };
 }

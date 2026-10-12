@@ -124,6 +124,11 @@ describe("normalizarGeracao", () => {
     pacotes: ["atender", "atender", "escalar"] as const,
     handoff_keywords: ["atendente", "Atendente", " ", "humano"],
     lacunas: ["preço do clareamento"],
+    coordenacao: {
+      quando_usar: "Agendamento de consultas e dúvidas sobre tratamentos.",
+      exemplos: ["quero marcar uma consulta", "Quero marcar uma consulta", "quanto custa o clareamento?"],
+      nao_usar: ["segunda via de boleto"],
+    },
   };
 
   it("material vazio some, nome repetido ganha sufixo, item vazio sai", () => {
@@ -143,6 +148,17 @@ describe("normalizarGeracao", () => {
     expect(p.pacotes).toEqual(["atender", "escalar"]);
     expect(p.handoff_keywords).toEqual(["atendente", "humano"]);
     expect(p.lacunas).toEqual(["preço do clareamento"]);
+  });
+
+  it("a coordenação sai pronta para o coordenador: incluída por padrão, exemplos sem repetição", () => {
+    const p = normalizarGeracao({ ...agente, pacotes: [...agente.pacotes] }, { materiais: [] });
+    expect(p.coordenacao).toEqual({
+      incluir: true,
+      quando_usar: "Agendamento de consultas e dúvidas sobre tratamentos.",
+      exemplos: ["quero marcar uma consulta", "quanto custa o clareamento?"],
+      nao_usar: ["segunda via de boleto"],
+      fluxos_chamaveis: [],
+    });
   });
 
   it("a prévia normalizada passa no schema da criação (com o canal que a tela escolhe)", () => {
