@@ -54,7 +54,7 @@ test.describe("coordenador de atendimento", () => {
 
     // ─── Atividade: vazia, com a explicação ───────────────────────────────
     await page.getByRole("tab", { name: "Atividade" }).click();
-    await expect(page.getByText(/Nenhuma troca de responsável ainda|→/).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/Nenhuma decisão ainda|→|continua conduzindo/).first()).toBeVisible({ timeout: 20_000 });
     await page.screenshot({ path: ".superpowers/evidence/coordenador-atividade.png", fullPage: true });
 
     // ─── Volta a Desligado ────────────────────────────────────────────────
