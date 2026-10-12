@@ -291,7 +291,7 @@ A linguagem "Ajustes do iOS" (`.ios-grupo`, `.ios-linha`, `.ios-segmentado`, `.i
 | Peça | Para quê |
 |---|---|
 | `PaginaAjustes` | Cabeçalho da página (título, descrição, ações à direita) e o espaço entre grupos |
-| `Grupo` | UM cartão agrupado. Título e rodapé ficam FORA do cartão; `recuo="icone"` recua o divisor |
+| `Grupo` | UM cartão agrupado. Título e rodapé ficam FORA do cartão; `recuo="icone"` recua o divisor; `idDoTitulo` faz do grupo uma região com nome (o hub usa) |
 | `Linha` | Rótulo à esquerda; `valor` ou `controle` à direita. Com `href`/`aoClicar` vira navegação, com seta |
 | `LinhaInterruptor` | Linha com interruptor; o rótulo inteiro é clicável |
 | `Segmentado` | Escolha de UM valor entre poucos (`radiogroup`, setas trocam). Para abas com conteúdo, `Tabs` + `SEGMENTADO_ABAS`/`GATILHO_DA_ABA` |

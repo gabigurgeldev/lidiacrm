@@ -451,7 +451,7 @@ export const NAV_DESTINATIONS: NavDestination[] = [
   },
   {
     href: "/app/ai/inbox",
-    label: "Alertas",
+    label: "Central de avisos",
     description: "O que a IA encontrou e precisa de uma decisão sua.",
     icon: Flag,
     group: "ia",

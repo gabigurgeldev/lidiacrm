@@ -19,7 +19,6 @@ import { toast } from "sonner";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -200,7 +199,7 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
       </TabsList>
 
       <TabsContent value="configurar" className="flex flex-col gap-4">
-        <Card className="flex flex-col gap-3 p-4">
+        <div className="ios-grupo flex flex-col gap-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-col">
               <span className="text-sm font-medium">{t("Modo")}</span>
@@ -241,9 +240,9 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
               {painel.numerosComPoliticaPropria.length}
             </p>
           )}
-        </Card>
+        </div>
 
-        <Card className="flex flex-col gap-3 p-4">
+        <div className="ios-grupo flex flex-col gap-3 p-4">
           <div className="flex flex-col">
             <span className="text-sm font-medium">{t("Destinos")}</span>
             <span className="text-xs text-muted-foreground">
@@ -372,9 +371,9 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
               })}
             </div>
           )}
-        </Card>
+        </div>
 
-        <Card className="flex flex-col gap-3 p-4">
+        <div className="ios-grupo flex flex-col gap-3 p-4">
           <div className="flex flex-col">
             <span className="text-sm font-medium">{t("Regras")}</span>
             <span className="text-xs text-muted-foreground">
@@ -495,12 +494,12 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
             />
             <Label htmlFor="usar-modelo">{t("Usar o modelo quando as regras não bastarem")}</Label>
           </div>
-        </Card>
+        </div>
 
         {/* O coordenador É o modelo de decisão: a escolha dos dois modelos fica
             aqui, sempre visível (2026-10-10: escondida atrás do interruptor e em
             IA › Provedores, ninguém a achava). */}
-        <Card className="flex flex-col gap-3 p-4" data-testid="modelo-do-decisor">
+        <div className="ios-grupo flex flex-col gap-3 p-4" data-testid="modelo-do-decisor">
           <div className="flex flex-col">
             <span className="text-sm font-medium">{t("Modelo de decisão")}</span>
             <span className="text-xs text-muted-foreground">
@@ -546,10 +545,10 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
               <ModeloDoPonto pontoId="coordenador_decidir_reserva" />
             </div>
           </div>
-        </Card>
+        </div>
 
         {agentesNaPolitica.length > 0 && politica.destinos.length > 1 && (
-          <Card className="flex flex-col gap-3 p-4">
+          <div className="ios-grupo flex flex-col gap-3 p-4">
             <div className="flex flex-col">
               <span className="text-sm font-medium">{t("O que cada agente pode pedir")}</span>
               <span className="text-xs text-muted-foreground">
@@ -598,10 +597,10 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
                 </div>
               );
             })}
-          </Card>
+          </div>
         )}
 
-        <Card className="flex flex-col gap-3 p-4">
+        <div className="ios-grupo flex flex-col gap-3 p-4">
           <span className="text-sm font-medium">{t("Limites")}</span>
           <div className="grid gap-3 sm:grid-cols-2">
             <CampoNumero
@@ -645,7 +644,7 @@ export function CoordenadorClient({ painelInicial, podePublicar }: Props) {
               onChange={(v) => setConfig({ decisor: { ...config.decisor, reinicio_apos_horas: v } })}
             />
           </div>
-        </Card>
+        </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">
@@ -774,7 +773,7 @@ function Simulacao({ politica, painel }: { politica: Politica; painel: Painel })
   }
 
   return (
-    <Card className="flex flex-col gap-3 p-4">
+    <div className="ios-grupo flex flex-col gap-3 p-4">
       <p className="text-sm text-muted-foreground">
         {t("Teste o rascunho com uma mensagem. Nada é enviado e nenhuma conversa muda.")}
       </p>
@@ -852,7 +851,7 @@ function Simulacao({ politica, painel }: { politica: Politica; painel: Painel })
           )}
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -891,13 +890,13 @@ function Atividade() {
   }
   if (linhasDeAtividade.length === 0) {
     return (
-      <Card className="p-6 text-sm text-muted-foreground">
+      <div className="ios-grupo p-6 text-sm text-muted-foreground">
         {t("Nenhuma decisão ainda. Com o coordenador em Observar ou Ativo, elas aparecem aqui.")}
-      </Card>
+      </div>
     );
   }
   return (
-    <Card className="flex flex-col divide-y">
+    <div className="ios-grupo flex flex-col divide-y">
       {linhasDeAtividade.map((l) => (
         <div key={l.id} className="flex flex-col gap-1 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col">
@@ -931,6 +930,6 @@ function Atividade() {
           </div>
         </div>
       ))}
-    </Card>
+    </div>
   );
 }

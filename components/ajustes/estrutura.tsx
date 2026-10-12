@@ -74,6 +74,7 @@ export function Grupo({
   children,
   className,
   testid,
+  idDoTitulo,
 }: {
   titulo?: ReactNode;
   /** Explicação curta embaixo do cartão, como no iOS. */
@@ -83,11 +84,20 @@ export function Grupo({
   children: ReactNode;
   className?: string;
   testid?: string;
+  /**
+   * Id do título. Com ele, o grupo vira uma REGIÃO com nome (`aria-labelledby`)
+   * — leitor de tela navega por ela. Sem espaço no id: `aria-labelledby`
+   * separa ids por espaço.
+   */
+  idDoTitulo?: string;
 }) {
+  const rotulado = titulo !== undefined && idDoTitulo !== undefined;
   return (
-    <section className={cn("space-y-1.5", className)}>
+    <section className={cn("space-y-1.5", className)} aria-labelledby={rotulado ? idDoTitulo : undefined}>
       {titulo !== undefined && (
-        <h2 className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{titulo}</h2>
+        <h2 id={rotulado ? idDoTitulo : undefined} className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {titulo}
+        </h2>
       )}
       <div className="ios-grupo" data-recuo={recuo} data-testid={testid}>
         {children}

@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
 
+import { PaginaAjustes } from "@/components/ajustes";
+import { traduzir } from "@/lib/i18n/dicionario";
+
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { listSelectableChannels } from "@/lib/channels/selectable";
@@ -73,7 +76,14 @@ export default async function NewAgentPage({
   }
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <PaginaAjustes
+      testid="pagina-novo-agente"
+      titulo={traduzir("Novo agente", user.idioma)}
+      descricao={traduzir(
+        "Comece por um modelo pronto para o seu ramo, ou em branco. O agente nasce como rascunho: nada vai para o cliente até você publicar.",
+        user.idioma,
+      )}
+    >
       <EscolhaDeModelo
         modelos={MODELOS_DE_AGENTE.map(({ id, comoSeApresenta, resumo }) => ({ id, comoSeApresenta, resumo }))}
         jeitos={JEITOS_DE_FALAR}
@@ -95,6 +105,6 @@ export default async function NewAgentPage({
         integracoes={escopo.integracoes}
         emailConfigurado={isEmailConfigured()}
       />
-    </div>
+    </PaginaAjustes>
   );
 }

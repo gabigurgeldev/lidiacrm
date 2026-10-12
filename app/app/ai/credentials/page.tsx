@@ -63,7 +63,7 @@ export default async function CredentialsPage() {
 
   return (
     <PaginaAjustes
-      titulo={traduzir("Chaves de acesso à IA", idioma)}
+      titulo={traduzir("Credenciais", idioma)}
       descricao={traduzir(
         "A conta de inteligência artificial é sua: você contrata direto na Anthropic, OpenAI ou Google e cola a chave aqui. Ela é guardada criptografada e nunca mais aparece na tela depois de salva — nem para você.",
         idioma,

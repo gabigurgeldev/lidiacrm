@@ -100,7 +100,7 @@ export default async function AcervoPage() {
 
   return (
     <PaginaAjustes
-      titulo={t("O que o agente sabe")}
+      titulo={t("Conhecimento")}
       descricao={t(
         "O material do seu negócio que os assistentes consultam antes de responder. Cada assistente escolhe, na tela dele, o que pode ler daqui.",
       )}

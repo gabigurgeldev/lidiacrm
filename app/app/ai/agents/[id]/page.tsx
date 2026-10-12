@@ -1,5 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
+import { PaginaAjustes } from "@/components/ajustes";
+import { traduzir } from "@/lib/i18n/dicionario";
+
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { listSelectableChannels } from "@/lib/channels/selectable";
@@ -103,7 +106,14 @@ export default async function AgentEditorPage({
   const { draft, published, base, draftObsoleto } = escolherVersoesDaTela(versions, agent.published_version_id ?? null);
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <PaginaAjustes
+      testid="pagina-do-agente"
+      titulo={agent.name}
+      descricao={
+        agent.description ||
+        traduzir("Configure, teste e acompanhe este agente. O que você salva vira rascunho até publicar.", user.idioma)
+      }
+    >
       <AgentTabs
         agent={agent}
         draft={draft}
@@ -123,6 +133,6 @@ export default async function AgentEditorPage({
         routerMembership={routerMembership}
         readOnly={readOnly}
       />
-    </div>
+    </PaginaAjustes>
   );
 }

@@ -1,6 +1,4 @@
-import Link from "next/link";
-
-import { Card } from "@/components/ui/card";
+import { Grupo, Linha, PaginaAjustes } from "@/components/ajustes";
 import type { Role } from "@/lib/auth/types";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { IDIOMA_PADRAO, type Idioma } from "@/lib/i18n/idiomas";
@@ -50,39 +48,34 @@ function slug(texto: string): string {
 export function NavHub({ group, isPlatformAdmin, role, title, subtitle, locale = IDIOMA_PADRAO }: NavHubProps) {
   const secoes = hubSections(group, isPlatformAdmin, role);
 
+  // No kit de Ajustes: uma lista agrupada por etapa da jornada, cada linha com
+  // a frase que diz para que a tela serve. Era uma grade de cartões soltos —
+  // o único hub do produto que não falava a linguagem das telas a que leva.
   return (
-    <div className="flex h-full flex-col gap-8 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{traduzir(title, locale)}</h1>
-        {subtitle && <p className="text-sm text-muted-foreground">{traduzir(subtitle, locale)}</p>}
-      </header>
-
+    <PaginaAjustes titulo={traduzir(title, locale)} descricao={subtitle ? traduzir(subtitle, locale) : undefined}>
       {secoes.map(({ section, items }) => (
-        <section key={section} aria-labelledby={`hub-${group}-${slug(section)}`} className="space-y-3">
-          <h2
-            id={`hub-${group}-${slug(section)}`}
-            className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70"
-          >
-            {traduzir(section, locale)}
-          </h2>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {items.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link key={item.href} href={item.href} className="block">
-                  <Card className="flex h-full gap-3 p-4 transition-colors hover:border-border-strong">
-                    <Icon size={20} weight="regular" aria-hidden className="mt-0.5 shrink-0 text-muted-foreground" />
-                    <div>
-                      <h3 className="text-sm font-semibold">{traduzir(item.label, locale)}</h3>
-                      <p className="mt-1 text-xs text-muted-foreground">{traduzir(item.description, locale)}</p>
-                    </div>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
+        <Grupo
+          key={section}
+          titulo={traduzir(section, locale)}
+          idDoTitulo={`hub-${group}-${slug(section)}`}
+          recuo="icone"
+          className="max-w-3xl"
+        >
+          {items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Linha
+                key={item.href}
+                href={item.href}
+                icone={<Icon size={18} weight="regular" />}
+                disco
+                titulo={traduzir(item.label, locale)}
+                descricao={traduzir(item.description, locale)}
+              />
+            );
+          })}
+        </Grupo>
       ))}
-    </div>
+    </PaginaAjustes>
   );
 }

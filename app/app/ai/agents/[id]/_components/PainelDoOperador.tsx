@@ -15,7 +15,6 @@
  */
 import * as React from "react";
 
-import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useT } from "@/hooks/i18n/useT";
@@ -63,17 +62,17 @@ function ComoOPapelEstaIndo() {
     // Zero não é "0" cru: num papel recém-ligado isso é o estado esperado, e um
     // número solto pareceria falha.
     return (
-      <Card className="p-4" data-testid="operador-como-esta-indo">
+      <div className="ios-grupo p-4" data-testid="operador-como-esta-indo">
         <p className="text-xs text-muted-foreground">
           {t("Nenhuma conversa passou por aqui nos últimos")} {dias}{" "}
           {t("dias. Assim que o assistente atender alguém, o que ele organizar aparece nesta área.")}
         </p>
-      </Card>
+      </div>
     );
   }
 
   return (
-    <Card className="space-y-2 p-4" data-testid="operador-como-esta-indo">
+    <div className="ios-grupo space-y-2 p-4" data-testid="operador-como-esta-indo">
       <h4 className="text-sm font-medium">
         {t("Como está indo (últimos")} {dias} {t("dias)")}
       </h4>
@@ -103,7 +102,7 @@ function ComoOPapelEstaIndo() {
           )}
         </p>
       ) : null}
-    </Card>
+    </div>
   );
 }
 
@@ -114,7 +113,7 @@ export function PainelDoOperador(props: Props) {
   return (
     <div className="space-y-4">
       {props.enabled ? <ComoOPapelEstaIndo /> : null}
-      <Card className="space-y-3 p-4">
+      <div className="ios-grupo space-y-3 p-4">
         <div className="flex items-start gap-3">
           <Switch
             id="operator_enabled"
@@ -160,11 +159,11 @@ export function PainelDoOperador(props: Props) {
             </p>
           </div>
         ) : null}
-      </Card>
+      </div>
 
       {props.enabled ? (
         <>
-          <Card className="space-y-2 p-4">
+          <div className="ios-grupo space-y-2 p-4">
             <h3 className="text-sm font-medium">{t("A inteligência que ele usa para organizar")}</h3>
             <p className="text-xs text-muted-foreground">
               {t(
@@ -201,9 +200,9 @@ export function PainelDoOperador(props: Props) {
                 {t("Usar a mesma que conversa")}
               </button>
             ) : null}
-          </Card>
+          </div>
 
-          <Card className="space-y-2 p-4">
+          <div className="ios-grupo space-y-2 p-4">
             <h3 className="text-sm font-medium">{t("O que ele pode mexer no sistema")}</h3>
             <p className="text-xs text-muted-foreground">
               {t(
@@ -226,7 +225,7 @@ export function PainelDoOperador(props: Props) {
                 )}
               </p>
             ) : null}
-          </Card>
+          </div>
         </>
       ) : null}
     </div>

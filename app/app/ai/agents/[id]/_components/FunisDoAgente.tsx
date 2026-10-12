@@ -20,7 +20,6 @@
  */
 import * as React from "react";
 
-import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useT } from "@/hooks/i18n/useT";
 import type { FunilDaResposta } from "@/hooks/pipelines/usePipelines";
@@ -67,7 +66,7 @@ export function FunisDoAgente({ funis, value, onChange, cobertura, disabled = fa
     .map((f) => f.name);
 
   return (
-    <Card className="space-y-3 p-4">
+    <div className="ios-grupo space-y-3 p-4">
       <div>
         <h3 className="text-sm font-medium">{t("Em que negócios ele pode mexer")}</h3>
         <p className="text-xs text-muted-foreground">
@@ -145,6 +144,6 @@ export function FunisDoAgente({ funis, value, onChange, cobertura, disabled = fa
           {t(", que não está marcado. O assistente vai atender e os negócios vão se acumular ali sem que ele possa organizá-los.")}
         </p>
       ) : null}
-    </Card>
+    </div>
   );
 }

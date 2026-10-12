@@ -55,6 +55,21 @@ describe("kit de Ajustes", () => {
     expect(cartao).toHaveTextContent("Horário");
   });
 
+  it("grupo com idDoTitulo vira região com nome; sem ele, não", () => {
+    render(
+      <>
+        <Grupo titulo="Ensinar o agente" idDoTitulo="hub-ia-ensinar">
+          <Linha titulo="Memória" />
+        </Grupo>
+        <Grupo titulo="Sem id">
+          <Linha titulo="Outra" />
+        </Grupo>
+      </>,
+    );
+    expect(screen.getByRole("region", { name: "Ensinar o agente" })).toHaveTextContent("Memória");
+    expect(screen.queryByRole("region", { name: "Sem id" })).toBeNull();
+  });
+
   it("linha que navega tem seta e data-clicavel; linha estática não", () => {
     render(
       <Grupo>

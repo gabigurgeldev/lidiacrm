@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { useApiErrorHandler } from "@/components/feedback/ApiErrorToast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -115,15 +114,15 @@ function AbaEndpoints({ integracao, endpoints, podeEscrever }: Props) {
       ) : null}
 
       {endpoints.length === 0 ? (
-        <Card className="p-6 text-sm text-muted-foreground" data-testid="endpoints-vazio">
+        <div className="ios-grupo p-6 text-sm text-muted-foreground" data-testid="endpoints-vazio">
           {integracao.tipo === "suporte_v1"
             ? t("Nenhum endpoint ainda. Use \"Importar catálogo\" para trazer o que o sistema oferece.")
             : t("Nenhum endpoint ainda. Cadastre o primeiro: o que o agente pode consultar neste sistema.")}
-        </Card>
+        </div>
       ) : (
         <div className="flex flex-col gap-2">
           {endpoints.map((e) => (
-            <Card key={e.id} className="flex flex-wrap items-center justify-between gap-3 p-3" data-testid={`endpoint-linha-${e.slug}`}>
+            <div key={e.id} className="ios-grupo flex flex-wrap items-center justify-between gap-3 p-3" data-testid={`endpoint-linha-${e.slug}`}>
               <div className="min-w-0">
                 <p className="font-medium">
                   {e.titulo} <span className="text-xs font-normal text-muted-foreground">({e.slug})</span>
@@ -153,7 +152,7 @@ function AbaEndpoints({ integracao, endpoints, podeEscrever }: Props) {
                   </>
                 ) : null}
               </div>
-            </Card>
+            </div>
           ))}
         </div>
       )}
@@ -245,7 +244,7 @@ function AbaConexao({ integracao, endpoints, podeEscrever }: Props) {
   }
 
   return (
-    <Card className="flex max-w-2xl flex-col gap-4 p-4">
+    <div className="ios-grupo flex max-w-2xl flex-col gap-4 p-4">
       <div className="space-y-1">
         <Label htmlFor="cx-nome">{t("Nome do sistema")}</Label>
         <Input id="cx-nome" value={nome} onChange={(e) => setNome(e.target.value)} disabled={!podeEscrever} />
@@ -317,7 +316,7 @@ function AbaConexao({ integracao, endpoints, podeEscrever }: Props) {
           </>
         ) : null}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -365,7 +364,7 @@ function AbaAtividade({ integracao, endpoints }: { integracao: IntegracaoRow; en
       <p className="text-sm text-muted-foreground">
         {t("Últimas 24 horas")}: {dados.ultimas_24h.total} {t("chamadas")}, {dados.ultimas_24h.falhas} {t("com falha")}.
       </p>
-      <Card className="p-4">
+      <div className="ios-grupo p-4">
         <h3 className="mb-2 text-sm font-medium">{t("Correções propostas")}</h3>
         {dados.acoes.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("Nenhuma correção proposta ainda.")}</p>
@@ -382,8 +381,8 @@ function AbaAtividade({ integracao, endpoints }: { integracao: IntegracaoRow; en
             ))}
           </ul>
         )}
-      </Card>
-      <Card className="p-4">
+      </div>
+      <div className="ios-grupo p-4">
         <h3 className="mb-2 text-sm font-medium">{t("Chamadas")}</h3>
         {dados.chamadas.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("Nenhuma chamada ainda.")}</p>
@@ -401,7 +400,7 @@ function AbaAtividade({ integracao, endpoints }: { integracao: IntegracaoRow; en
             ))}
           </ul>
         )}
-      </Card>
+      </div>
     </div>
   );
 }

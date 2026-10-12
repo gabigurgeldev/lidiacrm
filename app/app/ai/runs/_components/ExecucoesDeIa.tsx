@@ -19,9 +19,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
-import { PaginaAjustes } from "@/components/ajustes";
+import { Aviso, Grupo, Linha, PaginaAjustes, Segmentado } from "@/components/ajustes";
+import { CheckCircle, Warning } from "@/lib/ui/icons";
 
 /**
  * O MESMO formato da tela de Uso — as duas leem `llm_calls.cost_cents`, que é
@@ -102,89 +102,103 @@ export function ExecucoesDeIa() {
     void carregar();
   }, [carregar]);
 
+  const cabecalho = {
+    className: "mx-auto w-full max-w-5xl",
+    testid: "execucoes-de-ia",
+    titulo: t("Execuções de IA"),
+    descricao: t(
+      "Tudo que a inteligência artificial fez por aqui — e, quando algo falhou, o que aconteceu e o que fazer.",
+    ),
+  };
+
   if (erro) {
     return (
-      <div className="p-6">
-        <Card className="border-destructive/40 p-6">
-          <h2 className="font-medium">{t("Não consegui carregar as execuções")}</h2>
-          <p className="mt-2 text-sm text-muted-foreground">{erro}</p>
-          <Button className="mt-4" variant="outline" onClick={() => void carregar()}>
-            {t("Tentar de novo")}
-          </Button>
-        </Card>
-      </div>
+      <PaginaAjustes {...cabecalho}>
+        <Grupo titulo={t("Não consegui carregar as execuções")}>
+          <Linha
+            icone={<Warning size={18} className="text-destructive" />}
+            titulo={<span className="whitespace-normal">{erro}</span>}
+            controle={
+              <Button size="sm" variant="outline" onClick={() => void carregar()}>
+                {t("Tentar de novo")}
+              </Button>
+            }
+          />
+        </Grupo>
+      </PaginaAjustes>
     );
   }
 
   if (!execucoes || !resumo) {
-    return <div className="p-6 text-sm text-muted-foreground">{t("Carregando…")}</div>;
+    return (
+      <PaginaAjustes {...cabecalho}>
+        <Aviso texto={t("Carregando…")} />
+      </PaginaAjustes>
+    );
   }
 
   return (
-    <PaginaAjustes
-      className="mx-auto w-full max-w-5xl"
-      testid="execucoes-de-ia"
-      titulo={t("Execuções de IA")}
-      descricao={t(
-        "Tudo que a inteligência artificial fez por aqui — e, quando algo falhou, o que aconteceu e o que fazer.",
-      )}
-    >
+    <PaginaAjustes {...cabecalho}>
       {/* O resumo responde "está tudo bem?" antes da lista. */}
-      <Card className="p-4" data-testid="resumo">
+      <Grupo titulo={t("Resumo")} testid="resumo">
         {resumo.erros === 0 ? (
-          <p className="text-sm">
-            <span className="font-medium text-emerald-600 dark:text-emerald-500">
-              {t("Nenhuma falha")}
-            </span>{" "}
-            {t("nas últimas")} {resumo.total} {t("execuções.")}
-          </p>
+          <Linha
+            icone={<CheckCircle size={18} className="text-emerald-600 dark:text-emerald-500" />}
+            titulo={t("Nenhuma falha")}
+            descricao={`${t("nas últimas")} ${resumo.total} ${t("execuções.")}`}
+          />
         ) : (
-          <div>
-            <p className="text-sm font-medium text-destructive" data-testid="tem-falhas">
-              {resumo.erros} {t("de")} {resumo.total} {t("execuções falharam.")}
-            </p>
-            <ul className="mt-3 space-y-2">
-              {resumo.porCodigo.map((c) => (
-                <li key={c.codigo} className="text-sm">
-                  <Badge variant="outline" className="mr-2 font-mono text-xs">
-                    {c.quantas}×
-                  </Badge>
-                  {c.oQueFazer ? t(c.oQueFazer) : c.codigo}
-                </li>
-              ))}
-            </ul>
-          </div>
+          <>
+            <Linha
+              icone={<Warning size={18} className="text-destructive" />}
+              titulo={
+                <span className="text-destructive" data-testid="tem-falhas">
+                  {resumo.erros} {t("de")} {resumo.total} {t("execuções falharam.")}
+                </span>
+              }
+            />
+            {resumo.porCodigo.map((c) => (
+              <Linha
+                key={c.codigo}
+                titulo={<span className="whitespace-normal">{c.oQueFazer ? t(c.oQueFazer) : c.codigo}</span>}
+                valor={<span className="font-mono text-xs">{c.quantas}×</span>}
+              />
+            ))}
+          </>
         )}
-      </Card>
+      </Grupo>
 
-      <div className="mb-3">
-        <Button
-          size="sm"
-          variant={soErros ? "default" : "outline"}
-          onClick={() => setSoErros((v) => !v)}
-          data-testid="filtro-erros"
-        >
-          {soErros ? t("Mostrando só as falhas") : t("Ver só as falhas")}
-        </Button>
-      </div>
+      <Segmentado<"todas" | "falhas">
+        valor={soErros ? "falhas" : "todas"}
+        aoMudar={(v) => setSoErros(v === "falhas")}
+        rotuloAcessivel={t("Quais execuções mostrar")}
+        className="self-start"
+        testid="filtro-erros"
+        opcoes={[
+          { valor: "todas", rotulo: t("Todas") },
+          { valor: "falhas", rotulo: t("Só as falhas") },
+        ]}
+      />
 
       {execucoes.length === 0 ? (
-        <Card className="p-6 text-sm text-muted-foreground" data-testid="lista-vazia">
-          {soErros
-            ? t("Nenhuma falha registrada.")
-            : t("Nenhuma execução ainda. Assim que o agente atender alguém, aparece aqui.")}
-        </Card>
+        <Grupo testid="lista-vazia">
+          <Linha
+            titulo={
+              <span className="whitespace-normal">
+                {soErros
+                  ? t("Nenhuma falha registrada.")
+                  : t("Nenhuma execução ainda. Assim que o agente atender alguém, aparece aqui.")}
+              </span>
+            }
+          />
+        </Grupo>
       ) : (
-        <div className="space-y-2">
+        <Grupo titulo={soErros ? t("Falhas") : t("Últimas execuções")}>
           {execucoes.map((e) => (
-            <Card
-              key={e.id}
-              className={e.status === "erro" ? "border-destructive/40 p-4" : "p-4"}
-              data-testid={`execucao-${e.id}`}
-            >
+            <div key={e.id} className="ios-linha flex-col items-stretch gap-1.5" data-testid={`execucao-${e.id}`}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium">{t(e.pontoRotulo)}</span>
+                  <span className="text-sm font-medium">{t(e.pontoRotulo)}</span>
                   {e.status === "erro" && (
                     <Badge variant="destructive" className="text-xs">
                       {t("falhou")}
@@ -197,7 +211,7 @@ export function ExecucoesDeIa() {
               </div>
 
               {e.status === "erro" ? (
-                <div className="mt-2 space-y-2 text-sm">
+                <div className="space-y-2 text-sm">
                   {/* 1º: o que o CLIENTE viu. */}
                   {e.consequencia && (
                     <p data-testid="consequencia">
@@ -216,31 +230,28 @@ export function ExecucoesDeIa() {
                       <summary className="cursor-pointer">{t("Mensagem técnica do provedor")}</summary>
                       <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted p-2">
                         {e.error_message}
-                        {e.http_status ? `\n(${t("código")} ${e.http_status})` : ""}
+                        {e.http_status ? `
+(${t("código")} ${e.http_status})` : ""}
                       </pre>
                     </details>
                   )}
                 </div>
               ) : (
-                <p className="mt-2 text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {e.input_tokens + e.output_tokens} tokens
                   {e.latency_ms !== null ? ` · ${e.latency_ms} ms` : ""}
-                  {/* `cost_cents` está em CENTAVOS: dividir por 100 dá REAIS, e o
-                      rótulo dizia "centavos" — uma execução de 25 centavos
-                      aparecia como "0.2500 centavos", 100× menor que o mesmo
-                      evento na tela de Uso, sem nenhuma das duas dizer qual
-                      estava certa. Aqui vale o mesmo formato de lá: reais. */}
+                  {/* `cost_cents` está em CENTAVOS de dólar — o mesmo formato da tela de Uso. */}
                   {e.cost_cents !== null ? ` · ${usd.format(e.cost_cents / 100)}` : ""}
                 </p>
               )}
 
-              <p className="mt-2 text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {new Date(e.created_at).toLocaleString(tagDoIdioma)}
                 {e.porQueEsteModelo ? ` · ${t(e.porQueEsteModelo)}` : ""}
               </p>
-            </Card>
+            </div>
           ))}
-        </div>
+        </Grupo>
       )}
     </PaginaAjustes>
   );

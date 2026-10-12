@@ -6,9 +6,8 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Aviso, Campo, Dica, Grupo, Linha, Segmentado } from "@/components/ajustes";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -131,28 +130,27 @@ export function OrgMemoryClient({ initialState }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle>{t("Documento da organização")}</CardTitle>
-              <CardDescription>
-                {t(
-                  'O texto-base que qualquer agente de IA lê antes de responder — como a "política da casa" que todo atendente novo teria que decorar.',
-                )}
-              </CardDescription>
-            </div>
-            {document ? (
+      <Grupo
+        titulo={t("Documento da organização")}
+        rodape={t(
+          'O texto-base que qualquer agente de IA lê antes de responder — como a "política da casa" que todo atendente novo teria que decorar.',
+        )}
+      >
+        <Linha
+          titulo={t("Versão em vigor")}
+          controle={
+            document ? (
               <Badge variant="success">
                 v{document.version_number} {t("ativa")}
               </Badge>
             ) : (
               <Badge variant="neutral">{t("Nenhuma versão publicada ainda")}</Badge>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+            )
+          }
+        />
+        <Campo rotulo={t("Texto")} htmlFor="memoria-documento">
           <Textarea
+            id="memoria-documento"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder={t(
@@ -160,167 +158,141 @@ export function OrgMemoryClient({ initialState }: Props) {
             )}
             className="min-h-[220px] font-mono text-[13px]"
           />
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground">
-              {content.length} {t("caracteres")}
-            </span>
-            <div className="flex items-center gap-2">
-              {!canPublish && (
-                <span className="text-xs text-muted-foreground">
-                  {t("Somente admins podem publicar uma nova versão.")}
-                </span>
-              )}
-              <Button
-                onClick={handlePublish}
-                disabled={!canSubmitPublish || publish.isPending}
-              >
-                {publish.isPending ? t("Publicando…") : t("Publicar versão")}
+          <Dica texto={`${content.length} ${t("caracteres")}`} />
+        </Campo>
+        <div className="flex flex-wrap items-center justify-end gap-2 px-4 py-3">
+          {!canPublish && (
+            <span className="text-xs text-muted-foreground">{t("Somente admins podem publicar uma nova versão.")}</span>
+          )}
+          <Button onClick={handlePublish} disabled={!canSubmitPublish || publish.isPending}>
+            {publish.isPending ? t("Publicando…") : t("Publicar versão")}
+          </Button>
+        </div>
+      </Grupo>
+
+      {versions.length > 0 && (
+        <Grupo titulo={t("Histórico de versões")}>
+          {versions.map((v) => (
+            <Linha
+              key={v.id}
+              aoClicar={() => setHistoryTarget(v)}
+              titulo={<span className="font-mono">v{v.version_number}</span>}
+              descricao={formatDate(v.created_at, tagDoIdioma)}
+              controle={
+                document?.version_id === v.id ? (
+                  <Badge variant="success" className="text-[10px]">
+                    {t("ativa")}
+                  </Badge>
+                ) : undefined
+              }
+            />
+          ))}
+        </Grupo>
+      )}
+
+      <Grupo
+        titulo={t("Aprendizados")}
+        rodape={t(
+          "Fatos e correções pontuais que os agentes também levam em conta — adicionados à mão ou aprendidos automaticamente pelo sistema a partir de conversas reais.",
+        )}
+      >
+        <Linha
+          titulo={t("Novo aprendizado")}
+          icone={<Plus size={18} />}
+          aoClicar={() => setFormOpen((v) => !v)}
+        />
+        {formOpen && (
+          <form onSubmit={handleCreateEntry}>
+            <Campo rotulo={t("Título")} htmlFor="entry-title">
+              <Input
+                id="entry-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={t("Ex.: Não oferecer frete grátis no primeiro contato")}
+                maxLength={200}
+                required
+              />
+            </Campo>
+            <Campo rotulo={t("O que o agente deve saber")} htmlFor="entry-body">
+              <Textarea
+                id="entry-body"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder={t("Descreva a regra ou o aprendizado em texto simples.")}
+                className="min-h-[100px]"
+                required
+              />
+            </Campo>
+            <div className="flex justify-end gap-2 px-4 py-3">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setFormOpen(false)}>
+                {t("Cancelar")}
+              </Button>
+              <Button type="submit" size="sm" disabled={createEntry.isPending}>
+                {createEntry.isPending ? t("Salvando…") : t("Salvar aprendizado")}
               </Button>
             </div>
-          </div>
+          </form>
+        )}
+      </Grupo>
 
-          {versions.length > 0 && (
-            <div className="mt-4 border-t border-border pt-3">
-              <p className="mb-2 text-xs font-medium text-muted-foreground">{t("Histórico de versões")}</p>
-              <ul className="flex flex-col gap-1">
-                {versions.map((v) => (
-                  <li key={v.id}>
-                    <button
-                      type="button"
-                      onClick={() => setHistoryTarget(v)}
-                      className="flex w-full items-center gap-3 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent-soft"
-                    >
-                      <span className="font-mono text-xs">v{v.version_number}</span>
-                      <span className="text-xs text-muted-foreground">{formatDate(v.created_at, tagDoIdioma)}</span>
-                      {document?.version_id === v.id && (
-                        <Badge variant="success" className="text-[10px]">
-                          {t("ativa")}
-                        </Badge>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {entries.some((e) => e.status === "archived") && (
+        <Segmentado<"ativos" | "arquivados">
+          valor={showArchived ? "arquivados" : "ativos"}
+          aoMudar={(v) => setShowArchived(v === "arquivados")}
+          rotuloAcessivel={t("Quais aprendizados mostrar")}
+          className="self-start"
+          opcoes={[
+            { valor: "ativos", rotulo: t("Ativos") },
+            { valor: "arquivados", rotulo: t("Arquivados") },
+          ]}
+        />
+      )}
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle>{t("Aprendizados")}</CardTitle>
-              <CardDescription>
-                {t(
-                  "Fatos e correções pontuais que os agentes também levam em conta — adicionados à mão ou aprendidos automaticamente pelo sistema a partir de conversas reais.",
-                )}
-              </CardDescription>
-            </div>
-            <Button variant="secondary" size="sm" onClick={() => setFormOpen((v) => !v)}>
-              <Plus /> {t("Novo aprendizado")}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {formOpen && (
-            <form
-              onSubmit={handleCreateEntry}
-              className="flex flex-col gap-3 rounded-md border border-border bg-surface-elevated p-4"
-            >
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="entry-title">{t("Título")}</Label>
-                <Input
-                  id="entry-title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder={t("Ex.: Não oferecer frete grátis no primeiro contato")}
-                  maxLength={200}
-                  required
-                />
+      {visibleEntries.length === 0 ? (
+        <Aviso
+          texto={
+            showArchived
+              ? t("Nenhum aprendizado arquivado.")
+              : t(
+                  'Nenhum aprendizado ainda. Use "+ Novo aprendizado" para ensinar algo que os agentes devem lembrar em toda conversa — ou aguarde o sistema sugerir aprendizados automaticamente a partir do atendimento real.',
+                )
+          }
+        />
+      ) : (
+        <Grupo>
+          {visibleEntries.map((entry) => (
+            <div key={entry.id} className="ios-linha flex-col items-stretch gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">{entry.title}</span>
+                <Badge variant={entry.source === "flywheel" ? "info" : "neutral"} className="text-[10px]">
+                  {entry.source === "flywheel" ? t("aprendido automaticamente") : t("manual")}
+                </Badge>
+                <span className="ml-auto text-xs text-muted-foreground">{formatDate(entry.created_at, tagDoIdioma)}</span>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="entry-body">{t("O que o agente deve saber")}</Label>
-                <Textarea
-                  id="entry-body"
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  placeholder={t("Descreva a regra ou o aprendizado em texto simples.")}
-                  className="min-h-[100px]"
-                  required
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="ghost" size="sm" onClick={() => setFormOpen(false)}>
-                  {t("Cancelar")}
-                </Button>
-                <Button type="submit" size="sm" disabled={createEntry.isPending}>
-                  {createEntry.isPending ? t("Salvando…") : t("Salvar aprendizado")}
-                </Button>
-              </div>
-            </form>
-          )}
-
-          {entries.some((e) => e.status === "archived") && (
-            <button
-              type="button"
-              onClick={() => setShowArchived((v) => !v)}
-              className="self-start text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-            >
-              {showArchived ? t("Ver aprendizados ativos") : t("Ver aprendizados arquivados")}
-            </button>
-          )}
-
-          {visibleEntries.length === 0 ? (
-            <p className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
-              {showArchived
-                ? t("Nenhum aprendizado arquivado.")
-                : t(
-                    'Nenhum aprendizado ainda. Use "+ Novo aprendizado" para ensinar algo que os agentes devem lembrar em toda conversa — ou aguarde o sistema sugerir aprendizados automaticamente a partir do atendimento real.',
-                  )}
-            </p>
-          ) : (
-            <ol className="flex flex-col gap-2">
-              {visibleEntries.map((entry) => (
-                <li
-                  key={entry.id}
-                  className="flex flex-col gap-1.5 rounded-md border border-border/60 p-3 text-sm"
+              <p className="whitespace-pre-wrap text-sm text-text-muted">{entry.body}</p>
+              <div className="flex sm:justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={setStatus.isPending}
+                  onClick={() => handleToggleArchive(entry.id, entry.status === "active" ? "archived" : "active")}
+                  className="w-full sm:w-auto"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{entry.title}</span>
-                    <Badge variant={entry.source === "flywheel" ? "info" : "neutral"} className="text-[10px]">
-                      {entry.source === "flywheel" ? t("aprendido automaticamente") : t("manual")}
-                    </Badge>
-                    <span className="ml-auto text-xs text-muted-foreground">{formatDate(entry.created_at, tagDoIdioma)}</span>
-                  </div>
-                  <p className="whitespace-pre-wrap text-text-muted">{entry.body}</p>
-                  <div className="flex sm:justify-end">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={setStatus.isPending}
-                      onClick={() =>
-                        handleToggleArchive(entry.id, entry.status === "active" ? "archived" : "active")
-                      }
-                      className="w-full sm:w-auto"
-                    >
-                      {entry.status === "active" ? (
-                        <>
-                          <Archive /> {t("Arquivar")}
-                        </>
-                      ) : (
-                        <>
-                          <ArrowsClockwise /> {t("Reativar")}
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-        </CardContent>
-      </Card>
+                  {entry.status === "active" ? (
+                    <>
+                      <Archive /> {t("Arquivar")}
+                    </>
+                  ) : (
+                    <>
+                      <ArrowsClockwise /> {t("Reativar")}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </Grupo>
+      )}
 
       <Dialog open={historyTarget != null} onOpenChange={(o) => !o && setHistoryTarget(null)}>
         <DialogContent className="max-w-2xl">

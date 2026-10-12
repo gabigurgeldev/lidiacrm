@@ -16,7 +16,6 @@ import { useT } from "@/hooks/i18n/useT";
 import * as React from "react";
 import Link from "next/link";
 
-import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { TETO_ENDPOINTS_POR_AGENTE } from "@/lib/ai/integracoes/schema";
 
@@ -80,7 +79,7 @@ export function IntegracoesDoAgente({ integracoes, emailConfigurado, value, onCh
   const acima = value.length > TETO_ENDPOINTS_POR_AGENTE;
 
   return (
-    <Card className="space-y-3 p-4" data-testid="agente-integracoes">
+    <div className="ios-grupo space-y-3 p-4" data-testid="agente-integracoes">
       <div>
         <h3 className="text-sm font-medium">{t("Sistemas que ele consulta")}</h3>
         <p className="text-xs text-muted-foreground">
@@ -157,6 +156,6 @@ export function IntegracoesDoAgente({ integracoes, emailConfigurado, value, onCh
           )}
         </p>
       ) : null}
-    </Card>
+    </div>
   );
 }
