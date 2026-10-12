@@ -28,7 +28,8 @@ import {
 import { PAPEIS, PONTOS_DE_IA, PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { PROVEDORES, ehProvedorSuportado } from "@/lib/ai/pontos/provedores";
 import { validarBinding } from "@/lib/ai/pontos/validar-binding";
-import { transcricaoParaATela } from "@/lib/messaging/media/transcription";
+import { efetivoDerivado } from "@/lib/ai/pontos/efetivo-na-tela";
+import { MODELO_DE_EMBEDDING } from "@/lib/ai/embeddings/chave";
 import { createClient } from "@/lib/supabase/server";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { llmEdgeConfigFromEnv, resolveOrgLlmConfig } from "@/lib/agent-engine/edge/llm/credentials";
@@ -163,11 +164,17 @@ export async function GET(): Promise<Response> {
     });
     const chave = `${decisao.provider}|${decisao.modelId ?? ""}`;
     const capacidade = capacidadePorModelo.get(chave);
-    // A transcrição não escolhe modelo pela precedência acima: ela sobe uma
-    // escada de CHAVE (OpenAI, depois OpenRouter). Mostrar a `decisao` aqui
-    // anunciava o modelo de conversa num ponto que nunca o usa.
-    if (ponto.id === PONTO_DA_TRANSCRICAO) {
-      const t = transcricaoParaATela(chavesDeTranscricao);
+    // Transcrição, embeddings, ensaio e contagem de tokens não escolhem modelo
+    // pela precedência acima. Mostrar a `decisao` neles anunciava o modelo de
+    // CONVERSA (Claude, por padrão) num ponto que nunca o usa — ver o
+    // cabeçalho de `efetivo-na-tela.ts`.
+    const derivado = efetivoDerivado(ponto.id, {
+      chaves: chavesDeTranscricao,
+      bindingDaTranscricao: (bindings.get(PONTO_DA_TRANSCRICAO) as LinhaDeBinding | undefined) ?? null,
+      modeloDeEmbedding: MODELO_DE_EMBEDDING,
+      agentePublicado: agentePublicado ? { provider: agentePublicado.provider, model: agentePublicado.model } : null,
+    });
+    if (derivado !== null) {
       return {
         id: ponto.id,
         rotulo: ponto.rotulo,
@@ -177,15 +184,9 @@ export async function GET(): Promise<Response> {
         sintomaDeFalha: ponto.sintomaDeFalha,
         fixo: ponto.fixo ?? null,
         mandadoPeloAgente: false,
-        efetivo: {
-          provider: t.provider,
-          modelId: t.modelId,
-          credentialId: null,
-          baseUrl: null,
-          origem: "escada_de_chave",
-          porQue: t.porQue,
-        },
-        avisos: t.aviso ? [t.aviso] : [],
+        efetivo: derivado.efetivo,
+        avisos: derivado.avisos,
+        restricao: derivado.restricao ?? null,
       };
     }
     return {
@@ -208,6 +209,7 @@ export async function GET(): Promise<Response> {
        * primeiro uso é o pior lugar para esse defeito estar.
        */
       mandadoPeloAgente: agentePublicado !== null && PONTOS_DO_AGENTE_PUBLICADO.has(ponto.id),
+      restricao: null,
       efetivo: {
         provider: decisao.provider,
         modelId: decisao.modelId,
@@ -289,6 +291,7 @@ export async function PUT(req: NextRequest): Promise<Response> {
 
   const validacao = validarBinding({
     pontoId: corpo.purpose,
+    provider: corpo.provider,
     modelo: {
       model_id: corpo.model_id,
       supports_tools: modelo?.supports_tools ?? false,

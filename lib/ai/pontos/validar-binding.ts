@@ -23,6 +23,12 @@
  * cada modelo sabe fazer, é `ai_models` — alimentado pelo catálogo do próprio
  * fabricante, não por heurística sobre o nome do modelo.
  */
+import {
+  modeloDeTranscricaoConhecido,
+  POR_QUE_SO_ESTES,
+  transcreveAudio,
+} from "@/lib/messaging/media/modelos-de-transcricao";
+
 import { PONTO_POR_ID } from "./registro";
 
 /** O que o catálogo sabe sobre o modelo escolhido. */
@@ -49,6 +55,8 @@ export type ResultadoDaValidacao =
  */
 export function validarBinding(entrada: {
   pontoId: string;
+  /** Opcional só por compatibilidade com chamadores antigos; a API sempre manda. */
+  provider?: string;
   modelo: CapacidadeDoModelo;
 }): ResultadoDaValidacao {
   const ponto = PONTO_POR_ID.get(entrada.pontoId);
@@ -65,6 +73,29 @@ export function validarBinding(entrada: {
       ok: false,
       codigo: "ponto_fixo",
       mensagem: `${ponto.rotulo} não aceita troca de modelo. ${ponto.fixo.razao}`,
+    };
+  }
+
+  // Áudio: o formato é o da OpenAI, e só OpenAI e OpenRouter o falam. Gravar
+  // Anthropic aqui não daria erro na tela — daria áudio sem transcrição, com a
+  // escada caindo para outra chave em silêncio.
+  if (ponto.exige.audio === true && entrada.provider !== undefined) {
+    if (!transcreveAudio(entrada.provider)) {
+      return {
+        ok: false,
+        codigo: "provedor_nao_transcreve",
+        mensagem: `${ponto.rotulo} só funciona com a OpenAI ou a OpenRouter. ${POR_QUE_SO_ESTES}`,
+      };
+    }
+    if (modeloDeTranscricaoConhecido(entrada.provider, entrada.modelo.model_id)) {
+      return { ok: true, avisos: [] };
+    }
+    return {
+      ok: true,
+      avisos: [
+        `"${entrada.modelo.model_id}" não está entre os modelos de transcrição que conhecemos. Se for um servidor ` +
+          `seu (endereço próprio), isso é esperado; senão, confira o nome — com nome errado o áudio não é transcrito.`,
+      ],
     };
   }
 

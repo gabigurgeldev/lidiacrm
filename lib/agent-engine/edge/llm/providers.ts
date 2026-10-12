@@ -92,8 +92,19 @@ export function createDefaultRegistry(opts?: { allowedHosts?: string[] }): Provi
   return {
     anthropic: (apiKey, modelId) =>
       createAnthropic({ apiKey, fetch: contain(ANTHROPIC_ENDPOINT) })(modelId),
-    openai: (apiKey, modelId) =>
-      createOpenAI({ apiKey, fetch: contain(OPENAI_ENDPOINT) })(modelId),
+    // `aceitaEndpointProprio: true` em `lib/ai/pontos/provedores.ts`: o painel
+    // deixa apontar a OpenAI para um servidor compatível (modelo local,
+    // gateway próprio), e a allowlist passa a ser a desse endereço — mesmo
+    // contrato da OpenRouter abaixo. Antes o endereço era ignorado e a chamada
+    // ia para a OpenAI de verdade.
+    openai: (apiKey, modelId, baseUrl) => {
+      const endpoint = baseUrl ?? OPENAI_ENDPOINT;
+      return createOpenAI({
+        apiKey,
+        ...(baseUrl ? { baseURL: baseUrl } : {}),
+        fetch: contain(endpoint),
+      })(modelId);
+    },
     google: (apiKey, modelId) =>
       createGoogleGenerativeAI({ apiKey, fetch: contain(GOOGLE_ENDPOINT) })(modelId),
     /**
