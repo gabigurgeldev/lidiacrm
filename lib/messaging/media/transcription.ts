@@ -85,6 +85,38 @@ export function escolherTranscricao(chaves: {
   return null;
 }
 
+/** O que o painel gravou para "Ouvir o áudio do cliente" (`ai_purpose_bindings`). */
+export interface BindingDeTranscricao {
+  provider: string;
+  model_id: string;
+  base_url: string | null;
+}
+
+/**
+ * A escolha do PAINEL, quando há uma, antes da escada de chave.
+ *
+ * Até 2026-10-12 o ponto era fixo: a transcrição sempre subia a escada
+ * OpenAI → OpenRouter com o modelo da casa, e quem queria o modelo mais
+ * preciso (ou um whisper próprio) não tinha como escolher. Provedor que não
+ * fala o formato de áudio da OpenAI devolve `null` — quem chama volta para a
+ * escada, nunca manda a chave de um serviço para o endpoint de outro.
+ */
+export function transcricaoDoBinding(binding: BindingDeTranscricao, apiKey: string): EscolhaDaTranscricao | null {
+  if (binding.provider === "openai") {
+    return {
+      origem: "openai",
+      creds: { apiKey, model: binding.model_id, ...(binding.base_url ? { baseUrl: binding.base_url } : {}) },
+    };
+  }
+  if (binding.provider === "openrouter") {
+    return {
+      origem: "openrouter",
+      creds: { apiKey, model: binding.model_id, baseUrl: binding.base_url ?? TRANSCRICAO_PELA_OPENROUTER.baseUrl },
+    };
+  }
+  return null;
+}
+
 /**
  * O que o painel de provedores mostra no ponto "Ouvir o áudio do cliente".
  *
@@ -95,13 +127,26 @@ export function escolherTranscricao(chaves: {
  * em "não consegui abrir". Aqui a tela descreve a mesma escada que o worker
  * sobe, a partir das chaves que existem — sem decifrar nenhuma.
  */
-export function transcricaoParaATela(tem: { openai: boolean; openrouter: boolean }): {
+export function transcricaoParaATela(
+  tem: { openai: boolean; openrouter: boolean },
+  binding: BindingDeTranscricao | null = null,
+): {
   /** Nunca nulo: sem chave nenhuma, é o degrau que a escada tenta primeiro. */
   provider: string;
   modelId: string | null;
   porQue: string;
   aviso: string | null;
 } {
+  if (binding !== null && (binding.provider === "openai" || binding.provider === "openrouter")) {
+    return {
+      provider: binding.provider,
+      modelId: binding.model_id,
+      porQue: "Escolhido por você neste painel.",
+      aviso: tem[binding.provider]
+        ? null
+        : `Não há chave da ${binding.provider === "openai" ? "OpenAI" : "OpenRouter"} cadastrada nem na instalação: os áudios voltam a usar a outra chave, se houver.`,
+    };
+  }
   const escolha = escolherTranscricao({
     openai: tem.openai ? "x" : null,
     openrouter: tem.openrouter ? "x" : null,

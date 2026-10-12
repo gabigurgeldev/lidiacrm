@@ -65,6 +65,12 @@ export interface Ponto {
     porQue: string;
   };
   avisos: string[];
+  /** Ponto que só aceita alguns provedores e modelos (ex.: transcrição de áudio). */
+  restricao?: {
+    provedores: string[];
+    modelos: Array<{ provider: string; model_id: string; display_name: string }>;
+    explicacao: string;
+  } | null;
 }
 
 interface Modelo {
@@ -291,7 +297,17 @@ export function CartaoDoPonto({
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState("");
 
-  const modelosDoProvider = dados.modelos.filter((m) => m.provider === provider);
+  // Ponto com restrição (transcrição): a lista vem dele, não do catálogo de
+  // modelos de conversa — que não tem nenhum modelo de áudio.
+  const restricao = ponto.restricao ?? null;
+  const modelosDoProvider: Modelo[] = restricao
+    ? restricao.modelos
+        .filter((m) => m.provider === provider)
+        .map((m) => ({ ...m, supports_tools: true, supports_vision: false, input_price_per_million_cents: null }))
+    : dados.modelos.filter((m) => m.provider === provider);
+  const provedoresDoPonto = restricao
+    ? dados.provedores.filter((p) => restricao.provedores.includes(p.id))
+    : dados.provedores;
   // Roteadores primeiro e busca por texto: a OpenRouter tem ~500 modelos, e uma
   // lista única sem busca escondia exatamente os que escolhem sozinhos.
   const separadosBrutos = separarModelos(modelosDoProvider, busca, modelId);
@@ -425,13 +441,18 @@ export function CartaoDoPonto({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {dados.provedores.map((p) => (
+                {provedoresDoPonto.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.rotulo}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {restricao && (
+              <p className="mt-1 text-xs text-muted-foreground" data-testid={`restricao-${ponto.id}`}>
+                {t(restricao.explicacao)}
+              </p>
+            )}
           </div>
 
           <div>

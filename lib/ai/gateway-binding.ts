@@ -27,6 +27,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 
 import { decryptKey, byteaToBuffer } from "@/lib/crypto/aes_gcm";
+import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -42,6 +43,8 @@ export interface ModeloResolvido {
   /** Para o log: qual modelo e de onde veio a decisão. */
   modelId: string;
   origem: "binding" | "padrao";
+  /** Só com binding: de qual degrau da escada veio a chave (ver `chaveDoBinding`). */
+  chave?: OrigemDaChave;
 }
 
 /**
@@ -66,20 +69,22 @@ export async function resolverModeloDoPonto(
     return model === null ? null : { model, modelId: String(padrao), origem: "padrao" };
   }
 
-  const apiKey = await decifrarChave(binding.credential_id, organizationId);
-  if (apiKey === null) {
-    // Binding configurado mas sem chave utilizável: cai no padrão em vez de
-    // deixar o ponto morto. O aviso é o que impede isso de virar mais uma
-    // falha muda — foi justamente o que esta frente veio acabar.
+  const chave = await chaveDoBinding(binding, organizationId);
+  if (chave === null) {
+    // Binding configurado mas sem chave utilizável em nenhum degrau: cai no
+    // padrão em vez de deixar o ponto morto. O aviso é o que impede isso de
+    // virar mais uma falha muda — foi justamente o que esta frente veio acabar.
     logger.warn("[gateway-binding] binding sem credencial utilizável — usando o padrão", {
       organization_id: organizationId,
       purpose,
+      provider: binding.provider,
+      origem: "padrao_sem_chave_do_provedor",
     });
     const model = resolveLanguageModel(padrao);
     return model === null ? null : { model, modelId: String(padrao), origem: "padrao" };
   }
 
-  const model = instanciar(binding.provider, apiKey, binding.model_id, binding.base_url);
+  const model = instanciar(binding.provider, chave.apiKey, binding.model_id, binding.base_url);
   if (model === null) {
     logger.warn("[gateway-binding] provider do binding é desconhecido — usando o padrão", {
       organization_id: organizationId,
@@ -90,7 +95,83 @@ export async function resolverModeloDoPonto(
     return fallback === null ? null : { model: fallback, modelId: String(padrao), origem: "padrao" };
   }
 
-  return { model, modelId: binding.model_id, origem: "binding" };
+  return { model, modelId: binding.model_id, origem: "binding", chave: chave.origem };
+}
+
+export type OrigemDaChave = "credencial_escolhida" | "credencial_da_organizacao" | "chave_da_instalacao";
+
+/**
+ * A chave com que o ponto vai chamar o provedor ESCOLHIDO no painel.
+ *
+ * ═══ A escada, e o defeito que ela fecha ═══
+ *
+ * `credential_id` nulo é escolha legítima na tela ("usar a chave da
+ * instalação"). Até 2026-10-12 este módulo tratava nulo como "sem chave" e
+ * caía no PADRÃO — que é Claude. Quem escolhia OpenRouter com a chave da
+ * instalação via a tela dizer OpenRouter e a conta da Anthropic pagar:
+ * exatamente o "botão que não controla nada" que este arquivo veio acabar.
+ *
+ *  1. a credencial escolhida no binding (se ainda ativa e validada);
+ *  2. a credencial ativa e validada da organização PARA AQUELE PROVEDOR (a mais
+ *     antiga — desempate que não muda sozinho, igual a `embeddings/chave.ts`);
+ *  3. a chave da instalação daquele provedor (`ANTHROPIC_API_KEY`,
+ *     `OPENAI_API_KEY`, `OPENROUTER_API_KEY`; a Google não tem chave de
+ *     instalação).
+ *
+ * Nunca a chave de OUTRO provedor: mandar a chave de um para o endpoint de
+ * outro é a forma do defeito do PR #151. Sem nenhum degrau, devolve `null` e o
+ * chamador cai no padrão com aviso.
+ */
+async function chaveDoBinding(
+  binding: LinhaBinding,
+  organizationId: string,
+): Promise<{ apiKey: string; origem: OrigemDaChave } | null> {
+  if (binding.credential_id !== null) {
+    const escolhida = await decifrarChave(binding.credential_id, organizationId);
+    if (escolhida !== null) return { apiKey: escolhida, origem: "credencial_escolhida" };
+  }
+  const daOrganizacao = await credencialAtivaDoProvedor(binding.provider, organizationId);
+  if (daOrganizacao !== null) return { apiKey: daOrganizacao, origem: "credencial_da_organizacao" };
+  const daInstalacao = chaveDaInstalacao(binding.provider);
+  if (daInstalacao !== null) return { apiKey: daInstalacao, origem: "chave_da_instalacao" };
+  return null;
+}
+
+function chaveDaInstalacao(provider: string): string | null {
+  switch (provider) {
+    case "anthropic":
+      return env.ANTHROPIC_API_KEY || null;
+    case "openai":
+      return env.OPENAI_API_KEY || null;
+    case "openrouter":
+      return env.OPENROUTER_API_KEY || null;
+    default:
+      return null;
+  }
+}
+
+async function credencialAtivaDoProvedor(provider: string, organizationId: string): Promise<string | null> {
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("ai_provider_credentials")
+      .select("api_key_encrypted, api_key_iv, api_key_tag")
+      .eq("organization_id", organizationId)
+      .eq("provider", provider)
+      .eq("is_active", true)
+      .not("validated_at", "is", null)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (!data) return null;
+    return decryptKey({
+      ciphertext: byteaToBuffer(data.api_key_encrypted),
+      iv: byteaToBuffer(data.api_key_iv),
+      tag: byteaToBuffer(data.api_key_tag),
+    });
+  } catch {
+    return null;
+  }
 }
 
 interface LinhaBinding {
@@ -174,7 +255,10 @@ function instanciar(
     case "anthropic":
       return createAnthropic({ apiKey })(modelId);
     case "openai":
-      return createOpenAI({ apiKey })(modelId);
+      // `aceitaEndpointProprio: true` no registro de provedores: o painel
+      // deixa preencher o endereço (servidor compatível com a API da OpenAI),
+      // e ignorá-lo aqui mandava a chamada para a OpenAI de verdade.
+      return createOpenAI(baseUrl ? { apiKey, baseURL: baseUrl } : { apiKey })(modelId);
     case "google":
       return createGoogleGenerativeAI({ apiKey })(modelId);
     case "openrouter":
