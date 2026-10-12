@@ -15,6 +15,7 @@ import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
+import { randomId } from "@/lib/random-id";
 import { Paperclip, Trash, Warning } from "@/lib/ui/icons";
 
 export interface AnexoDaTela {
@@ -61,7 +62,7 @@ export function BotaoDeAnexar({
       const falhas: string[] = [];
       for (const a of json.data.anexos) {
         if (a.ok) {
-          novos.push({ id: crypto.randomUUID(), nome: a.nome, texto: a.texto, chars: a.chars, truncado: a.truncado, ler: true, guardar: false });
+          novos.push({ id: randomId(), nome: a.nome, texto: a.texto, chars: a.chars, truncado: a.truncado, ler: true, guardar: false });
         } else {
           falhas.push(`${a.nome}: ${a.motivo}`);
         }
