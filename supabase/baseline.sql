@@ -22259,7 +22259,7 @@ update playbook_pointers p
 alter table public.ai_agent_versions
   add column if not exists change_summary text;
 
-do $
+do $$
 begin
   if not exists (
     select 1 from pg_constraint
@@ -22270,7 +22270,7 @@ begin
       add constraint ai_agent_versions_change_summary_len
       check (change_summary is null or char_length(change_summary) <= 500);
   end if;
-end $;
+end $$;
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
