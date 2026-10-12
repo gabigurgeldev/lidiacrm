@@ -11,6 +11,7 @@ import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -60,17 +61,17 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   const linhas = (conversas ?? []) as Array<{ id: string; contact_id: string; last_message_at: string | null }>;
   const { data: contatos } = await admin
     .from("contacts")
-    .select("id, name, display_name")
+    .select("id, name, display_name, phone_number")
     .eq("organization_id", orgId)
     .in(
       "id",
       linhas.map((c) => c.contact_id),
     );
+  // O rótulo do contato tem UMA regra no produto (`rotuloDoContato`).
   const nome = new Map(
-    ((contatos ?? []) as Array<{ id: string; name: string | null; display_name: string | null }>).map((c) => [
-      c.id,
-      c.display_name || c.name || null,
-    ]),
+    ((contatos ?? []) as Array<{ id: string; name: string | null; display_name: string | null; phone_number: string | null }>).map(
+      (c) => [c.id, rotuloDoContato(c)],
+    ),
   );
 
   // Na ordem em que o agente atuou (a mais recente primeiro), não na do banco.
