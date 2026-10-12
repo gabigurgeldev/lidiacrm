@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { ferramentasDe, type MapaDePacotes } from "@/lib/ai/agents/construtor/capacidades";
+import { verificarManual, verificarPrompt, type Achado } from "@/lib/ai/agents/construtor/verificacao";
 import type {
   CoordenacaoDaPrevia,
   MaterialDaPrevia,
@@ -35,7 +36,7 @@ import type { Painel } from "@/lib/coordenador/painel";
 import { Switch } from "@/components/ui/switch";
 import { PACOTES, type ToolBundle } from "@/lib/mcp/tools/pacotes";
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
-import { Sparkle, Trash, Warning } from "@/lib/ui/icons";
+import { CheckCircle, Sparkle, Trash, Warning } from "@/lib/ui/icons";
 
 import {
   Bolha,
@@ -94,6 +95,8 @@ export function CriarComIa({ canais, mapa }: { canais: Canal[]; mapa: MapaDePaco
   const [material, setMaterial] = React.useState("");
   const [historico, setHistorico] = React.useState<Fala[]>([]);
   const [rodada, setRodada] = React.useState(1);
+  const [maxRodadas, setMaxRodadas] = React.useState(3);
+  const [confirmarBrancos, setConfirmarBrancos] = React.useState(false);
   const [nicho, setNicho] = React.useState<string | undefined>();
   const [perguntas, setPerguntas] = React.useState<PerguntaDaEntrevista[]>([]);
   const [respostas, setRespostas] = React.useState<string[]>([]);
@@ -110,21 +113,25 @@ export function CriarComIa({ canais, mapa }: { canais: Canal[]; mapa: MapaDePaco
     try {
       const res = await apiClient.post<RespostaDaEntrevista>(
         "/api/v1/ai/agents/construtor/entrevistar",
-        { material, historico: hist, rodada: r },
+        { material, historico: hist, rodada: r, ...(nicho ? { nicho } : {}) },
         TEMPO,
       );
       // Só agora a rodada conta: se a chamada falhar, a pessoa reenvia as
       // mesmas respostas sem duplicá-las no histórico nem pular uma rodada.
       setHistorico(hist);
-      setRodada(r);
+      setRodada(res.data.rodada ?? r);
+      setMaxRodadas(res.data.max_rodadas ?? 3);
       setNicho(res.data.nicho);
+      setConfirmarBrancos(false);
       if (res.data.kind === "perguntar") {
         setPerguntas(res.data.perguntas);
         setRespostas(res.data.perguntas.map(() => ""));
         setEtapa("perguntas");
       } else {
         setResumo(res.data.resumo);
-        await gerar(hist);
+        // O nicho vai explícito: o estado só atualiza no próximo render, e o
+        // `gerar` leria o da rodada anterior (indefinido na rodada 1).
+        await gerar(hist, res.data.nicho);
       }
     } catch (err) {
       showApiError(err);
@@ -133,17 +140,18 @@ export function CriarComIa({ canais, mapa }: { canais: Canal[]; mapa: MapaDePaco
     }
   }
 
-  async function gerar(hist: Fala[]) {
+  async function gerar(hist: Fala[], nichoDaRodada: string | undefined = nicho) {
     setEtapa("gerando");
     try {
       const res = await apiClient.post<RespostaDaGeracao>(
         "/api/v1/ai/agents/construtor/gerar",
-        { material, historico: hist, nicho },
+        { material, historico: hist, ...(nichoDaRodada ? { nicho: nichoDaRodada } : {}) },
         TEMPO,
       );
       setPrevia(res.data.previa);
       setForaDoTeto(res.data.pacotes_fora_do_teto);
       setMateriaisFalharam(res.data.materiais_falharam);
+      setHistorico(hist);
       setEtapa("revisar");
     } catch (err) {
       showApiError(err);
@@ -152,12 +160,35 @@ export function CriarComIa({ canais, mapa }: { canais: Canal[]; mapa: MapaDePaco
     }
   }
 
+  const emBranco = respostas.filter((r) => r.trim() === "").length;
+
+  /** A rodada na tela, como falas. Em branco vira `PULOU` só quando `comPulos`. */
+  function falasDaRodada(comPulos: boolean): Fala[] {
+    return perguntas.flatMap((p, i) => {
+      const r = respostas[i]?.trim() ?? "";
+      if (r === "" && !comPulos) return [];
+      return [
+        { papel: "ia" as const, texto: p.pergunta },
+        { papel: "usuario" as const, texto: r || PULOU },
+      ];
+    });
+  }
+
   function enviarRespostas() {
-    const novas: Fala[] = perguntas.flatMap((p, i) => [
-      { papel: "ia" as const, texto: p.pergunta },
-      { papel: "usuario" as const, texto: respostas[i]?.trim() || PULOU },
-    ]);
-    void entrevistar([...historico, ...novas], rodada + 1);
+    // Resposta em branco vira lacuna — o agente passa o assunto para uma
+    // pessoa. É escolha válida, mas tem de ser escolha: um clique apressado
+    // não pode pular a rodada inteira sem a pessoa ver.
+    if (emBranco > 0 && !confirmarBrancos) {
+      setConfirmarBrancos(true);
+      return;
+    }
+    void entrevistar([...historico, ...falasDaRodada(true)], rodada + 1);
+  }
+
+  function pularPerguntas() {
+    // Leva o que já foi respondido nesta rodada; antes ia só o histórico, e as
+    // respostas digitadas na tela se perdiam.
+    void gerar([...historico, ...falasDaRodada(false)]);
   }
 
   async function criar() {
@@ -232,7 +263,7 @@ export function CriarComIa({ canais, mapa }: { canais: Canal[]; mapa: MapaDePaco
         <Card className="flex flex-col gap-4 p-5">
           <div className="flex items-center justify-between gap-2">
             <h2 className="font-medium">{t("Só mais algumas perguntas")}</h2>
-            <Badge variant="secondary">{`${t("Rodada")} ${Math.min(rodada, 3)} / 3`}</Badge>
+            <Badge variant="secondary" data-testid="construtor-rodada">{`${t("Rodada")} ${Math.min(rodada, maxRodadas)} / ${maxRodadas}`}</Badge>
           </div>
           {perguntas.map((p, i) => (
             <div key={`${rodada}-${i}`} className="flex flex-col gap-2" data-testid="construtor-pergunta">
@@ -276,16 +307,25 @@ export function CriarComIa({ canais, mapa }: { canais: Canal[]; mapa: MapaDePaco
             <button
               type="button"
               className="text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => void gerar(historico)}
+              onClick={pularPerguntas}
               disabled={ocupado}
               data-testid="construtor-pular-perguntas"
             >
               {t("Pular perguntas e montar agora")}
             </button>
             <Button onClick={enviarRespostas} disabled={ocupado} data-testid="construtor-enviar-respostas">
-              {ocupado ? t("Lendo…") : t("Enviar respostas")}
+              {ocupado ? t("Lendo…") : confirmarBrancos && emBranco > 0 ? t("Enviar mesmo assim") : t("Enviar respostas")}
             </Button>
           </div>
+          {confirmarBrancos && emBranco > 0 && (
+            <Aviso>
+              <span data-testid="construtor-confirmar-brancos">
+                {emBranco === 1
+                  ? t("1 pergunta ficou sem resposta. Ela vira assunto em aberto: o agente chama uma pessoa quando perguntarem.")
+                  : `${emBranco} ${t("perguntas ficaram sem resposta. Elas viram assuntos em aberto: o agente chama uma pessoa quando perguntarem.")}`}
+              </span>
+            </Aviso>
+          )}
           {ocupado && <Pensando rotulo={t("Lendo suas respostas…")} />}
         </Card>
       )}
@@ -304,6 +344,7 @@ export function CriarComIa({ canais, mapa }: { canais: Canal[]; mapa: MapaDePaco
           mapa={mapa}
           foraDoTeto={foraDoTeto}
           materiaisFalharam={materiaisFalharam}
+          fonte={[material, ...historico.map((f) => f.texto)].join("\n")}
           canais={canais}
           canal={canal}
           aoMudarCanal={setCanal}
@@ -359,6 +400,35 @@ export function CriarComIa({ canais, mapa }: { canais: Canal[]; mapa: MapaDePaco
   );
 }
 
+function CartaoDeVerificacao({ achados }: { achados: Achado[] }) {
+  const t = useT();
+  const erros = achados.filter((a) => a.nivel === "erro");
+  if (achados.length === 0) {
+    return (
+      <p className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="construtor-verificacao-ok">
+        <CheckCircle className="size-4 text-emerald-600" aria-hidden />
+        {t("Conferência do prompt: nada a corrigir.")}
+      </p>
+    );
+  }
+  return (
+    <Card className="flex flex-col gap-2 p-4" data-testid="construtor-verificacao">
+      <h3 className="flex items-center gap-2 text-sm font-medium">
+        <Warning className={erros.length > 0 ? "size-4 text-destructive" : "size-4 text-amber-600"} aria-hidden />
+        {erros.length > 0 ? t("Conferência do prompt: corrija antes de criar") : t("Conferência do prompt: vale olhar")}
+      </h3>
+      <ul className="flex flex-col gap-1.5 text-sm">
+        {achados.map((a, i) => (
+          <li key={`${a.regra}-${i}`} className="flex flex-col">
+            <span className={a.nivel === "erro" ? "text-destructive" : undefined}>{a.mensagem}</span>
+            {a.trecho && <span className="font-mono text-xs text-muted-foreground">{a.trecho}</span>}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 function Aviso({ children }: { children: React.ReactNode }) {
   return (
     <p className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
@@ -374,6 +444,7 @@ function Revisao({
   mapa,
   foraDoTeto,
   materiaisFalharam,
+  fonte,
   canais,
   canal,
   aoMudarCanal,
@@ -385,6 +456,8 @@ function Revisao({
   mapa: MapaDePacotes;
   foraDoTeto: ToolBundle[];
   materiaisFalharam: boolean;
+  /** O que o dono contou — a conferência do prompt acusa fato que não está aqui. */
+  fonte: string;
   canais: Canal[];
   canal: string;
   aoMudarCanal: (id: string) => void;
@@ -399,11 +472,20 @@ function Revisao({
       materiais: m === null ? previa.materiais.filter((_, k) => k !== i) : previa.materiais.map((x, k) => (k === i ? m : x)),
     });
 
+  // Conferência ao vivo: refaz a cada edição do prompt, então a pessoa vê o
+  // achado sumir quando corrige. É a mesma função que a rota `gerar` usa.
+  const verificacao = React.useMemo(() => {
+    const achados = verificarPrompt({ prompt: previa.system_prompt, fonte, pacotes: previa.pacotes });
+    return [...achados, ...verificarManual(previa.materiais)];
+  }, [previa.system_prompt, previa.pacotes, previa.materiais, fonte]);
+
   const podeCriar =
     !criando && canal !== "" && previa.nome.trim() !== "" && previa.system_prompt.trim().length >= 10 && total <= TETO_TOOLS_POR_AGENTE;
 
   return (
     <div className="flex flex-col gap-4" data-testid="construtor-revisao">
+      <CartaoDeVerificacao achados={verificacao} />
+
       {previa.lacunas.length > 0 && (
         <Card className="flex flex-col gap-2 border-amber-500/40 p-4">
           <h3 className="flex items-center gap-2 text-sm font-medium">

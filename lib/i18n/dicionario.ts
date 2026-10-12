@@ -4829,6 +4829,13 @@ export const DICIONARIO: Traducoes = {
   "Não fala com o cliente": { es: "No habla con el cliente" },
   "Remover destino": { es: "Quitar destino" },
   "Quando usar": { es: "Cuándo usar" },
+  // ─── Criar com IA: entrevista e conferência do prompt ───
+  "1 pergunta ficou sem resposta. Ela vira assunto em aberto: o agente chama uma pessoa quando perguntarem.": { es: "1 pregunta quedó sin respuesta. Se vuelve un tema abierto: el agente llama a una persona cuando pregunten." },
+  "perguntas ficaram sem resposta. Elas viram assuntos em aberto: o agente chama uma pessoa quando perguntarem.": { es: "preguntas quedaron sin respuesta. Se vuelven temas abiertos: el agente llama a una persona cuando pregunten." },
+  "Conferência do prompt: nada a corrigir.": { es: "Revisión del prompt: nada que corregir." },
+  "Conferência do prompt: corrija antes de criar": { es: "Revisión del prompt: corrige antes de crear" },
+  "Conferência do prompt: vale olhar": { es: "Revisión del prompt: vale la pena revisar" },
+  "Enviar mesmo assim": { es: "Enviar de todos modos" },
   // ─── Criar com IA: o agente no coordenador ───
   "O coordenador de atendimento foi criado em Observar, com este agente como destino.": { es: "El coordinador de atención fue creado en Observar, con este agente como destino." },
   "Este agente entrou no coordenador de atendimento": { es: "Este agente entró en el coordinador de atención" },
