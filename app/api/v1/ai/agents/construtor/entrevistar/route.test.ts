@@ -5,9 +5,11 @@ import { NextRequest } from "next/server";
  * POST /api/v1/ai/agents/construtor/entrevistar
  *
  *  - quem não é admin não chega ao modelo;
- *  - o teto de rodadas é do SERVIDOR: na última, um modelo que insiste em
- *    perguntar recebe "pronto" de volta mesmo assim;
- *  - resposta sem pergunta válida e sem resumo é 502, não uma tela vazia;
+ *  - quem encerra é o SERVIDOR: a 3ª rodada ainda pergunta; depois dela,
+ *    um modelo que insiste em perguntar recebe "pronto" de volta;
+ *  - "pronto" cedo demais (sem o essencial coberto) é pedido de novo;
+ *  - resposta sem pergunta válida, duas vezes, vira rodada de RESERVA — nunca
+ *    502 (a pessoa presa) nem "pronto" em silêncio (a pergunta pulada);
  *  - orçamento esgotado é 402 antes de gastar.
  */
 
@@ -57,28 +59,64 @@ describe("entrevistar", () => {
 
   it("devolve a rodada de perguntas", async () => {
     objeto.mockResolvedValue(
-      resultado({ kind: "perguntar", perguntas: [{ pergunta: "Atende convênio?", opcoes: ["Sim", "Não"] }] }),
+      resultado({ kind: "perguntar", perguntas: [{ pergunta: "Atende convênio?", opcoes: ["Sim", "Não"] }], cobertura: [] }),
     );
     const corpo = await (await chamar({ material: MATERIAL, rodada: 1 })).json();
     expect(corpo.data).toMatchObject({ kind: "perguntar", nicho: "clinica", perguntas: [{ pergunta: "Atende convênio?" }] });
   });
 
-  it("na última rodada o servidor encerra, mesmo que o modelo queira perguntar", async () => {
+  it("a TERCEIRA rodada ainda pergunta (era forçada a encerrar e só cabiam duas)", async () => {
     objeto.mockResolvedValue(resultado({ kind: "perguntar", perguntas: [{ pergunta: "Mais uma?", resposta_livre: true }] }));
     const corpo = await (await chamar({ material: MATERIAL, rodada: 3 })).json();
-    expect(corpo.data.kind).toBe("pronto");
+    expect(corpo.data).toMatchObject({ kind: "perguntar", rodada: 3, max_rodadas: 3 });
   });
 
-  it("resposta incoerente ENCERRA a entrevista (200 `pronto`), não 502", async () => {
-    // Era 502, e em produção a pessoa ficava presa na primeira tela: três
-    // tentativas, três "resposta sem pergunta válida" (ver `normalizarEntrevista`).
-    // O que faltou vira lacuna; a marca de degradação fica no log, não na resposta.
-    objeto.mockResolvedValue(resultado({ kind: "perguntar", perguntas: [] }));
+  it("depois da última rodada o servidor encerra, mesmo que o modelo queira perguntar", async () => {
+    objeto.mockResolvedValue(resultado({ kind: "perguntar", perguntas: [{ pergunta: "Mais uma?", resposta_livre: true }] }));
+    const corpo = await (await chamar({ material: MATERIAL, rodada: 4 })).json();
+    expect(corpo.data.kind).toBe("pronto");
+    expect(objeto).toHaveBeenCalledTimes(1);
+  });
+
+  it("`pronto` na rodada 1 sem o checklist coberto é pedido de novo, e a correção diz o que falta", async () => {
+    objeto
+      .mockResolvedValueOnce(resultado({ kind: "pronto", resumo: "Agente da clínica.", perguntas: [], cobertura: [] }))
+      .mockResolvedValueOnce(
+        resultado({ kind: "perguntar", perguntas: [{ pergunta: "Pode dizer preço?", opcoes: ["Sim", "Não"] }], cobertura: [] }),
+      );
+    const corpo = await (await chamar({ material: MATERIAL })).json();
+    expect(corpo.data).toMatchObject({ kind: "perguntar", perguntas: [{ pergunta: "Pode dizer preço?" }] });
+    expect(objeto).toHaveBeenCalledTimes(2);
+    expect(objeto.mock.calls[1]![0].system).toMatch(/CORREÇÃO: você respondeu kind=.pronto./);
+  });
+
+  it("resposta sem pergunta, duas vezes, vira rodada de RESERVA do checklist — nem 502, nem pronto", async () => {
+    // Em produção (2026-10-10) o modelo devolveu três vezes "sem pergunta
+    // válida". Era 502 (pessoa presa); depois virou `pronto` (pergunta pulada).
+    objeto.mockResolvedValue(resultado({ kind: "perguntar", perguntas: [], cobertura: [] }));
     const res = await chamar({ material: MATERIAL });
     expect(res.status).toBe(200);
     const corpo = await res.json();
-    expect(corpo.data.kind).toBe("pronto");
-    expect(corpo.data).not.toHaveProperty("degradada");
+    expect(corpo.data.kind).toBe("perguntar");
+    expect(corpo.data.perguntas.length).toBeGreaterThan(0);
+    expect(corpo.data.perguntas[0].pergunta.endsWith("?")).toBe(true);
+    expect(objeto).toHaveBeenCalledTimes(2);
+  });
+
+  it("`pronto` com o checklist inteiro coberto é aceito de primeira", async () => {
+    const cobertura = ["Negócio", "Objetivo do agente", "Oferta", "Pagamento e políticas", "Cliente e qualificação", "Tom", "Passar para uma pessoa"].map(
+      (assunto) => ({ assunto, estado: "coberto", evidencia: "está no texto" }),
+    );
+    objeto.mockResolvedValue(resultado({ kind: "pronto", resumo: "Agente da clínica.", perguntas: [], cobertura }));
+    const corpo = await (await chamar({ material: MATERIAL })).json();
+    expect(corpo.data).toMatchObject({ kind: "pronto", resumo: "Agente da clínica." });
+    expect(objeto).toHaveBeenCalledTimes(1);
+  });
+
+  it("o nicho da rodada anterior vale, em vez de reclassificar pelo texto", async () => {
+    objeto.mockResolvedValue(resultado({ kind: "perguntar", perguntas: [{ pergunta: "X?", resposta_livre: true }] }));
+    const corpo = await (await chamar({ material: MATERIAL, nicho: "loja" })).json();
+    expect(corpo.data.nicho).toBe("loja");
   });
 
   it("orçamento esgotado é 402, sem chamar o modelo", async () => {

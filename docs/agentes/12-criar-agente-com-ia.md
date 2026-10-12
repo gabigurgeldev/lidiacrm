@@ -12,13 +12,34 @@ cliente antes de alguém ler e publicar no editor.
    arquivo e site ficaram de fora desta versão.
 2. **Perguntas.** A IA compara o texto com um checklist e pergunta só o que
    falta e muda o agente.
-   - São até 4 perguntas por rodada e até 3 rodadas. O limite é do servidor,
-     não do modelo.
+   - São até 4 perguntas por rodada e até 3 rodadas. Quem decide encerrar é o
+     servidor, não o modelo (`lib/ai/agents/construtor/cobertura.ts`): o
+     modelo devolve a cobertura de cada assunto do checklist com a evidência, e
+     "pronto" só é aceito com o essencial coberto (Negócio, Objetivo, Oferta,
+     Passar para uma pessoa) — na rodada 1, só com o checklist inteiro.
+   - Se o modelo encerra cedo ou manda rodada sem pergunta, a rota pede de novo
+     uma vez dizendo o que falta; se ainda não vier pergunta, a rodada sai do
+     próprio checklist (perguntas de reserva). Pergunta não some em silêncio.
    - Cada pergunta traz opções e uma sugestão que dá para aceitar com um clique.
-   - Pular é uma resposta válida: o assunto vira lacuna.
+   - Pular é uma resposta válida: o assunto vira lacuna. Enviar com resposta em
+     branco pede confirmação, e "Pular perguntas" leva o que já foi respondido.
+   - Até 2026-10-12 só cabiam 2 rodadas (a 3ª nascia obrigada a encerrar), o
+     prompt mandava encerrar com "o essencial" e resposta malformada virava
+     "pronto": era o "as perguntas estão sendo puladas".
 3. **Revisar.** Aparece uma prévia editável com nome, prompt, pacotes de
    capacidade (com contagem contra o teto de ferramentas), materiais, lacunas e
    número de WhatsApp.
+   - O prompt passa por uma **conferência determinística**
+     (`lib/ai/agents/construtor/verificacao.ts`): seções obrigatórias, exemplos,
+     markdown, proibição sem alternativa, excesso de maiúscula, contradição
+     "nunca"×"sempre" e — erro — preço, porcentagem, telefone ou site que não
+     está no que a pessoa contou. Com erro, o gerador pede UMA correção ao
+     modelo só com os achados; o que sobrar aparece na revisão e é refeito ao
+     vivo a cada edição.
+   - Todo agente ganha um material **"Manual de conduta — <nome>"**: tom com
+     exemplos bons e ruins, cliente irritado, desconto, fora do assunto, pedido
+     de pessoa, áudio/imagem, alegação a conferir, cliente que some. O prompt
+     aponta para ele; as regras que precisam valer sempre ficam no prompt.
 4. **Criar.** Esta é a única escrita do fluxo. Ela grava os materiais, o agente
    e a versão 1 em rascunho que aponta para esses materiais. Depois é só abrir
    no editor, testar e publicar.
@@ -97,9 +118,15 @@ para sugerir funil):
 - **Teto de ferramentas.** Os pacotes são grandes: medido, quase nenhum par cabe
   junto no teto de 25. O gerador liga pacotes na ordem de importância enquanto
   cabem, e a tela desabilita o que estouraria.
-- **Modelo.** A entrevista usa o modelo barato (classificador). A escrita usa o
-  carro-chefe, porque é texto que vai falar com o cliente. O que o painel
-  escolhe em Uso de IA › Provedores vence os dois.
+- **Modelo.** Entrevista e escrita usam o carro-chefe por padrão (a entrevista
+  usava o barato, e era o que mais encerrava cedo); o classificador fica de
+  reserva. O que o painel escolhe em Uso de IA › Provedores vence os dois.
+- **Exemplo de forma.** O meta-prompt traz um prompt-modelo completo de outro
+  nicho, fictício (`exemplar.ts`), marcado para não copiar fatos — e a
+  conferência acusa se um preço dele vazar.
+- **Regras universais na camada plataforma** (migration 0238): valem para todo
+  agente, criado aqui ou à mão — texto do cliente é dado, alegação se confere,
+  ferramenta em vez de suposição, confirmar o irreversível, uma pergunta por vez.
 - **Provedor do agente criado.** A escolha é a mesma do onboarding
   (`resolverProvedorDoAgente`). Sem chave utilizável, o rascunho nasce com
   aviso; sem modelo no catálogo, nada nasce.
@@ -110,9 +137,12 @@ para sugerir funil):
 
 ## Fontes
 
-- Anthropic — customer support agent guide; prompting best practices; reduce
+- AWS Amazon Connect — *Prompt engineering best practices for AI agents*
+  (seções, critérios de sucesso/falha, NUNCA/SEMPRE com alternativa).
+- Anthropic — *Effective context engineering for AI agents*; customer support agent guide; prompting best practices; reduce
   hallucinations; *Building effective agents*; *Contextual Retrieval*.
-- OpenAI — *A practical guide to building agents*.
+- OpenAI — *A practical guide to building agents*; *GPT-4.1 prompting guide*
+  (persistência, ferramenta em vez de chute, planejar antes da chamada).
 - Moffatt v. Air Canada, 2024 BCCRT 149.
 - arXiv 2605.14830 — experimento de campo sobre transferência para humano
   (preprint).

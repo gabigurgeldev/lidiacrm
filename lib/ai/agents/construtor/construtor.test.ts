@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { pacotesQueCabem, type MapaDePacotes } from "./capacidades";
 import { metaPromptDoAgente, metaPromptDosMateriais, SECOES_OBRIGATORIAS } from "./doutrina";
 import { MAX_PERGUNTAS_POR_RODADA, MAX_RODADAS, promptDaEntrevista } from "./entrevista";
-import { normalizarEntrevista, normalizarGeracao, previaSchema, RESUMO_PADRAO } from "./esquemas";
+import { normalizarCobertura, normalizarEntrevista, normalizarGeracao, previaSchema, RESUMO_PADRAO } from "./esquemas";
 import { NICHOS, nichoDoTexto } from "./nicho";
 
 /**
@@ -54,15 +54,20 @@ describe("nicho", () => {
 });
 
 describe("entrevista", () => {
-  it("a última rodada manda encerrar", () => {
-    expect(promptDaEntrevista("generico", MAX_RODADAS)).toMatch(/ÚLTIMA RODADA/);
-    expect(promptDaEntrevista("generico", 1)).not.toMatch(/ÚLTIMA RODADA/);
+  const sem = { cobertura: [] as Array<{ assunto: string; estado: "coberto" | "parcial" | "faltando"; evidencia: string }> };
+
+  it("a terceira rodada é a última de PERGUNTAS; só a seguinte manda encerrar", () => {
+    expect(promptDaEntrevista("generico", MAX_RODADAS)).toMatch(/última rodada de perguntas/);
+    expect(promptDaEntrevista("generico", MAX_RODADAS)).not.toMatch(/A entrevista acabou/);
+    expect(promptDaEntrevista("generico", MAX_RODADAS + 1)).toMatch(/A entrevista acabou/);
+    expect(promptDaEntrevista("generico", 1)).not.toMatch(/última rodada/);
   });
 
   it("pergunta fechada com uma opção só vira aberta, com a opção como sugestão", () => {
     const r = normalizarEntrevista({
       kind: "perguntar",
       perguntas: [{ pergunta: "Qual o horário?", opcoes: ["8h às 18h"] }],
+      ...sem,
     });
     expect(r).toEqual({
       kind: "perguntar",
@@ -78,32 +83,24 @@ describe("entrevista", () => {
         { pergunta: "  " },
         ...Array.from({ length: 6 }, (_, i) => ({ pergunta: `P${i}`, resposta_livre: true })),
       ],
+      ...sem,
     });
-    expect(r?.kind).toBe("perguntar");
-    expect(r && r.kind === "perguntar" ? r.perguntas.map((p) => p.pergunta) : []).toHaveLength(
-      MAX_PERGUNTAS_POR_RODADA,
-    );
+    expect(r.kind === "perguntar" ? r.perguntas.map((p) => p.pergunta) : []).toHaveLength(MAX_PERGUNTAS_POR_RODADA);
   });
 
-  // Era `null` → 502, e a pessoa ficava presa na primeira tela (produção, 2026-10-10).
-  it("perguntar sem pergunta válida encerra a entrevista em vez de falhar", () => {
-    expect(normalizarEntrevista({ kind: "perguntar", perguntas: [] })).toEqual({
-      kind: "pronto",
-      resumo: RESUMO_PADRAO,
+  // Até 2026-10-12 virava `pronto` aqui, em silêncio — uma das causas de "as
+  // perguntas estão sendo puladas". Quem decide agora é `decidirRodada`.
+  it("perguntar sem pergunta válida NÃO vira pronto: sai perguntar com lista vazia", () => {
+    expect(normalizarEntrevista({ kind: "perguntar", perguntas: [], ...sem })).toEqual({
+      kind: "perguntar",
+      perguntas: [],
       nicho: null,
-      degradada: "perguntar_sem_pergunta",
     });
-    expect(normalizarEntrevista({ kind: "perguntar" })?.kind).toBe("pronto");
-    expect(normalizarEntrevista({ kind: "perguntar", perguntas: [{ pergunta: "   " }] })?.kind).toBe("pronto");
-  });
-
-  it("perguntar sem pergunta mas com resumo aproveita o resumo do modelo", () => {
-    const r = normalizarEntrevista({ kind: "perguntar", perguntas: [], resumo: " Agente da floricultura. ", nicho: "loja" });
-    expect(r).toEqual({ kind: "pronto", resumo: "Agente da floricultura.", nicho: "loja", degradada: "perguntar_sem_pergunta" });
+    expect(normalizarEntrevista({ kind: "perguntar", perguntas: [{ pergunta: "   " }], ...sem }).kind).toBe("perguntar");
   });
 
   it("pronto sem resumo usa o resumo padrão", () => {
-    expect(normalizarEntrevista({ kind: "pronto", resumo: " " })).toEqual({
+    expect(normalizarEntrevista({ kind: "pronto", resumo: " ", perguntas: [], ...sem })).toEqual({
       kind: "pronto",
       resumo: RESUMO_PADRAO,
       nicho: null,
@@ -112,7 +109,24 @@ describe("entrevista", () => {
   });
 
   it("caminho feliz não leva marca de degradação", () => {
-    expect(normalizarEntrevista({ kind: "pronto", resumo: "Agente X." })).not.toHaveProperty("degradada");
+    expect(normalizarEntrevista({ kind: "pronto", resumo: "Agente X.", perguntas: [], ...sem })).not.toHaveProperty("degradada");
+  });
+
+  it("cobertura: só assuntos do checklist, primeiro vence, 'coberto' sem evidência vira 'parcial'", () => {
+    const r = normalizarCobertura({
+      kind: "pronto",
+      perguntas: [],
+      cobertura: [
+        { assunto: "oferta", estado: "coberto", evidencia: "Buquê R$ 90" },
+        { assunto: "Oferta", estado: "faltando", evidencia: "" },
+        { assunto: "Assunto inventado", estado: "coberto", evidencia: "x" },
+        { assunto: "Tom", estado: "coberto", evidencia: "  " },
+      ],
+    });
+    expect(r).toEqual([
+      { assunto: "Oferta", estado: "coberto" },
+      { assunto: "Tom", estado: "parcial" },
+    ]);
   });
 });
 
