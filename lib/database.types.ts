@@ -361,6 +361,7 @@ export type Database = {
           agent_id: string
           audio_voice: string
           cases_enabled: boolean
+          change_summary: string | null
           channel_session_id: string
           cost_budget_cents: number
           created_at: string
@@ -401,6 +402,7 @@ export type Database = {
           agent_id: string
           audio_voice?: string
           cases_enabled?: boolean
+          change_summary?: string | null
           channel_session_id: string
           cost_budget_cents?: number
           created_at?: string
@@ -441,6 +443,7 @@ export type Database = {
           agent_id?: string
           audio_voice?: string
           cases_enabled?: boolean
+          change_summary?: string | null
           channel_session_id?: string
           cost_budget_cents?: number
           created_at?: string

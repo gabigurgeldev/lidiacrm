@@ -44,6 +44,8 @@ export interface AgentVersionRow {
   superseded_at: string | null;
   created_at: string;
   created_by: string | null;
+  /** O que mudou nesta versão (migration 0240) — hoje só a correção com IA grava. */
+  change_summary?: string | null;
 }
 
 interface ListResponse {

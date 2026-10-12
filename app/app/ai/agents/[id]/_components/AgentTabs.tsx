@@ -3,12 +3,15 @@
  * Tabs do detalhe de agent. Wave 12 (S-13.12) entrega Test, Runs e History.
  * A aba Teste ensaia o formulário vivo (`TestPanel`, `lib/agent-engine/ensaio`).
  */
+import Link from "next/link";
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { GATILHO_DA_ABA, SEGMENTADO_ABAS } from "@/components/ajustes";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/i18n/useT";
+import { Sparkle } from "@/lib/ui/icons";
 import { AgentForm, type ChannelSessionLite, type VersaoDoFormulario } from "./AgentForm";
 import type { CoberturaPorFunil } from "./FunisDoAgente";
 import type { MaterialDoAcervo } from "./BasesDoAgente";
@@ -93,6 +96,7 @@ export function AgentTabs(props: Props) {
       onValueChange={(v) => setTab(v as Aba)}
       className="flex flex-col gap-4"
     >
+      <div className="flex flex-wrap items-center justify-between gap-3">
       {/* No segmentado do kit de Ajustes. */}
       <TabsList className={SEGMENTADO_ABAS}>
         <TabsTrigger value="configuration" className={GATILHO_DA_ABA}>{t("Configuração")}</TabsTrigger>
@@ -102,6 +106,16 @@ export function AgentTabs(props: Props) {
         <TabsTrigger value="history" className={GATILHO_DA_ABA}>{t("Histórico")}</TabsTrigger>
         <TabsTrigger value="proposals" className={GATILHO_DA_ABA}>{t("Propostas")}</TabsTrigger>
       </TabsList>
+        {/* Relatar um problema e receber a correção como rascunho — ver criar-com-ia/_components/Corrigir.tsx. */}
+        {!props.readOnly && (
+          <Button asChild variant="outline" size="sm" data-testid="agente-corrigir-com-ia">
+            <Link href={`/app/ai/agents/criar-com-ia?modo=corrigir&agente=${props.agent.id}`}>
+              <Sparkle className="mr-1.5 size-4" aria-hidden />
+              {t("Corrigir com IA")}
+            </Link>
+          </Button>
+        )}
+      </div>
 
       {/*
         `forceMount`: o formulário fica montado (só escondido) nas outras abas.

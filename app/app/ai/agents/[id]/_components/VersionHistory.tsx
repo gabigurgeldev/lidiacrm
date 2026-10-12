@@ -159,6 +159,11 @@ export function VersionHistory({ agentId, versions, readOnly }: Props) {
                   {t("publicada em")} {new Date(v.published_at).toLocaleString()}
                 </span>
               ) : null}
+              {v.change_summary ? (
+                <span className="basis-full text-xs text-muted-foreground" data-testid="versao-resumo-da-mudanca">
+                  {v.change_summary}
+                </span>
+              ) : null}
               <div className="ml-auto flex gap-2">
                 <Button variant="ghost" size="sm" onClick={() => openDiff(v)}>
                   {t("Comparar")}

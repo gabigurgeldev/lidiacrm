@@ -169,6 +169,10 @@ export const AUDIT_ACTIONS = [
   "ai_agent.version_updated",
   "ai_agent.tested",
   "ai_agent.reverted",
+  // "Corrigir com IA" gravou um rascunho a partir de um problema relatado
+  // (`lib/ai/agents/correcao/aplicar.ts`). Nunca publica: `metadata` diz de
+  // que versão partiu e o que mudou — é o que responde "quem mexeu no prompt".
+  "ai_agent.correcao_aplicada",
   "ai.dispatcher_run",
   "ai.pacing_knobs_updated",
   "ai.inbox_item_status_changed",
