@@ -47,9 +47,6 @@ const SEM_KIT: Record<string, string> = {
 const LEGADO: Record<string, number> = {
   // Reescrito no PR do construtor em conversa (Revisao/Anexos já no kit); 10 = 9 + o cartão do coordenador.
   "app/app/ai/agents/criar-com-ia/_client.tsx": 10,
-  // Mexidos pelo PR do embedding escolhível; convertidos depois que ele entrar.
-  "app/app/ai/providers/_components/PainelDeProvedores.tsx": 4,
-  "app/app/ai/providers/_components/ModeloDoPonto.tsx": 1,
 };
 
 function arquivos(dir: string): string[] {
