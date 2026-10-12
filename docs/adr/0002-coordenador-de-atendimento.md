@@ -325,6 +325,7 @@ quem é a vez (`vez.ts`).
 | Interrupção por regra | `interrupcao.ao_interromper` era publicado e ignorado. | Aplicado à execução antiga depois da troca (`paused` ou `cancelled`). |
 | Teto `decisor_chamadas_por_hora` | Contava `coord_transicoes` com modelo — consulta que terminava em "manter" não gravava linha, e o teto nunca batia em `active`. | Conta `llm_calls` com `purpose = 'coordenador_decidir'` do contato (o ajudante não conta: é a mesma consulta). |
 | Cliente volta depois de N horas | Mensagem curta ficava com o dono de dias atrás sem perguntar; trocar exigia confiança mínima. | `decisor.reinicio_apos_horas` (padrão 24, `0` desliga): o modelo é consultado mesmo com mensagem curta, e trocar não exige a confiança mínima (motivo `retomada_apos_pausa`). Medido por `sent_at`. |
+| Modelo consultado mantém quem conduz (ou falha e a regra de segurança mantém) | Nenhuma linha em `coord_transicoes`: modelo, escolha, confiança e erro sumiam, e a Atividade ficava congelada na última troca — em produção, uma falha antiga parecia o estado atual do modelo. | Linha `status = mantida` (0238) com `detalhe.decisor` completo, inclusive `erro`. Os limites de transferência não a contam (só `aplicada`); a tela mostra modelo, escolha, confiança e erro. |
 
 **Recusado:** uma "janela de estabilidade" que dispensasse o modelo por alguns
 minutos depois de uma decisão. Contradiz `decisor.quando = "sempre"`, que o dono
