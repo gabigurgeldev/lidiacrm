@@ -6,8 +6,8 @@ titulo: O painel de Provedores mostra o modelo de verdade e a escolha vale mesmo
 
 Em **IA › Provedores**:
 
-- **"Buscar no seu material" e "Indexar o seu material" não aparecem mais como
-  Claude.** Eles usam embedding (texto → vetor), não o modelo de conversa, e a
+- **"Buscar no seu material" e "Indexar o seu material" não aparecem mais como Claude.**
+  Eles usam embedding (texto → vetor), não o modelo de conversa, e a
   tela agora mostra o modelo e a chave que de fato usam. O mesmo vale para
   "Ensaiar o agente" e "Medir o tamanho do contexto".
 - **"Ouvir o áudio do cliente" passou a ser configurável**: escolha OpenAI ou
