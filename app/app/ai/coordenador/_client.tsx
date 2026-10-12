@@ -733,6 +733,7 @@ interface ResultadoDaSimulacao {
     status: string;
     modelo: string | null;
     confianca: number | null;
+    erro?: string;
     ajudante?: { decidiu: boolean; primeiro: { modelo: string | null; escolha: string | null; confianca: number | null } };
   } | null;
 }
@@ -832,6 +833,11 @@ function Simulacao({ politica, painel }: { politica: Politica; painel: Painel })
               {resultado.decisor.confianca !== null ? ` · ${Math.round(resultado.decisor.confianca * 100)}%` : ""}
             </span>
           )}
+          {resultado.decisor?.erro && (
+            <span className="text-xs text-destructive" data-testid="sim-erro-do-modelo">
+              {t("Erro do modelo")}: {resultado.decisor.erro}
+            </span>
+          )}
           {resultado.decisor?.ajudante && (
             <span className="text-xs text-muted-foreground" data-testid="sim-ajudante">
               {resultado.decisor.ajudante.decidiu
@@ -856,6 +862,7 @@ const ROTULO_DO_STATUS: Record<string, string> = {
   recusada: "Recusada",
   obsoleta: "Descartada",
   falhou: "Sem destino",
+  mantida: "Mantida",
 };
 
 function Atividade() {
@@ -885,7 +892,7 @@ function Atividade() {
   if (linhasDeAtividade.length === 0) {
     return (
       <Card className="p-6 text-sm text-muted-foreground">
-        {t("Nenhuma troca de responsável ainda. Com o coordenador em Observar ou Ativo, elas aparecem aqui.")}
+        {t("Nenhuma decisão ainda. Com o coordenador em Observar ou Ativo, elas aparecem aqui.")}
       </Card>
     );
   }
@@ -894,13 +901,26 @@ function Atividade() {
       {linhasDeAtividade.map((l) => (
         <div key={l.id} className="flex flex-col gap-1 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col">
-            <span>
-              {t(l.de)} → <span className="font-medium">{t(l.para)}</span>
-            </span>
+            {l.status === "mantida" ? (
+              <span>
+                <span className="font-medium">{t(l.para)}</span> {t("continua conduzindo")}
+              </span>
+            ) : (
+              <span>
+                {t(l.de)} → <span className="font-medium">{t(l.para)}</span>
+              </span>
+            )}
             <span className="text-xs text-muted-foreground">
               {t(l.motivo_legivel)}
               {l.modelo ? ` · ${t("Modelo")}: ${l.modelo}` : ""}
+              {l.escolha ? ` · ${t("escolheu")} ${l.escolha}` : ""}
+              {l.confianca !== null ? ` (${Math.round(l.confianca * 100)}%)` : ""}
             </span>
+            {l.erro && (
+              <span className="text-xs text-destructive" data-testid="atividade-erro-do-modelo">
+                {t("Erro do modelo")}: {l.erro}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Badge variant={l.status === "aplicada" ? "default" : "secondary"}>{t(ROTULO_DO_STATUS[l.status] ?? l.status)}</Badge>

@@ -278,7 +278,7 @@ async function registrarDiario(
   e: EntradaDoTurno,
   politica: PoliticaEfetiva,
   estado: EstadoDaConversa | null,
-  status: "shadow" | "falhou" | "recusada",
+  status: "shadow" | "falhou" | "recusada" | "mantida",
   proposta: Proposta,
   decisao: Decisao | null,
   messageId: string | null,
@@ -323,7 +323,7 @@ async function registrarDiario(
       decisao?.ms ?? null,
       decisao?.custoCents ?? null,
       decisao?.confianca ?? null,
-      JSON.stringify({ acao: proposta.acao }),
+      JSON.stringify({ acao: proposta.acao, ...decisorNoDetalhe(decisao) }),
     ],
   );
 }
@@ -697,6 +697,16 @@ async function coordenarComPolitica(
         if (!r.ok) return { modo: "active", acao: "nada", motivo: r.motivo };
         geracao = r.geracao;
         await pararInterrompida();
+      } else if (decisao !== null) {
+        // O modelo foi consultado e a conversa seguiu com o mesmo dono. Sem
+        // esta linha a decisão sumia — modelo, escolha, confiança e o erro
+        // quando ele falhou e a regra de segurança manteve o dono —, e a aba
+        // Atividade ficava congelada na última troca: o modelo parecia
+        // quebrado enquanto decidia toda mensagem. Os limites não a contam
+        // (só `aplicada`). Falhar em gravar não pode calar o dono: o turno segue.
+        await registrarDiario(pool, e, politica, estado, "mantida", proposta, decisao, ultima?.id ?? null).catch(
+          () => undefined,
+        );
       }
       await admitirLote("agente", agentId, geracao);
       return {
