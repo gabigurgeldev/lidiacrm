@@ -580,6 +580,18 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     sintomaDeFalha: "Você pede um ajuste no chat do construtor e a prévia não muda.",
     registraEm: "nenhum",
   },
+  {
+    id: "agent_builder_corrigir",
+    rotulo: "Corrigir um agente com IA",
+    oQueFaz:
+      "Lê o agente, as últimas execuções e a conversa em que o problema aconteceu, acha a causa e propõe a correção (prompt, materiais, capacidades).",
+    papel: "melhorar",
+    exige: {},
+    // O diagnóstico (`correcao/diagnosticar`) usa o mesmo ponto.
+    emissor: "app/api/v1/ai/agents/[id]/correcao/propor/route.ts",
+    sintomaDeFalha: "Você relata um problema em \"Corrigir com IA\" e nenhuma causa ou correção aparece.",
+    registraEm: "nenhum",
+  },
 ] as const;
 
 /** Índice por id, para quem resolve um binding. */

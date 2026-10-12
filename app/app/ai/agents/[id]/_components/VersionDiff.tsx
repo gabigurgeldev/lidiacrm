@@ -5,62 +5,19 @@
  * Implementação intencionalmente simples (sem `react-diff-viewer`):
  *   - Tools: pills added/removed.
  *   - Provider/model/limits: lista de mudanças key→A/B.
- *   - System prompt: diff naive linha-a-linha (LCS via dynamic programming
- *     pequeno) com marcadores `+`/`-`/` `.
+ *   - System prompt: diff linha-a-linha de `lib/ui/diff-de-linhas.ts` (o mesmo
+ *     da correção com IA), com marcadores `+`/`-`/` `.
  */
 import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { useT } from "@/hooks/i18n/useT";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
+import { diffDeLinhas } from "@/lib/ui/diff-de-linhas";
 
 interface Props {
   versionA: AgentVersionRow; // mais antiga / base
   versionB: AgentVersionRow; // mais nova / candidata
-}
-
-type DiffLine = { kind: "ctx" | "add" | "del"; text: string };
-
-function diffLines(a: string, b: string): DiffLine[] {
-  const A = a.split("\n");
-  const B = b.split("\n");
-  const m = A.length;
-  const n = B.length;
-  // LCS DP — capped to keep us safe on huge prompts (rare here).
-  const CAP = 600;
-  if (m > CAP || n > CAP) {
-    return [
-      { kind: "del", text: a },
-      { kind: "add", text: b },
-    ];
-  }
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
-  for (let i = m - 1; i >= 0; i--) {
-    const row = dp[i]!;
-    const next = dp[i + 1]!;
-    for (let j = n - 1; j >= 0; j--) {
-      row[j] = A[i] === B[j] ? next[j + 1]! + 1 : Math.max(next[j]!, row[j + 1]!);
-    }
-  }
-  const out: DiffLine[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < m && j < n) {
-    if (A[i] === B[j]) {
-      out.push({ kind: "ctx", text: A[i]! });
-      i++;
-      j++;
-    } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
-      out.push({ kind: "del", text: A[i]! });
-      i++;
-    } else {
-      out.push({ kind: "add", text: B[j]! });
-      j++;
-    }
-  }
-  while (i < m) out.push({ kind: "del", text: A[i++]! });
-  while (j < n) out.push({ kind: "add", text: B[j++]! });
-  return out;
 }
 
 function diffArr(prev: string[], next: string[]) {
@@ -112,7 +69,7 @@ export function VersionDiff({ versionA, versionB }: Props) {
   const followupEnabledChanged =
     (versionA.followup?.enabled ?? false) !== (versionB.followup?.enabled ?? false);
   const fields = buildFieldChanges(versionA, versionB);
-  const lines = diffLines(versionA.system_prompt ?? "", versionB.system_prompt ?? "");
+  const lines = diffDeLinhas(versionA.system_prompt ?? "", versionB.system_prompt ?? "");
 
   return (
     <div className="flex flex-col gap-4">
