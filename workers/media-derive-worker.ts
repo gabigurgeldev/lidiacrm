@@ -20,8 +20,10 @@ import {
   apiTranscriptionProvider,
   escolherTranscricao,
   idiomaDaTranscricao,
+  transcricaoDoBinding,
   type EscolhaDaTranscricao,
 } from "@/lib/messaging/media/transcription";
+import { transcreveAudio } from "@/lib/messaging/media/modelos-de-transcricao";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -175,11 +177,34 @@ export async function deriveMessageMedia(row: EventRow): Promise<HandlerResult> 
         return null; // sem credencial na org e sem a variável de ambiente
       }
     };
-    const openaiKey = await chaveDo("openai");
-    const transcricao = escolherTranscricao({
-      openai: openaiKey,
-      openrouter: openaiKey ? null : await chaveDo("openrouter"),
-    });
+    // A escolha do painel vem antes da escada: provedor, modelo e chave que o
+    // operador gravou em "Ouvir o áudio do cliente". Sem chave utilizável para
+    // ela, a escada segue valendo — áudio sem transcrição é pior que áudio
+    // transcrito pelo outro serviço.
+    let transcricao: EscolhaDaTranscricao | null = null;
+    const bindingDaTranscricao = await lerBindingDoPonto(admin, row.organization_id, "transcricao_de_audio");
+    if (bindingDaTranscricao && transcreveAudio(bindingDaTranscricao.provider)) {
+      try {
+        const r = await resolveOrgLlmConfig(derivePool(), llmCfg, row.organization_id, {
+          provider: bindingDaTranscricao.provider,
+          credentialId: bindingDaTranscricao.credential_id,
+        });
+        transcricao = transcricaoDoBinding(bindingDaTranscricao, r.apiKey);
+      } catch (err) {
+        logger.warn("[media-derive] binding de transcrição sem credencial utilizável; usando a escada", {
+          organization_id: row.organization_id,
+          provider: bindingDaTranscricao.provider,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    if (transcricao === null) {
+      const openaiKey = await chaveDo("openai");
+      transcricao = escolherTranscricao({
+        openai: openaiKey,
+        openrouter: openaiKey ? null : await chaveDo("openrouter"),
+      });
+    }
 
     // O idioma vem do locale da org: sem ele o modelo adivinha pelo áudio, e
     // áudio curto em português já saiu em tailandês (ver `TranscriptionCreds.language`).
@@ -219,10 +244,10 @@ async function lerBindingDoPonto(
   admin: ReturnType<typeof createAdminClient>,
   organizationId: string,
   purpose: string,
-): Promise<{ provider: string; model_id: string; credential_id: string | null } | null> {
+): Promise<LinhaDoBinding | null> {
   const { data, error } = await admin
     .from("ai_purpose_bindings")
-    .select("provider, model_id, credential_id")
+    .select("provider, model_id, credential_id, base_url")
     .eq("organization_id", organizationId)
     .eq("purpose", purpose)
     .eq("is_enabled", true)
@@ -235,7 +260,14 @@ async function lerBindingDoPonto(
     });
     return null;
   }
-  return (data as { provider: string; model_id: string; credential_id: string | null } | null) ?? null;
+  return (data as LinhaDoBinding | null) ?? null;
+}
+
+interface LinhaDoBinding {
+  provider: string;
+  model_id: string;
+  credential_id: string | null;
+  base_url: string | null;
 }
 
 function buildDeriveDeps(

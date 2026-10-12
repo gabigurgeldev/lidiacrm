@@ -393,7 +393,7 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
       "Encontra, entre os seus documentos, os trechos que respondem à pergunta do cliente.",
     papel: "lembrar",
     exige: { embeddingDims: 1536 },
-    emissor: "lib/agent-engine/edge/llm/embed.ts",
+    emissor: "lib/agent-engine/agent/search-knowledge.ts",
     fixo: {
       razao:
         "Precisa usar o mesmo modelo com que o material foi indexado. Se divergir, a busca continua funcionando e devolve resultados errados — falha silenciosa, e por isso a troca é feita junto com a reindexação, não aqui.",
@@ -411,10 +411,9 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     papel: "perceber",
     exige: { audio: true },
     emissor: "lib/messaging/media/transcription.ts",
-    fixo: {
-      razao:
-        "Usa o padrão de transcrição da OpenAI, que é o formato que os serviços do mercado implementam. Funciona com a sua chave da OpenAI ou, se você não tiver uma, com a da OpenRouter — não depende do modelo de conversa escolhido.",
-    },
+    // Não é mais fixo (2026-10-12): o painel escolhe provedor (OpenAI ou
+    // OpenRouter — os dois que falam o formato de áudio da OpenAI), modelo e
+    // chave. Sem escolha, vale a escada de chave de `escolherTranscricao`.
     sintomaDeFalha:
       "O cliente manda áudio e o agente responde como se não tivesse recebido nada.",
     registraEm: "nenhum",

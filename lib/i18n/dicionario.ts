@@ -2307,6 +2307,13 @@ export const DICIONARIO: Traducoes = {
     es: "Heredado de quien disparó la llamada — el agente publicado, o el enrutador de intención.",
   },
   "Usando sua chave da OpenAI.": { es: "Usando tu clave de OpenAI." },
+  "Escolhido por você neste painel.": { es: "Elegido por ti en este panel." },
+  "Usa o modelo da versão que você ensaia.": { es: "Usa el modelo de la versión que estás probando." },
+  "Mede no mesmo provedor do modelo que está respondendo.": { es: "Mide en el mismo proveedor del modelo que está respondiendo." },
+  "Embedding (texto → vetor), não modelo de conversa. Usando sua chave da OpenAI.": { es: "Embedding (texto → vector), no modelo de conversación. Usando tu clave de OpenAI." },
+  "Embedding (texto → vetor), não modelo de conversa. Usando sua chave da OpenRouter.": { es: "Embedding (texto → vector), no modelo de conversación. Usando tu clave de OpenRouter." },
+  "Embedding (texto → vetor), não modelo de conversa. Falta a chave.": { es: "Embedding (texto → vector), no modelo de conversación. Falta la clave." },
+  "A transcrição usa o formato de áudio da OpenAI, que a OpenAI e a OpenRouter implementam. A Anthropic não tem API de áudio, e a da Google usa outro formato — ainda não suportado.": { es: "La transcripción usa el formato de audio de OpenAI, que OpenAI y OpenRouter implementan. Anthropic no tiene API de audio, y la de Google usa otro formato — todavía no soportado." },
   "Usando sua chave da OpenRouter (não há chave da OpenAI cadastrada).": {
     es: "Usando tu clave de OpenRouter (no hay clave de OpenAI registrada).",
   },
