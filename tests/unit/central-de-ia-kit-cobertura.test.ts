@@ -45,8 +45,8 @@ const SEM_KIT: Record<string, string> = {
 
 /** Arquivo → quantos `<Card` ainda tem. Só desce. */
 const LEGADO: Record<string, number> = {
-  // Reescrito no PR do construtor em conversa (Revisao/Anexos já no kit).
-  "app/app/ai/agents/criar-com-ia/_client.tsx": 9,
+  // Reescrito no PR do construtor em conversa (Revisao/Anexos já no kit); 10 = 9 + o cartão do coordenador.
+  "app/app/ai/agents/criar-com-ia/_client.tsx": 10,
   // Mexidos pelo PR do embedding escolhível; convertidos depois que ele entrar.
   "app/app/ai/providers/_components/PainelDeProvedores.tsx": 4,
   "app/app/ai/providers/_components/ModeloDoPonto.tsx": 1,
