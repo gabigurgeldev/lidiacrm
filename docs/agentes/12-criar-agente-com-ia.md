@@ -73,6 +73,52 @@ O que a pessoa não informou **não é inventado**. Vira regra de transferência
 prompt ("se perguntarem sobre X, chame a equipe") e aparece na prévia como
 "O que ficou em aberto".
 
+## Corrigir um agente que já existe
+
+O mesmo assistente tem o modo **Corrigir existente** (`?modo=corrigir&agente=<id>`).
+A porta mais curta é o botão **Corrigir com IA** no editor do agente, que abre
+direto no agente certo. É o "iterar sobre falha observada" da doutrina: parte de
+um caso concreto que deu errado e faz a menor mudança que o resolve.
+
+1. **Relatar.** A pessoa escolhe o agente, conta o problema e, se quiser, aponta
+   a conversa em que ele aconteceu (lista das conversas recentes em que o agente
+   atuou) e anexa arquivos (a tabela de preços certa, a política nova).
+2. **Diagnosticar** (`correcao/diagnosticar`). O servidor lê, sempre filtrando
+   a organização da sessão: a versão de partida (o rascunho vigente, se houver
+   — a tela avisa —, senão a publicada), os materiais ligados com o começo de
+   cada um, as últimas 20 execuções (status, erro, ferramentas) e até 40
+   mensagens da conversa apontada, com CPF, e-mail, telefone e CEP mascarados
+   (`lib/ai/anonymize`). A IA devolve as causas prováveis com a evidência
+   literal e onde está cada uma (prompt, materiais, capacidades, frases de
+   passagem, configuração ou fora do agente), e até 3 perguntas quando a
+   correção depende de um fato ou de uma decisão do dono.
+3. **Propor** (`correcao/propor`). Com o diagnóstico e as respostas, a IA
+   devolve o prompt corrigido inteiro, materiais a criar ou a deixar de usar,
+   pacotes a ligar ou desligar e frases de passagem, cada mudança com o porquê,
+   e uma mensagem de cliente que reproduz o problema. `normalizarProposta`
+   apara contra a base (só desliga material que está ligado, ligar e desligar o
+   mesmo pacote se anulam). O prompt novo passa pela conferência do construtor,
+   e a tela mostra só o que a correção **piorou** — agente feito à mão
+   raramente segue as seções do construtor, e acusar isso seria ruído.
+4. **Conferir e testar.** Antes × depois do prompt, linha a linha (o mesmo diff
+   do histórico de versões, `lib/ui/diff-de-linhas.ts`), com uma chave por
+   mudança. "Testar a correção" roda o ensaio duas vezes (versão de partida ×
+   versão corrigida) com a mensagem de teste; custa tokens e não envia nada. A
+   versão do teste é montada pela mesma função que o aplicar usa
+   (`versaoCorrigida`), então o testado é o gravado. Materiais novos só
+   entram depois de salvar.
+5. **Salvar como rascunho** (`correcao/aplicar`). Se a partida era rascunho,
+   ele é atualizado; se era a publicada, nasce um rascunho v(max+1). A versão
+   ganha `change_summary` ("Correção com IA: <problema>", migration 0240), que
+   o histórico mostra. **Nunca publica**: o agente no ar só muda quando a pessoa
+   publica no editor, e a versão anterior fica para reverter. Se a versão de
+   partida deixou de ser a vigente no meio (alguém salvou ou publicou), a
+   aplicação é recusada com 409 em vez de passar por cima. Audita
+   `ai_agent.correcao_aplicada`.
+
+Os dois passos com modelo usam o ponto de IA `agent_builder_corrigir`
+(Uso de IA › Provedores).
+
 ## O que é um bom agente: a doutrina que o gerador segue
 
 A doutrina está em `lib/ai/agents/construtor/doutrina.ts` e é vigiada por teste

@@ -22254,6 +22254,24 @@ update playbook_pointers p
    and p.layer = 'platform'
    and exists (select 1 from nova);
 
+-- ---- a versão do agente diz o que mudou nela (migration 0240) ----
+-- Ver o cabeçalho de supabase/migrations/20261012140000_0240_versao_do_agente_diz_o_que_mudou.sql.
+alter table public.ai_agent_versions
+  add column if not exists change_summary text;
+
+do $
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'ai_agent_versions_change_summary_len'
+       and conrelid = 'public.ai_agent_versions'::regclass
+  ) then
+    alter table public.ai_agent_versions
+      add constraint ai_agent_versions_change_summary_len
+      check (change_summary is null or char_length(change_summary) <= 500);
+  end if;
+end $;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
