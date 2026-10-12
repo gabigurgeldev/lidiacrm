@@ -23,7 +23,8 @@ import {
   isAiGatewayConfigured,
 } from "@/lib/ai/gateway";
 import { embedText } from "@/lib/ai/embed";
-import { MODELO_DE_EMBEDDING } from "@/lib/ai/embeddings/chave";
+import { buscarPorMapa, executorSupabase } from "@/lib/ai/knowledge/buscar-por-mapa";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getBudgetStatus, type BudgetStatus } from "@/lib/ai/budget/check";
 import {
   AVISO_CORPO,
@@ -847,54 +848,51 @@ async function retrieveContext(input: RetrieveInput): Promise<RagHit[]> {
 
   if (fontes.length === 0 && !input.kbVersionId) return [];
 
-  let embedding: number[];
+  type RpcRow = {
+    chunk_id: string;
+    knowledge_source_id: string;
+    content: string;
+    similarity: number;
+    metadata?: Record<string, unknown> | null;
+  };
+
+  let linhas: RpcRow[];
   try {
-    const { embedding: e } = await embedText(input.query, {
-      organizationId: input.organizationId,
-      ponto: "embedding_consultar",
-    });
-    embedding = e;
+    if (fontes.length > 0) {
+      // A pergunta é embedada no MAPA de cada material: durante uma troca de
+      // modelo de embedding, parte do acervo ainda está no antigo.
+      const { hits } = await buscarPorMapa({
+        organizationId: input.organizationId,
+        fontes,
+        query: input.query,
+        k: RAG_TOP_K,
+        executor: executorSupabase(admin as unknown as SupabaseClient, input.organizationId, RAG_THRESHOLD),
+      });
+      linhas = hits as unknown as RpcRow[];
+    } else {
+      const { embedding } = await embedText(input.query, {
+        organizationId: input.organizationId,
+        ponto: "embedding_consultar",
+      });
+      const { data, error } = await admin.rpc("retrieve_top_k_chunks" as never, {
+        p_organization_id: input.organizationId,
+        p_kb_version_id: input.kbVersionId,
+        p_embedding: embedding as unknown as string,
+        p_k: RAG_TOP_K,
+        p_threshold: RAG_THRESHOLD,
+      } as never);
+      if (error) throw new Error(error.message);
+      linhas = (data ?? []) as RpcRow[];
+    }
   } catch (err) {
-    logger.warn("[ai-response-worker] embed falhou; segue sem RAG", {
+    logger.warn("[ai-response-worker] busca de trechos falhou; segue sem RAG", {
       error: err instanceof Error ? err.message : String(err),
       organization_id: input.organizationId,
     });
     return [];
   }
 
-  const { data, error } =
-    fontes.length > 0
-      ? await admin.rpc("fn_buscar_trechos_das_fontes" as never, {
-          p_organization_id: input.organizationId,
-          p_source_ids: fontes as unknown as string,
-          p_embedding: embedding as unknown as string,
-          p_k: RAG_TOP_K,
-          p_threshold: RAG_THRESHOLD,
-          p_embedding_model: MODELO_DE_EMBEDDING,
-        } as never)
-      : await admin.rpc("retrieve_top_k_chunks" as never, {
-          p_organization_id: input.organizationId,
-          p_kb_version_id: input.kbVersionId,
-          p_embedding: embedding as unknown as string,
-          p_k: RAG_TOP_K,
-          p_threshold: RAG_THRESHOLD,
-        } as never);
-
-  if (error) {
-    logger.warn("[ai-response-worker] busca de trechos falhou", {
-      error: error.message,
-      organization_id: input.organizationId,
-    });
-    return [];
-  }
-  type RpcRow = {
-    chunk_id: string;
-    knowledge_source_id: string;
-    content: string;
-    similarity: number;
-    metadata: Record<string, unknown> | null;
-  };
-  return ((data ?? []) as RpcRow[]).map((r) => ({
+  return linhas.map((r) => ({
     chunk_id: r.chunk_id,
     knowledge_source_id: r.knowledge_source_id,
     content: r.content,

@@ -15,8 +15,8 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { embedText } from "@/lib/ai/embed";
-import { MODELO_DE_EMBEDDING } from "@/lib/ai/embeddings/chave";
+import type { embedText } from "@/lib/ai/embed";
+import { buscarPorMapa, executorSupabase, type DepsDaBusca } from "@/lib/ai/knowledge/buscar-por-mapa";
 
 export interface TrechoEncontrado {
   chunk_id: string;
@@ -60,17 +60,11 @@ interface LinhaDaRpc {
 export async function buscarConhecimento(
   supabase: SupabaseClient,
   p: ParametrosDaBusca,
-  deps?: { embed?: typeof embedText },
+  deps?: { embed?: typeof embedText; chaveDoMapa?: DepsDaBusca["chaveDoMapa"] },
 ): Promise<ResultadoDaBusca> {
   if (p.knowledgeSourceIds.length === 0) {
     return { trechos: [], melhorSimilaridade: null };
   }
-
-  const embed = deps?.embed ?? embedText;
-  const { embedding } = await embed(p.pergunta, {
-    organizationId: p.organizationId,
-    ponto: "embedding_consultar",
-  });
 
   // Piso real da similaridade de cosseno (1 - distancia, distancia em [0,2]).
   // Pedimos SEM limiar e cortamos aqui para conseguir enxergar o melhor
@@ -78,20 +72,18 @@ export async function buscarConhecimento(
   // se faltou pouco ou se nao ha nada parecido no acervo.
   const PISO = -1;
 
-  const { data, error } = await supabase.rpc("fn_buscar_trechos_das_fontes", {
-    p_organization_id: p.organizationId,
-    p_source_ids: p.knowledgeSourceIds,
-    p_embedding: `[${embedding.join(",")}]`,
-    p_k: p.topK,
-    p_threshold: PISO,
-    p_embedding_model: MODELO_DE_EMBEDDING,
+  // A pergunta é embedada no MAPA de cada material: durante uma troca de
+  // modelo, parte do acervo ainda está no antigo (ver `buscar-por-mapa.ts`).
+  const { hits } = await buscarPorMapa<LinhaDaRpc>({
+    organizationId: p.organizationId,
+    fontes: p.knowledgeSourceIds,
+    query: p.pergunta,
+    k: p.topK,
+    executor: executorSupabase(supabase, p.organizationId, PISO),
+    deps: { ...(deps?.embed ? { embed: deps.embed } : {}), ...(deps?.chaveDoMapa ? { chaveDoMapa: deps.chaveDoMapa } : {}) },
   });
 
-  if (error) {
-    throw new Error(`busca_de_conhecimento_falhou: ${error.message}`);
-  }
-
-  const linhas = (data ?? []) as LinhaDaRpc[];
+  const linhas = hits;
   const melhor = linhas.length > 0 ? Math.max(...linhas.map((l) => l.similarity)) : null;
 
   return {

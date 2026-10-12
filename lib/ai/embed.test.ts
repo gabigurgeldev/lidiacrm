@@ -41,6 +41,10 @@ vi.mock("@/lib/ai/embeddings/chave", async () => {
 });
 
 import { embedText, SemChaveDeEmbeddingError } from "@/lib/ai/embed";
+import { modeloDoMapa, MAPA_LEGADO } from "@/lib/ai/embeddings/catalogo";
+
+const MODELO_OPENAI = modeloDoMapa(MAPA_LEGADO, "openai")!;
+const MODELO_OPENROUTER = modeloDoMapa(MAPA_LEGADO, "openrouter")!;
 
 beforeEach(() => {
   embedSpy.mockReset();
@@ -51,6 +55,7 @@ beforeEach(() => {
     usage: { tokens: 7 },
   });
   chaveMock = () => ({
+    modelo: MODELO_OPENAI,
     apiKey: "sk-da-organizacao",
     baseUrl: null,
     provedor: "openai",
@@ -78,6 +83,7 @@ describe("embedText", () => {
 
   it("COM gateway, mantém a string (é ele quem roteia) e anexa os headers do tenant", async () => {
     chaveMock = () => ({
+      modelo: MODELO_OPENAI,
       apiKey: null,
       baseUrl: null,
       provedor: "openai",
@@ -106,6 +112,7 @@ describe("embedText", () => {
     // o `openai/` para um endpoint que só aceita o id completo, e o material
     // nunca ficava pronto.
     chaveMock = () => ({
+      modelo: MODELO_OPENROUTER,
       apiKey: "sk-or-da-organizacao",
       baseUrl: "https://openrouter.ai/api/v1",
       provedor: "openrouter",
@@ -150,6 +157,7 @@ describe("embedText", () => {
     chaveMock = () => {
       resolucoes++;
       return {
+        modelo: MODELO_OPENAI,
         apiKey: "sk-x",
         baseUrl: null,
         provedor: "openai",
@@ -161,6 +169,7 @@ describe("embedText", () => {
     };
 
     const chave = {
+      modelo: MODELO_OPENAI,
       apiKey: "sk-x",
       baseUrl: null,
       provedor: "openai" as const,

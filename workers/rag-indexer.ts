@@ -36,9 +36,11 @@
 
 import { embedText, SemChaveDeEmbeddingError } from "@/lib/ai/embed";
 import {
+  MODELO_DE_EMBEDDING,
   resolverChaveDeEmbedding,
   type ChaveDeEmbedding,
 } from "@/lib/ai/embeddings/chave";
+import { MOTIVO_TROCA_DE_MODELO } from "@/lib/ai/embeddings/reindexacao";
 import { acquireDebounce } from "@/lib/ai/rag/debounce";
 import { chunkText, computeContentHash } from "@/lib/ai/rag/chunker";
 import { canonizarTipoDeFonte } from "@/lib/ai/rag/tipos-de-fonte";
@@ -357,6 +359,7 @@ async function indexarFonte(
     knowledgeSourceId: fonte.id,
     agentId: fonte.agent_id,
     sourceType: tipo,
+    embeddingModel: chave.modelo.mapa,
   });
 
   console.warn(
@@ -495,6 +498,29 @@ async function garantirFonteDeCatalogo(organizationId: string): Promise<FonteRow
   return criada as FonteRow;
 }
 
+/**
+ * O mapa da versão ATIVA de um material (`null` = sem versão ativa). Versão
+ * anterior à 0181 não gravava o mapa: só existia o legado, e é ele que vale.
+ */
+async function mapaDaVersaoAtiva(organizationId: string, fonteId: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data: fonte } = await admin
+    .from("ai_knowledge_sources")
+    .select("active_kb_version_id")
+    .eq("organization_id", organizationId)
+    .eq("id", fonteId)
+    .maybeSingle();
+  const versaoId = (fonte as { active_kb_version_id?: string | null } | null)?.active_kb_version_id;
+  if (!versaoId) return null;
+  const { data: versao } = await admin
+    .from("ai_knowledge_versions")
+    .select("embedding_model")
+    .eq("organization_id", organizationId)
+    .eq("id", versaoId)
+    .maybeSingle();
+  return (versao as { embedding_model?: string | null } | null)?.embedding_model ?? MODELO_DE_EMBEDDING;
+}
+
 export async function processRagIndexer(row: EventRow): Promise<HandlerResult> {
   const consumerKey = "rag-indexer.v1";
 
@@ -520,13 +546,25 @@ export async function processRagIndexer(row: EventRow): Promise<HandlerResult> {
 
     // Debounce por FONTE (antes era por agente): duas edições seguidas do mesmo
     // material coalescem, e materiais diferentes não se atrapalham.
-    const chaveDebounce = `rag:debounce:${row.organization_id}:${fonte.id}:${row.event_type}`;
+    //
+    // A troca de modelo tem debounce PRÓPRIO: uma edição feita segundos antes
+    // não pode engolir a reindexação que a troca pediu (e o cron
+    // `kb-conversations-batch` ainda reconcilia o que escapar).
+    const trocaDeModelo = row.payload["motivo"] === MOTIVO_TROCA_DE_MODELO;
+    const chaveDebounce = `rag:debounce:${row.organization_id}:${fonte.id}:${row.event_type}${trocaDeModelo ? ":troca" : ""}`;
     if (!(await acquireDebounce(chaveDebounce, DEBOUNCE_TTL_SEC))) {
       return { consumer_key: consumerKey, status: "skipped", detail: "debounced" };
     }
 
-    // A chave é resolvida UMA vez por indexação — não uma vez por trecho.
+    // A chave é resolvida UMA vez por indexação — não uma vez por trecho. Ela
+    // traz o MODELO junto: é com ele que os trechos são embedados e é o mapa
+    // dele que a versão nova grava.
     const chave = await resolverChaveDeEmbedding(row.organization_id, "embedding_indexar");
+    if (chave && trocaDeModelo && (await mapaDaVersaoAtiva(row.organization_id, fonte.id)) === chave.modelo.mapa) {
+      // Trocou de A para B e voltou para A antes de terminar: quem já está no
+      // modelo-alvo não paga de novo.
+      return { consumer_key: consumerKey, status: "skipped", detail: "ja_no_modelo_alvo" };
+    }
     if (!chave) {
       await marcarFonte(row.organization_id, fonte.id, {
         last_index_status: "sem_credencial",
