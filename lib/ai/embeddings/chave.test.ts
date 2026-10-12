@@ -10,7 +10,10 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const banco = vi.hoisted(() => ({ credenciais: [] as Array<{ id: string; label: string; provider: string }> }));
+const banco = vi.hoisted(() => ({
+  credenciais: [] as Array<{ id: string; label: string; provider: string }>,
+  binding: null as null | { provider: string; credential_id: string | null; model_id: string; base_url: string | null },
+}));
 
 vi.mock("@/lib/crypto/aes_gcm", () => ({
   byteaToBuffer: (v: unknown) => v,
@@ -52,18 +55,19 @@ vi.mock("@/lib/supabase/admin", () => ({
                   }))
               : [],
         }),
-        // Nenhum binding no painel: a escada começa no degrau 2.
-        maybeSingle: async () => ({ data: null }),
+        // O binding do painel (degrau 1) vem de `banco.binding`; credencial por id não é usada aqui.
+        maybeSingle: async () => ({ data: tabela === "ai_purpose_bindings" ? banco.binding : null }),
       };
       return q;
     },
   }),
 }));
 
-import { resolverChaveDeEmbedding } from "@/lib/ai/embeddings/chave";
+import { resolverChaveDeEmbedding, resolverChaveParaMapa } from "@/lib/ai/embeddings/chave";
 
 beforeEach(() => {
   banco.credenciais = [];
+  banco.binding = null;
   envFalso.OPENAI_API_KEY = "";
   envFalso.OPENROUTER_API_KEY = "";
 });
@@ -117,5 +121,45 @@ describe("resolverChaveDeEmbedding — OpenRouter", () => {
 
   it("sem nenhuma chave, a resposta é null — e não um palpite", async () => {
     expect(await resolverChaveDeEmbedding("org-1")).toBeNull();
+  });
+});
+
+describe("resolverChaveDeEmbedding — modelo escolhido no painel", () => {
+  it("sem escolha, a chave carrega o mapa LEGADO (quem atualiza não reindexa)", async () => {
+    envFalso.OPENAI_API_KEY = "sk";
+    const chave = await resolverChaveDeEmbedding("org-1");
+    expect(chave?.modelo).toMatchObject({ mapa: "openai/text-embedding-3-small", idNoProvedor: "text-embedding-3-small", parametro: null });
+  });
+
+  it("Gemini pela OpenRouter usa a chave da OpenRouter, com o id e o corte certos", async () => {
+    banco.binding = { provider: "openrouter", credential_id: null, model_id: "google/gemini-embedding-001", base_url: null };
+    banco.credenciais = [{ id: "c1", label: "OR", provider: "openrouter" }];
+    const chave = await resolverChaveDeEmbedding("org-1");
+    expect(chave?.modelo).toMatchObject({ mapa: "google/gemini-embedding-001@1536", provedor: "openrouter", parametro: "dimensions" });
+    expect(chave?.baseUrl).toBe("https://openrouter.ai/api/v1");
+  });
+
+  it("sem chave do provedor escolhido, usa outro que sirva o MESMO mapa — e avisa", async () => {
+    banco.binding = { provider: "openrouter", credential_id: null, model_id: "openai/text-embedding-3-large", base_url: null };
+    envFalso.OPENAI_API_KEY = "sk";
+    const chave = await resolverChaveDeEmbedding("org-1");
+    expect(chave?.modelo).toMatchObject({ mapa: "openai/text-embedding-3-large@1536", provedor: "openai", idNoProvedor: "text-embedding-3-large" });
+    expect(chave?.avisos.join(" ")).toMatch(/mesmo modelo/);
+  });
+
+  it("nenhum provedor com chave para o mapa escolhido: null — nunca outro mapa", async () => {
+    banco.binding = { provider: "google", credential_id: null, model_id: "gemini-embedding-001", base_url: null };
+    envFalso.OPENAI_API_KEY = "sk";
+    expect(await resolverChaveDeEmbedding("org-1")).toBeNull();
+  });
+
+  it("a busca acha material ANTIGO pelo mapa dele, mesmo depois da troca", async () => {
+    banco.binding = { provider: "openrouter", credential_id: null, model_id: "google/gemini-embedding-001", base_url: null };
+    banco.credenciais = [{ id: "c1", label: "OR", provider: "openrouter" }];
+    envFalso.OPENAI_API_KEY = "sk";
+    const legado = await resolverChaveParaMapa("org-1", "openai/text-embedding-3-small");
+    expect(legado?.modelo.mapa).toBe("openai/text-embedding-3-small");
+    const novo = await resolverChaveParaMapa("org-1", "google/gemini-embedding-001@1536");
+    expect(novo?.modelo.mapa).toBe("google/gemini-embedding-001@1536");
   });
 });

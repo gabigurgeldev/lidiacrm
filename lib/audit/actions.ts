@@ -191,6 +191,14 @@ export const AUDIT_ACTIONS = [
   "ai.org_memory_entry_updated",
   /** Provedor/modelo de um ponto do sistema que usa IA foi trocado no painel. */
   "ai.purpose_binding_updated",
+  /**
+   * O modelo que indexa e consulta o material foi trocado no painel. `metadata`
+   * leva o mapa de antes e o de depois, quantos materiais foram mandados
+   * reindexar e a estimativa de custo mostrada a quem confirmou.
+   */
+  "ai.embedding_model_changed",
+  /** O cron reemitiu a reindexação de materiais que ficaram no modelo antigo. */
+  "ai.embedding_reindex_reconciled",
   // Ligar/desligar uma das duas verificações que consultam modelo. Auditável
   // porque muda o que o sistema confere antes de falar com o cliente — e porque
   // custa dinheiro por mensagem.

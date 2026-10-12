@@ -30,7 +30,6 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -46,6 +45,8 @@ import {
 import { useT } from "@/hooks/i18n/useT";
 import { PaginaAjustes } from "@/components/ajustes";
 import { PONTOS_DE_DECISAO, separarModelos } from "@/lib/ai/pontos/roteadores";
+
+import { CartaoDoMaterial } from "./CartaoDoMaterial";
 
 export interface Ponto {
   id: string;
@@ -65,6 +66,14 @@ export interface Ponto {
     porQue: string;
   };
   avisos: string[];
+  /** Ponto que só aceita alguns provedores e modelos (ex.: transcrição de áudio). */
+  restricao?: {
+    provedores: string[];
+    modelos: Array<{ provider: string; model_id: string; display_name: string }>;
+    explicacao: string;
+  } | null;
+  /** O par indexar/buscar do material tem cartão próprio (CartaoDoMaterial). */
+  cartaoProprio?: "material" | null;
 }
 
 interface Modelo {
@@ -164,13 +173,13 @@ export function PainelDeProvedores() {
   if (erro) {
     return (
       <div className="p-6">
-        <Card className="border-destructive/40 p-6">
+        <div className="ios-grupo border-destructive/40 p-6">
           <h2 className="font-medium">{t("Não consegui carregar a configuração de IA")}</h2>
           <p className="mt-2 text-sm text-muted-foreground">{erro}</p>
           <Button className="mt-4" variant="outline" onClick={() => void carregar()}>
             {t("Tentar de novo")}
           </Button>
-        </Card>
+        </div>
       </div>
     );
   }
@@ -194,7 +203,7 @@ export function PainelDeProvedores() {
       }
     >
       {semChave && (
-        <Card className="border-amber-500/40 bg-amber-500/5 p-4" data-testid="aviso-sem-chave">
+        <div className="ios-grupo border-amber-500/40 bg-amber-500/5 p-4" data-testid="aviso-sem-chave">
           <p className="text-sm">
             {t(
               "Você ainda não cadastrou nenhuma chave de provedor. Enquanto isso, tudo usa a chave que veio na instalação.",
@@ -203,8 +212,10 @@ export function PainelDeProvedores() {
               {t("Cadastrar uma chave")}
             </Link>
           </p>
-        </Card>
+        </div>
       )}
+
+      <CartaoDoMaterial credenciais={dados.credenciais} />
 
       <div className="space-y-8">
         {porPapel.map(({ papel, info, pontos }) => (
@@ -254,7 +265,7 @@ function ResumoDoGrupo({ pontos }: { pontos: Ponto[] }) {
   const comAviso = pontos.filter((p) => p.avisos.length > 0).length;
 
   return (
-    <Card className="p-4">
+    <div className="ios-grupo p-4">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="text-muted-foreground">{t("Usando:")}</span>
         {modelos.map((m) => (
@@ -270,7 +281,7 @@ function ResumoDoGrupo({ pontos }: { pontos: Ponto[] }) {
             : `${comAviso} ${t("pontos deste grupo precisam da sua atenção.")}`}
         </p>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -291,7 +302,17 @@ export function CartaoDoPonto({
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState("");
 
-  const modelosDoProvider = dados.modelos.filter((m) => m.provider === provider);
+  // Ponto com restrição (transcrição): a lista vem dele, não do catálogo de
+  // modelos de conversa — que não tem nenhum modelo de áudio.
+  const restricao = ponto.restricao ?? null;
+  const modelosDoProvider: Modelo[] = restricao
+    ? restricao.modelos
+        .filter((m) => m.provider === provider)
+        .map((m) => ({ ...m, supports_tools: true, supports_vision: false, input_price_per_million_cents: null }))
+    : dados.modelos.filter((m) => m.provider === provider);
+  const provedoresDoPonto = restricao
+    ? dados.provedores.filter((p) => restricao.provedores.includes(p.id))
+    : dados.provedores;
   // Roteadores primeiro e busca por texto: a OpenRouter tem ~500 modelos, e uma
   // lista única sem busca escondia exatamente os que escolhem sozinhos.
   const separadosBrutos = separarModelos(modelosDoProvider, busca, modelId);
@@ -316,7 +337,9 @@ export function CartaoDoPonto({
   const aceitaEndpointProprio =
     dados.provedores.find((p) => p.id === provider)?.aceitaEndpointProprio === true;
 
-  const editavel = dados.podeEditar && ponto.fixo === null && !ponto.mandadoPeloAgente;
+  // O par indexar/buscar é escolhido no cartão "Seu material": aqui só leitura.
+  const editavel =
+    dados.podeEditar && ponto.fixo === null && !ponto.mandadoPeloAgente && ponto.cartaoProprio !== "material";
 
   async function salvar() {
     setSalvando(true);
@@ -355,7 +378,7 @@ export function CartaoDoPonto({
   }
 
   return (
-    <Card className="p-4" data-testid={`ponto-${ponto.id}`}>
+    <div className="ios-grupo p-4" data-testid={`ponto-${ponto.id}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -400,6 +423,12 @@ export function CartaoDoPonto({
         </p>
       )}
 
+      {ponto.cartaoProprio === "material" && (
+        <p className="mt-2 text-xs text-muted-foreground" data-testid={`cartao-proprio-${ponto.id}`}>
+          {t("Escolhido no cartão \"Seu material\", no alto da página — indexar e buscar mudam juntos.")}
+        </p>
+      )}
+
       {ponto.mandadoPeloAgente && (
         <p className="mt-2 text-xs text-muted-foreground">
           {t("Este ponto usa o modelo definido na versão publicada do agente.")}{" "}
@@ -425,13 +454,18 @@ export function CartaoDoPonto({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {dados.provedores.map((p) => (
+                {provedoresDoPonto.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.rotulo}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {restricao && (
+              <p className="mt-1 text-xs text-muted-foreground" data-testid={`restricao-${ponto.id}`}>
+                {t(restricao.explicacao)}
+              </p>
+            )}
           </div>
 
           <div>
@@ -563,6 +597,6 @@ export function CartaoDoPonto({
           </div>
         </div>
       )}
-    </Card>
+    </div>
   );
 }
