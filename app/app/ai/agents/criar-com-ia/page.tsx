@@ -11,6 +11,8 @@
  */
 import { redirect } from "next/navigation";
 
+import { PaginaAjustes } from "@/components/ajustes";
+import { traduzir } from "@/lib/i18n/dicionario";
 import { capacidadesPorPacote } from "@/lib/ai/agents/capacidades-padrao";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
@@ -34,8 +36,16 @@ export default async function CriarAgenteComIaPage() {
   }));
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <PaginaAjustes
+      className="mx-auto w-full max-w-6xl"
+      testid="pagina-criar-com-ia"
+      titulo={traduzir("Assistente de agentes", user.idioma)}
+      descricao={traduzir(
+        "Converse com a IA: conte sobre o negócio, anexe arquivos e responda as perguntas. Ela monta o agente, você revisa e pede ajustes no chat. Nada é criado antes do seu clique.",
+        user.idioma,
+      )}
+    >
       <CriarComIa canais={canais} mapa={capacidadesPorPacote()} />
-    </div>
+    </PaginaAjustes>
   );
 }

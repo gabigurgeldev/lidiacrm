@@ -137,4 +137,42 @@ test.describe("criar agente com IA", () => {
     }
     await page.screenshot({ path: ".superpowers/evidence/agente-criado-por-ia-revisao.png", fullPage: true });
   });
+
+  test("anexo lido vai junto para a IA e, marcado para guardar, vira material da prévia", async ({ page }) => {
+    const corpos: Array<{ anexos?: Array<{ nome: string; texto: string }> }> = [];
+    await page.route("**/api/v1/ai/agents/construtor/anexos", (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            anexos: [{ nome: "tabela.txt", ok: true, texto: "Clareamento: R$ 900.", chars: 20, truncado: false }],
+          },
+        },
+      }),
+    );
+    await page.route("**/api/v1/ai/agents/construtor/entrevistar", async (route) => {
+      corpos.push(route.request().postDataJSON());
+      await route.fulfill({ json: { data: { ...PRONTO.data, rodada: 1 } } });
+    });
+    await page.route("**/api/v1/ai/agents/construtor/gerar", (route) => route.fulfill({ json: PREVIA }));
+
+    await loginComoAdmin(page, lerCreds());
+    await page.goto("/app/ai/agents/criar-com-ia");
+    await page.getByTestId("construtor-anexar-arquivo").setInputFiles({
+      name: "tabela.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("Clareamento: R$ 900."),
+    });
+    await expect(page.getByTestId("construtor-anexo")).toHaveCount(1);
+    await page.getByTestId("construtor-anexo-guardar").check();
+    await page
+      .getByTestId("construtor-material")
+      .fill("Somos a Clínica Sorriso, em Curitiba. Atendemos de segunda a sábado. Consulta R$ 200.");
+    await page.getByTestId("construtor-comecar").click();
+
+    await expect(page.getByTestId("construtor-revisao")).toBeVisible({ timeout: 20_000 });
+    // FAQ gerado + o anexo guardado como documento.
+    await expect(page.getByTestId("construtor-material-item")).toHaveCount(2);
+    expect(corpos[0]?.anexos).toEqual([{ nome: "tabela.txt", texto: "Clareamento: R$ 900." }]);
+    await page.screenshot({ path: ".superpowers/evidence/agente-criado-por-ia-anexo.png", fullPage: true });
+  });
 });

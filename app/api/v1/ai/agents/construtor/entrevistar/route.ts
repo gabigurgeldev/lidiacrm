@@ -76,7 +76,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       details: lido.error.flatten(),
     });
   }
-  const { material, historico, rodada } = lido.data;
+  const { material, historico, rodada, anexos } = lido.data;
 
   const orcamento = await orcamentoPermite(orgId, PURPOSE);
   if (!orcamento.permitido) {
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   try {
     const porta = portaComFallback(cadeia, { organizationId: orgId, requestId });
-    const prompt = pedidoAoModelo(material, historico);
+    const prompt = pedidoAoModelo(material, historico, anexos);
     const perguntarAoModelo = (correcao?: string) =>
       porta.objeto({
         schema: saidaDaEntrevistaSchema,

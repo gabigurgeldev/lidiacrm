@@ -154,7 +154,21 @@ export async function criarAgenteDaPrevia(
     else materiaisComFalha.push({ nome: m.nome, motivo: r.mensagem });
   }
 
-  const versao = montar(materiais.map((m) => m.id));
+  // Materiais que JÁ existem e a pessoa escolheu ligar. Admin client: o filtro
+  // de organização é programático (anti-pattern 10) — id de outra organização
+  // simplesmente não volta, e não é ligado.
+  let existentes: string[] = [];
+  if ((previa.fontes_existentes ?? []).length > 0) {
+    const { data } = await admin
+      .from("ai_knowledge_sources")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("is_active", true)
+      .in("id", previa.fontes_existentes ?? []);
+    existentes = ((data ?? []) as Array<{ id: string }>).map((f) => f.id);
+  }
+
+  const versao = montar([...new Set([...materiais.map((m) => m.id), ...existentes])]);
   if (!versao.success) {
     return { ...recusa(500, "internal_error", "Não consegui montar a versão do agente."), materiais_criados: materiais };
   }

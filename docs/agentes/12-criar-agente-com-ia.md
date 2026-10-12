@@ -7,9 +7,26 @@ cliente antes de alguém ler e publicar no editor.
 
 ## O fluxo
 
+A tela é uma conversa (`app/app/ai/agents/criar-com-ia/_client.tsx`): o que a
+pessoa conta, as perguntas e as respostas ficam numa linha do tempo, e a prévia
+aparece ao lado quando fica pronta. A conversa é guardada na aba
+(`sessionStorage`): recarregar a página não perde o trabalho.
+
 1. **Contar.** A pessoa cola tudo o que tem sobre o negócio: o que faz, preços,
-   horários, políticas, dúvidas frequentes, objeções e jeito de falar. Só texto;
-   arquivo e site ficaram de fora desta versão.
+   horários, políticas, dúvidas frequentes, objeções e jeito de falar.
+   - **Anexos (PDF, Markdown, texto).** Até 5 por vez, 20 MB cada. A rota
+     `construtor/anexos` só extrai o texto e o devolve — não grava arquivo
+     nem linha. Cada anexo tem duas escolhas independentes: "a IA lê" (o texto
+     vai delimitado, como dado, nas perguntas, na escrita e nos ajustes; teto
+     de 40 mil caracteres por anexo e 120 mil no total) e "guardar como
+     material" (vira um documento "Anexo — <arquivo>" na prévia, gravado só no
+     clique de criar). Guarda-se o texto, não o PDF.
+   - **Materiais que já existem.** A pessoa pode ligar materiais da
+     organização ao agente novo. A criação confere que cada id é desta
+     organização e está ativo antes de ligar; id de outra organização é
+     descartado em silêncio.
+   - A caixa de mensagem fica aberta durante as perguntas: o que a pessoa
+     acrescentar entra no material.
 2. **Perguntas.** A IA compara o texto com um checklist e pergunta só o que
    falta e muda o agente.
    - São até 4 perguntas por rodada e até 3 rodadas. Quem decide encerrar é o
@@ -40,7 +57,15 @@ cliente antes de alguém ler e publicar no editor.
      exemplos bons e ruins, cliente irritado, desconto, fora do assunto, pedido
      de pessoa, áudio/imagem, alegação a conferir, cliente que some. O prompt
      aponta para ele; as regras que precisam valer sempre ficam no prompt.
-4. **Criar.** Esta é a única escrita do fluxo. Ela grava os materiais, o agente
+4. **Ajustar pelo chat.** Com a prévia pronta, o que a pessoa escreve
+   ("deixe mais formal", "ele não pode dar desconto", "acrescente a política
+   de troca") vai para `construtor/refinar` (ponto de IA
+   `agent_builder_refinar`). O modelo devolve o agente inteiro ajustado e o
+   que muda nos materiais; `refino.ts` mescla — material não citado fica,
+   mesmo nome substitui, remover tira só o nomeado — e o que a pessoa decidiu
+   na revisão (coordenador, fluxos, materiais existentes) não é desfeito. A
+   conferência do prompt roda de novo. Nada é gravado.
+5. **Criar.** Esta é a única escrita do fluxo. Ela grava os materiais, o agente
    e a versão 1 em rascunho que aponta para esses materiais. Depois é só abrir
    no editor, testar e publicar.
 

@@ -37,7 +37,7 @@ import {
   normalizarGeracao,
 } from "@/lib/ai/agents/construtor/esquemas";
 import { nichoDoTexto } from "@/lib/ai/agents/construtor/nicho";
-import { pedidoAoModelo } from "@/lib/ai/agents/construtor/pedido";
+import { fonteDosFatos, pedidoAoModelo } from "@/lib/ai/agents/construtor/pedido";
 import { orcamentoPermite } from "@/lib/flow-engine/ai/budget-gate";
 import { causaDe, portaComFallback, resolverCadeia } from "@/lib/flow-engine/ai/modelo-com-fallback";
 
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       details: lido.error.flatten(),
     });
   }
-  const { material, historico } = lido.data;
+  const { material, historico, anexos } = lido.data;
   const nicho = lido.data.nicho ?? nichoDoTexto(material);
 
   const orcamento = await orcamentoPermite(orgId, PURPOSE);
@@ -93,7 +93,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   try {
     const porta = portaComFallback(cadeia, { organizationId: orgId, requestId });
-    const prompt = pedidoAoModelo(material, historico);
+    const prompt = pedidoAoModelo(material, historico, anexos);
     const [agente, materiais] = await Promise.all([
       porta.objeto({
         schema: agenteGeradoSchema,
@@ -146,7 +146,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     // seção faltando, markdown, preço que o dono não informou —, UMA correção:
     // o modelo recebe o próprio prompt e só os achados. Fica a versão com
     // menos erros; o que sobrar vai para a revisão, onde quem decide é a pessoa.
-    const fonte = [material, ...historico.map((f) => f.texto)].join("\n");
+    const fonte = fonteDosFatos(material, historico, anexos);
     let agenteFinal = agente.objeto;
     let verificacao = verificarPrompt({ prompt: agenteFinal.system_prompt, fonte, pacotes: agenteFinal.pacotes });
     let corrigido = false;
