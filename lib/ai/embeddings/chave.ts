@@ -44,13 +44,20 @@
  * a tela responder *"está usando a chave X **porque**…"* em vez de deixar o dono
  * do negócio adivinhando por que a indexação não anda.
  *
- * ## O modelo NÃO é escolha
+ * ## O modelo agora É escolha (2026-10-12) — com o mapa amarrado
  *
- * `text-embedding-3-small`, 1536 dimensões, dos dois lados. Indexação e busca
- * são coordenadas de um mesmo mapa: trocar só um lado não dá erro nenhum — o
- * agente simplesmente para de achar o seu conteúdo. É por isso que o binding
- * aqui governa a CHAVE e não o MODELO, e por isso que a versão de índice grava
- * com que modelo foi calculada (`ai_knowledge_versions.embedding_model`).
+ * Até aqui o modelo era fixo (`text-embedding-3-small`) e o binding governava
+ * só a chave. Hoje o painel escolhe provedor E modelo
+ * (`lib/ai/embeddings/catalogo.ts`), sempre com 1536 dimensões, e a chave
+ * devolvida carrega o MODELO junto (`ChaveDeEmbedding.modelo`) — quem embeda
+ * não decide modelo nenhum, usa o que veio com a chave. Indexação e busca
+ * continuam sendo coordenadas de um mesmo mapa: os dois pontos são gravados
+ * juntos, a versão de índice grava o mapa com que foi calculada
+ * (`ai_knowledge_versions.embedding_model`), e a busca embeda a pergunta no
+ * mapa de cada material (`resolverChaveParaMapa`) — material ainda não
+ * reindexado segue sendo achado pelo modelo antigo.
+ *
+ * Sem modelo escolhido, tudo funciona como antes: mapa legado, escada abaixo.
  */
 import { byteaToBuffer, decryptKey } from "@/lib/crypto/aes_gcm";
 import { OPENROUTER_BASE_URL } from "@/lib/ai/gateway";
@@ -58,17 +65,35 @@ import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import {
+  DIMENSOES,
+  MAPA_LEGADO,
+  modeloDoBinding,
+  modeloDoMapa,
+  provedoresDoMapa,
+  rotuloDoMapa,
+  type ModeloDeEmbedding,
+  type ProvedorDeEmbedding,
+} from "./catalogo";
+
+export type { ProvedorDeEmbedding } from "./catalogo";
+
 /** Os dois pontos de IA que consomem embedding (`lib/ai/pontos/registro.ts`). */
 export type PontoDeEmbedding = "embedding_indexar" | "embedding_consultar";
 
-/** Pin de contrato: o mesmo modelo dos dois lados, com a mesma dimensão. */
-export const MODELO_DE_EMBEDDING = "openai/text-embedding-3-small";
-export const DIMENSOES_DO_EMBEDDING = 1536;
+/**
+ * O mapa LEGADO — o único até 2026-10-12. Não é mais "o modelo": é o que vale
+ * sem escolha no painel, e o valor gravado pelas versões antigas. Quem precisa
+ * do modelo em vigor lê `ChaveDeEmbedding.modelo`.
+ */
+export const MODELO_DE_EMBEDDING = MAPA_LEGADO;
+export const DIMENSOES_DO_EMBEDDING = DIMENSOES;
 
 export type OrigemDaChave =
   | "binding_do_ponto"
   | "credencial_da_organizacao"
   | "credencial_openrouter_da_organizacao"
+  | "credencial_google_da_organizacao"
   | "gateway_da_instalacao"
   | "chave_da_instalacao"
   | "chave_openrouter_da_instalacao";
@@ -77,15 +102,15 @@ export const EXPLICACAO_DA_ORIGEM: Record<OrigemDaChave, string> = {
   binding_do_ponto: "Escolhida por você no painel de Provedores.",
   credencial_da_organizacao: "Usando a chave OpenAI cadastrada em Credenciais.",
   credencial_openrouter_da_organizacao: "Usando a chave OpenRouter cadastrada em Credenciais.",
+  credencial_google_da_organizacao: "Usando a chave Google cadastrada em Credenciais.",
   gateway_da_instalacao: "Usando o gateway de IA configurado nesta instalação.",
   chave_da_instalacao: "Usando a chave que veio na instalação.",
   chave_openrouter_da_instalacao: "Usando a chave OpenRouter que veio na instalação.",
 };
 
-/** Com quem a chamada fala — decide como o id do modelo é escrito. */
-export type ProvedorDeEmbedding = "openai" | "openrouter";
-
 export interface ChaveDeEmbedding {
+  /** O modelo da chamada — mapa, provedor, id e parâmetro de corte. */
+  modelo: ModeloDeEmbedding;
   /** Plaintext. Vive só no escopo de quem chamou — nunca logada nem persistida. */
   apiKey: string | null;
   /** `null` = falar direto com a OpenAI. */
@@ -117,22 +142,187 @@ export async function resolverChaveDeEmbedding(
   ponto: PontoDeEmbedding = "embedding_indexar",
 ): Promise<ChaveDeEmbedding | null> {
   const avisos: string[] = [];
-
-  // 1 · A escolha explícita do painel.
   const binding = await lerBindingDeEmbedding(ponto, organizationId);
+
+  // A · O painel escolheu um MODELO: a chave tem de servir esse mapa.
+  const alvo = modeloDoBinding(binding);
+  if (binding && alvo) {
+    const chave = await chaveParaOModelo(organizationId, alvo, binding, avisos);
+    if (chave === null) {
+      logger.warn("[embedding] nenhuma chave serve o modelo escolhido no painel", {
+        organization_id: organizationId,
+        purpose: ponto,
+        mapa: alvo.mapa,
+        provider: alvo.provedor,
+      });
+    }
+    return chave;
+  }
+
+  // B · Sem modelo escolhido: o mapa legado e a escada de sempre.
+  return resolverLegado(organizationId, binding, avisos);
+}
+
+/**
+ * A chave para embedar no mapa `mapa` — o da versão ATIVA de um material. A
+ * busca usa isto para achar material ainda não reindexado depois de uma troca
+ * de modelo: a pergunta é embedada no mapa de cada material, e cada grupo é
+ * buscado com o seu vetor.
+ */
+export async function resolverChaveParaMapa(
+  organizationId: string,
+  mapa: string,
+): Promise<ChaveDeEmbedding | null> {
+  const atual = await resolverChaveDeEmbedding(organizationId, "embedding_consultar");
+  if (atual?.modelo.mapa === mapa) return atual;
+  if (mapa === MAPA_LEGADO) return resolverLegado(organizationId, null, []);
+  for (const provedor of provedoresDoMapa(mapa)) {
+    const modelo = modeloDoMapa(mapa, provedor);
+    const chave = modelo ? await chaveDoProvedor(organizationId, provedor, null) : null;
+    if (modelo && chave) {
+      return {
+        modelo,
+        apiKey: chave.apiKey,
+        baseUrl: provedor === "openrouter" ? OPENROUTER_BASE_URL : null,
+        provedor,
+        viaGateway: false,
+        origem: chave.origem,
+        rotulo: chave.rotulo,
+        avisos: [],
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * A chave EXATA para um modelo e provedor, sem descer para outro provedor —
+ * é o que a prova de salvar usa: ela precisa testar a escolha da tela, não
+ * uma alternativa que a escada encontraria.
+ */
+export async function chaveParaProva(
+  organizationId: string,
+  modelo: ModeloDeEmbedding,
+  credentialId: string | null,
+): Promise<ChaveDeEmbedding | null> {
+  const chave = await chaveDoProvedor(organizationId, modelo.provedor, credentialId);
+  if (!chave) return null;
+  return {
+    modelo,
+    apiKey: chave.apiKey,
+    baseUrl: modelo.provedor === "openrouter" ? OPENROUTER_BASE_URL : null,
+    provedor: modelo.provedor,
+    viaGateway: false,
+    origem: chave.origem,
+    rotulo: chave.rotulo,
+    avisos: [],
+  };
+}
+
+/**
+ * Caminho A. Primeiro o provedor escolhido (credencial do binding → da
+ * organização → da instalação); sem chave nenhuma para ele, outro provedor que
+ * sirva o MESMO mapa (o Gemini sai pela Google ou pela OpenRouter; o
+ * text-embedding-3 pela OpenAI ou pela OpenRouter) — é o mesmo vetor, então
+ * nada precisa ser reindexado. Nunca um mapa diferente do escolhido.
+ */
+async function chaveParaOModelo(
+  organizationId: string,
+  alvo: ModeloDeEmbedding,
+  binding: LinhaDeBinding,
+  avisos: string[],
+): Promise<ChaveDeEmbedding | null> {
+  const ordem = [alvo.provedor, ...provedoresDoMapa(alvo.mapa).filter((p) => p !== alvo.provedor)];
+  for (const provedor of ordem) {
+    const modelo = provedor === alvo.provedor ? alvo : modeloDoMapa(alvo.mapa, provedor);
+    if (!modelo) continue;
+    const ehOProvedorDoBinding = provedor === binding.provider;
+    const chave = await chaveDoProvedor(organizationId, provedor, ehOProvedorDoBinding ? binding.credential_id : null, avisos);
+    if (!chave) continue;
+    if (provedor !== alvo.provedor) {
+      avisos.push(
+        `Não há chave de ${NOME[alvo.provedor]} para "${rotuloDoMapa(alvo.mapa)}". Usando ${NOME[provedor]}, ` +
+          `que serve o mesmo modelo — o material continua no mesmo mapa.`,
+      );
+    }
+    const baseUrlDoBinding = ehOProvedorDoBinding ? binding.base_url : null;
+    return {
+      modelo,
+      apiKey: chave.apiKey,
+      baseUrl: baseUrlDoBinding ?? (provedor === "openrouter" ? OPENROUTER_BASE_URL : null),
+      provedor,
+      viaGateway: false,
+      origem: chave.origem,
+      rotulo: chave.rotulo,
+      avisos,
+    };
+  }
+  return null;
+}
+
+const NOME: Record<ProvedorDeEmbedding, string> = { openai: "OpenAI", openrouter: "OpenRouter", google: "Google" };
+
+const ORIGEM_DA_CREDENCIAL: Record<ProvedorDeEmbedding, OrigemDaChave> = {
+  openai: "credencial_da_organizacao",
+  openrouter: "credencial_openrouter_da_organizacao",
+  google: "credencial_google_da_organizacao",
+};
+
+/** A chave de UM provedor: a escolhida, a da organização, a da instalação. */
+async function chaveDoProvedor(
+  organizationId: string,
+  provedor: ProvedorDeEmbedding,
+  credentialId: string | null,
+  avisos: string[] = [],
+): Promise<{ apiKey: string; origem: OrigemDaChave; rotulo: string | null } | null> {
+  if (credentialId) {
+    const escolhida = await decifrarCredencial(credentialId, organizationId);
+    if (escolhida && escolhida.provider === provedor) {
+      return { apiKey: escolhida.apiKey, origem: "binding_do_ponto", rotulo: escolhida.rotulo };
+    }
+    avisos.push(
+      "A chave escolhida no painel de Provedores para o seu material não está utilizável " +
+        "(desativada, apagada ou ainda não validada). Seguindo com a próxima chave disponível.",
+    );
+  }
+  const daOrg = await credencialDaOrganizacao(organizationId, provedor);
+  if (daOrg) return { apiKey: daOrg.apiKey, origem: ORIGEM_DA_CREDENCIAL[provedor], rotulo: daOrg.rotulo };
+  if (provedor === "openai" && env.OPENAI_API_KEY) {
+    return { apiKey: env.OPENAI_API_KEY, origem: "chave_da_instalacao", rotulo: null };
+  }
+  if (provedor === "openrouter" && env.OPENROUTER_API_KEY) {
+    return { apiKey: env.OPENROUTER_API_KEY, origem: "chave_openrouter_da_instalacao", rotulo: null };
+  }
+  return null;
+}
+
+/** O mapa legado servido por um provedor (OpenAI ou OpenRouter). */
+function legadoPor(provedor: "openai" | "openrouter"): ModeloDeEmbedding {
+  return modeloDoMapa(MAPA_LEGADO, provedor)!;
+}
+
+/**
+ * Caminho B — a escada de sempre, com o mapa legado. Um binding SEM modelo de
+ * embedding (formato antigo: só chave) ainda escolhe a chave no degrau 1.
+ */
+async function resolverLegado(
+  organizationId: string,
+  binding: LinhaDeBinding | null,
+  avisos: string[],
+): Promise<ChaveDeEmbedding | null> {
+  // 1 · A chave escolhida no painel.
   if (binding?.credential_id) {
     const credencial = await decifrarCredencial(binding.credential_id, organizationId);
-    if (credencial) {
+    if (credencial && (credencial.provider === "openai" || credencial.provider === "openrouter")) {
       if (binding.model_id && !/embed/i.test(binding.model_id)) {
-        // Falha ABERTA na informação: a chamada segue com o modelo do contrato,
-        // e quem configurou fica sabendo que o campo dele não é obedecido.
         avisos.push(
-          `O painel aponta "${binding.model_id}" para este ponto, mas o modelo de embedding é fixo ` +
-            `(${MODELO_DE_EMBEDDING}) — trocá-lo exigiria reindexar todo o material de uma vez.`,
+          `O painel aponta "${binding.model_id}" para o seu material, mas esse não é um modelo de embedding — ` +
+            `valendo ${rotuloDoMapa(MAPA_LEGADO)}. Escolha o modelo do material em Provedores.`,
         );
       }
       const ehOpenRouter = credencial.provider === "openrouter";
       return {
+        modelo: legadoPor(ehOpenRouter ? "openrouter" : "openai"),
         apiKey: credencial.apiKey,
         // Chave da OpenRouter sem endpoint próprio iria para api.openai.com e
         // voltaria 401: o binding sem `base_url` herda o endpoint do provedor.
@@ -160,6 +350,7 @@ export async function resolverChaveDeEmbedding(
       );
     }
     return {
+      modelo: legadoPor("openai"),
       apiKey: daOrg.apiKey,
       baseUrl: null,
       provedor: "openai",
@@ -181,6 +372,7 @@ export async function resolverChaveDeEmbedding(
       );
     }
     return {
+      modelo: legadoPor("openrouter"),
       apiKey: daOrgOpenRouter.apiKey,
       baseUrl: OPENROUTER_BASE_URL,
       provedor: "openrouter",
@@ -194,6 +386,7 @@ export async function resolverChaveDeEmbedding(
   // 3 · O gateway da instalação. A chave não sai daqui: o SDK a lê do process.env.
   if (env.AI_GATEWAY_API_KEY) {
     return {
+      modelo: legadoPor("openai"),
       apiKey: null,
       baseUrl: env.AI_GATEWAY_BASE_URL || null,
       provedor: "openai",
@@ -207,6 +400,7 @@ export async function resolverChaveDeEmbedding(
   // 4 · A chave que o install.sh pediu.
   if (env.OPENAI_API_KEY) {
     return {
+      modelo: legadoPor("openai"),
       apiKey: env.OPENAI_API_KEY,
       baseUrl: null,
       provedor: "openai",
@@ -220,6 +414,7 @@ export async function resolverChaveDeEmbedding(
   // 4b · A chave da OpenRouter da instalação.
   if (env.OPENROUTER_API_KEY) {
     return {
+      modelo: legadoPor("openrouter"),
       apiKey: env.OPENROUTER_API_KEY,
       baseUrl: env.OPENROUTER_BASE_URL || OPENROUTER_BASE_URL,
       provedor: "openrouter",
@@ -250,6 +445,7 @@ export async function temChaveDeEmbedding(organizationId: string): Promise<boole
 // ---------------------------------------------------------------------------
 
 interface LinhaDeBinding {
+  provider: string;
   credential_id: string | null;
   model_id: string;
   base_url: string | null;
@@ -263,7 +459,7 @@ async function lerBindingDeEmbedding(
     const admin = createAdminClient();
     const { data } = await admin
       .from("ai_purpose_bindings")
-      .select("credential_id, model_id, base_url")
+      .select("provider, credential_id, model_id, base_url")
       .eq("organization_id", organizationId)
       .eq("purpose", ponto)
       .eq("is_enabled", true)

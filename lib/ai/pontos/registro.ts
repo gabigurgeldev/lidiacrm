@@ -374,10 +374,10 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     papel: "lembrar",
     exige: { embeddingDims: 1536 },
     emissor: "lib/ai/embed.ts",
-    fixo: {
-      razao:
-        "O material indexado e a busca precisam usar exatamente o mesmo modelo — são coordenadas de um mesmo mapa. Trocar só um dos lados não dá erro: o agente simplesmente para de achar o seu conteúdo, sem avisar. Para mudar de modelo aqui é preciso reindexar tudo de uma vez.",
-    },
+    // Não é mais fixo (2026-10-12), mas é VINCULADO ao par: indexar e buscar
+    // são escolhidos juntos no cartão "Seu material" do painel
+    // (`/api/v1/ai/providers/embedding`), que prova o modelo, grava os dois e
+    // pede a reindexação. O PUT genérico recusa este ponto (`ponto_vinculado`).
     sintomaDeFalha:
       "Você sobe um documento e ele nunca fica pronto para uso; o agente responde sem conhecer o seu material.",
     // `nenhum`, e não `llm_calls`: `lib/ai/embed.ts` não chama `logInvocation`
@@ -394,10 +394,10 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     papel: "lembrar",
     exige: { embeddingDims: 1536 },
     emissor: "lib/agent-engine/agent/search-knowledge.ts",
-    fixo: {
-      razao:
-        "Precisa usar o mesmo modelo com que o material foi indexado. Se divergir, a busca continua funcionando e devolve resultados errados — falha silenciosa, e por isso a troca é feita junto com a reindexação, não aqui.",
-    },
+    // Não é mais fixo (2026-10-12), mas é VINCULADO ao par: indexar e buscar
+    // são escolhidos juntos no cartão "Seu material" do painel
+    // (`/api/v1/ai/providers/embedding`), que prova o modelo, grava os dois e
+    // pede a reindexação. O PUT genérico recusa este ponto (`ponto_vinculado`).
     sintomaDeFalha:
       "O agente responde de forma genérica, ignorando o que está escrito nos seus documentos.",
     registraEm: "nenhum",

@@ -19,6 +19,7 @@ import type pg from 'pg';
 
 import { embedText } from '@/lib/ai/embed';
 import { MODELO_DE_EMBEDDING } from '@/lib/ai/embeddings/chave';
+import { buscarPorMapa, SQL_MAPAS_DAS_FONTES, type DepsDaBusca } from '@/lib/ai/knowledge/buscar-por-mapa';
 import type { Citation } from '@/lib/ai/citations/types';
 import type { Logger } from '../obs/logger';
 
@@ -55,7 +56,7 @@ export async function searchKnowledge(
     /** Só para telemetria: QUAL assistente perguntou. */
     agentId?: string | null;
   },
-  deps?: { embed?: typeof embedText; log?: Logger },
+  deps?: { embed?: typeof embedText; log?: Logger; chaveDoMapa?: DepsDaBusca['chaveDoMapa'] },
 ): Promise<SearchKnowledgeResult> {
   const embed = deps?.embed ?? embedText;
   const fontes = args.knowledgeSourceIds ?? [];
@@ -73,12 +74,6 @@ export async function searchKnowledge(
   }
 
   try {
-    const { embedding } = await embed(args.query, {
-      organizationId: args.organizationId,
-      ponto: 'embedding_consultar',
-    });
-    const vec = `[${embedding.join(',')}]`;
-
     // Pedimos ao banco SEM limiar (piso da similaridade) e cortamos aqui. O
     // conjunto entregue ao modelo é o mesmo — `order by` é por distância e o
     // `limit` vem depois do `where`, então os K melhores globais já são os K
@@ -88,17 +83,53 @@ export async function searchKnowledge(
     // quando ela não passa. Sem isso, "a base não tem essa informação" e "a base
     // tem e o corte está apertado demais" são indistinguíveis — e são problemas
     // com consertos opostos.
-    const { rows } = usaFontes
-      ? await pool.query<KnowledgeHit>(
-          `select chunk_id, knowledge_source_id, source_name, content, similarity, metadata
-           from fn_buscar_trechos_das_fontes($1, $2::uuid[], $3::vector, $4, $5, $6)`,
-          [args.organizationId, fontes, vec, args.topK, PISO_SIMILARIDADE, MODELO_DE_EMBEDDING],
-        )
-      : await pool.query<KnowledgeHit>(
-          `select chunk_id, knowledge_source_id, content, similarity, metadata
-           from retrieve_top_k_chunks($1, $2, $3::vector, $4, $5)`,
-          [args.organizationId, args.kbVersionId, vec, args.topK, PISO_SIMILARIDADE],
-        );
+    //
+    // Caminho por materiais: a pergunta é embedada no MAPA de cada material
+    // (`buscarPorMapa`) — durante uma troca de modelo de embedding, parte do
+    // acervo ainda está no modelo antigo e precisa continuar sendo achada.
+    const rows: KnowledgeHit[] = usaFontes
+      ? (
+          await buscarPorMapa<KnowledgeHit>({
+            organizationId: args.organizationId,
+            fontes,
+            query: args.query,
+            k: args.topK,
+            deps: { embed, ...(deps?.chaveDoMapa ? { chaveDoMapa: deps.chaveDoMapa } : {}) },
+            executor: {
+              mapasDasFontes: async (ids) => {
+                const r = await pool.query<{ id: string; mapa: string }>(SQL_MAPAS_DAS_FONTES, [
+                  args.organizationId,
+                  ids,
+                  MODELO_DE_EMBEDDING,
+                ]);
+                return new Map(r.rows.map((l) => [l.id, l.mapa]));
+              },
+              buscar: async (ids, vec, k, mapa) =>
+                (
+                  await pool.query<KnowledgeHit>(
+                    `select chunk_id, knowledge_source_id, source_name, content, similarity, metadata
+                     from fn_buscar_trechos_das_fontes($1, $2::uuid[], $3::vector, $4, $5, $6)`,
+                    [args.organizationId, ids, vec, k, PISO_SIMILARIDADE, mapa],
+                  )
+                ).rows,
+            },
+          })
+        ).hits
+      : (
+          await pool.query<KnowledgeHit>(
+            `select chunk_id, knowledge_source_id, content, similarity, metadata
+             from retrieve_top_k_chunks($1, $2, $3::vector, $4, $5)`,
+            [
+              args.organizationId,
+              args.kbVersionId,
+              `[${(
+                await embed(args.query, { organizationId: args.organizationId, ponto: 'embedding_consultar' })
+              ).embedding.join(',')}]`,
+              args.topK,
+              PISO_SIMILARIDADE,
+            ],
+          )
+        ).rows;
 
     const results = rows.filter((r) => r.similarity >= args.threshold);
     // Sem depender da ordem das linhas. O `filter` descarta o NaN que o pgvector
@@ -148,7 +179,10 @@ export async function searchKnowledge(
     // Falta de chave é ESTADO do tenant e merece uma frase própria: "a base caiu"
     // manda o operador procurar um incidente que não existe.
     const detalhe = err instanceof Error ? err.message : String(err);
-    if (detalhe.includes('embedding_sem_chave') || /SemChaveDeEmbedding/.test(detalhe)) {
+    // O `code` é o sinal confiável: a mensagem do erro é prosa para gente e não
+    // carrega o nome da classe — o teste por texto nunca casava.
+    const codigo = (err as { code?: unknown } | null)?.code;
+    if (codigo === 'embedding_sem_chave' || detalhe.includes('embedding_sem_chave') || /SemChaveDeEmbedding/.test(detalhe)) {
       return {
         ok: false,
         error: {
