@@ -182,6 +182,7 @@ export async function ingestConversationsBatch(
       knowledgeSourceId: sourceId,
       agentId,
       sourceType: "conversas",
+      embeddingModel: chave.modelo.mapa,
     });
     versionId = v.versionId;
   } catch (err) {

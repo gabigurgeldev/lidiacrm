@@ -47,6 +47,8 @@ import { useT } from "@/hooks/i18n/useT";
 import { PaginaAjustes } from "@/components/ajustes";
 import { PONTOS_DE_DECISAO, separarModelos } from "@/lib/ai/pontos/roteadores";
 
+import { CartaoDoMaterial } from "./CartaoDoMaterial";
+
 export interface Ponto {
   id: string;
   rotulo: string;
@@ -71,6 +73,8 @@ export interface Ponto {
     modelos: Array<{ provider: string; model_id: string; display_name: string }>;
     explicacao: string;
   } | null;
+  /** O par indexar/buscar do material tem cartão próprio (CartaoDoMaterial). */
+  cartaoProprio?: "material" | null;
 }
 
 interface Modelo {
@@ -212,6 +216,8 @@ export function PainelDeProvedores() {
         </Card>
       )}
 
+      <CartaoDoMaterial credenciais={dados.credenciais} />
+
       <div className="space-y-8">
         {porPapel.map(({ papel, info, pontos }) => (
           <section key={papel} data-testid={`papel-${papel}`}>
@@ -332,7 +338,9 @@ export function CartaoDoPonto({
   const aceitaEndpointProprio =
     dados.provedores.find((p) => p.id === provider)?.aceitaEndpointProprio === true;
 
-  const editavel = dados.podeEditar && ponto.fixo === null && !ponto.mandadoPeloAgente;
+  // O par indexar/buscar é escolhido no cartão "Seu material": aqui só leitura.
+  const editavel =
+    dados.podeEditar && ponto.fixo === null && !ponto.mandadoPeloAgente && ponto.cartaoProprio !== "material";
 
   async function salvar() {
     setSalvando(true);
@@ -413,6 +421,12 @@ export function CartaoDoPonto({
       {ponto.fixo && (
         <p className="mt-2 text-xs text-muted-foreground" data-testid={`razao-fixo-${ponto.id}`}>
           {t(ponto.fixo.razao)}
+        </p>
+      )}
+
+      {ponto.cartaoProprio === "material" && (
+        <p className="mt-2 text-xs text-muted-foreground" data-testid={`cartao-proprio-${ponto.id}`}>
+          {t("Escolhido no cartão \"Seu material\", no alto da página — indexar e buscar mudam juntos.")}
         </p>
       )}
 

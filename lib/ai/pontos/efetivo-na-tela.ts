@@ -41,8 +41,8 @@ export interface ContextoDaTela {
   /** Há chave (da organização, validada, ou da instalação) para cada provedor. */
   chaves: { openai: boolean; openrouter: boolean };
   bindingDaTranscricao: (BindingDeTranscricao & { credential_id: string | null }) | null;
-  /** O modelo de embedding em vigor (hoje, fixo). */
-  modeloDeEmbedding: string;
+  /** O modelo de embedding em vigor: o mapa, como a tela o nomeia, e o provedor escolhido no painel (null = sem escolha). */
+  embedding: { mapa: string; rotulo: string; provedorEscolhido: string | null };
   agentePublicado: { provider: string; model: string } | null;
 }
 
@@ -50,6 +50,8 @@ export interface PontoDerivado {
   efetivo: EfetivoNaTela;
   avisos: string[];
   restricao?: RestricaoDoPonto;
+  /** Ponto escolhido num cartão próprio (o par indexar/buscar do material). */
+  cartaoProprio?: "material";
 }
 
 export const PONTOS_DERIVADOS = new Set([
@@ -88,18 +90,22 @@ export function efetivoDerivado(pontoId: string, ctx: ContextoDaTela): PontoDeri
     }
     case "embedding_indexar":
     case "embedding_consultar": {
-      const provider = ctx.chaves.openai ? "openai" : ctx.chaves.openrouter ? "openrouter" : "openai";
-      const semChave = !ctx.chaves.openai && !ctx.chaves.openrouter;
+      const escolhido = ctx.embedding.provedorEscolhido;
+      const provider = escolhido ?? (ctx.chaves.openai ? "openai" : ctx.chaves.openrouter ? "openrouter" : "openai");
+      const semChave = escolhido === null && !ctx.chaves.openai && !ctx.chaves.openrouter;
       return {
+        cartaoProprio: "material",
         efetivo: {
           provider,
-          modelId: ctx.modeloDeEmbedding,
+          modelId: ctx.embedding.mapa,
           credentialId: null,
           baseUrl: null,
-          origem: "embedding",
-          porQue: semChave
-            ? "Embedding (texto → vetor), não modelo de conversa. Falta a chave."
-            : `Embedding (texto → vetor), não modelo de conversa. Usando sua chave da ${provider === "openai" ? "OpenAI" : "OpenRouter"}.`,
+          origem: escolhido ? "binding" : "embedding",
+          porQue: escolhido
+            ? `Embedding (texto → vetor), escolhido por você: ${ctx.embedding.rotulo}.`
+            : semChave
+              ? "Embedding (texto → vetor), não modelo de conversa. Falta a chave."
+              : `Embedding (texto → vetor), não modelo de conversa. Usando sua chave da ${provider === "openai" ? "OpenAI" : "OpenRouter"}.`,
         },
         avisos: semChave
           ? [

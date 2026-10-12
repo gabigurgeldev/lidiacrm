@@ -18,6 +18,7 @@ import type { NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { env } from "@/lib/env";
+import { reconciliarModeloDoAcervo } from "@/lib/ai/embeddings/reindexacao";
 import { ingestConversationsBatch } from "@/lib/ai/rag/ingest/conversations";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -94,6 +95,27 @@ export async function GET(req: NextRequest): Promise<Response> {
         detail,
       );
       failures.push(`${agent.organization_id}:${detail}`);
+    }
+
+    // Rede de segurança da troca de modelo de embedding: material que ficou no
+    // modelo antigo (debounce, worker parado, falha de rede) é reemitido para o
+    // indexador. Audita só quando reemitiu — rodada sem efeito não ocupa linha.
+    try {
+      const reemitidos = await reconciliarModeloDoAcervo(admin, agent.organization_id);
+      if (reemitidos > 0) {
+        await audit({
+          action: "ai.embedding_reindex_reconciled",
+          organizationId: agent.organization_id,
+          metadata: { materiais_reemitidos: reemitidos },
+          requestId,
+        });
+      }
+    } catch (err) {
+      console.error(
+        "[kb-conversations-cron] reconciliação do modelo do acervo falhou",
+        agent.organization_id,
+        err instanceof Error ? err.message : String(err),
+      );
     }
   }
 
