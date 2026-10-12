@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
+import { randomId } from "@/lib/random-id";
 import { sincronizarAnexosGuardados } from "@/lib/ai/agents/construtor/anexos-guardados";
 import type { MapaDePacotes } from "@/lib/ai/agents/construtor/capacidades";
 import type { PerguntaDaEntrevista, PreviaGerada } from "@/lib/ai/agents/construtor/esquemas";
@@ -76,8 +77,6 @@ interface RespostaDaCriacao {
 const PULOU = "(pulei esta — use um padrão razoável ou trate como lacuna)";
 const TEMPO = { timeoutMs: 180_000, semRepetir: true } as const;
 const CHAVE_DA_SESSAO = "construtor-de-agente:v2";
-
-const novoId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Math.random()));
 
 interface EstadoSalvo {
   etapa: Etapa;
@@ -216,7 +215,7 @@ export function CriarComIa({ canais, mapa }: { canais: Canal[]; mapa: MapaDePaco
   );
 
   const dizer = (de: ItemDoChat["de"], texto: string, nomesDeAnexo?: string[]) =>
-    setChat((c) => [...c, { id: novoId(), de, texto, ...(nomesDeAnexo?.length ? { anexos: nomesDeAnexo } : {}) }]);
+    setChat((c) => [...c, { id: randomId(), de, texto, ...(nomesDeAnexo?.length ? { anexos: nomesDeAnexo } : {}) }]);
 
   function mudarAnexos(lista: AnexoDaTela[]) {
     setAnexos(lista);
@@ -307,7 +306,7 @@ export function CriarComIa({ canais, mapa }: { canais: Canal[]; mapa: MapaDePaco
     setChat((c) => [
       ...c,
       ...falas.map((f) => ({
-        id: novoId(),
+        id: randomId(),
         de: f.papel === "ia" ? ("ia" as const) : ("voce" as const),
         texto: f.texto === PULOU ? t("(pulei esta)") : f.texto,
       })),

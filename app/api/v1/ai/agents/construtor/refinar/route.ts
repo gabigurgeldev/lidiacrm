@@ -69,6 +69,14 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   const t0 = Date.now();
+  logger.info("agent_builder.refinar.inicio", {
+    organizationId: orgId,
+    requestId,
+    nicho,
+    materiais: atual.materiais.length,
+    anexos: anexos.length,
+    pedidoChars: pedido.length,
+  });
   try {
     const porta = portaComFallback(cadeia, { organizationId: orgId, requestId });
     const resposta = await porta.objeto({
@@ -96,6 +104,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         ms: Date.now() - t0,
         causa: resposta.causa ?? "sem causa",
         finishReason: resposta.finishReason,
+        warnings: resposta.avisos,
       });
       return fail("ai_provider_error", resposta.causa ?? "A IA não conseguiu aplicar o ajuste. Tente de novo.", 502, {
         requestId,
@@ -114,6 +123,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       requestId,
       ms: Date.now() - t0,
       usouReserva: resposta.usouReserva,
+      finishReason: resposta.finishReason,
+      warnings: resposta.avisos,
       erros: verificacao.filter((a) => a.nivel === "erro").length,
       materiais: nova.materiais.length,
     });
