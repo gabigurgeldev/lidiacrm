@@ -570,6 +570,17 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
     sintomaDeFalha: "Ao criar um agente com IA, a prévia não aparece ou vem sem materiais.",
     registraEm: "nenhum",
   },
+  {
+    id: "agent_builder_refinar",
+    rotulo: "Ajustar o agente na conversa",
+    oQueFaz:
+      "Aplica na prévia o que você pede no chat do construtor (\"deixe mais formal\", \"acrescente a política de troca\").",
+    papel: "melhorar",
+    exige: {},
+    emissor: "app/api/v1/ai/agents/construtor/refinar/route.ts",
+    sintomaDeFalha: "Você pede um ajuste no chat do construtor e a prévia não muda.",
+    registraEm: "nenhum",
+  },
 ] as const;
 
 /** Índice por id, para quem resolve um binding. */

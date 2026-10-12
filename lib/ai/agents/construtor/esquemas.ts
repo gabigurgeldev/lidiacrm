@@ -31,6 +31,23 @@ export const IDS_DE_PACOTE = [
   "evoluir",
 ] as const satisfies readonly ToolBundle[];
 
+// ──────────────────────────────── anexos ────────────────────────────────────
+
+/** Texto por anexo, depois de extraído (`construtor/anexos`). */
+export const TETO_POR_ANEXO = 40_000;
+/** Soma dos anexos que vão ao modelo — além disso o contexto não cabe. */
+export const TETO_TOTAL_DE_ANEXOS = 120_000;
+
+export const anexosSchema = z
+  .array(z.strictObject({ nome: z.string().trim().min(1).max(120), texto: z.string().max(TETO_POR_ANEXO) }))
+  .max(5)
+  .default([])
+  .refine((a) => a.reduce((n, x) => n + x.texto.length, 0) <= TETO_TOTAL_DE_ANEXOS, {
+    message: `Os anexos somam mais de ${TETO_TOTAL_DE_ANEXOS.toLocaleString("pt-BR")} caracteres. Desmarque "a IA lê" em algum.`,
+  });
+
+export type Anexo = z.infer<typeof anexosSchema>[number];
+
 // ─────────────────────────────── entrevista ─────────────────────────────────
 
 export const entradaDaEntrevistaSchema = z.strictObject({
@@ -42,6 +59,8 @@ export const entradaDaEntrevistaSchema = z.strictObject({
   rodada: z.number().int().min(1).max(10).default(1),
   /** O nicho que a rodada anterior devolveu. Sem ele, cada rodada reclassificava pelo texto e podia trocar de nicho no meio. */
   nicho: z.enum(NICHOS).optional(),
+  /** Arquivos que a pessoa anexou e marcou "a IA lê". */
+  anexos: anexosSchema,
 });
 
 export const saidaDaEntrevistaSchema = z.object({
@@ -173,6 +192,7 @@ export const entradaDaGeracaoSchema = z.strictObject({
     .max(40)
     .default([]),
   nicho: z.enum(NICHOS).optional(),
+  anexos: anexosSchema,
 });
 
 export const agenteGeradoSchema = z.object({
@@ -259,6 +279,11 @@ export const previaSchema = z.strictObject({
   materiais: z.array(materialDaPreviaSchema).max(TETO_DE_MATERIAIS),
   channel_session_id: z.string().uuid(),
   coordenacao: coordenacaoDaPreviaSchema.optional(),
+  /**
+   * Materiais que JÁ existem na organização e o agente também vai ler. A
+   * criação confere que são desta organização antes de ligar.
+   */
+  fontes_existentes: z.array(z.string().uuid()).max(20).optional(),
 });
 
 export type Previa = z.infer<typeof previaSchema>;
@@ -266,6 +291,35 @@ export type MaterialDaPrevia = Previa["materiais"][number];
 
 /** A prévia SEM canal: é o que a geração devolve; o canal a tela escolhe. */
 export type PreviaGerada = Omit<Previa, "channel_session_id"> & { lacunas: string[] };
+
+// ──────────────────────────────── refinar ───────────────────────────────────
+
+/** A prévia que a tela manda para ser ajustada (sem canal, com lacunas). */
+export const previaGeradaSchema = previaSchema
+  .omit({ channel_session_id: true })
+  .extend({ lacunas: z.array(z.string().max(300)).max(15).default([]) });
+
+export const entradaDoRefinoSchema = z.strictObject({
+  material: z.string().trim().min(20).max(30_000),
+  historico: z
+    .array(z.strictObject({ papel: z.enum(["usuario", "ia"]), texto: z.string().max(4000) }))
+    .max(40)
+    .default([]),
+  nicho: z.enum(NICHOS).optional(),
+  anexos: anexosSchema,
+  previa: previaGeradaSchema,
+  pedido: z.string().trim().min(3).max(4000),
+});
+
+/** O que o modelo devolve ao refinar: o agente inteiro (já ajustado) e o que muda nos materiais. */
+export const saidaDoRefinoSchema = z.object({
+  explicacao: z.string().describe("Em 1 a 3 frases, o que você mudou e por quê, para o dono ler."),
+  agente: agenteGeradoSchema,
+  materiais_novos: materiaisGeradosSchema.shape.materiais.describe(
+    "Materiais a CRIAR ou SUBSTITUIR (mesmo nome substitui). Vazio quando o pedido não mexe em material.",
+  ),
+  materiais_remover: z.array(z.string()).describe("Nomes de materiais a tirar. Vazio na maioria dos pedidos."),
+});
 
 function unicos(lista: string[], teto: number, tamanho: number): string[] {
   const vistos = new Set<string>();
