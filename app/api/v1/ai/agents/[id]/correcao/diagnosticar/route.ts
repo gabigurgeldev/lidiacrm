@@ -79,6 +79,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   });
 
   const t0 = Date.now();
+  logger.info("agent_builder.corrigir.diagnosticar.inicio", {
+    organizationId: orgId,
+    requestId,
+    agentId,
+    comConversa: c.conversa !== null,
+    execucoes: c.execucoes.length,
+    anexos: anexos.length,
+  });
   try {
     const porta = portaComFallback(cadeia, { organizationId: orgId, requestId });
     const resposta = await porta.objeto({
@@ -101,6 +109,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         requestId,
         ms: Date.now() - t0,
         causa: resposta.causa ?? "sem causa",
+        finishReason: resposta.finishReason,
+        warnings: resposta.avisos,
       });
       return fail("ai_provider_error", resposta.causa ?? "A IA não conseguiu analisar o agente. Tente de novo.", 502, {
         requestId,
@@ -111,6 +121,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     logger.info("agent_builder.corrigir.diagnosticar.fim", {
       requestId,
       ms: Date.now() - t0,
+      finishReason: resposta.finishReason,
+      warnings: resposta.avisos,
       hipoteses: diagnostico.hipoteses.length,
       perguntas: diagnostico.perguntas.length,
       comConversa: c.conversa !== null,

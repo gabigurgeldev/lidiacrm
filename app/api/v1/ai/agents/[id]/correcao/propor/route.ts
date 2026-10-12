@@ -82,6 +82,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const nicho = nichoDoTexto(`${promptBase}\n${problema}`);
 
   const t0 = Date.now();
+  logger.info("agent_builder.corrigir.propor.inicio", {
+    organizationId: orgId,
+    requestId,
+    agentId,
+    nicho,
+    hipoteses: diagnostico.hipoteses.length,
+    anexos: anexos.length,
+  });
   try {
     const porta = portaComFallback(cadeia, { organizationId: orgId, requestId });
     const resposta = await porta.objeto({
@@ -101,6 +109,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         ms: Date.now() - t0,
         causa: resposta.causa ?? "sem causa",
         finishReason: resposta.finishReason,
+        warnings: resposta.avisos,
       });
       return fail("ai_provider_error", resposta.causa ?? "A IA não conseguiu propor a correção. Tente de novo.", 502, {
         requestId,
@@ -142,6 +151,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       requestId,
       ms: Date.now() - t0,
       usouReserva: resposta.usouReserva,
+      finishReason: resposta.finishReason,
+      warnings: resposta.avisos,
       promptMudou: proposta.system_prompt.trim() !== promptBase.trim(),
       materiaisNovos: proposta.materiais_novos.length,
       erros: verificacao.filter((a) => a.nivel === "erro").length,
