@@ -15,7 +15,7 @@ import { transcricaoDoBinding, TRANSCRICAO_PELA_OPENROUTER } from "@/lib/messagi
 const CTX: ContextoDaTela = {
   chaves: { openai: false, openrouter: true },
   bindingDaTranscricao: null,
-  modeloDeEmbedding: "openai/text-embedding-3-small",
+  embedding: { mapa: "openai/text-embedding-3-small", rotulo: "OpenAI Text Embedding 3 Small", provedorEscolhido: null },
   agentePublicado: { provider: "anthropic", model: "claude-sonnet-5" },
 };
 
@@ -26,6 +26,15 @@ describe("efetivoDerivado", () => {
     expect(r.efetivo.modelId).not.toMatch(/claude/);
     expect(r.efetivo.provider).toBe("openrouter");
     expect(r.efetivo.porQue).toMatch(/não modelo de conversa/);
+  });
+
+  it("embedding escolhido no painel mostra a escolha e aponta para o cartão próprio", () => {
+    const r = efetivoDerivado("embedding_consultar", {
+      ...CTX,
+      embedding: { mapa: "google/gemini-embedding-001@1536", rotulo: "Google Gemini Embedding", provedorEscolhido: "openrouter" },
+    })!;
+    expect(r.efetivo).toMatchObject({ provider: "openrouter", modelId: "google/gemini-embedding-001@1536", origem: "binding" });
+    expect(r.cartaoProprio).toBe("material");
   });
 
   it("embedding sem chave nenhuma avisa que o material não é consultado", () => {

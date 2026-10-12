@@ -92,13 +92,28 @@ test("F0/F1 — o painel abre agrupado, explica os pontos e diz a origem", async
 test("F1 — ponto fixo mostra a RAZÃO, não um cadeado mudo", async ({ page }) => {
   await page.goto("/app/ai/providers");
   await page.waitForSelector('[data-testid="painel-de-provedores"]');
-  await page.click('[data-testid="avancado-lembrar"]');
-  await expect(page.locator('[data-testid="razao-fixo-embedding_indexar"]')).toContainText(
-    "mesmo modelo",
-  );
+  await page.click('[data-testid="avancado-melhorar"]');
+  await expect(page.locator('[data-testid="razao-fixo-teste_de_agente"]')).toContainText("versão do agente");
   // E o ponto fixo NÃO oferece seletor — oferecer e ignorar seria a tela que mente.
-  await expect(page.locator('[data-testid="provider-embedding_indexar"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="provider-teste_de_agente"]')).toHaveCount(0);
   await page.screenshot({ path: "evidence/provedores/03-ponto-fixo-com-razao.png", fullPage: true });
+});
+
+test("F1b — o material escolhe provedor e modelo num cartão próprio, nunca mostrando Claude", async ({ page }) => {
+  // "Buscar no seu material" aparecia como o modelo de conversa (Claude) e não
+  // tinha como mudar. Agora é embedding, escolhível, e indexar/buscar mudam juntos.
+  await page.goto("/app/ai/providers");
+  await page.waitForSelector('[data-testid="painel-de-provedores"]');
+  const cartao = page.locator('[data-testid="cartao-material"]');
+  await expect(cartao).toBeVisible();
+  await expect(page.locator('[data-testid="material-modelo-atual"]')).toContainText("Embedding");
+  await expect(page.locator('[data-testid="material-provider"]')).toBeVisible();
+  await page.click('[data-testid="avancado-lembrar"]');
+  await expect(page.locator('[data-testid="origem-embedding_consultar"]')).not.toContainText(/claude/i);
+  await expect(page.locator('[data-testid="cartao-proprio-embedding_consultar"]')).toBeVisible();
+  // O par não tem seletor solto: gravar um sem o outro quebraria a busca.
+  await expect(page.locator('[data-testid="provider-embedding_consultar"]')).toHaveCount(0);
+  await page.screenshot({ path: "evidence/provedores/03b-cartao-do-material.png", fullPage: true });
 });
 
 test("F3 — a OpenRouter é oferecida e seus modelos estão no seletor", async ({ page }) => {

@@ -68,6 +68,19 @@ export function validarBinding(entrada: {
     };
   }
 
+  // Indexar e buscar no material são um PAR: gravar um sem o outro deixa o
+  // material num mapa e a busca noutro — o agente para de achar tudo, sem erro.
+  // Os dois só mudam juntos, pela rota que prova o modelo e pede a reindexação.
+  if (ponto.exige.embeddingDims !== undefined) {
+    return {
+      ok: false,
+      codigo: "ponto_vinculado",
+      mensagem:
+        `${ponto.rotulo} é escolhido junto com a indexação, no cartão "Seu material" do painel de Provedores — ` +
+        `indexar e buscar precisam do mesmo modelo, e a troca reindexa o material.`,
+    };
+  }
+
   if (ponto.fixo !== undefined) {
     return {
       ok: false,

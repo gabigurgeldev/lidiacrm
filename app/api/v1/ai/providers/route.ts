@@ -29,7 +29,7 @@ import { PAPEIS, PONTOS_DE_IA, PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { PROVEDORES, ehProvedorSuportado } from "@/lib/ai/pontos/provedores";
 import { validarBinding } from "@/lib/ai/pontos/validar-binding";
 import { efetivoDerivado } from "@/lib/ai/pontos/efetivo-na-tela";
-import { MODELO_DE_EMBEDDING } from "@/lib/ai/embeddings/chave";
+import { MAPA_LEGADO, modeloDoBinding, rotuloDoMapa } from "@/lib/ai/embeddings/catalogo";
 import { createClient } from "@/lib/supabase/server";
 import { getRequestPool } from "@/lib/agent-engine/db/request-pool";
 import { llmEdgeConfigFromEnv, resolveOrgLlmConfig } from "@/lib/agent-engine/edge/llm/credentials";
@@ -137,6 +137,9 @@ export async function GET(): Promise<Response> {
     openrouter: temChave("openrouter", process.env.OPENROUTER_API_KEY),
   };
 
+  // O modelo do material escolhido no painel (os dois pontos são gravados juntos).
+  const modeloDoMaterial = modeloDoBinding(bindings.get("embedding_indexar") ?? null);
+
   const pontos = PONTOS_DE_IA.map((ponto) => {
     const decisao = decidirBinding({
       pontoId: ponto.id,
@@ -171,7 +174,11 @@ export async function GET(): Promise<Response> {
     const derivado = efetivoDerivado(ponto.id, {
       chaves: chavesDeTranscricao,
       bindingDaTranscricao: (bindings.get(PONTO_DA_TRANSCRICAO) as LinhaDeBinding | undefined) ?? null,
-      modeloDeEmbedding: MODELO_DE_EMBEDDING,
+      embedding: {
+        mapa: modeloDoMaterial?.mapa ?? MAPA_LEGADO,
+        rotulo: rotuloDoMapa(modeloDoMaterial?.mapa ?? MAPA_LEGADO),
+        provedorEscolhido: modeloDoMaterial?.provedor ?? null,
+      },
       agentePublicado: agentePublicado ? { provider: agentePublicado.provider, model: agentePublicado.model } : null,
     });
     if (derivado !== null) {
@@ -187,6 +194,7 @@ export async function GET(): Promise<Response> {
         efetivo: derivado.efetivo,
         avisos: derivado.avisos,
         restricao: derivado.restricao ?? null,
+        cartaoProprio: derivado.cartaoProprio ?? null,
       };
     }
     return {
@@ -210,6 +218,7 @@ export async function GET(): Promise<Response> {
        */
       mandadoPeloAgente: agentePublicado !== null && PONTOS_DO_AGENTE_PUBLICADO.has(ponto.id),
       restricao: null,
+      cartaoProprio: null,
       efetivo: {
         provider: decisao.provider,
         modelId: decisao.modelId,
