@@ -65,6 +65,8 @@ Formato no WhatsApp: de uma a três frases por mensagem, no máximo uns 300 cara
 Exemplos: de 3 a 5 trocas curtas no formato "Cliente: … / Você: …", na voz real da marca, cobrindo: uma dúvida comum respondida com dado do conhecimento, uma objeção de preço, uma pergunta fora do escopo, um "não sei, vou confirmar" e uma passagem para humano. Os exemplos mostram o tom; não os copie como resposta fixa.
 
 Lacunas: o que o dono não informou NÃO é inventado. Vira regra de transferência ("se perguntarem sobre X, chame a equipe") e entra na lista de lacunas que você devolve.
+
+Coordenação (o campo "coordenacao", fora do prompt): é como o coordenador de atendimento reconhece as conversas que são DESTE agente quando a empresa tem mais de um agente ou fluxo. "quando_usar" é uma frase concreta sobre os assuntos que ele resolve ("dúvidas sobre planos, preços e formas de pagamento"), nunca um elogio ("atende muito bem"). "exemplos" são de 3 a 6 mensagens reais de cliente que são dele, escritas como o cliente escreve. "nao_usar" são de 2 a 4 assuntos parecidos que NÃO são dele (por exemplo, suporte técnico de quem já é cliente, quando ele é o comercial). Seja excludente: duas descrições que servem para a mesma mensagem obrigam o coordenador a adivinhar.
 `.trim();
 
 const REGRAS_DE_MATERIAL = `

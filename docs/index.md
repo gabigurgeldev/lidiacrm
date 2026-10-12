@@ -123,6 +123,7 @@ acessibilidade).
 | [`runbooks/waha-hostgator.md`](runbooks/waha-hostgator.md) | Runbook do WAHA em produção |
 | [`runbooks/cloudpanel.md`](runbooks/cloudpanel.md) | **VPS que já tem CloudPanel/Nginx nas portas 80/443** — o modo proxy externo do kit, o endereço fixo para o Nginx do host e o 403 do webhook global |
 | [`runbooks/ai-credentials-rotation.md`](runbooks/ai-credentials-rotation.md) | Rotação de credenciais de IA |
+| [`agentes/README.md`](agentes/README.md) | **Guia dos agentes de IA** (12 docs) — como o agente funciona, cada campo da tela, capacidades, roteadores, follow-ups, fluxos, handoff, guardrails, conhecimento, integrações e diagnóstico. Escrito para quem configura e opera |
 | [`../SECURITY.md`](../SECURITY.md) | Política de reporte de vulnerabilidade |
 
 ## 7. Testes e QA

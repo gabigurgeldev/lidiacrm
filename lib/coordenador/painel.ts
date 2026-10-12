@@ -41,6 +41,12 @@ export interface VersaoPublicada {
 export interface Painel {
   /** A política da organização em vigor (ou a inicial, desligada). */
   politica: Politica;
+  /**
+   * A versão em vigor passou no schema de hoje. `false` = a tela abre a
+   * política inicial para corrigir, e quem COPIA a política (o construtor) não
+   * pode publicar em cima — perderia os destinos que não conseguiu ler.
+   */
+  politicaLegivel: boolean;
   versaoAtual: VersaoPublicada | null;
   historico: VersaoPublicada[];
   /** Números que seguem política própria (não editável aqui). */
@@ -96,6 +102,7 @@ export async function lerPainel(admin: SupabaseClient, orgId: string): Promise<P
 
   const daOrg = versoes.find((v) => v.channel_session_id === null) ?? null;
   let politica: Politica = politicaSchema.parse({ modo: "off" });
+  let politicaLegivel = true;
   if (daOrg) {
     const { data: destinos } = await admin
       .from("coord_politica_destinos")
@@ -119,6 +126,7 @@ export async function lerPainel(admin: SupabaseClient, orgId: string): Promise<P
     // Uma versão que não passa no schema de HOJE (campo removido, limite
     // apertado) não pode derrubar a tela: abre como desligada para corrigir.
     if (lido.success) politica = lido.data;
+    else politicaLegivel = false;
   }
 
   const { data: historicoBruto } = await admin
@@ -148,6 +156,7 @@ export async function lerPainel(admin: SupabaseClient, orgId: string): Promise<P
 
   return {
     politica,
+    politicaLegivel,
     versaoAtual: daOrg
       ? { versao_id: daOrg.id, numero: daOrg.numero, modo: daOrg.modo, publicado_em: daOrg.publicado_em, channel_session_id: null }
       : null,

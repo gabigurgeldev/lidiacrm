@@ -25,7 +25,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/hooks/i18n/useT";
 import { apiClient } from "@/lib/api/client";
 import { ferramentasDe, type MapaDePacotes } from "@/lib/ai/agents/construtor/capacidades";
-import type { MaterialDaPrevia, PerguntaDaEntrevista, PreviaGerada } from "@/lib/ai/agents/construtor/esquemas";
+import type {
+  CoordenacaoDaPrevia,
+  MaterialDaPrevia,
+  PerguntaDaEntrevista,
+  PreviaGerada,
+} from "@/lib/ai/agents/construtor/esquemas";
+import type { Painel } from "@/lib/coordenador/painel";
+import { Switch } from "@/components/ui/switch";
 import { PACOTES, type ToolBundle } from "@/lib/mcp/tools/pacotes";
 import { TETO_TOOLS_POR_AGENTE } from "@/lib/mcp/tools/selecao-por-pacote";
 import { Sparkle, Trash, Warning } from "@/lib/ui/icons";
@@ -67,8 +74,15 @@ interface RespostaDaCriacao {
     materiais_com_falha: Array<{ nome: string; motivo: string }>;
     avisos: string[];
     indexacao_habilitada: boolean;
+    coordenador: { ok: true; numero: number; modo: "off" | "shadow" | "active"; criada: boolean } | { ok: false } | null;
   };
 }
+
+const ROTULO_DO_MODO: Record<"off" | "shadow" | "active", string> = {
+  off: "Desligado",
+  shadow: "Observar",
+  active: "Ativo",
+};
 
 const PULOU = "(pulei esta — use um padrão razoável ou trate como lacuna)";
 const TEMPO = { timeoutMs: 180_000, semRepetir: true } as const;
@@ -319,8 +333,20 @@ export function CriarComIa({ canais, mapa }: { canais: Canal[]; mapa: MapaDePaco
               )}
             </Aviso>
           )}
+          {criado.coordenador?.ok === true && (
+            <p className="text-sm" data-testid="construtor-coordenador-resultado">
+              {criado.coordenador.criada
+                ? t("O coordenador de atendimento foi criado em Observar, com este agente como destino.")
+                : `${t("Este agente entrou no coordenador de atendimento")} (#${criado.coordenador.numero} · ${t(
+                    ROTULO_DO_MODO[criado.coordenador.modo],
+                  )}).`}{" "}
+              <Link href="/app/ai/coordenador" className="underline">
+                {t("Ver o coordenador")}
+              </Link>
+            </p>
+          )}
           {criado.avisos.map((a) => (
-            <Aviso key={a}>{a}</Aviso>
+            <Aviso key={a}>{t(a)}</Aviso>
           ))}
           <div>
             <Link href={`/app/ai/agents/${criado.agent_id}`}>
@@ -507,6 +533,12 @@ function Revisao({
         ))}
       </Card>
 
+      <CartaoDeCoordenacao
+        coordenacao={previa.coordenacao}
+        aoMudar={(c) => mudar({ coordenacao: c })}
+        descricaoPadrao={previa.descricao ?? ""}
+      />
+
       <Card className="flex flex-col gap-3 p-5">
         <h3 className="font-medium">{t("Número de WhatsApp")}</h3>
         {canais.length === 0 ? (
@@ -542,6 +574,142 @@ function Revisao({
         </Button>
       </div>
     </div>
+  );
+}
+
+const COORDENACAO_VAZIA: CoordenacaoDaPrevia = {
+  incluir: true,
+  quando_usar: "",
+  exemplos: [],
+  nao_usar: [],
+  fluxos_chamaveis: [],
+};
+
+const porLinha = (texto: string) =>
+  texto
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+
+/**
+ * O agente no coordenador de atendimento. Mostra o estado do coordenador da
+ * organização ANTES do clique: "vai nascer em Observar" ou "entra na política
+ * em vigor, e o modo não muda" — a pessoa não descobre depois.
+ */
+function CartaoDeCoordenacao({
+  coordenacao,
+  aoMudar,
+  descricaoPadrao,
+}: {
+  coordenacao: CoordenacaoDaPrevia | undefined;
+  aoMudar: (c: CoordenacaoDaPrevia) => void;
+  descricaoPadrao: string;
+}) {
+  const t = useT();
+  const c = coordenacao ?? { ...COORDENACAO_VAZIA, quando_usar: descricaoPadrao };
+  const [painel, setPainel] = React.useState<Painel | null>(null);
+
+  React.useEffect(() => {
+    let vivo = true;
+    apiClient
+      .get<{ data: Painel }>("/api/v1/ai/coordenador")
+      .then((r) => {
+        if (vivo) setPainel(r.data);
+      })
+      .catch(() => {
+        // Sem o estado, o cartão segue útil: só não diz em que modo está.
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  const fluxosAtivos = (painel?.fluxos ?? []).filter((f) => f.ativo);
+
+  return (
+    <Card className="flex flex-col gap-3 p-5" data-testid="construtor-coordenacao">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="font-medium">{t("Coordenador de atendimento")}</h3>
+        <Switch
+          checked={c.incluir}
+          onCheckedChange={(v) => aoMudar({ ...c, incluir: v })}
+          aria-label={t("Incluir este agente no coordenador")}
+        />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {painel === null
+          ? t("O coordenador decide quem conduz cada conversa quando há mais de um agente ou fluxo.")
+          : painel.versaoAtual === null
+            ? t("Ainda não há coordenador: ele será criado em Observar — registra o que faria, sem mudar nada para o cliente.")
+            : `${t("O agente entra na política em vigor, e o modo dela não muda:")} ${t(
+                ROTULO_DO_MODO[painel.versaoAtual.modo],
+              )}.`}{" "}
+        {t("O agente nasce em rascunho e só recebe conversas depois de publicado.")}
+      </p>
+      {c.incluir && (
+        <>
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="coord-quando">{t("Quando usar")}</Label>
+            <Textarea
+              id="coord-quando"
+              rows={2}
+              maxLength={600}
+              value={c.quando_usar}
+              onChange={(e) => aoMudar({ ...c, quando_usar: e.target.value })}
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="coord-exemplos">{t("Exemplos de mensagem (um por linha)")}</Label>
+              <Textarea
+                id="coord-exemplos"
+                rows={3}
+                value={c.exemplos.join("\n")}
+                onChange={(e) => aoMudar({ ...c, exemplos: porLinha(e.target.value) })}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="coord-nao">{t("Não usar quando (um por linha)")}</Label>
+              <Textarea
+                id="coord-nao"
+                rows={3}
+                value={c.nao_usar.join("\n")}
+                onChange={(e) => aoMudar({ ...c, nao_usar: porLinha(e.target.value) })}
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-sm">{t("Fluxos que este agente pode chamar e voltar")}</span>
+            {fluxosAtivos.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {t("Nenhum fluxo ligado ainda. Quando houver, você pode deixar o agente chamá-los pela tela do coordenador.")}
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-3">
+                {fluxosAtivos.map((f) => (
+                  <label key={f.id} className="flex items-center gap-1 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={c.fluxos_chamaveis.includes(f.id)}
+                      onChange={() =>
+                        aoMudar({
+                          ...c,
+                          fluxos_chamaveis: c.fluxos_chamaveis.includes(f.id)
+                            ? c.fluxos_chamaveis.filter((x) => x !== f.id)
+                            : [...c.fluxos_chamaveis, f.id].slice(0, 10),
+                        })
+                      }
+                    />
+                    {f.nome}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </Card>
   );
 }
 
