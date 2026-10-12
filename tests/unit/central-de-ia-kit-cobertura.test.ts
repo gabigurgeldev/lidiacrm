@@ -39,14 +39,11 @@ const SEM_KIT: Record<string, string> = {
     "dossiê de UM contato no follow-up: o título é o dado (nome do contato), montado no DossieDoFollowup",
   "app/app/ai/integracoes/[id]/page.tsx":
     "detalhe de UMA integração: o título é o nome dela, montado no PainelDaIntegracao",
-  "app/app/ai/agents/criar-com-ia/page.tsx":
-    "reescrita no PR do construtor em conversa (feat/construtor-em-chat), que já a põe no kit — sai daqui quando ele entrar",
 };
 
 /** Arquivo → quantos `<Card` ainda tem. Só desce. */
 const LEGADO: Record<string, number> = {
-  // Reescrito no PR do construtor em conversa (Revisao/Anexos já no kit); 10 = 9 + o cartão do coordenador.
-  "app/app/ai/agents/criar-com-ia/_client.tsx": 10,
+  // Vazia: nenhum <Card> antigo resta em app/app/ai. Fica para quem precisar registrar um.
 };
 
 function arquivos(dir: string): string[] {

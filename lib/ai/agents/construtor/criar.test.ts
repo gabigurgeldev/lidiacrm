@@ -55,6 +55,14 @@ const CANAL = "33333333-3333-4333-8333-333333333333";
 const CANAL_DE_OUTRA_ORG = "44444444-4444-4444-8444-444444444444";
 const FUNIL = "55555555-5555-4555-8555-555555555555";
 const MAT = "66666666-6666-4666-8666-666666666666";
+/** Material que já existe NESTA organização. */
+const FONTE_DA_ORG = "77777777-7777-4777-8777-777777777777";
+/** Material de OUTRA organização: o banco tem, mas o filtro por organização não deixa voltar. */
+const FONTE_DE_OUTRA_ORG = "88888888-8888-4888-8888-888888888888";
+const FONTES = [
+  { id: FONTE_DA_ORG, organization_id: ORG, is_active: true },
+  { id: FONTE_DE_OUTRA_ORG, organization_id: "99999999-9999-4999-8999-999999999999", is_active: true },
+];
 
 const inserts: Array<{ tabela: string; linha: Record<string, unknown> }> = [];
 let falharVersao = false;
@@ -64,8 +72,17 @@ function adminFalso() {
     from(tabela: string) {
       const b: Record<string, unknown> = {};
       const self = () => b;
+      const filtros: Record<string, unknown> = {};
+      let ids: string[] | null = null;
       b.select = self;
-      b.eq = self;
+      b.eq = (coluna: string, valor: unknown) => {
+        filtros[coluna] = valor;
+        return b;
+      };
+      b.in = (_coluna: string, lista: string[]) => {
+        ids = lista;
+        return b;
+      };
       b.update = (linha: Record<string, unknown>) => {
         inserts.push({ tabela: `${tabela}:update`, linha });
         return b;
@@ -79,7 +96,16 @@ function adminFalso() {
             : { data: { id: tabela === "ai_agents" ? "agent-1" : "version-1" }, error: null };
         return { select: () => ({ single: async () => resultado }), then: (r: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(r) };
       };
-      b.then = (r: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(r);
+      b.then = (r: (v: unknown) => unknown) => {
+        if (tabela !== "ai_knowledge_sources") return Promise.resolve({ error: null }).then(r);
+        // Simula o banco: só volta o que passa em TODOS os filtros pedidos.
+        const data = FONTES.filter(
+          (f) =>
+            Object.entries(filtros).every(([c, v]) => (f as Record<string, unknown>)[c] === v) &&
+            (ids === null || ids.includes(f.id)),
+        ).map((f) => ({ id: f.id }));
+        return Promise.resolve({ data, error: null }).then(r);
+      };
       return b;
     },
   };
@@ -193,6 +219,23 @@ describe("criarAgenteDaPrevia", () => {
       materiais: [],
       materiais_com_falha: [{ nome: "Perguntas frequentes", motivo: "Erro ao criar o material." }],
     });
+  });
+
+  it("material que já existe é ligado; o de OUTRA organização não", async () => {
+    const r = await criarAgenteDaPrevia(
+      adminFalso() as never,
+      ctx,
+      previa({ fontes_existentes: [FONTE_DA_ORG, FONTE_DE_OUTRA_ORG] }),
+    );
+    expect(r.ok).toBe(true);
+    const versao = inserts.find((i) => i.tabela === "ai_agent_versions")?.linha;
+    expect(versao?.knowledge_source_ids).toEqual([MAT, FONTE_DA_ORG]);
+  });
+
+  it("sem material existente escolhido, o acervo é só o criado", async () => {
+    await criarAgenteDaPrevia(adminFalso() as never, ctx, previa({ fontes_existentes: [] }));
+    const versao = inserts.find((i) => i.tabela === "ai_agent_versions")?.linha;
+    expect(versao?.knowledge_source_ids).toEqual([MAT]);
   });
 
   it("versão falha: o agente é arquivado e os materiais criados são informados", async () => {

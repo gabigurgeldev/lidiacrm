@@ -82,7 +82,15 @@ export async function extrairTextoDoArquivo(
   }
 
   const buffer = Buffer.from(await blob.arrayBuffer());
+  return { texto: await extrairTextoDoBuffer(buffer, extensao), extensao };
+}
 
+/**
+ * O texto de um arquivo que já está em memória — para quem não guarda o
+ * arquivo (os anexos do "Criar com IA" são lidos e descartados). Mesmas
+ * mensagens de erro do caminho pelo Storage.
+ */
+export async function extrairTextoDoBuffer(buffer: Buffer, extensao: ExtensaoAceita): Promise<string> {
   let texto: string;
   if (extensao === "pdf") {
     try {
@@ -108,5 +116,5 @@ export async function extrairTextoDoArquivo(
     throw new ErroDeExtracao("o arquivo não tem texto nenhum para indexar");
   }
 
-  return { texto, extensao };
+  return texto;
 }

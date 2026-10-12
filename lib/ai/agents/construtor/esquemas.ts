@@ -19,7 +19,7 @@ import { z } from "zod";
 
 import type { ToolBundle } from "@/lib/mcp/tools/pacotes";
 
-import { MAX_PERGUNTAS_POR_RODADA } from "./entrevista";
+import { ASSUNTOS, MAX_PERGUNTAS_POR_RODADA, type Assunto } from "./entrevista";
 import { NICHOS } from "./nicho";
 
 export const IDS_DE_PACOTE = [
@@ -31,6 +31,23 @@ export const IDS_DE_PACOTE = [
   "evoluir",
 ] as const satisfies readonly ToolBundle[];
 
+// ──────────────────────────────── anexos ────────────────────────────────────
+
+/** Texto por anexo, depois de extraído (`construtor/anexos`). */
+export const TETO_POR_ANEXO = 40_000;
+/** Soma dos anexos que vão ao modelo — além disso o contexto não cabe. */
+export const TETO_TOTAL_DE_ANEXOS = 120_000;
+
+export const anexosSchema = z
+  .array(z.strictObject({ nome: z.string().trim().min(1).max(120), texto: z.string().max(TETO_POR_ANEXO) }))
+  .max(5)
+  .default([])
+  .refine((a) => a.reduce((n, x) => n + x.texto.length, 0) <= TETO_TOTAL_DE_ANEXOS, {
+    message: `Os anexos somam mais de ${TETO_TOTAL_DE_ANEXOS.toLocaleString("pt-BR")} caracteres. Desmarque "a IA lê" em algum.`,
+  });
+
+export type Anexo = z.infer<typeof anexosSchema>[number];
+
 // ─────────────────────────────── entrevista ─────────────────────────────────
 
 export const entradaDaEntrevistaSchema = z.strictObject({
@@ -40,6 +57,10 @@ export const entradaDaEntrevistaSchema = z.strictObject({
     .max(40)
     .default([]),
   rodada: z.number().int().min(1).max(10).default(1),
+  /** O nicho que a rodada anterior devolveu. Sem ele, cada rodada reclassificava pelo texto e podia trocar de nicho no meio. */
+  nicho: z.enum(NICHOS).optional(),
+  /** Arquivos que a pessoa anexou e marcou "a IA lê". */
+  anexos: anexosSchema,
 });
 
 export const saidaDaEntrevistaSchema = z.object({
@@ -61,8 +82,16 @@ export const saidaDaEntrevistaSchema = z.object({
         sugestao: z.string().optional().describe("Um padrão razoável que o dono pode aceitar com um clique."),
       }),
     )
-    .optional()
-    .describe(`Obrigatório quando kind='perguntar': de 1 a ${MAX_PERGUNTAS_POR_RODADA} perguntas.`),
+    .describe(`De 1 a ${MAX_PERGUNTAS_POR_RODADA} perguntas quando kind='perguntar'; lista vazia quando kind='pronto'.`),
+  cobertura: z
+    .array(
+      z.object({
+        assunto: z.string().describe(`Um dos assuntos do checklist: ${ASSUNTOS.join(", ")}.`),
+        estado: z.enum(["coberto", "parcial", "faltando"]),
+        evidencia: z.string().describe("O trecho do material ou da resposta que cobre o assunto. Vazio quando faltando."),
+      }),
+    )
+    .describe("A avaliação de CADA assunto do checklist, com a evidência."),
   nicho: z.enum(NICHOS).optional().describe("O ramo do negócio."),
   resumo: z
     .string()
@@ -85,8 +114,8 @@ export type EntrevistaNormalizada =
       kind: "pronto";
       resumo: string;
       nicho: string | null;
-      /** Presente quando o modelo não mandou o que prometeu e a rodada foi encerrada por nós. Só vai a log. */
-      degradada?: "pronto_sem_resumo" | "perguntar_sem_pergunta";
+      /** Presente quando o modelo disse `pronto` sem resumo. Só vai a log. */
+      degradada?: "pronto_sem_resumo";
     };
 
 /** O resumo quando o modelo encerra sem dizer o que vai montar. */
@@ -94,19 +123,20 @@ export const RESUMO_PADRAO =
   "Já tenho o suficiente para montar o agente. O que ficou em aberto vira assunto para a equipe.";
 
 /**
- * Apara e confere a resposta da entrevista. NUNCA devolve "incoerente".
+ * Apara e confere a resposta da entrevista. NUNCA devolve "incoerente" — e
+ * também não DECIDE mais encerrar: isso é de `decidirRodada` (`cobertura.ts`).
  *
- * Pergunta sem texto, ou fechada com menos de 2 opções, é DESCARTADA — não
- * derruba a rodada inteira. Mandar à tela uma pergunta de múltipla escolha sem
- * escolhas é pior que erro, porque não parece erro.
+ * Pergunta sem texto é descartada; pergunta "fechada" com menos de 2 opções
+ * vira aberta (a opção solitária vai para a sugestão). `perguntar` sem
+ * nenhuma pergunta válida sai como `perguntar` com lista vazia — até
+ * 2026-10-12 virava `pronto` aqui, em silêncio, e era uma das razões de "as
+ * perguntas estão sendo puladas". Hoje a rota pede de novo e, em último caso,
+ * monta perguntas de reserva do checklist.
  *
- * Quando nada sobra (ou o modelo diz `pronto` sem resumo), a entrevista ENCERRA
- * em vez de falhar. Era 502 — medido em produção (2026-10-10, org de
- * floricultura): três tentativas seguidas com o mesmo material, todas
- * "resposta sem pergunta válida e sem resumo", e a pessoa presa na primeira
- * tela sem ter como passar. Encerrar é seguro pelo mesmo motivo que o teto de
- * rodadas já encerra: o que faltou vira lacuna, e o agente passa esse assunto
- * para uma pessoa. A pergunta não feita custa menos que o agente não criado.
+ * Histórico que segue valendo: em 2026-10-10 (org de floricultura) o modelo
+ * devolveu três vezes seguidas "sem pergunta válida e sem resumo", e a rota
+ * respondia 502 — a pessoa ficava presa na primeira tela. Nada aqui volta a
+ * ser erro: o pior caso agora é a rodada de reserva.
  */
 export function normalizarEntrevista(s: SaidaDaEntrevista): EntrevistaNormalizada {
   const nicho = s.nicho ?? null;
@@ -127,21 +157,30 @@ export function normalizarEntrevista(s: SaidaDaEntrevista): EntrevistaNormalizad
     const livre = p.resposta_livre === true || opcoes.length < 2;
     perguntas.push({
       pergunta: texto,
-      // Pergunta que veio "fechada" com uma opção só vira aberta: a opção
-      // solitária vai para a sugestão, em vez de virar um beco de uma porta.
       opcoes: livre ? [] : opcoes,
       resposta_livre: livre,
       sugestao: (p.sugestao?.trim() || (livre && opcoes[0]) || "").slice(0, 200) || null,
     });
     if (perguntas.length === MAX_PERGUNTAS_POR_RODADA) break;
   }
-  if (perguntas.length > 0) return { kind: "perguntar", perguntas, nicho };
-  return {
-    kind: "pronto",
-    resumo: resumo.length > 0 ? resumo : RESUMO_PADRAO,
-    nicho,
-    degradada: "perguntar_sem_pergunta",
-  };
+  return { kind: "perguntar", perguntas, nicho };
+}
+
+export type EstadoDeCobertura = "coberto" | "parcial" | "faltando";
+
+/** A cobertura que o modelo declarou, só com assuntos do checklist (o primeiro de cada um vence). */
+export function normalizarCobertura(s: SaidaDaEntrevista): Array<{ assunto: Assunto; estado: EstadoDeCobertura }> {
+  const vistos = new Set<string>();
+  const saida: Array<{ assunto: Assunto; estado: EstadoDeCobertura }> = [];
+  for (const c of s.cobertura ?? []) {
+    const assunto = ASSUNTOS.find((a) => a.toLowerCase() === c.assunto.trim().toLowerCase());
+    if (!assunto || vistos.has(assunto)) continue;
+    vistos.add(assunto);
+    // "coberto" sem evidência escrita não é coberto: é o modelo deduzindo.
+    const estado = c.estado === "coberto" && c.evidencia.trim().length === 0 ? "parcial" : c.estado;
+    saida.push({ assunto, estado });
+  }
+  return saida;
 }
 
 // ──────────────────────────────── geração ───────────────────────────────────
@@ -153,6 +192,7 @@ export const entradaDaGeracaoSchema = z.strictObject({
     .max(40)
     .default([]),
   nicho: z.enum(NICHOS).optional(),
+  anexos: anexosSchema,
 });
 
 export const agenteGeradoSchema = z.object({
@@ -193,7 +233,8 @@ export const materiaisGeradosSchema = z.object({
 
 // ─────────────────────── prévia (o que a tela manda) ────────────────────────
 
-export const TETO_DE_MATERIAIS = 8;
+/** 10 = os materiais típicos (até 8) mais o "Manual de conduta" e um anexo guardado. */
+export const TETO_DE_MATERIAIS = 10;
 export const TETO_DE_ITENS_POR_FAQ = 60;
 
 const materialDaPreviaSchema = z
@@ -238,6 +279,11 @@ export const previaSchema = z.strictObject({
   materiais: z.array(materialDaPreviaSchema).max(TETO_DE_MATERIAIS),
   channel_session_id: z.string().uuid(),
   coordenacao: coordenacaoDaPreviaSchema.optional(),
+  /**
+   * Materiais que JÁ existem na organização e o agente também vai ler. A
+   * criação confere que são desta organização antes de ligar.
+   */
+  fontes_existentes: z.array(z.string().uuid()).max(20).optional(),
 });
 
 export type Previa = z.infer<typeof previaSchema>;
@@ -245,6 +291,35 @@ export type MaterialDaPrevia = Previa["materiais"][number];
 
 /** A prévia SEM canal: é o que a geração devolve; o canal a tela escolhe. */
 export type PreviaGerada = Omit<Previa, "channel_session_id"> & { lacunas: string[] };
+
+// ──────────────────────────────── refinar ───────────────────────────────────
+
+/** A prévia que a tela manda para ser ajustada (sem canal, com lacunas). */
+export const previaGeradaSchema = previaSchema
+  .omit({ channel_session_id: true })
+  .extend({ lacunas: z.array(z.string().max(300)).max(15).default([]) });
+
+export const entradaDoRefinoSchema = z.strictObject({
+  material: z.string().trim().min(20).max(30_000),
+  historico: z
+    .array(z.strictObject({ papel: z.enum(["usuario", "ia"]), texto: z.string().max(4000) }))
+    .max(40)
+    .default([]),
+  nicho: z.enum(NICHOS).optional(),
+  anexos: anexosSchema,
+  previa: previaGeradaSchema,
+  pedido: z.string().trim().min(3).max(4000),
+});
+
+/** O que o modelo devolve ao refinar: o agente inteiro (já ajustado) e o que muda nos materiais. */
+export const saidaDoRefinoSchema = z.object({
+  explicacao: z.string().describe("Em 1 a 3 frases, o que você mudou e por quê, para o dono ler."),
+  agente: agenteGeradoSchema,
+  materiais_novos: materiaisGeradosSchema.shape.materiais.describe(
+    "Materiais a CRIAR ou SUBSTITUIR (mesmo nome substitui). Vazio quando o pedido não mexe em material.",
+  ),
+  materiais_remover: z.array(z.string()).describe("Nomes de materiais a tirar. Vazio na maioria dos pedidos."),
+});
 
 function unicos(lista: string[], teto: number, tamanho: number): string[] {
   const vistos = new Set<string>();

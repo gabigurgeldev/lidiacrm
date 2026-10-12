@@ -133,6 +133,10 @@ const FORA_DO_SEAM: Record<string, { arquivo: string; marcador: string }> = {
     arquivo: "app/api/v1/ai/agents/construtor/gerar/route.ts",
     marcador: "resolverCadeia",
   },
+  agent_builder_refinar: {
+    arquivo: "app/api/v1/ai/agents/construtor/refinar/route.ts",
+    marcador: "resolverCadeia",
+  },
 };
 
 describe("registro de pontos de IA × código", () => {

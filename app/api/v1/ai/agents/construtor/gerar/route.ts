@@ -7,6 +7,10 @@
  * independentes e grandes — numa chamada só, um FAQ longo cortaria o prompt no
  * teto de tokens, ou o contrário.
  *
+ * Depois, o prompt passa pela conferência determinística (`verificacao.ts`);
+ * com erro, o modelo recebe uma chance de corrigir só os achados. Os achados
+ * que sobram vão na resposta (`verificacao`) para a revisão mostrar.
+ *
  * Devolve uma PRÉVIA e não escreve nada: a pessoa revisa, edita e só então
  * `construtor/criar` grava. Mesma regra do "Criar fluxo com IA".
  *
@@ -25,6 +29,7 @@ import { DEFAULT_BOT_MODEL, DEFAULT_CLASSIFIER_MODEL } from "@/lib/ai/gateway";
 import { capacidadesPorPacote, catalogoComHandler } from "@/lib/ai/agents/capacidades-padrao";
 import { pacotesQueCabem } from "@/lib/ai/agents/construtor/capacidades";
 import { metaPromptDoAgente, metaPromptDosMateriais } from "@/lib/ai/agents/construtor/doutrina";
+import { pedidoDeCorrecao, verificarManual, verificarPrompt } from "@/lib/ai/agents/construtor/verificacao";
 import {
   agenteGeradoSchema,
   entradaDaGeracaoSchema,
@@ -32,7 +37,7 @@ import {
   normalizarGeracao,
 } from "@/lib/ai/agents/construtor/esquemas";
 import { nichoDoTexto } from "@/lib/ai/agents/construtor/nicho";
-import { pedidoAoModelo } from "@/lib/ai/agents/construtor/pedido";
+import { fonteDosFatos, pedidoAoModelo } from "@/lib/ai/agents/construtor/pedido";
 import { orcamentoPermite } from "@/lib/flow-engine/ai/budget-gate";
 import { causaDe, portaComFallback, resolverCadeia } from "@/lib/flow-engine/ai/modelo-com-fallback";
 
@@ -59,7 +64,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       details: lido.error.flatten(),
     });
   }
-  const { material, historico } = lido.data;
+  const { material, historico, anexos } = lido.data;
   const nicho = lido.data.nicho ?? nichoDoTexto(material);
 
   const orcamento = await orcamentoPermite(orgId, PURPOSE);
@@ -88,7 +93,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   try {
     const porta = portaComFallback(cadeia, { organizationId: orgId, requestId });
-    const prompt = pedidoAoModelo(material, historico);
+    const prompt = pedidoAoModelo(material, historico, anexos);
     const [agente, materiais] = await Promise.all([
       porta.objeto({
         schema: agenteGeradoSchema,
@@ -137,7 +142,54 @@ export async function POST(req: NextRequest): Promise<Response> {
       });
     }
 
-    const previa = normalizarGeracao(agente.objeto, materiais.objeto ?? { materiais: [] });
+    // Conferência determinística do prompt (`verificacao.ts`). Com erro —
+    // seção faltando, markdown, preço que o dono não informou —, UMA correção:
+    // o modelo recebe o próprio prompt e só os achados. Fica a versão com
+    // menos erros; o que sobrar vai para a revisão, onde quem decide é a pessoa.
+    const fonte = fonteDosFatos(material, historico, anexos);
+    let agenteFinal = agente.objeto;
+    let verificacao = verificarPrompt({ prompt: agenteFinal.system_prompt, fonte, pacotes: agenteFinal.pacotes });
+    let corrigido = false;
+    const errosAntes = verificacao.filter((a) => a.nivel === "erro").length;
+    if (errosAntes > 0) {
+      const reparo = await porta.objeto({
+        schema: agenteGeradoSchema,
+        system: metaPromptDoAgente(nicho),
+        prompt: [
+          prompt,
+          "",
+          "O AGENTE QUE VOCÊ ESCREVEU (prompt entre as marcas <<< e >>>):",
+          "<<<",
+          agenteFinal.system_prompt,
+          ">>>",
+          "",
+          pedidoDeCorrecao(verificacao),
+        ].join("\n"),
+        rotulo: "agente:correcao",
+        sinal: req.signal,
+        maxOutputTokens: TOKENS_DO_AGENTE,
+      });
+      if (reparo.ok && reparo.objeto !== undefined) {
+        const depois = verificarPrompt({ prompt: reparo.objeto.system_prompt, fonte, pacotes: reparo.objeto.pacotes });
+        if (depois.filter((a) => a.nivel === "erro").length < errosAntes) {
+          agenteFinal = reparo.objeto;
+          verificacao = depois;
+          corrigido = true;
+        }
+      }
+      logger.info("agent_builder.gerar.correcao", {
+        requestId,
+        erros_antes: errosAntes,
+        erros_depois: verificacao.filter((a) => a.nivel === "erro").length,
+        regras: verificacao.filter((a) => a.nivel === "erro").map((a) => a.regra),
+        corrigido,
+        reparo_ok: reparo.ok,
+      });
+    }
+
+    const previa = normalizarGeracao(agenteFinal, materiais.objeto ?? { materiais: [] });
+    if (materiais.ok) verificacao = [...verificacao, ...verificarManual(previa.materiais)];
+
     // O modelo sugere pacotes em ordem de importância; liga-se enquanto cabe no
     // teto de ferramentas. O resto vai para a tela como aviso, não como erro.
     const { cabem, foraDoTeto } = pacotesQueCabem(previa.pacotes, capacidadesPorPacote(catalogoComHandler()));
@@ -158,6 +210,8 @@ export async function POST(req: NextRequest): Promise<Response> {
         pacotes_fora_do_teto: foraDoTeto,
         materiais_falharam: !materiais.ok,
         nicho,
+        verificacao,
+        corrigido,
       },
       { requestId },
     );
