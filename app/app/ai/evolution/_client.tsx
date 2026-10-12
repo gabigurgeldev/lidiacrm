@@ -13,7 +13,6 @@ import {
   YAxis,
 } from "recharts";
 
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -168,11 +167,11 @@ function StatCard({
   significa: string;
 }) {
   return (
-    <Card className="flex flex-col p-4">
+    <div className="ios-grupo flex flex-col p-4">
       <p className="text-xs text-text-muted">{rotulo}</p>
       <p className="mt-1 text-2xl font-semibold tracking-tight">{valor}</p>
       <p className="mt-2 text-xs leading-relaxed text-text-muted">{significa}</p>
-    </Card>
+    </div>
   );
 }
 
@@ -227,7 +226,7 @@ function GraficoDiario({
   const temDado = dados.some((p) => p.value > 0);
   const total = dados.reduce((acc, p) => acc + p.value, 0);
   return (
-    <Card className="p-4">
+    <div className="ios-grupo p-4">
       <h3 className="text-sm font-medium">{titulo}</h3>
       <p className="mt-1 text-xs leading-relaxed text-text-muted">{significa}</p>
       {!temDado ? (
@@ -273,7 +272,7 @@ function GraficoDiario({
           </div>
         </>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -293,7 +292,7 @@ function Ranking({
     .slice(0, 8);
   const maior = linhas[0]?.[1] ?? 0;
   return (
-    <Card className="p-4">
+    <div className="ios-grupo p-4">
       <h3 className="text-sm font-medium">{titulo}</h3>
       <p className="mt-1 text-xs leading-relaxed text-text-muted">{significa}</p>
       {linhas.length === 0 ? (
@@ -320,7 +319,7 @@ function Ranking({
           ))}
         </ul>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -329,11 +328,11 @@ function Carregando() {
     <div className="flex flex-col gap-4" data-testid="evolution-carregando">
       <div className="grid gap-3 sm:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={i} className="p-4">
+          <div key={i} className="ios-grupo p-4">
             <Skeleton className="h-3 w-28" />
             <Skeleton className="mt-2 h-8 w-16" />
             <Skeleton className="mt-3 h-3 w-full" />
-          </Card>
+          </div>
         ))}
       </div>
       <Skeleton className="h-64 w-full" />
@@ -349,7 +348,7 @@ export function EvolutionClient({ defaultRange }: { defaultRange: { from: string
 
   return (
     <div className="flex flex-col gap-8">
-      <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:gap-4">
+      <div className="ios-grupo flex flex-col gap-3 p-4 sm:flex-row sm:items-end sm:gap-4">
         <div className="flex-1">
           <p className="text-sm font-medium">{t("Período analisado")}</p>
           <p className="text-xs text-text-muted">
@@ -384,14 +383,14 @@ export function EvolutionClient({ defaultRange }: { defaultRange: { from: string
             />
           </div>
         </div>
-      </Card>
+      </div>
 
       {q.error ? (
-        <Card className="p-6 text-sm" data-testid="evolution-erro">
+        <div className="ios-grupo p-6 text-sm" data-testid="evolution-erro">
           {t(
             "Não conseguimos carregar os números agora. Recarregue a página em alguns instantes — se continuar assim, avise quem cuida da sua instalação.",
           )}
-        </Card>
+        </div>
       ) : !q.data ? (
         <Carregando />
       ) : (
@@ -442,7 +441,7 @@ function Conteudo({ payload }: { payload: NonNullable<ReturnType<typeof useEvolu
             )}
           />
         </div>
-        <Card className="p-4">
+        <div className="ios-grupo p-4">
           <h3 className="text-sm font-medium">{t("Linha do tempo do aprendizado")}</h3>
           <p className="mt-1 text-xs text-text-muted">
             {t("Cada linha é uma coisa nova que o agente passou a saber, na ordem em que aconteceu.")}
@@ -467,7 +466,7 @@ function Conteudo({ payload }: { payload: NonNullable<ReturnType<typeof useEvolu
               <EvolutionTimeline items={learned.timeline} />
             )}
           </div>
-        </Card>
+        </div>
       </Bloco>
 
       <Bloco

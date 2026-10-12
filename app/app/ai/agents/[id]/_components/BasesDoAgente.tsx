@@ -26,7 +26,6 @@ import { useT } from "@/hooks/i18n/useT";
 import * as React from "react";
 import Link from "next/link";
 
-import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
 export interface MaterialDoAcervo {
@@ -61,7 +60,7 @@ export function BasesDoAgente({ materiais, value, onChange, disabled = false }: 
   const acervoTodoDeFora = materiais.length > 0 && value.length === 0;
 
   return (
-    <Card className="space-y-3 p-4">
+    <div className="ios-grupo space-y-3 p-4">
       <div>
         <h3 className="text-sm font-medium">{t("O que ele consulta antes de responder")}</h3>
         <p className="text-xs text-muted-foreground">
@@ -148,6 +147,6 @@ export function BasesDoAgente({ materiais, value, onChange, disabled = false }: 
           </Link>
         </p>
       ) : null}
-    </Card>
+    </div>
   );
 }

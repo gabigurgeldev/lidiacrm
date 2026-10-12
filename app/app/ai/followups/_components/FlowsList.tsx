@@ -7,7 +7,7 @@ import { useState } from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Grupo } from "@/components/ajustes";
 import { FlowArrow, Plus } from "@/lib/ui/icons";
 import { useFollowupFlows, type FollowupFlowPointerRow } from "@/hooks/followup/useFollowupFlows";
 import { DeleteFollowupFlowButton } from "./DeleteFollowupFlowButton";
@@ -44,7 +44,7 @@ export function FlowsList({ initialData, canWrite }: Props) {
   if (flows.length === 0) {
     return (
       <>
-        <Card className="flex flex-col items-center gap-3 p-10 text-center">
+        <div className="ios-grupo flex flex-col items-center gap-3 p-10 text-center">
           <FlowArrow size={36} aria-hidden className="text-text-muted" />
           <h2 className="font-medium">{t("Nenhum fluxo de follow-up ainda")}</h2>
           <p className="max-w-sm text-sm text-text-muted">
@@ -53,7 +53,7 @@ export function FlowsList({ initialData, canWrite }: Props) {
             )}
           </p>
           {canWrite && <div className="mt-1">{newFlowButton}</div>}
-        </Card>
+        </div>
         {canWrite && <NewFlowDialog open={dialogOpen} onOpenChange={setDialogOpen} />}
       </>
     );
@@ -65,40 +65,27 @@ export function FlowsList({ initialData, canWrite }: Props) {
         <div className="flex sm:justify-end">{newFlowButton}</div>
       )}
 
-      <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {/* No kit de Ajustes: uma lista agrupada, uma linha por fluxo. */}
+      <Grupo>
         {flows.map((flow) => (
-          <li key={flow.id}>
-            <Card className="flex h-full flex-col gap-3 p-4 transition-colors hover:border-accent-400">
-              <Link href={`/app/ai/followups/${flow.id}`} className="flex flex-1 flex-col gap-3">
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="min-w-0 flex-1 truncate font-medium" title={flow.name}>
-                    {flow.name}
-                  </h3>
-                  <FlowStatusBadge status={flow.status} />
-                </div>
-                <dl className="grid grid-cols-2 gap-2 pt-1 text-xs">
-                  <div>
-                    <dt className="text-text-muted">{t("Versão")}</dt>
-                    <dd className="font-mono">{flow.active_version_id ? "publicada" : "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-text-muted">Handoff</dt>
-                    <dd className="font-mono">{flow.handoff_policy}</dd>
-                  </div>
-                </dl>
-                <p className="mt-auto pt-2 text-xs text-text-muted">
-                  Atualizado em {formatUpdatedAt(flow.updated_at, tagDoIdioma)}
-                </p>
-              </Link>
-              {canWrite && (
-                <div className="flex justify-end border-t border-border pt-2">
-                  <DeleteFollowupFlowButton flowId={flow.id} flowName={flow.name} />
-                </div>
-              )}
-            </Card>
-          </li>
+          <div key={flow.id} className="ios-linha gap-3">
+            <Link href={`/app/ai/followups/${flow.id}`} className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="flex items-center gap-2">
+                <span className="min-w-0 truncate text-sm font-medium" title={flow.name}>
+                  {flow.name}
+                </span>
+                <FlowStatusBadge status={flow.status} />
+              </span>
+              <span className="text-xs text-text-muted">
+                {t("Versão")}: <span className="font-mono">{flow.active_version_id ? "publicada" : "—"}</span>
+                {" · "}Handoff: <span className="font-mono">{flow.handoff_policy}</span>
+                {" · "}Atualizado em {formatUpdatedAt(flow.updated_at, tagDoIdioma)}
+              </span>
+            </Link>
+            {canWrite && <DeleteFollowupFlowButton flowId={flow.id} flowName={flow.name} />}
+          </div>
         ))}
-      </ul>
+      </Grupo>
 
       {canWrite && <NewFlowDialog open={dialogOpen} onOpenChange={setDialogOpen} />}
     </div>

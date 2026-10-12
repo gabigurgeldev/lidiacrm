@@ -8292,6 +8292,15 @@ export const DICIONARIO: Traducoes = {
   "agentes publicados": { es: "agentes publicados" },
   "Não dá para remover: há agentes publicados usando esta chave.": { es: "No se puede eliminar: hay agentes publicados usando esta clave." },
   "Agentes que usam esta chave vão falhar ao responder. Esta ação não pode ser desfeita.": { es: "Los agentes que usan esta clave fallarán al responder. Esta acción no se puede deshacer." },
+  // ─── Central de IA no kit (lote 1) ───
+  "Comece por um modelo pronto para o seu ramo, ou em branco. O agente nasce como rascunho: nada vai para o cliente até você publicar.": { es: "Empieza con un modelo listo para tu rubro, o en blanco. El agente nace como borrador: nada llega al cliente hasta que lo publiques." },
+  "Configure, teste e acompanhe este agente. O que você salva vira rascunho até publicar.": { es: "Configura, prueba y sigue este agente. Lo que guardas queda como borrador hasta publicar." },
+  "Texto": { es: "Texto" },
+  "Quais aprendizados mostrar": { es: "Qué aprendizajes mostrar" },
+  "Lê cada mensagem nova, entende a intenção e entrega a conversa ao agente certo.": { es: "Lee cada mensaje nuevo, entiende la intención y entrega la conversación al agente correcto." },
+  "Quais execuções mostrar": { es: "Qué ejecuciones mostrar" },
+  "Só as falhas": { es: "Solo las fallas" },
+  "Últimas execuções": { es: "Últimas ejecuciones" },
 };
 
 /**

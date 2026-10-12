@@ -36,7 +36,6 @@
  */
 import * as React from "react";
 
-import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { useT } from "@/hooks/i18n/useT";
 
@@ -140,7 +139,7 @@ export function PainelDeSeguranca() {
 
   return (
     <div className="space-y-4" data-testid="painel-de-seguranca">
-      <Card className="space-y-2 p-4">
+      <div className="ios-grupo space-y-2 p-4">
         <h3 className="text-sm font-medium">{t("Antes de cada mensagem sair")}</h3>
         <p className="text-xs text-muted-foreground">
           {t("O assistente escreve, e o sistema confere. São")} {CONFERENCIAS_DE_SAIDA.length}{" "}
@@ -153,9 +152,9 @@ export function PainelDeSeguranca() {
             <Conferencia key={c.nome} c={c} ordem={i + 1} {...props(c.camada)} />
           ))}
         </ul>
-      </Card>
+      </div>
 
-      <Card className="space-y-2 p-4">
+      <div className="ios-grupo space-y-2 p-4">
         <h3 className="text-sm font-medium">{t("Antes de o assistente ler")}</h3>
         <p className="text-xs text-muted-foreground">
           {t("Esta roda sobre a mensagem que chega, antes das outras — por isso aparece separada.")}
@@ -163,7 +162,7 @@ export function PainelDeSeguranca() {
         <ul className="divide-y">
           <Conferencia c={CONFERENCIA_DE_ENTRADA} ordem={null} {...props(CONFERENCIA_DE_ENTRADA.camada)} />
         </ul>
-      </Card>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
+import { PaginaAjustes } from "@/components/ajustes";
+import { traduzir } from "@/lib/i18n/dicionario";
+
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { listClassifierModels } from "@/lib/ai/classifier-models";
@@ -65,7 +68,14 @@ export default async function RouterEditorPage({ params }: { params: Promise<{ i
   const agents = agentRows ?? [];
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
+    <PaginaAjustes
+      testid="pagina-do-roteador"
+      titulo={(routerRow as { name: string }).name}
+      descricao={traduzir(
+        "Lê cada mensagem nova, entende a intenção e entrega a conversa ao agente certo.",
+        user.idioma,
+      )}
+    >
       <RouterEditorClient
         routerId={id}
         initialState={initialState}
@@ -73,6 +83,6 @@ export default async function RouterEditorPage({ params }: { params: Promise<{ i
         channelSessions={channelSessions}
         classifierModels={classifierModels}
       />
-    </div>
+    </PaginaAjustes>
   );
 }

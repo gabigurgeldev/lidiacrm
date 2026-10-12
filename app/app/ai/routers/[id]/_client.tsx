@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -258,7 +257,7 @@ export function RouterEditorClient({
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="space-y-4">
-          <Card className="space-y-3 p-4">
+          <div className="ios-grupo space-y-3 p-4">
             <h3 className="text-sm font-medium">{t("Identificação")}</h3>
             <div className="space-y-1">
               <Label htmlFor="router-name">{t("Nome")}</Label>
@@ -296,9 +295,9 @@ export function RouterEditorClient({
                   : t("Inativo — não roteia nada")}
               </Label>
             </div>
-          </Card>
+          </div>
 
-          <Card className="space-y-3 p-4">
+          <div className="ios-grupo space-y-3 p-4">
             <h3 className="text-sm font-medium">{t("Modelo que identifica a intenção")}</h3>
             <div className="space-y-1">
               <Label htmlFor="router-classifier">{t("Modelo do classificador")}</Label>
@@ -330,9 +329,9 @@ export function RouterEditorClient({
                     )}
               </p>
             </div>
-          </Card>
+          </div>
 
-          <Card className="space-y-3 p-4">
+          <div className="ios-grupo space-y-3 p-4">
             <h3 className="text-sm font-medium">{t("Se nenhuma intenção casar")}</h3>
             <div className="space-y-1">
               <Label htmlFor="router-fallback">{t("Agente de fallback")}</Label>
@@ -359,7 +358,7 @@ export function RouterEditorClient({
                 )}
               </p>
             </div>
-          </Card>
+          </div>
 
           <TestPanel
             isActive={router.is_active}
@@ -373,7 +372,7 @@ export function RouterEditorClient({
         </div>
 
         <div className="space-y-4">
-          <Card className="space-y-3 p-4">
+          <div className="ios-grupo space-y-3 p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
                 <h3 className="text-sm font-medium">{t("Intenções")}</h3>
@@ -413,7 +412,7 @@ export function RouterEditorClient({
                 ))}
               </ul>
             )}
-          </Card>
+          </div>
 
           {canManage && (
             <div className="flex sm:justify-end">
@@ -634,16 +633,16 @@ function TestPanel({
   const t = useT();
   const belowThreshold = result?.intent_name != null && result.confidence < result.min_confidence;
   return (
-    <Card className="space-y-3 p-4">
-      <CardHeader className="p-0">
-        <CardTitle className="text-sm">{t("Testar classificação")}</CardTitle>
-        <CardDescription>
+    <div className="ios-grupo space-y-3 p-4">
+      <div>
+        <h3 className="text-sm font-semibold">{t("Testar classificação")}</h3>
+        <p className="text-sm text-muted-foreground">
           {t(
             "Escreva uma frase como um cliente escreveria e veja qual intenção e qual agente o roteador escolheria — sem afetar nenhuma conversa real.",
           )}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3 p-0">
+        </p>
+      </div>
+      <div className="space-y-3">
         {!isActive && (
           <div className="flex items-start gap-2 rounded-md bg-accent-soft p-3 text-xs text-text-muted">
             <Info className="mt-0.5 shrink-0" aria-hidden />
@@ -689,7 +688,7 @@ function TestPanel({
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

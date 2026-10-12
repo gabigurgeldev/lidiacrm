@@ -1,6 +1,5 @@
 "use client";
 import { useSearchParams } from "next/navigation";
-import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAiUsage, type AiUsageFilters } from "@/hooks/ai/useAiUsage";
 import { UsageFilters, type UsageFiltersAgent } from "@/components/ai/UsageFilters";
@@ -28,11 +27,11 @@ function StatCard({
   hint?: string;
 }) {
   return (
-    <Card className="p-4">
+    <div className="ios-grupo p-4">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
       {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
-    </Card>
+    </div>
   );
 }
 
@@ -40,10 +39,10 @@ function StatSkeletons() {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {Array.from({ length: 4 }).map((_, i) => (
-        <Card key={i} className="p-4">
+        <div key={i} className="ios-grupo p-4">
           <Skeleton className="h-3 w-24" />
           <Skeleton className="mt-2 h-8 w-32" />
-        </Card>
+        </div>
       ))}
     </div>
   );
