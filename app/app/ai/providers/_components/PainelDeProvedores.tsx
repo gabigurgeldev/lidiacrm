@@ -30,7 +30,6 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -174,13 +173,13 @@ export function PainelDeProvedores() {
   if (erro) {
     return (
       <div className="p-6">
-        <Card className="border-destructive/40 p-6">
+        <div className="ios-grupo border-destructive/40 p-6">
           <h2 className="font-medium">{t("Não consegui carregar a configuração de IA")}</h2>
           <p className="mt-2 text-sm text-muted-foreground">{erro}</p>
           <Button className="mt-4" variant="outline" onClick={() => void carregar()}>
             {t("Tentar de novo")}
           </Button>
-        </Card>
+        </div>
       </div>
     );
   }
@@ -204,7 +203,7 @@ export function PainelDeProvedores() {
       }
     >
       {semChave && (
-        <Card className="border-amber-500/40 bg-amber-500/5 p-4" data-testid="aviso-sem-chave">
+        <div className="ios-grupo border-amber-500/40 bg-amber-500/5 p-4" data-testid="aviso-sem-chave">
           <p className="text-sm">
             {t(
               "Você ainda não cadastrou nenhuma chave de provedor. Enquanto isso, tudo usa a chave que veio na instalação.",
@@ -213,7 +212,7 @@ export function PainelDeProvedores() {
               {t("Cadastrar uma chave")}
             </Link>
           </p>
-        </Card>
+        </div>
       )}
 
       <CartaoDoMaterial credenciais={dados.credenciais} />
@@ -266,7 +265,7 @@ function ResumoDoGrupo({ pontos }: { pontos: Ponto[] }) {
   const comAviso = pontos.filter((p) => p.avisos.length > 0).length;
 
   return (
-    <Card className="p-4">
+    <div className="ios-grupo p-4">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="text-muted-foreground">{t("Usando:")}</span>
         {modelos.map((m) => (
@@ -282,7 +281,7 @@ function ResumoDoGrupo({ pontos }: { pontos: Ponto[] }) {
             : `${comAviso} ${t("pontos deste grupo precisam da sua atenção.")}`}
         </p>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -379,7 +378,7 @@ export function CartaoDoPonto({
   }
 
   return (
-    <Card className="p-4" data-testid={`ponto-${ponto.id}`}>
+    <div className="ios-grupo p-4" data-testid={`ponto-${ponto.id}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -598,6 +597,6 @@ export function CartaoDoPonto({
           </div>
         </div>
       )}
-    </Card>
+    </div>
   );
 }

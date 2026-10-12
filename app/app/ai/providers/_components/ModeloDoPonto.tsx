@@ -11,7 +11,6 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
-import { Card } from "@/components/ui/card";
 import { useT } from "@/hooks/i18n/useT";
 
 import { CartaoDoPonto, type Dados } from "./PainelDeProvedores";
@@ -40,7 +39,7 @@ export function ModeloDoPonto({ pontoId }: { pontoId: string }) {
     void carregar();
   }, [carregar]);
 
-  if (erro) return <Card className="p-3 text-sm text-muted-foreground">{erro}</Card>;
+  if (erro) return <div className="ios-grupo p-3 text-sm text-muted-foreground">{erro}</div>;
   if (!dados) return <div className="text-sm text-muted-foreground">{t("Carregando…")}</div>;
   const ponto = dados.pontos.find((p) => p.id === pontoId);
   if (!ponto) return null;
