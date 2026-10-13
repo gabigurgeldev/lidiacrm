@@ -110,7 +110,11 @@ services:
     environment:
       WAHA_API_KEY: "sha512:${WAHA_API_KEY_SHA512}"
       WHATSAPP_HOOK_URL: ${WAHA_WEBHOOK_BASE_URL}/api/v1/webhooks/waha
-      WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,session.status,state.change"
+      # `poll.vote` / `poll.vote.failed`: o voto numa enquete NOSSA não chega como mensagem —
+      # é evento próprio. Sem eles o agente manda a enquete, o cliente toca e o CRM nunca
+      # sabe a escolha (medido 2026-10-13: zero eventos de voto em produção). Mesma lista
+      # do docker-compose.prod.yml da main.
+      WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,poll.vote,poll.vote.failed,session.status,state.change"
       WHATSAPP_HOOK_HMAC: ${WAHA_HMAC_SECRET}
       # Reentrega do webhook quando o app/Supabase está fora. O padrão do WAHA (15 x 2 s,
       # ~1 min) perdeu 676 de 679 webhooks na queda de 2026-10-13. Exponencial: espera da
