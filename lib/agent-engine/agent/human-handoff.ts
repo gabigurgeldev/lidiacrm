@@ -395,9 +395,31 @@ function linhaDoAviso(aviso: { avisado: boolean; porque?: string } | undefined):
   return `⚠️ O cliente NÃO foi avisado (${aviso.porque ?? 'motivo desconhecido'}) — ele está esperando sem saber. `;
 }
 
+export const LIMITE_DO_MOTIVO = 500;
+
+/**
+ * Motivo comprido é CORTADO, nunca motivo para recusar a passagem.
+ *
+ * Com `.max(500)` a ferramenta devolvia `too_big`, e o agente que já tinha dito
+ * ao cliente "vou passar para uma atendente" gastava o último passo do turno e
+ * terminava sem passar — o cliente ficava esperando ninguém (caso Faby,
+ * 2026-10-13: o pedido estruturado inteiro no motivo deu 600+ caracteres). A
+ * passagem é o caminho de segurança; o texto é enfeite dela.
+ *
+ * Corta na última fronteira `|` (o formato de campos que `motivoEmLinhas`
+ * desenha) quando ela não joga fora mais de 40% do texto; senão, corte seco.
+ */
+export function cortarMotivo(motivo: string, limite = LIMITE_DO_MOTIVO): string {
+  if (motivo.length <= limite) return motivo;
+  const corpo = motivo.slice(0, limite - 1);
+  const fronteira = corpo.lastIndexOf('|');
+  const cortado = fronteira >= limite * 0.6 ? corpo.slice(0, fronteira) : corpo;
+  return `${cortado.trimEnd()}…`;
+}
+
 /** Whitelist EXATA do payload da tool (mesmo padrão .strict() da F2-10/F3-02). */
 export const requestHumanHandoffInputSchema = z.strictObject({
-  reason: z.string().min(1).max(500).optional(),
+  reason: z.string().min(1).transform((m) => cortarMotivo(m)).optional(),
 });
 
 const PAYLOAD_TEACHING =

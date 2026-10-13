@@ -56,6 +56,9 @@ describe("a sessão nasce ignorando o que o CRM não atende", () => {
     expect((criacao?.corpo as { config?: { ignore?: unknown } })?.config?.ignore).toEqual({
       status: true, broadcast: true, channels: true, groups: true,
     });
+    expect((criacao?.corpo as { config?: { noweb?: unknown } })?.config?.noweb).toEqual({
+      store: { enabled: true, fullSync: false },
+    });
   });
 
   it("os estados são a categoria que mais pesava — não podem sair da lista", () => {
@@ -103,9 +106,31 @@ describe("sessão que JÁ existe é corrigida — sem levar a config junto", () 
   it("não reescreve quando já está como queremos", async () => {
     // Este caminho roda em TODA reconexão, e o PUT REINICIA a sessão. Um
     // restart por rodada seria pior que o gasto que ele evita.
-    const vistos = comSessao({ webhooks: WEBHOOKS, ignore: { ...CONVERSAS_IGNORADAS } });
+    const vistos = comSessao({
+      webhooks: WEBHOOKS,
+      ignore: { ...CONVERSAS_IGNORADAS },
+      noweb: { store: { enabled: true, fullSync: false } },
+    });
     await new WahaClient("http://w", "k").startSession("s1");
     expect(vistos.some((v) => v.metodo === "PUT"), "reiniciou a sessão à toa").toBe(false);
+  });
+
+  // Sem store o voto de enquete chega ilegível (`poll.vote.failed`) — medido em
+  // produção em 2026-10-13. Sessão que já existe ganha o store na reconexão.
+  it("liga o store do NOWEB sem sincronizar histórico, preservando o resto", async () => {
+    const vistos = comSessao({ webhooks: WEBHOOKS, ignore: { ...CONVERSAS_IGNORADAS } });
+    await new WahaClient("http://w", "k").startSession("s1");
+    const put = vistos.find((v) => v.metodo === "PUT");
+    const cfg = (put?.corpo as { config?: Record<string, unknown> })?.config;
+    expect(cfg?.noweb).toEqual({ store: { enabled: true, fullSync: false } });
+    expect(cfg?.webhooks).toEqual(WEBHOOKS);
+  });
+
+  it("respeita um fullSync já escolhido ao ligar o store", async () => {
+    const vistos = comSessao({ ignore: { ...CONVERSAS_IGNORADAS }, noweb: { store: { enabled: false, fullSync: true } } });
+    await new WahaClient("http://w", "k").startSession("s1");
+    const put = vistos.find((v) => v.metodo === "PUT");
+    expect((put?.corpo as { config: { noweb: unknown } }).config.noweb).toEqual({ store: { enabled: true, fullSync: true } });
   });
 
   it("se não conseguir LER a config, não escreve nada", async () => {

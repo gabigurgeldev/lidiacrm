@@ -54,6 +54,33 @@ export const CONVERSAS_IGNORADAS = {
   groups: true,
 } as const;
 
+/**
+ * O "store" do NOWEB ligado, SEM sincronizar o histórico antigo.
+ *
+ * Sem store o transporte não guarda a enquete que mandou, e o voto do cliente
+ * (cifrado com o segredo DAQUELA mensagem) não tem como ser lido: chega como
+ * `poll.vote.failed`. Medido em produção em 2026-10-13 — enquete enviada,
+ * cliente votou, dois `poll.vote.failed` e nenhum voto legível.
+ *
+ * `fullSync: false`: guarda só o que acontece daqui em diante — é o mínimo
+ * para decifrar o voto e não puxa meses de conversa para o disco da VPS.
+ */
+export const STORE_DO_NOWEB = { enabled: true, fullSync: false } as const;
+
+function storeLigado(config: Record<string, unknown>): boolean {
+  const noweb = config.noweb;
+  if (noweb === null || typeof noweb !== "object") return false;
+  const store = (noweb as Record<string, unknown>).store;
+  return store !== null && typeof store === "object" && (store as Record<string, unknown>).enabled === true;
+}
+
+function comStoreLigado(config: Record<string, unknown>): Record<string, unknown> {
+  const noweb = config.noweb !== null && typeof config.noweb === "object" ? (config.noweb as Record<string, unknown>) : {};
+  const store = noweb.store !== null && typeof noweb.store === "object" ? (noweb.store as Record<string, unknown>) : {};
+  // Liga o store e respeita um `fullSync` que alguém já tenha escolhido.
+  return { ...config, noweb: { ...noweb, store: { ...STORE_DO_NOWEB, ...store, enabled: true } } };
+}
+
 export class WahaClient {
   constructor(
     private readonly baseUrl: string,
@@ -71,7 +98,7 @@ export class WahaClient {
     const createRes = await fetch(`${this.baseUrl}/api/sessions`, {
       method: "POST",
       headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ name, config: { ignore: CONVERSAS_IGNORADAS } }),
+      body: JSON.stringify({ name, config: { ignore: CONVERSAS_IGNORADAS, noweb: { store: STORE_DO_NOWEB } } }),
     });
     if (!createRes.ok && createRes.status !== 422 && createRes.status !== 409) {
       const body = await createRes.text().catch(() => "");
@@ -199,7 +226,7 @@ export class WahaClient {
         return;
       }
 
-      const config = { ...sessao.config, ignore: CONVERSAS_IGNORADAS };
+      const config = comStoreLigado({ ...sessao.config, ignore: CONVERSAS_IGNORADAS });
       // Já está como queremos: não reiniciar a sessão à toa. Este caminho roda
       // em TODA reconexão, e um restart desnecessário por rodada seria pior que
       // o gasto que ele evita.
@@ -212,7 +239,8 @@ export class WahaClient {
         sessao.config.ignore !== null &&
         Object.entries(CONVERSAS_IGNORADAS).every(
           ([k, v]) => (sessao.config!.ignore as Record<string, unknown>)[k] === v,
-        );
+        ) &&
+        storeLigado(sessao.config);
       if (jaConvergida) return;
 
       const res = await fetch(url, {
