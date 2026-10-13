@@ -3113,6 +3113,7 @@ export const DICIONARIO: Traducoes = {
   "Etapa de destino": { es: "Etapa de destino" },
   "Texto da mensagem": { es: "Texto del mensaje" },
   "Tags do contato": { es: "Etiquetas del contacto" },
+  "Veio de anúncio (valor: ad)": { es: "Vino de un anuncio (valor: ad)" },
   "Tag adicionada": { es: "Etiqueta agregada" },
   "Quando entrar um contato novo (webhook)": { es: "Cuando entre un contacto nuevo (webhook)" },
   "Quando um lead mudar de etapa": { es: "Cuando un lead cambie de etapa" },

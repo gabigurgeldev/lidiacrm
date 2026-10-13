@@ -41,6 +41,16 @@ export function extrairAtribuicaoMeta(referral: unknown): AtribuicaoDeAnuncio | 
     titulo,
     corpo: str(r.body),
     sourceUrl,
+    detalhes: {
+      idDoAnuncio: str(r.source_id) ?? str(r.sourceId),
+      ctwaClid: str(r.ctwa_clid) ?? str(r.ctwaClid),
+      tipoDaOrigem: tipo,
+      appDeOrigem: null,
+      tipoDeMidia: str(r.media_type) ?? str(r.mediaType),
+      urlDaMidia: str(r.video_url) ?? str(r.image_url) ?? str(r.videoUrl) ?? str(r.imageUrl),
+      urlDaMiniatura: str(r.thumbnail_url) ?? str(r.thumbnailUrl),
+      origemDaConversao: null,
+    },
     bruto: r,
   };
 }

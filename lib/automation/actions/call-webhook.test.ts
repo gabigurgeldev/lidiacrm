@@ -47,6 +47,72 @@ describe("executeCallWebhook", () => {
     }
   });
 
+  function receptor(): { pronto: Promise<{ port: number }>; corpo: () => Record<string, unknown> } {
+    let body = "";
+    server = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (c) => chunks.push(c));
+      req.on("end", () => {
+        body = Buffer.concat(chunks).toString("utf8");
+        res.writeHead(200);
+        res.end();
+      });
+    });
+    return { pronto: listen(server), corpo: () => JSON.parse(body) };
+  }
+
+  it("mensagem que veio de anúncio: manda o bloco `anuncio`, e só as chaves do contrato", async () => {
+    const r = receptor();
+    const { port } = await r.pronto;
+    const ctx = baseCtx({ event_type: "message.received", entity_kind: "message", entity_id: "msg-1" });
+    ctx.context = {
+      message: {
+        id: "msg-1",
+        metadata: {
+          raw_type: "chat",
+          anuncio: {
+            platform: "meta_ads",
+            source_type: "ad",
+            source_id: "120252124339240364",
+            ctwa_clid: "AfhVFGa3tRkZ",
+            title: "A LOJA",
+            interno: "não pode sair",
+          },
+        },
+      },
+      contact: { id: "c-1", name: "Ana", source_metadata: { utm_source: "segredo" } },
+    };
+
+    const result = await executeCallWebhook(ctx, { url: `http://127.0.0.1:${port}/h` }, { skipUrlCheck: true });
+
+    expect(result.status).toBe("success");
+    const data = r.corpo().data as Record<string, unknown>;
+    expect(data.anuncio).toMatchObject({
+      platform: "meta_ads",
+      source_type: "ad",
+      source_id: "120252124339240364",
+      ctwa_clid: "AfhVFGa3tRkZ",
+      title: "A LOJA",
+      conversion_source: null,
+    });
+    expect(data.anuncio).not.toHaveProperty("interno");
+    // O resto do source_metadata continua fora — só o anúncio, projetado.
+    expect(JSON.stringify(data)).not.toContain("segredo");
+  });
+
+  it("gatilho de lead sem mensagem: usa o primeiro toque gravado no lead", async () => {
+    const r = receptor();
+    const { port } = await r.pronto;
+    const ctx = baseCtx();
+    ctx.context = {
+      lead: { id: "lead-1", source_metadata: { ad_public: { platform: "meta_ads", ctwa_clid: "clid-lead" } } },
+    };
+
+    await executeCallWebhook(ctx, { url: `http://127.0.0.1:${port}/h` }, { skipUrlCheck: true });
+
+    expect((r.corpo().data as Record<string, unknown>).anuncio).toMatchObject({ ctwa_clid: "clid-lead" });
+  });
+
   it("sucesso: envia envelope correto, sem assinatura, sem organization_id", async () => {
     let received: { headers: Record<string, string | string[] | undefined>; body: string } | undefined;
     server = createServer((req, res) => {

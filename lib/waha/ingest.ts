@@ -17,7 +17,7 @@ import { depoisDaResposta } from "@/lib/channels/depois-da-resposta";
 import { aplicarEfeitosPosEntrada } from "@/lib/channels/pos-entrada";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
-import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
+import { anuncioPublico, estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
 import { extrairAtribuicaoWaha } from "@/lib/waha/atribuicao-de-anuncio";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ackToStatus } from "@/lib/types/messaging";
@@ -569,13 +569,17 @@ async function handleInbound(
 
     // Best-effort: o dado do anúncio (se houver) vai embutido na PRÓPRIA
     // mensagem que o app do cliente manda ao clicar num anúncio "Clique para o
-    // WhatsApp" — não é exclusivo da API oficial. NUNCA verificado contra um
-    // clique real nesta instalação (ver cabeçalho de `atribuicao-de-anuncio.ts`);
-    // por isso é silencioso quando não reconhece a forma, nunca derruba o
-    // inbound. `estamparAtribuicaoDoContato` só grava na primeira vez — se o
-    // contato já tem atribuição, o UPDATE casa zero linhas.
+    // WhatsApp" — não é exclusivo da API oficial. Conferido contra cliques
+    // reais em 2026-10-13 (ver cabeçalho de `atribuicao-de-anuncio.ts`); segue
+    // silencioso quando não reconhece a forma, nunca derruba o inbound.
+    // `estamparAtribuicaoDoContato` só grava na primeira vez — se o contato já
+    // tem atribuição, o UPDATE casa zero linhas. A MENSAGEM leva o anúncio
+    // sempre: é ela que a automação "Quando chegar mensagem" lê.
     const atribuicao = extrairAtribuicaoWaha(p._data?.message);
-    if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
+    if (atribuicao) {
+      await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
+      metadataExtra = { ...metadataExtra, anuncio: anuncioPublico(atribuicao) };
+    }
 
     const conversa = await upsertConversation(admin, session.organization_id, contactId, session.id);
     if (!conversa) return;

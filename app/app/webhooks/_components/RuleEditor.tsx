@@ -68,6 +68,9 @@ const STAGE_FIELD: CuratedField = {
 const MESSAGE_FIELDS: CuratedField[] = [
   { value: "event.body_preview", label: "Texto da mensagem", op: "contains" },
   { value: "contact.tags", label: "Tags do contato", op: "contains" },
+  // Só a mensagem do clique carrega o anúncio (`metadata.anuncio`, gravado na
+  // ingestão); com valor `ad` a regra roda uma vez por clique, não por mensagem.
+  { value: "message.metadata.anuncio.source_type", label: "Veio de anúncio (valor: ad)", op: "eq" },
 ];
 const TAG_ADDED_FIELD: CuratedField = {
   value: "event.added_tags",

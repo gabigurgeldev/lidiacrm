@@ -10,6 +10,7 @@ import type { ActionCtx, ActionResultDetail } from "@/lib/automation/types";
 import { assertDestinoResolvidoSeguro } from "@/lib/automation/outbound-ip";
 import { assertSafeOutboundUrl } from "@/lib/automation/outbound-url";
 import { decryptWebhookSecret } from "@/lib/webhooks/secrets";
+import { lerAnuncioPublico, type AnuncioPublico } from "@/lib/leads/atribuicao-de-anuncio";
 
 const TIMEOUT_MS = 10_000;
 const RETRY_DELAYS_MS = [1_000, 5_000]; // total 3 tentativas
@@ -54,6 +55,23 @@ function projectPublicFields(
   return out;
 }
 
+/**
+ * O anúncio que trouxe a pessoa, quando há um — projeção fechada
+ * (`lerAnuncioPublico`), nunca o `source_metadata` cru.
+ *
+ * Ordem: o da MENSAGEM primeiro (este clique, em "Quando chegar mensagem");
+ * depois o do lead e o do contato (o primeiro toque, nos gatilhos de lead).
+ */
+function anuncioDoContexto(context: Record<string, unknown>): AnuncioPublico | null {
+  const sub = (v: unknown, k: string): unknown =>
+    v && typeof v === "object" ? (v as Record<string, unknown>)[k] : undefined;
+  return (
+    lerAnuncioPublico(sub(sub(context.message, "metadata"), "anuncio")) ??
+    lerAnuncioPublico(sub(sub(context.lead, "source_metadata"), "ad_public")) ??
+    lerAnuncioPublico(sub(sub(context.contact, "source_metadata"), "ad_public"))
+  );
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -79,6 +97,7 @@ export async function executeCallWebhook(
 
   const leadPublic = projectPublicFields(ctx.context.lead, LEAD_PUBLIC_FIELDS);
   const contactPublic = projectPublicFields(ctx.context.contact, CONTACT_PUBLIC_FIELDS);
+  const anuncio = anuncioDoContexto(ctx.context);
   const body = JSON.stringify({
     event: ctx.event.event_type,
     occurred_at: new Date().toISOString(),
@@ -86,6 +105,7 @@ export async function executeCallWebhook(
       ...ctx.event.payload,
       ...(leadPublic ? { lead: leadPublic } : {}),
       ...(contactPublic ? { contact: contactPublic } : {}),
+      ...(anuncio ? { anuncio } : {}),
     },
   });
   const headers: Record<string, string> = {
