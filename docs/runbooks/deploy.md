@@ -130,3 +130,97 @@ stack em operação, não o WAHA isolado — e a folga existe justamente porque 
 parcela por sessão não é conhecida com precisão.
 
 Ao terminar, feche o ciclo — merge na `main` e volte a VPS pra imagem oficial.
+
+
+---
+
+## 5. Vigia da produção (watchdog)
+
+Existe para o incidente de **2026-10-13**: a VPS reiniciou, o `kong` (gateway do
+Supabase) subiu amarrado a uma rede que o boot recriou (`network <id> not found`,
+`Exited (255)`) e **ficou parado por 2 h 10**. O `restart: unless-stopped` não
+salva esse caso — o Docker desiste da partida. Resultado: `supabase.<domínio>`
+respondendo 502, o CRM sem login, e ninguém avisado.
+
+`scripts/vps/lidiacrm-watchdog.sh` roda **no host**, a cada minuto, via systemd
+timer, e faz duas coisas:
+
+1. **Cura.** Contêiner de projeto Compose parado por falha de partida (tem
+   `State.Error`, ou saiu com 255) volta com `docker start`; se isso falhar, é
+   recriado com `docker compose up -d --no-deps <serviço>` usando os `-f` que o
+   próprio Compose gravou nas labels do contêiner. Parada deliberada
+   (`docker stop`: exit 0/137/143, sem erro) **não é tocada**. No máximo uma
+   tentativa a cada 5 min por contêiner, e nada nos 3 min seguintes ao boot (o
+   Docker ainda está subindo tudo).
+2. **Avisa.** Sonda `/api/v1/health` e, depois de `LIMITE` falhas seguidas
+   (padrão 3, ≈3 min), manda e-mail com o corpo do health, os contêineres
+   parados e a memória. Reavisa a cada hora enquanto seguir fora e manda um
+   segundo e-mail quando volta. O envio usa o SMTP do próprio app, lido do `.env`
+   dele na hora — nenhum segredo é copiado para o vigia. Por viver no host, o
+   aviso sai **mesmo com o Supabase ou o app fora**, que é exatamente quando
+   um alerta feito dentro do app não existiria.
+
+### Instalar (uma vez por VPS, como root)
+
+```bash
+install -m 755 scripts/vps/lidiacrm-watchdog.sh /usr/local/sbin/lidiacrm-watchdog
+
+cat > /etc/lidiacrm-watchdog.env <<'EOF'
+HEALTH_URL="https://SEU-DOMINIO/api/v1/health"
+ALERTA_PARA="voce@exemplo.com"
+# PROJETOS="lidiacrm_supabase lidiacrm_crm"   # nomes de projeto do Compose a vigiar
+# ENV_APP="/caminho/do/.env/do/app"           # de onde sai o EMAIL_SMTP_*
+EOF
+
+cat > /etc/systemd/system/lidiacrm-watchdog.service <<'EOF'
+[Unit]
+Description=Vigia da producao do CRM (cura conteiner e sonda saude)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lidiacrm-watchdog
+TimeoutStartSec=120
+EOF
+
+cat > /etc/systemd/system/lidiacrm-watchdog.timer <<'EOF'
+[Unit]
+Description=Roda o vigia da producao a cada minuto
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
+EOF
+
+systemctl daemon-reload && systemctl enable --now lidiacrm-watchdog.timer
+/usr/local/sbin/lidiacrm-watchdog --testar-email   # manda 1 e-mail de teste
+```
+
+Sem `HEALTH_URL` a sonda fica desligada; sem `ALERTA_PARA` o aviso vira só linha
+no log. O log é `/var/log/lidiacrm-watchdog.log` (e `journalctl -t lidiacrm-watchdog`).
+Estado em `/var/lib/lidiacrm-watchdog/`.
+
+### Reentrega do webhook do WAHA
+
+O WAHA reentrega webhook que falhou, e o padrão dele desiste em ~1 min (15
+tentativas × 2 s). Na mesma queda de 2026-10-13, **676 de 679 webhooks**
+esgotaram as tentativas — 212 eram mensagens (`message.any`) que nunca chegaram ao
+CRM. Sem o NOWEB store ligado o WAHA não guarda histórico, então a mensagem não
+volta por API: a única cópia fica no celular do cliente.
+
+`docker-compose.prod.yml` agora põe `WHATSAPP_HOOK_RETRIES_*` em exponencial
+(base 5 s, 11 tentativas ≈ 5,7 h de cobertura). Os três botões
+(`WAHA_HOOK_RETRIES_POLICY`, `WAHA_HOOK_RETRIES_DELAY_SECONDS`,
+`WAHA_HOOK_RETRIES_ATTEMPTS`) têm default no compose: `.env` antigo não precisa de
+edição. A mudança só vale depois de recriar o `waha`, o que derruba as sessões por
+~30 s (voltam sozinhas):
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.traefik.yml --env-file .env up -d waha
+docker exec <contêiner-waha> printenv | grep HOOK_RETRIES   # confira os três
+```

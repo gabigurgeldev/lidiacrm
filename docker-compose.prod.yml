@@ -197,6 +197,25 @@ services:
       # enquete espera uma resposta que nunca vem (lib/waha/resposta-interativa.ts).
       WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,poll.vote,poll.vote.failed,session.status,state.change"
       WHATSAPP_HOOK_HMAC: ${WAHA_HMAC_SECRET}
+      # Reentrega do webhook quando o app (ou o Supabase atrás dele) está fora.
+      #
+      # O padrão do WAHA é CONSTANTE: 15 tentativas, 2 s entre elas — ~1 minuto, e
+      # depois ele DESISTE para sempre. Medido em 2026-10-13: um reboot da VPS
+      # deixou o Supabase fora por 2 h 10, e 676 de 679 webhooks esgotaram as 15
+      # tentativas em ~58 s (212 eram `message.any`). Sem o NOWEB store ligado
+      # (`config.noweb.store.enabled`), o WAHA não guarda histórico e não há como
+      # buscar a mensagem depois — a única cópia fica no celular do cliente.
+      #
+      # Exponencial com base 5 s e 11 tentativas: a espera da tentativa n é
+      # 2^n × 5 s — ~10 s, 20 s, 40 s … a última de ~2,8 h, ~5,7 h no total. Cobre
+      # uma queda de horas e ainda reentrega rápido o soluço de segundos. O sorteio de +20% do WAHA
+      # espalha as retentativas depois da volta, sem rajada.
+      #
+      # Custo: resposta 4xx do nosso handler (payload fora do contrato) também é
+      # retentada — o WAHA retenta TUDO. Esse caso é raro e limitado a 11 tentativas.
+      WHATSAPP_HOOK_RETRIES_POLICY: ${WAHA_HOOK_RETRIES_POLICY:-exponential}
+      WHATSAPP_HOOK_RETRIES_DELAY_SECONDS: ${WAHA_HOOK_RETRIES_DELAY_SECONDS:-5}
+      WHATSAPP_HOOK_RETRIES_ATTEMPTS: ${WAHA_HOOK_RETRIES_ATTEMPTS:-11}
       # WAHA lê WHATSAPP_DEFAULT_ENGINE (NÃO WAHA_DEFAULT_ENGINE — o nome errado
       # fazia cair no default WEBJS, engine com browser que trava/corrompe a sessão
       # quando o WhatsApp Web atualiza; NOWEB é websocket direto, estável e leve).
