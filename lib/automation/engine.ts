@@ -72,6 +72,17 @@ export async function buildContext(admin: SupabaseClient, row: EventRow): Promis
       .maybeSingle();
     if (contact) context.contact = contact;
   } else if (row.entity_kind === "message" && row.entity_id) {
+    // A mensagem entra no contexto pelo `metadata`: o payload do evento é
+    // montado por trigger e não o carrega, e é lá que mora o anúncio que o
+    // clique trouxe (`metadata.anuncio`) — condição `message.metadata.anuncio.
+    // source_type` e o bloco `anuncio` do webhook leem daqui.
+    const { data: message } = await admin
+      .from("messages")
+      .select("id, type, direction, metadata")
+      .eq("id", row.entity_id)
+      .eq("organization_id", org)
+      .maybeSingle();
+    if (message) context.message = message;
     const contactId = row.payload.contact_id as string | undefined;
     if (contactId) {
       const { data: contact } = await admin

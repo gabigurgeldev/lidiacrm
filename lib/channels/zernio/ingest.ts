@@ -27,7 +27,7 @@ import { encontrarContatoPorTelefone } from "@/lib/channels/contato-por-telefone
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
 
 import { extrairAtribuicaoMeta } from "@/lib/channels/atribuicao-de-anuncio-oficial";
-import { estamparAtribuicaoDoContato } from "@/lib/leads/atribuicao-de-anuncio";
+import { estamparAtribuicaoDoContato, gravarAnuncioNaMensagem } from "@/lib/leads/atribuicao-de-anuncio";
 
 import { aplicarEfeitosPosEntrada } from "../pos-entrada";
 
@@ -207,7 +207,12 @@ async function efeitosDaEntrada(
   // regra de primeiro-toque: `estamparAtribuicaoDoContato` só grava se o
   // contato ainda não tem `ad_platform`.
   const atribuicao = extrairAtribuicaoMeta(msg.referral);
-  if (atribuicao) await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
+  if (atribuicao) {
+    await estamparAtribuicaoDoContato(admin, contactId, atribuicao);
+    // O contato guarda o primeiro toque; a mensagem guarda ESTE clique — é ela
+    // que a automação "Quando chegar mensagem" lê e repassa ao webhook.
+    await gravarAnuncioNaMensagem(admin, input.organizationId, messageId, atribuicao);
+  }
 
   await aplicarEfeitosPosEntrada(admin, {
     organizationId: input.organizationId,
