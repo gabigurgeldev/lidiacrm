@@ -178,6 +178,32 @@ describe("poll.vote", () => {
     }
   });
 
+  // Payload REAL do NOWEB com store ligado (produção, 2026-10-13). O timestamp
+  // vem em milissegundos; multiplicado por 1000 no ingest, `toISOString()`
+  // lançava e o voto decifrado nunca era gravado.
+  it("voto real do NOWEB (timestamp em ms) grava com data válida", async () => {
+    const db = bancoDeMentira(ENQUETE);
+    const real = {
+      event: "poll.vote",
+      session: "org_x",
+      payload: {
+        poll: { id: "true_203040971833554@lid_3EB0POLL", to: "203040971833554@lid", from: "me", fromMe: true },
+        vote: {
+          id: "false_203040971833554@lid_A5519DB29076DD78340B7FE6D113A026",
+          to: "me",
+          from: "203040971833554@lid",
+          fromMe: false,
+          timestamp: 1791919719183,
+          selectedOptions: ["Financeiro"],
+        },
+      },
+    } as unknown as WahaEnvelope;
+    await dispatchWahaEvent(db.admin as never, SESSION as never, real, "req-1");
+    const entrada = db.inseridas.find((i) => i.tabela === "messages")?.linha;
+    expect(entrada).toMatchObject({ body: "Financeiro", conversation_id: "conversa-da-pergunta" });
+    expect(String(entrada?.sent_at)).toMatch(/^2026-10-13T/);
+  });
+
   it("sem a pergunta de origem, não grava em conversa nenhuma", async () => {
     const db = bancoDeMentira(null);
     await dispatchWahaEvent(db.admin as never, SESSION as never, voto(["Financeiro"]), "req-1");

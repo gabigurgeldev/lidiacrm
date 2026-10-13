@@ -32,6 +32,17 @@ export interface VotoDeEnquete {
   emGrupo: boolean;
 }
 
+/**
+ * O voto vem com `timestamp` em MILISSEGUNDOS (medido no NOWEB, 2026-10-13:
+ * `1791919719183`), enquanto a mensagem comum vem em segundos — e o ingest
+ * multiplica por 1000. Sem normalizar, o voto virava uma data no ano 58 mil,
+ * `toISOString()` lançava e a escolha do cliente nunca era gravada.
+ */
+function emSegundos(t: unknown): number | null {
+  if (typeof t !== "number" || !Number.isFinite(t) || t <= 0) return null;
+  return t > 1e12 ? Math.floor(t / 1000) : t;
+}
+
 export function lerVotoDeEnquete(payload: Record<string, unknown>): VotoDeEnquete | null {
   const vote = payload.vote;
   const poll = payload.poll;
@@ -49,7 +60,7 @@ export function lerVotoDeEnquete(payload: Record<string, unknown>): VotoDeEnquet
     de: typeof v.from === "string" ? v.from : null,
     doProprioNumero: v.fromMe === true,
     opcoesVotadas: selecionadas,
-    timestamp: typeof v.timestamp === "number" ? v.timestamp : null,
+    timestamp: emSegundos(v.timestamp),
     emGrupo: para.endsWith("@g.us"),
   };
 }
