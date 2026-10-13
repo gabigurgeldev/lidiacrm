@@ -112,6 +112,13 @@ services:
       WHATSAPP_HOOK_URL: ${WAHA_WEBHOOK_BASE_URL}/api/v1/webhooks/waha
       WHATSAPP_HOOK_EVENTS: "message.any,message.ack,message.edited,message.revoked,session.status,state.change"
       WHATSAPP_HOOK_HMAC: ${WAHA_HMAC_SECRET}
+      # Reentrega do webhook quando o app/Supabase está fora. O padrão do WAHA (15 x 2 s,
+      # ~1 min) perdeu 676 de 679 webhooks na queda de 2026-10-13. Exponencial: espera da
+      # tentativa n = 2^n x 5 s, 11 tentativas = ~5,7 h de cobertura. Mesmo valor do
+      # docker-compose.prod.yml da main (PR #58).
+      WHATSAPP_HOOK_RETRIES_POLICY: ${WAHA_HOOK_RETRIES_POLICY:-exponential}
+      WHATSAPP_HOOK_RETRIES_DELAY_SECONDS: ${WAHA_HOOK_RETRIES_DELAY_SECONDS:-5}
+      WHATSAPP_HOOK_RETRIES_ATTEMPTS: ${WAHA_HOOK_RETRIES_ATTEMPTS:-11}
       WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}
       WAHA_DASHBOARD_ENABLED: "false"
       WHATSAPP_RESTART_ALL_SESSIONS: "${WHATSAPP_RESTART_ALL_SESSIONS:-True}"
