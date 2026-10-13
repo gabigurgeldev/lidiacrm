@@ -107,6 +107,23 @@ services:
     mem_limit: 1280m
     image: ${WAHA_IMAGE:-devlikeapro/waha:latest-2026.7.2}
     restart: unless-stopped
+    # Botões nativos (quick_reply, cta_url, cta_call, cta_copy) em conta
+    # conectada por QR Code: o WhatsApp só desenha quando a mensagem sai com
+    # os nós biz/bot de fluxo de empresa. O patch (código-fonte versionado em
+    # deploy/easypanel/waha-patch/waha-native-buttons.js, embutido em base64
+    # em WAHA_PATCH_B64 abaixo) injeta additionalNodes no relayMessage dos
+    # botões do NOWEB em /app/dist/core/engines/noweb/noweb.buttons.js.
+    # Idempotente e à prova de atualização: já aplicado ou dist diferente,
+    # avisa no log e sobe SEM o patch (lista e enquete seguem funcionando).
+    # O override troca só o CMD (entrypoint da imagem é tini): roda o patch e
+    # depois exec /entrypoint.sh original, que termina em exec node dist/main.
+    # Falha do patch NUNCA derruba o contêiner.
+    command:
+      - sh
+      - -c
+      - |
+        node -e "eval(Buffer.from(process.env.WAHA_PATCH_B64 || '', 'base64').toString())" || echo "[waha-native-buttons] patch falhou, seguindo sem botões"
+        exec /entrypoint.sh
     environment:
       WAHA_API_KEY: "sha512:${WAHA_API_KEY_SHA512}"
       WHATSAPP_HOOK_URL: ${WAHA_WEBHOOK_BASE_URL}/api/v1/webhooks/waha
@@ -126,6 +143,68 @@ services:
       WHATSAPP_DEFAULT_ENGINE: ${WHATSAPP_DEFAULT_ENGINE:-NOWEB}
       WAHA_DASHBOARD_ENABLED: "false"
       WHATSAPP_RESTART_ALL_SESSIONS: "${WHATSAPP_RESTART_ALL_SESSIONS:-True}"
+      # Patch do command acima, embutido em base64 (literal block: quebras de
+      # linha são ignoradas no decode).
+      WAHA_PATCH_B64: |
+        LyoqCiAqIFBhdGNoIGRvIFdBSEEgKGVuZ2luZSBOT1dFQikgcGFyYSBib3TDtWVzIG5hdGl2b3Mg
+        ZW0gY29udGEgY29uZWN0YWRhIHBvciBRUiBDb2RlLgogKgogKiBPIFdoYXRzQXBwIHPDsyBkZXNl
+        bmhhIGJvdMO1ZXMgaW50ZXJhdGl2b3MgKHF1aWNrX3JlcGx5LCBjdGFfdXJsLCBjdGFfY2FsbCwK
+        ICogY3RhX2NvcHkpIHF1YW5kbyBhIG1lbnNhZ2VtIGNoZWdhIG1hcmNhZGEgY29tbyBmbHV4byBk
+        ZSBlbXByZXNhLiBPIFdBSEEgbW9udGEKICogbyBgaW50ZXJhY3RpdmVNZXNzYWdlLm5hdGl2ZUZs
+        b3dNZXNzYWdlYCwgbWFzIG7Do28gYW5leGEgb3MgbsOzcyBkZSBzdGFuemEKICogKGBiaXpgICsg
+        YGJvdGApIHF1ZSBvIGNsaWVudGUgb2ZpY2lhbCBlbWl0ZSDigJQgZSwgc2VtIGVsZXMsIG8gYXBw
+        IGRvCiAqIGRlc3RpbmF0w6FyaW8gcmVjZWJlIGEgbWVuc2FnZW0gZW0gc2lsw6puY2lvIChuYWRh
+        IMOpIGRlc2VuaGFkbykuCiAqCiAqIEVzdGUgc2NyaXB0IGluamV0YSwgbm8gYHJlbGF5TWVzc2Fn
+        ZWAgZGUKICogYC9hcHAvZGlzdC9jb3JlL2VuZ2luZXMvbm93ZWIvbm93ZWIuYnV0dG9ucy5qc2A6
+        CiAqCiAqICAgLSBuw7MgYGJpemAgY29tIGBpbnRlcmFjdGl2ZWAgdHlwZT1uYXRpdmVfZmxvdyB2
+        PTEgZW52b2x2ZW5kbyBgbmF0aXZlX2Zsb3dgCiAqICAgICB2PTkgbmFtZT1taXhlZCAoY2FzbyBn
+        ZW7DqXJpY28sIHZhbGUgcGFyYSBxdWlja19yZXBseS9jdGFfKik7CiAqICAgLSBuw7MgYGJvdGAg
+        Y29tIGBiaXpfYm90PTFgIGVtIGNoYXRzIHByaXZhZG9zIChncnVwb3MgbsOjbyBsZXZhbSBgYm90
+        YCkuCiAqCiAqIElkZW1wb3RlbnRlOiBzZSBqw6EgYXBsaWNhZG8gKG1hcmNhIG5vIGZvbnRlKSBv
+        dSBzZSBvIHBhZHLDo28gbsOjbyBmb3IKICogZW5jb250cmFkbyAoV0FIQSBhdHVhbGl6YWRvIGUg
+        ZGlzdCBkaWZlcmVudGUpLCBzYWkgc2VtIGFsdGVyYXIgbmFkYSBlIFNFTQogKiBkZXJydWJhciBv
+        IGNvbnTDqmluZXIg4oCUIGEgZXhlY3XDp8OjbyBkbyBXQUhBIGNvbnRpbnVhIG5vcm1hbG1lbnRl
+        IHBlbG8KICogYC9lbnRyeXBvaW50LnNoYCAodmVyIGNvbXBvc2UpLiBCYWNrdXAgZG8gb3JpZ2lu
+        YWwgZW0gYDxhbHZvPi5vcmlnLTxkYXRhPmAuCiAqLwpjb25zdCBmcyA9IHJlcXVpcmUoImZzIik7
+        Cgpjb25zdCBUQVJHRVQgPQogIHByb2Nlc3MuZW52LldBSEFfUEFUQ0hfVEFSR0VUIHx8CiAgIi9h
+        cHAvZGlzdC9jb3JlL2VuZ2luZXMvbm93ZWIvbm93ZWIuYnV0dG9ucy5qcyI7CmNvbnN0IE1BUksg
+        PSAiLyogW3dhaGEtbmF0aXZlLWJ1dHRvbnNdICovIjsKCmNvbnN0IE9SSUdJTkFMID0gWwogICJh
+        d2FpdCBzb2NrLnJlbGF5TWVzc2FnZShjaGF0SWQsIGZ1bGxNZXNzYWdlLm1lc3NhZ2UsIHsiLAog
+        ICIgICAgICAgIG1lc3NhZ2VJZDogZnVsbE1lc3NhZ2Uua2V5LmlkLCIsCiAgIiAgICB9KTsiLApd
+        LmpvaW4oIlxuIik7Cgpjb25zdCBSRVBMQUNFTUVOVCA9IFsKICBNQVJLLAogICIgICAgLy8gW3dh
+        aGEtbmF0aXZlLWJ1dHRvbnNdIE1hcmNhIGEgbWVuc2FnZW0gY29tbyBmbHV4byBpbnRlcmF0aXZv
+        IiwKICAiICAgIC8vIChiaXogPiBpbnRlcmFjdGl2ZSB0eXBlPW5hdGl2ZV9mbG93IHY9MSA+IG5h
+        dGl2ZV9mbG93IHY9OSBuYW1lPW1peGVkKSIsCiAgIiAgICAvLyBlLCBlbSBjb252ZXJzYSBwcml2
+        YWRhLCBjb21vIGJvdCAoYm90IGJpel9ib3Q9MSkg4oCUIMOpIG8gcXVlIG8gY2xpZW50ZSIsCiAg
+        IiAgICAvLyBvZmljaWFsIGVtaXRlIGUgbyBxdWUgZmF6IG8gYXBwIGRvIGRlc3RpbmF0w6FyaW8g
+        ZGVzZW5oYXIgb3MgYm90w7VlcyIsCiAgIiAgICAvLyBlbSBjb250YXMgY29uZWN0YWRhcyBwb3Ig
+        UVIgQ29kZSAobsOjby1idXNpbmVzcykuIiwKICAiICAgIGNvbnN0IF93YWhhTm9kZXMgPSBbeyIs
+        CiAgIiAgICAgICAgdGFnOiAnYml6JywiLAogICIgICAgICAgIGF0dHJzOiB7fSwiLAogICIgICAg
+        ICAgIGNvbnRlbnQ6IFt7IiwKICAiICAgICAgICAgICAgdGFnOiAnaW50ZXJhY3RpdmUnLCIsCiAg
+        IiAgICAgICAgICAgIGF0dHJzOiB7IHR5cGU6ICduYXRpdmVfZmxvdycsIHY6ICcxJyB9LCIsCiAg
+        IiAgICAgICAgICAgIGNvbnRlbnQ6IFt7IHRhZzogJ25hdGl2ZV9mbG93JywgYXR0cnM6IHsgdjog
+        JzknLCBuYW1lOiAnbWl4ZWQnIH0gfV0sIiwKICAiICAgICAgICB9XSwiLAogICIgICAgfV07IiwK
+        ICAiICAgIGlmICghY2hhdElkLmVuZHNXaXRoKCdAZy51cycpKSB7IiwKICAiICAgICAgICBfd2Fo
+        YU5vZGVzLnB1c2goeyB0YWc6ICdib3QnLCBhdHRyczogeyBiaXpfYm90OiAnMScgfSB9KTsiLAog
+        ICIgICAgfSIsCiAgIiAgICBhd2FpdCBzb2NrLnJlbGF5TWVzc2FnZShjaGF0SWQsIGZ1bGxNZXNz
+        YWdlLm1lc3NhZ2UsIHsiLAogICIgICAgICAgIG1lc3NhZ2VJZDogZnVsbE1lc3NhZ2Uua2V5Lmlk
+        LCIsCiAgIiAgICAgICAgYWRkaXRpb25hbE5vZGVzOiBfd2FoYU5vZGVzLCIsCiAgIiAgICB9KTsi
+        LApdLmpvaW4oIlxuIik7Cgp0cnkgewogIGlmICghZnMuZXhpc3RzU3luYyhUQVJHRVQpKSB7CiAg
+        ICBjb25zb2xlLmxvZygKICAgICAgIlt3YWhhLW5hdGl2ZS1idXR0b25zXSBhbHZvIGluZXhpc3Rl
+        bnRlIChkaXN0IG11ZG91IGRlIGVzdHJ1dHVyYT8pOiIsCiAgICAgIFRBUkdFVCwKICAgICAgIuKA
+        lCBzZWd1aW5kbyBzZW0gcGF0Y2giLAogICAgKTsKICAgIHByb2Nlc3MuZXhpdCgwKTsKICB9CiAg
+        Y29uc3Qgc3JjID0gZnMucmVhZEZpbGVTeW5jKFRBUkdFVCwgInV0ZjgiKTsKICBpZiAoc3JjLmlu
+        Y2x1ZGVzKE1BUkspKSB7CiAgICBjb25zb2xlLmxvZygiW3dhaGEtbmF0aXZlLWJ1dHRvbnNdIGrD
+        oSBhcGxpY2FkbyDigJQgbmFkYSBhIGZhemVyIik7CiAgICBwcm9jZXNzLmV4aXQoMCk7CiAgfQog
+        IGlmICghc3JjLmluY2x1ZGVzKE9SSUdJTkFMKSkgewogICAgY29uc29sZS5sb2coCiAgICAgICJb
+        d2FoYS1uYXRpdmUtYnV0dG9uc10gcGFkcsOjbyBkbyByZWxheU1lc3NhZ2UgbsOjbyBlbmNvbnRy
+        YWRvIOKAlCBXQUhBIGF0dWFsaXphZG8/IFNlZ3VpbmRvIHNlbSBwYXRjaCIsCiAgICApOwogICAg
+        cHJvY2Vzcy5leGl0KDApOwogIH0KICBmcy5jb3B5RmlsZVN5bmMoVEFSR0VULCBgJHtUQVJHRVR9
+        Lm9yaWdgKTsKICBmcy53cml0ZUZpbGVTeW5jKFRBUkdFVCwgc3JjLnJlcGxhY2UoT1JJR0lOQUws
+        IFJFUExBQ0VNRU5UKSk7CiAgY29uc29sZS5sb2coIlt3YWhhLW5hdGl2ZS1idXR0b25zXSBwYXRj
+        aCBhcGxpY2FkbyBlbSIsIFRBUkdFVCk7Cn0gY2F0Y2ggKGUpIHsKICBjb25zb2xlLmxvZygKICAg
+        ICJbd2FoYS1uYXRpdmUtYnV0dG9uc10gRVJSTyBhbyBhcGxpY2FyIChzZWd1aW5kbyBzZW0gcGF0
+        Y2gpOiIsCiAgICBlICYmIGUubWVzc2FnZSwKICApOwp9CnByb2Nlc3MuZXhpdCgwKTsK
     volumes:
       - waha-data:/app/.sessions # sessões pareadas (QR) — perder = re-parear
       - waha-media:/app/.media
