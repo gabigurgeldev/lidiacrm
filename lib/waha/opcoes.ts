@@ -40,11 +40,23 @@ export function wahaPollPayload(o: OpcoesInterativas) {
   };
 }
 
+/**
+ * Título da lista. OBRIGATÓRIO no transporte: sem ele o envio volta
+ * `400 message.title should not be empty`, e a lista do agente NUNCA saiu
+ * (medido em produção, 2026-10-13). Pergunta curta vira o próprio título;
+ * pergunta longa fica na descrição, com um título neutro em cima.
+ */
+const LIMITE_TITULO_LISTA = 60;
+export const TITULO_PADRAO_DA_LISTA = "Escolha uma opção";
+
 /** Corpo de POST /api/sendList, sem `session`/`chatId`. */
 export function wahaListPayload(o: OpcoesInterativas) {
+  const pergunta = o.pergunta.trim();
+  const cabeNoTitulo = pergunta.length > 0 && pergunta.length <= LIMITE_TITULO_LISTA;
   return {
     message: {
-      description: cortar(o.pergunta, LIMITE_DESCRICAO_LISTA),
+      title: cabeNoTitulo ? pergunta : TITULO_PADRAO_DA_LISTA,
+      ...(cabeNoTitulo ? {} : { description: cortar(pergunta, LIMITE_DESCRICAO_LISTA) }),
       button: cortar(o.botao ?? BOTAO_PADRAO_DA_LISTA, LIMITE_BOTAO),
       sections: [
         {

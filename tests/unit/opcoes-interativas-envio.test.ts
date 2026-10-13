@@ -96,12 +96,16 @@ describe("canal por QR", () => {
     });
     const corpo = corpoDe(fetchMock, "sendList") as {
       message: {
-        description: string;
+        title: string;
+        description?: string;
         button: string;
         sections: Array<{ rows: Array<{ title: string; rowId: string; description?: string }> }>;
       };
     };
-    expect(corpo.message.description).toBe("Como podemos ajudar?");
+    // `title` é obrigatório no transporte (sem ele: 400, a lista nunca sai).
+    // Pergunta curta vira o próprio título, sem repetir na descrição.
+    expect(corpo.message.title).toBe("Como podemos ajudar?");
+    expect(corpo.message.description).toBeUndefined();
     expect(corpo.message.button).toBe("Escolher");
     const rows = corpo.message.sections[0]!.rows;
     expect(rows.map((r) => r.rowId)).toEqual(["o1", "o2"]);
@@ -110,6 +114,25 @@ describe("canal por QR", () => {
     expect(Array.from(rows[1]!.title).length).toBeLessThanOrEqual(24);
     expect(rows[1]!.title.endsWith("…")).toBe(true);
     expect(rows[1]!.description).toBe("Remarcar uma consulta já marcada");
+  });
+
+  // Caso real (Faby, 2026-10-13): a pergunta do agente tinha ~100 caracteres e
+  // a lista ia SEM título — o transporte recusava com 400 e o cliente não via nada.
+  it("pergunta longa: título neutro e a pergunta inteira na descrição", async () => {
+    const fetchMock = stubWaha();
+    const longa =
+      "Anotado, Gabriel: sem cartão com mensagem. Qual forma de pagamento você prefere para o buquê de 4 rosas?";
+    await getAdapter("waha").send({
+      organizationId: ORG,
+      sessionRef: "sessao",
+      to: "5531999998888@c.us",
+      kind: "list",
+      body: "texto",
+      opcoes: { ...OPCOES, pergunta: longa },
+    });
+    const corpo = corpoDe(fetchMock, "sendList") as { message: { title: string; description?: string } };
+    expect(corpo.message.title).toBe("Escolha uma opção");
+    expect(corpo.message.description).toBe(longa);
   });
 });
 

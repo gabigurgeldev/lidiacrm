@@ -308,7 +308,7 @@ export const AGENT_TOOL_DEFS = {
     // + guard de prototype pollution dentro de applyRequestHumanHandoff — campo extra/forjado
     // vira erro de ENSINO ao modelo, nunca exceção do SDK nem strip silencioso.
     inputSchema: z.object({
-      reason: z.string().optional().describe('por que passar ao humano (curto)'),
+      reason: z.string().optional().describe('por que passar ao humano, com os dados que a equipe precisa (até 500 caracteres; o excedente é cortado)'),
     }).passthrough(),
   },
   read_skill_reference: {
