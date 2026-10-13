@@ -252,6 +252,7 @@ export function montar(mundo: Mundo, grafo: FlowGraph) {
         title: "Loja do Gabriel",
         status: "open",
         stage_id: "etapa-1",
+        stage_name: "Etapa 1",
         pipeline_id: "funil-1",
         owner_user_id: mundo.atribuicoes.at(-1)?.userId ?? null,
         value_cents: 150_000,

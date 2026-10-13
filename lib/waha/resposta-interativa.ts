@@ -62,9 +62,39 @@ export interface SelecaoDeLista {
   idDaLista: string | null;
 }
 
+/**
+ * Invólucros do proto que escondem a mensagem de verdade um nível abaixo, em
+ * `<invólucro>.message`. Conversa com mensagens temporárias manda TUDO dentro
+ * de `ephemeralMessage`; sem desembrulhar, a escolha na lista some.
+ */
+const INVOLUCROS = [
+  "ephemeralMessage",
+  "viewOnceMessage",
+  "viewOnceMessageV2",
+  "viewOnceMessageV2Extension",
+  "deviceSentMessage",
+  "documentWithCaptionMessage",
+] as const;
+
+function desembrulhar(mensagem: Record<string, unknown>): Record<string, unknown> {
+  let atual = mensagem;
+  // Limite de profundidade: proto malformado não pode virar laço.
+  for (let i = 0; i < 4; i++) {
+    const chave = INVOLUCROS.find((k) => {
+      const v = atual[k];
+      return v !== null && typeof v === "object" && typeof (v as Record<string, unknown>).message === "object";
+    });
+    if (!chave) return atual;
+    const interna = (atual[chave] as Record<string, unknown>).message;
+    if (interna === null || typeof interna !== "object") return atual;
+    atual = interna as Record<string, unknown>;
+  }
+  return atual;
+}
+
 export function lerSelecaoDeLista(mensagem: unknown): SelecaoDeLista | null {
   if (mensagem === null || typeof mensagem !== "object") return null;
-  const lr = (mensagem as Record<string, unknown>).listResponseMessage;
+  const lr = desembrulhar(mensagem as Record<string, unknown>).listResponseMessage;
   if (lr === null || typeof lr !== "object") return null;
   const l = lr as Record<string, unknown>;
   const reply = l.singleSelectReply;

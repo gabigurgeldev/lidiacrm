@@ -15,6 +15,7 @@ const escopo = {
     title: "Loja do Gabriel",
     score: 82,
     score_band: null,
+    stage_name: null,
     tags: ["quente", "meta-ads"],
     value_cents: 150_000,
     created_at: "2026-08-30T12:00:00.000Z",

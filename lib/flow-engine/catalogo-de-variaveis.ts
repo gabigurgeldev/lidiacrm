@@ -93,6 +93,7 @@ export const CATALOGO_DE_VARIAVEIS = {
       f("source", "Origem"),
       f("tags", "Marcadores"),
       f("created_at", "Criado em"),
+      f("stage_name", "Etapa"),
       f("stage_id", "Id da etapa"),
       f("pipeline_id", "Id do funil"),
       f("owner_user_id", "Id do dono"),
