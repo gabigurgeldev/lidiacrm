@@ -309,6 +309,15 @@ export function frameOpcoes(m: Pick<HistoryRow, 'direction' | 'type' | 'body' | 
     const pergunta = resposta.pergunta ? ` "${resposta.pergunta}"` : '';
     return `[O lead TOCOU numa opção ${onde}${pergunta}. A escolha dele foi:] ${resposta.opcao_label}`;
   }
+  // Voto que o WhatsApp entregou ilegível (`poll.vote.failed`, ver
+  // `lib/waha/ingest.ts`): o lead tocou, mas não se sabe em quê. Sem este
+  // enquadramento o marcador parece fala do lead, e o modelo responde a ele.
+  const naoLida = (m.metadata as Record<string, unknown> | null | undefined)?.escolha_nao_lida;
+  if (m.direction === 'inbound' && naoLida !== null && typeof naoLida === 'object') {
+    const p = (naoLida as { pergunta?: unknown }).pergunta;
+    const pergunta = typeof p === 'string' && p !== '' ? ` "${p}"` : '';
+    return `[O lead TOCOU numa opção da enquete${pergunta}, mas o WhatsApp não entregou QUAL. Não diga que houve erro técnico: peça, em uma frase curta, que ele escreva a opção escolhida.]`;
+  }
   if (m.direction === 'outbound' && (m.type === 'poll' || m.type === 'list') && m.body) {
     const como = m.type === 'poll' ? 'uma enquete' : 'uma lista de opções';
     return `[Você mandou ${como} para o lead tocar:]

@@ -107,6 +107,17 @@ describe("o modelo ENXERGA a escolha no histórico", () => {
     ).toMatch(/^\[Você mandou uma enquete para o lead tocar:\]\nQual setor\?/);
   });
 
+  it("voto ilegível vira instrução de pedir a opção por escrito, não fala do lead", () => {
+    const quadro = frameOpcoes({
+      direction: "inbound",
+      type: "text",
+      body: "[Votou na enquete — o voto não pôde ser lido]",
+      metadata: { escolha_nao_lida: { formato: "enquete", pergunta: "Qual setor?" } },
+    });
+    expect(quadro).toMatch(/^\[O lead TOCOU numa opção da enquete "Qual setor\?", mas o WhatsApp não entregou QUAL\./);
+    expect(quadro).toContain("escreva a opção");
+  });
+
   it("mensagem comum segue o caminho de sempre", () => {
     expect(frameOpcoes({ direction: "inbound", type: "text", body: "oi", metadata: {} })).toBeNull();
   });

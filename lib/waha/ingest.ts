@@ -1030,8 +1030,10 @@ async function handlePollVote(
   if (!origem) {
     // Enquete que não é nossa (mandada pelo celular) ou de antes desta versão:
     // sem a pergunta não há conversa certa onde gravar — e gravar na errada é
-    // pior que não gravar.
-    logger.info("waha.ingest: voto de enquete sem a pergunta de origem", {
+    // pior que não gravar. `warn`, não `info`: se a enquete ERA nossa (id em
+    // formato que o sufixo não casa), é uma escolha do cliente que se perdeu, e
+    // isso precisa aparecer em quem lê os avisos.
+    logger.warn("waha.ingest: voto de enquete sem a pergunta de origem", {
       organization_id: session.organization_id,
       poll_id: voto.idDaEnquete,
     });
@@ -1064,9 +1066,22 @@ async function handlePollVote(
 
 /**
  * O transporte recebeu um voto e não conseguiu decifrá-lo. Ninguém sabe o que
- * o cliente tocou — e quem esperava a escolha segue esperando. Vai à Central.
+ * o cliente tocou. Vai à Central — e TAMBÉM vira uma entrada na conversa.
+ *
+ * Só a Central deixava o agente mudo: o cliente tocava, nada chegava, e a IA
+ * ficava esperando uma escolha que não viria (ou, na mensagem seguinte do
+ * cliente — "eu marquei aí" —, admitia que não via nada). A entrada marcada
+ * (`metadata.escolha_nao_lida`) acorda o agente e o menu do fluxo, e o
+ * `frameOpcoes` diz ao modelo o que houve, para ele perguntar de novo em texto.
  */
-async function handlePollVoteFailed(admin: Admin, session: Session, payload: WahaPayload): Promise<void> {
+export const CORPO_DO_VOTO_NAO_LIDO = "[Votou na enquete — o voto não pôde ser lido]";
+
+async function handlePollVoteFailed(
+  admin: Admin,
+  session: Session,
+  payload: WahaPayload,
+  requestId: string,
+): Promise<void> {
   const voto = lerVotoDeEnquete(payload as Record<string, unknown>);
   if (!voto || voto.doProprioNumero || voto.emGrupo) return;
   const origem = await mensagemDeOpcoes(admin, session.organization_id, { sufixo: bareWaMessageId(voto.idDaEnquete) });
@@ -1076,6 +1091,25 @@ async function handlePollVoteFailed(admin: Admin, session: Session, payload: Wah
     message_id: origem.id,
   });
   await avisarEscolhaNaoLida(admin, session.organization_id, origem.conversation_id);
+
+  await handleInbound(
+    admin,
+    session,
+    {
+      id: voto.idDoVoto ?? `poll_vote_failed_${bareWaMessageId(voto.idDaEnquete)}_${voto.timestamp ?? Date.now()}`,
+      from: voto.de ?? undefined,
+      body: CORPO_DO_VOTO_NAO_LIDO,
+      ...(voto.timestamp !== null ? { timestamp: voto.timestamp } : {}),
+    } as WahaPayload,
+    requestId,
+    {
+      contactId: origem.contact_id,
+      conversationId: origem.conversation_id,
+      metadata: {
+        escolha_nao_lida: { formato: "enquete", pergunta: origem.opcoes.pergunta ?? null },
+      },
+    },
+  );
 }
 
 /**
@@ -1106,7 +1140,7 @@ export async function dispatchWahaEvent(
   } else if (eventType === "poll.vote") {
     await handlePollVote(admin, session, payload, requestId);
   } else if (eventType === "poll.vote.failed") {
-    await handlePollVoteFailed(admin, session, payload);
+    await handlePollVoteFailed(admin, session, payload, requestId);
   } else if (eventType === "session.status" || eventType === "state.change") {
     await handleSessionStatus(admin, session, payload);
   }

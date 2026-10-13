@@ -171,6 +171,8 @@ export interface FatosDaExecucao {
     title: string;
     status: string;
     stage_id: string;
+    /** Nome da etapa (`crm_stages.name`), para mensagem legível. `null` se a etapa sumiu. */
+    stage_name: string | null;
     pipeline_id: string;
     owner_user_id: string | null;
     value_cents: number | null;

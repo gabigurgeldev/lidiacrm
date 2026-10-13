@@ -443,11 +443,24 @@ async function carregarFatos(
         .eq("lead_id", exec.lead_id)
         .maybeSingle();
       const s = sc as { ai_probability: number | null; ai_probability_band: string | null } | null;
+      // Nome da etapa: `stage_id` sozinho não serve para avisar ninguém ("etapa
+      // 2248aa23…"). Consulta à parte, e não embed, para não depender do nome da FK.
+      let stageName: string | null = null;
+      if (typeof l.stage_id === "string" && l.stage_id !== "") {
+        const { data: st } = await admin
+          .from("crm_stages")
+          .select("name")
+          .eq("organization_id", orgId)
+          .eq("id", l.stage_id)
+          .maybeSingle();
+        stageName = (st as { name: string | null } | null)?.name ?? null;
+      }
       lead = {
         id: String(l.id),
         title: String(l.title ?? ""),
         status: String(l.status ?? "open"),
         stage_id: String(l.stage_id ?? ""),
+        stage_name: stageName,
         pipeline_id: String(l.pipeline_id ?? ""),
         owner_user_id: (l.owner_user_id as string | null) ?? null,
         value_cents: (l.value_cents as number | null) ?? null,
@@ -610,6 +623,74 @@ async function anunciarMarcacao(
   }
 }
 
+/**
+ * Dono do lead escolhido pelo fluxo também passa a ser o dono da CONVERSA.
+ *
+ * Antes disto os blocos de distribuição (`crm.assign_owner`, `routing.*`) só
+ * gravavam `crm_leads.owner_user_id`: o atendente sorteado não via a conversa na
+ * caixa de entrada dele, e `routing.round_robin` nunca girava — a rotação conta
+ * `conversation_assignment_events` (`lib/routing/eligibles.ts`), que ninguém
+ * escrevia. Atribuir pela `fn_conversation_assign` (a ÚNICA que atribui
+ * conversa) grava o evento na mesma transação, como o `routing-worker`.
+ *
+ * Qual conversa: a da execução quando o gatilho a trouxe; senão a mais recente
+ * ainda viva do contato do lead (o gatilho "a IA passou para uma pessoa" não
+ * grava `conversation_id` na execução).
+ *
+ * NÃO lança: o lead já tem dono, e lançar faria o motor repetir o bloco. Falha
+ * aqui (ex.: `assignee_not_eligible_member`, usuário só `viewer`) vira aviso.
+ */
+const STATUS_DE_CONVERSA_VIVA = ["open", "pending", "claimed", "ai_handling"];
+
+async function atribuirConversaDoLead(
+  admin: SupabaseClient,
+  orgId: string,
+  exec: FlowExecutionRow,
+  leadId: string,
+  userId: string,
+): Promise<void> {
+  try {
+    let conversationId = exec.conversation_id;
+    if (conversationId === null) {
+      const { data: lead } = await admin
+        .from("crm_leads")
+        .select("contact_id")
+        .eq("organization_id", orgId)
+        .eq("id", leadId)
+        .maybeSingle();
+      const contactId = (lead as { contact_id: string | null } | null)?.contact_id ?? exec.contact_id;
+      if (!contactId) return;
+      const { data: conv } = await admin
+        .from("conversations")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("contact_id", contactId)
+        .in("status", STATUS_DE_CONVERSA_VIVA)
+        .order("last_message_at", { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+      conversationId = (conv as { id: string } | null)?.id ?? null;
+    }
+    if (conversationId === null) return;
+
+    const { error } = await admin.rpc("fn_conversation_assign", {
+      p_organization_id: orgId,
+      p_conversation_id: conversationId,
+      p_to_user_id: userId,
+      p_reason: "routing",
+      p_expected_assignee: null,
+      p_enforce_expected: false,
+    });
+    if (error) throw new Error(error.message);
+  } catch (e) {
+    logger.warn("flow_engine.conversa_nao_atribuida", {
+      organization_id: orgId,
+      execution_id: exec.id,
+      erro: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
+
 // ───────────────────────────────── portas ────────────────────────────────────
 
 export function criarPortas(
@@ -633,6 +714,7 @@ export function criarPortas(
           .eq("organization_id", orgId)
           .eq("id", leadId);
         if (error) throw new Error(error.message);
+        await atribuirConversaDoLead(admin, orgId, exec, leadId, userId);
       },
 
       async removerDono({ leadId }) {

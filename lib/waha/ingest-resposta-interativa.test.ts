@@ -8,7 +8,7 @@ vi.mock("@/lib/channels/pos-entrada", () => ({
   aplicarEfeitosPosEntrada: (admin: unknown, input: Record<string, unknown>) => efeitos(admin, input),
 }));
 
-import { dispatchWahaEvent, type WahaEnvelope } from "@/lib/waha/ingest";
+import { CORPO_DO_VOTO_NAO_LIDO, dispatchWahaEvent, type WahaEnvelope } from "@/lib/waha/ingest";
 
 /**
  * A VOLTA de uma enquete/lista nossa vira mensagem de entrada comum, com o
@@ -197,7 +197,32 @@ describe("poll.vote.failed", () => {
       ref_kind: "conversation",
       ref_id: "conversa-da-pergunta",
     });
-    expect(db.inseridas.filter((i) => i.tabela === "messages")).toHaveLength(0);
+  });
+
+  // Só o aviso na Central deixava o agente mudo: o cliente tocava e a IA
+  // seguia esperando (caso Faby, 2026-10-12). A entrada marcada acorda quem
+  // espera, e o enquadramento diz ao modelo para pedir a opção por escrito.
+  it("grava entrada marcada na conversa da pergunta e acorda agente e fluxo", async () => {
+    const db = bancoDeMentira(ENQUETE);
+    const envelope = { ...voto([]), event: "poll.vote.failed" } as WahaEnvelope;
+    await dispatchWahaEvent(db.admin as never, SESSION as never, envelope, "req-1");
+    const entrada = db.inseridas.find((i) => i.tabela === "messages")?.linha;
+    expect(entrada).toMatchObject({
+      conversation_id: "conversa-da-pergunta",
+      contact_id: "contato-da-pergunta",
+      direction: "inbound",
+      type: "text",
+      body: CORPO_DO_VOTO_NAO_LIDO,
+      metadata: { escolha_nao_lida: { formato: "enquete", pergunta: "Qual setor?" } },
+    });
+    expect(efeitos).toHaveBeenCalledTimes(1);
+  });
+
+  it("voto ilegível sem a pergunta de origem não grava nada", async () => {
+    const db = bancoDeMentira(null);
+    const envelope = { ...voto([]), event: "poll.vote.failed" } as WahaEnvelope;
+    await dispatchWahaEvent(db.admin as never, SESSION as never, envelope, "req-1");
+    expect(db.inseridas).toHaveLength(0);
   });
 });
 
@@ -239,6 +264,43 @@ describe("seleção de lista (message.any com listResponseMessage)", () => {
       type: "text",
       body: "Suporte técnico",
       metadata: { resposta_interativa: { formato: "lista", opcao_id: "o1", mensagem_origem_id: "pergunta-1" } },
+    });
+  });
+
+  it("acha a seleção dentro de ephemeralMessage (conversa com mensagens temporárias)", async () => {
+    const db = bancoDeMentira(LISTA);
+    await dispatchWahaEvent(
+      db.admin as never,
+      SESSION as never,
+      {
+        event: "message.any",
+        session: "default",
+        payload: {
+          id: "false_5531999998888@c.us_SELECAO2",
+          from: "5531999998888@c.us",
+          fromMe: false,
+          body: "",
+          _data: {
+            message: {
+              ephemeralMessage: {
+                message: {
+                  listResponseMessage: {
+                    title: "Financ…",
+                    singleSelectReply: { selectedRowId: "o2" },
+                    contextInfo: { stanzaId: "3EB0LISTA" },
+                  },
+                },
+              },
+            },
+          },
+        },
+      } as unknown as WahaEnvelope,
+      "req-1",
+    );
+    const entrada = db.inseridas.find((i) => i.tabela === "messages")?.linha;
+    expect(entrada).toMatchObject({
+      body: "Financeiro",
+      metadata: { resposta_interativa: { formato: "lista", opcao_id: "o2" } },
     });
   });
 });
