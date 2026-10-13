@@ -114,7 +114,7 @@ describe("o modelo ENXERGA a escolha no histórico", () => {
       body: "[Votou na enquete — o voto não pôde ser lido]",
       metadata: { escolha_nao_lida: { formato: "enquete", pergunta: "Qual setor?" } },
     });
-    expect(quadro).toMatch(/^\[O lead TOCOU numa opção da enquete "Qual setor\?", mas o WhatsApp não entregou QUAL\./);
+    expect(quadro).toMatch(/^\[O lead TOCOU numa opção da enquete "Qual setor\?", mas o canal não entregou QUAL\./);
     expect(quadro).toContain("escreva a opção");
   });
 
