@@ -14,6 +14,11 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { audit } from "@/lib/audit";
 import { sincronizarSaudeDaConexao } from "@/lib/channels/health";
 import { depoisDaResposta } from "@/lib/channels/depois-da-resposta";
+import {
+  devolverAutomaticoPeloCelular,
+  ehComandoDeDevolucao,
+  pausarAutomaticoPeloCelular,
+} from "@/lib/escalacao/celular-da-loja";
 import { aplicarEfeitosPosEntrada } from "@/lib/channels/pos-entrada";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
 import { canonicalPhoneBR } from "@/lib/channels/phone-variants";
@@ -23,6 +28,7 @@ import type { createAdminClient } from "@/lib/supabase/admin";
 import { ackToStatus } from "@/lib/types/messaging";
 import type { WahaEnvelope, WahaPayload } from "@/lib/waha/envelope";
 import { bareWaMessageId, chatIdFromWaMessageId } from "@/lib/waha/message-id";
+import { idDaMensagemCitada } from "@/lib/waha/citacao";
 import { logger } from "@/lib/logger";
 import {
   avisarEscolhaNaoLida,
@@ -466,6 +472,37 @@ async function markConversation(
 }
 
 /**
+ * A linha da mensagem que o cliente citou, NESTA conversa. O id citado é bare;
+ * o banco guarda bare (envio pelo CRM) ou composto `{fromMe}_{chat}_{bare}`
+ * (webhook), então casa os dois. Restrito à conversa: o bare pode colidir
+ * entre chats, e a citação só faz sentido dentro do mesmo. Best-effort — uma
+ * citação que não acha a original não derruba a mensagem.
+ */
+async function resolverMensagemCitada(
+  admin: Admin,
+  orgId: string,
+  conversationId: string,
+  p: WahaPayload,
+): Promise<string | null> {
+  const bare = idDaMensagemCitada(p);
+  if (bare === null) return null;
+  const { data, error } = await admin
+    .from("messages")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("conversation_id", conversationId)
+    .or(`external_id.eq.${bare},external_id.like.*_${bare}`)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    logger.warn("waha.ingest: citação sem resolver a original", { detail: error.message });
+    return null;
+  }
+  return (data as { id: string } | null)?.id ?? null;
+}
+
+/**
  * Mensagem recebida (fromMe=false). Contato = remetente (`from`).
  */
 async function mensagemIngeridaPorExternalId(
@@ -586,6 +623,8 @@ async function handleInbound(
     conversationId = conversa;
   }
 
+  const replyToMessageId = await resolverMensagemCitada(admin, session.organization_id, conversationId, p);
+
   const now = new Date().toISOString();
   const { data: insertedMessage, error: insertErr } = await admin
     .from("messages")
@@ -605,6 +644,7 @@ async function handleInbound(
       sent_via: "external_device",
       sent_at: p.timestamp ? new Date(p.timestamp * 1000).toISOString() : now,
       delivered_at: now,
+      reply_to_message_id: replyToMessageId,
       metadata: { raw_type: p.type, ack_name: p.ackName, ...metadataExtra },
     })
     .select("id")
@@ -813,6 +853,22 @@ async function handleOutboundFromUserPhone(
   const conversationId = await upsertConversation(admin, session.organization_id, contactId, session.id);
   if (!conversationId) return;
 
+  const conversaDoCelular = {
+    organizationId: session.organization_id,
+    conversationId,
+    contactId,
+    channelSessionId: session.id,
+    requestId,
+  };
+
+  // `#ia` digitado no celular devolve a conversa ao automático e NÃO vira
+  // mensagem: o agente leria o comando como conversa com o cliente. Ver
+  // lib/escalacao/celular-da-loja.ts.
+  if (ehComandoDeDevolucao(bodyOf(p))) {
+    await devolverAutomaticoPeloCelular(admin, conversaDoCelular);
+    return;
+  }
+
   const now = new Date().toISOString();
   const { data: insertedOutbound, error: insertErr } = await admin
     .from("messages")
@@ -850,6 +906,12 @@ async function handleOutboundFromUserPhone(
   }
 
   await markConversation(admin, session.organization_id, conversationId, "outbound", previewFromMessage(p), now);
+
+  // Quem responde pelo celular assumiu a conversa: a IA para até alguém
+  // devolver (tela ou `#ia`). Antes daqui o agente seguia falando por cima do
+  // atendente. Só depois do insert bem-sucedido — o 23505 acima já saiu, então
+  // a dupla entrega `message` + `message.any` não pausa duas vezes.
+  await pausarAutomaticoPeloCelular(admin, conversaDoCelular);
 
   await audit({
     action: "message.sent",

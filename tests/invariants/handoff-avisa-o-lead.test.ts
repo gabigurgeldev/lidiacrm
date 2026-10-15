@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import pg from "pg";
 
 import type * as InboundTurn from "@/lib/agent-engine/agent/inbound-turn";
@@ -343,5 +343,103 @@ describe("suspeita de opt-out", () => {
       [CONV],
     );
     expect(rows[0]!.motivo).toBe("suspected_optout");
+  });
+});
+
+/**
+ * FOTO DO CLIENTE (migration 0243). Caso real: floricultura, 2026-10-15 — o
+ * cliente manda a foto de uma planta, "vcs tem dessa??", e o agente, sem o
+ * item no acervo, oscilava entre "vou confirmar" e um preço inventado. Com a
+ * opção ligada, a foto vai para uma pessoa ANTES do modelo.
+ *
+ * Precisa de agente PUBLICADO nesta sessão (a opção é da versão). Ele é
+ * despublicado no fim para não mudar o que os blocos acima medem sem agente.
+ */
+describe("foto do cliente com a opção ligada (migration 0243)", () => {
+  const AGENTE = "eeee0000-0000-4000-8000-0000000000a1";
+  const VERSAO = "eeee0000-0000-4000-8000-0000000000a2";
+
+  beforeAll(async () => {
+    await pool.query(
+      `insert into ai_agents (id, organization_id, name, system_prompt)
+       values ($1,$2,'Agente da foto','system') on conflict (id) do nothing`,
+      [AGENTE, ORG],
+    );
+    await pool.query(
+      `insert into ai_agent_versions
+         (id, organization_id, agent_id, version_number, system_prompt, provider, model,
+          channel_session_id, status, handoff_on_customer_image)
+       values ($1,$2,$3,1,'Você atende a loja de teste.','anthropic','claude-sonnet-4-6',$4,'published',true)
+       on conflict (id) do nothing`,
+      [VERSAO, ORG, AGENTE, SESSION],
+    );
+    await pool.query("update ai_agents set published_version_id = $1 where id = $2", [VERSAO, AGENTE]);
+  });
+
+  afterAll(async () => {
+    await pool.query("update ai_agents set published_version_id = null where id = $1", [AGENTE]);
+  });
+
+  /** Inbound de IMAGEM, já descrita — sem a descrição o drain esperaria por ela. */
+  async function rodaTurnoComFoto(): Promise<void> {
+    const msgId = crypto.randomUUID();
+    await pool.query(
+      `insert into messages (id, organization_id, conversation_id, channel_session_id, contact_id,
+         type, direction, status, body, media_url, media_mime, media_derived_text, sent_via, sent_at)
+       values ($1,$2,$3,$4,$5,'image','inbound','delivered','vcs tem dessa??',
+               'https://exemplo.invalid/palmeira.jpg','image/jpeg','uma palmeira de folhas azuladas',
+               'external_device', now())`,
+      [msgId, ORG, CONV, SESSION, CONTACT],
+    );
+    await pool.query("update job_queue set status = 'done' where status = 'pending'");
+    const { job } = await m.queue.enqueueJob(pool, ORG, {
+      kind: "inbound_turn",
+      leadId: CONTACT,
+      payload: {
+        conversation_id: CONV,
+        contact_id: CONTACT,
+        channel_session_id: SESSION,
+        inbound_message_id: msgId,
+        crm_event_id: crypto.randomUUID(),
+      },
+      maxAttempts: 1,
+    });
+    const [claimed] = await m.queue.claimJobs(pool, { workerId: "aviso", maxConcurrency: 1 });
+    expect(claimed?.id).toBe(job.id);
+    try {
+      await montaHandler()(claimed!, pool, { workerId: "aviso" });
+      await m.queue.completeJob(pool, claimed!.id, "aviso");
+    } catch (err) {
+      await m.queue.failJob(pool, claimed!.id, "aviso", err);
+      throw err;
+    }
+  }
+
+  it("a foto passa para uma pessoa: avisa ANTES da trava e sem gastar modelo", async () => {
+    await rodaTurnoComFoto();
+
+    expect(enviados, "o cliente mandou foto e não recebeu nada").toHaveLength(1);
+    expect(enviados[0]!.body).toMatch(/foto|imagem/iu);
+    expect(enviados[0]!.forceHumanNoEnvio, "avisou depois de armar a trava").toBe(false);
+    expect(modeloChamado, "a passagem pela foto chamou o modelo").toBe(0);
+
+    const { rows } = await pool.query<{ silencio: string | null; motivo: string | null; force_human: boolean }>(
+      `select c.bot_silenced_until::text as silencio, c.last_handoff_reason as motivo, k.force_human
+         from conversations c join contacts k on k.id = c.contact_id where c.id = $1`,
+      [CONV],
+    );
+    expect(rows[0]!.motivo).toBe("customer_image");
+    expect(rows[0]!.silencio).toBe("infinity");
+    expect(rows[0]!.force_human).toBe(true);
+  });
+
+  it("controle: TEXTO com a opção ligada segue com o agente", async () => {
+    await rodaTurnoCom("bom dia, qual o horário de vocês?");
+    const { rows } = await pool.query<{ force_human: boolean }>(
+      "select force_human from contacts where id = $1",
+      [CONTACT],
+    );
+    expect(rows[0]!.force_human, "texto comum virou passagem por foto").toBe(false);
+    expect(modeloChamado, "o turno não chegou ao modelo — o harness não rodou").toBeGreaterThan(0);
   });
 });

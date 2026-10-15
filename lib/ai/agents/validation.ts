@@ -136,6 +136,7 @@ const versionShapeSchema = z
     // Com reply_as_audio ligado: só responde em áudio quando o cliente mandou áudio (0226).
     reply_as_audio_mirror: z.boolean().default(false),
     human_request_try_first: z.boolean().default(false),
+    handoff_on_customer_image: z.boolean().default(false),
     interactive_options_enabled: z.boolean().default(true),
     audio_voice: z.enum(VOZES_DO_AGENTE).default(VOZ_PADRAO),
     followup: followupConfigSchema,

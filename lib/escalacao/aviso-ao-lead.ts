@@ -70,6 +70,8 @@ export type MotivoDoAviso =
   | "suspeita_de_opt_out"
   /** O teto de gasto com IA parou o atendimento automático. */
   | "orcamento_de_ia"
+  /** O cliente mandou uma foto e o agente está configurado para passar (migration 0243). */
+  | "enviou_foto"
   /** O sistema decidiu escalar (sentimento, baixa confiança, etapa, termo jurídico…). */
   | "outro";
 
@@ -81,6 +83,7 @@ export function motivoDoAviso(reason: string): MotivoDoAviso {
   if (reason === "requested_human") return "pediu_humano";
   if (reason === "suspected_optout") return "suspeita_de_opt_out";
   if (reason === "orcamento_de_ia") return "orcamento_de_ia";
+  if (reason === "customer_image") return "enviou_foto";
   return "outro";
 }
 
@@ -126,6 +129,13 @@ const ABERTURAS: Record<MotivoDoAviso, readonly string[]> = {
     "Vou passar seu atendimento para uma pessoa da equipe.",
     "A partir daqui quem continua com você é alguém do time.",
     "Estou transferindo esta conversa para um atendente humano.",
+  ],
+  // A foto chegou: diz que recebeu (o cliente não pode achar que ela sumiu) e
+  // que quem confere é uma pessoa — sem prometer que o item existe.
+  enviou_foto: [
+    "Recebi sua foto! Vou pedir para alguém da equipe conferir e te responder.",
+    "Foto recebida. Uma pessoa do nosso time vai olhar com calma e já te retorna.",
+    "Chegou sua imagem por aqui — passei para um atendente verificar pra você.",
   ],
   outro: [
     "Esse caso é melhor resolvido por uma pessoa. Já acionei o time.",

@@ -36,6 +36,17 @@ export function SecaoPessoa({ form, patch, disabled }: PropsDaSecao) {
             desabilitado={disabled}
           />
         ) : null}
+        {/* Migration 0243: não depende da ferramenta — a passagem é do código. */}
+        <LinhaInterruptor
+          id="handoff_on_customer_image"
+          titulo={t("Quando o cliente mandar uma foto, passar para uma pessoa")}
+          descricao={t(
+            "Ligado: a foto do cliente vai direto para a equipe, com um aviso de que ela foi recebida, e o automático fica parado nessa conversa até alguém devolver. Bom quando o cliente manda foto de um produto que pode não estar no seu catálogo. Desligado: o agente responde à foto.",
+          )}
+          ligado={form.handoff_on_customer_image}
+          aoMudar={(v) => patch({ handoff_on_customer_image: v })}
+          desabilitado={disabled}
+        />
         <Bloco>
           <HandoffKeywordsInput
             value={form.handoff_keywords}

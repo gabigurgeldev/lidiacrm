@@ -19,6 +19,7 @@ Três mecanismos diferentes, que se confundem com frequência:
 | Cliente pede atendente ("quero falar com uma pessoa", "atendente"…) | Detecção fixa em português, antes do modelo | Não |
 | Mensagem contém uma das **Palavras que chamam uma pessoa na hora** do agente | Configuração do agente | Não |
 | Suspeita de opt-out ("para de me mandar", "me tira da lista", STOP sozinho) | Detecção fixa | Não |
+| Cliente manda **foto**, com **"Quando o cliente mandar uma foto, passar para uma pessoa"** ligado no agente (migration 0243) | Detecção fixa, antes do modelo (`lib/agent-engine/agent/foto-do-cliente.ts`) — só foto do cliente desde a nossa última mensagem; figurinha e resposta citando foto nossa não contam | Não |
 | O **modelo** decide que não é caso dele | Ferramenta `request_human_handoff` (se "Deixar o agente chamar uma pessoa" estiver ligado) | Sim |
 | **Cliente irritado** — sentimento abaixo do limiar (padrão **0,3**) | Classificador de sentimento em toda mensagem recebida | Sim (ponto "Medir o clima da conversa") |
 | **Orçamento de IA** da organização esgotado | Qualquer chamada recusada pelo teto | Não |
@@ -39,6 +40,7 @@ Notas sobre o sentimento:
    | Pediu humano | "Claro! Já estou chamando alguém da equipe para falar com você." |
    | Suspeita de opt-out | "Entendi. Vou parar de te enviar mensagens automáticas por aqui." + "Encaminhei seu pedido para uma pessoa da equipe confirmar." |
    | Orçamento de IA | "Vou passar seu atendimento para uma pessoa da equipe." |
+   | Cliente mandou foto | "Recebi sua foto! Vou pedir para alguém da equipe conferir e te responder." |
    | Outro | "Esse caso é melhor resolvido por uma pessoa. Já acionei o time." |
 
    | Situação da equipe | Fecho |
@@ -70,6 +72,14 @@ Só uma **pessoa** (ou um fluxo com o bloco "Entregar a conversa para a IA") dev
 Todos usam a mesma regra (`lib/escalacao/retomada.ts`): solta **as três travas**, leva junto o que ficou combinado com o cliente e **fecha o aviso** de handoff na Central. O próximo turno do agente lê um resumo do que a pessoa fez (`lib/escalacao/continuidade.ts`: decisões em casos, notas internas, estado dos casos) — o cliente não precisa repetir nada.
 
 > Se o motivo foi orçamento: aumente o teto em **IA › Uso e orçamento** antes de devolver; senão a próxima mensagem cai no mesmo bloqueio.
+
+### A.4. Quem responde pelo celular da loja assume a conversa
+
+Responder pelo **composer do CRM** silencia o automático por 5 minutos, renovados a cada mensagem. Responder pelo **WhatsApp do celular** da loja (o mesmo número conectado) **pausa o automático daquela conversa até alguém devolver** — o agente não fala mais por cima do atendente. A pausa não trava o contato (`force_human` fica como está), só a conversa, e aparece na linha do tempo do negócio.
+
+Para devolver **pelo próprio celular**, mande na conversa a mensagem **`#ia`** (também valem `#bot`, `#robo` e `#automatico`; tem de ser a mensagem inteira). O comando passa pela mesma regra do botão "Devolver ao automático" e não entra no histórico que o agente lê. O cliente vê o `#ia` — apague para todos, se preferir.
+
+O eco das mensagens que o próprio CRM manda (IA, composer, fluxo) não pausa: a regra ignora o webhook quando a conversa tem um envio do CRM ainda sem id há menos de 2 minutos (`lib/escalacao/celular-da-loja.ts`).
 
 ---
 

@@ -330,3 +330,47 @@ describe("seleção de lista (message.any com listResponseMessage)", () => {
     });
   });
 });
+
+describe("resposta que CITA uma mensagem", () => {
+  // "Gostei desse" em cima de uma foto de buquê (floricultura, 2026-10-15): sem
+  // o vínculo gravado, o agente não sabia qual foto e perguntava "qual?".
+  const FOTO: Origem = { id: "foto-do-buque", contact_id: "contato-do-from", conversation_id: "conversa-do-from", metadata: {} };
+
+  function citando(replyTo: Record<string, unknown> | undefined): WahaEnvelope {
+    return {
+      event: "message",
+      session: "default",
+      payload: {
+        id: "false_5531999998888@c.us_RESP1",
+        from: "5531999998888@c.us",
+        fromMe: false,
+        body: "Gostei desse",
+        timestamp: 1_760_000_000,
+        ...(replyTo ? { replyTo } : {}),
+      },
+    } as unknown as WahaEnvelope;
+  }
+
+  it("grava `reply_to_message_id` com a linha citada, filtrando org e conversa", async () => {
+    const db = bancoDeMentira(FOTO);
+    await dispatchWahaEvent(db.admin as never, SESSION as never, citando({ id: "3EB0FOTO1234" }), "req-1");
+
+    const entrada = db.inseridas.find((i) => i.tabela === "messages")?.linha;
+    expect(entrada?.reply_to_message_id).toBe("foto-do-buque");
+    expect(db.filtrosDaOrigem).toContainEqual({ metodo: "eq", args: ["organization_id", ORG] });
+    expect(db.filtrosDaOrigem).toContainEqual({ metodo: "eq", args: ["conversation_id", "conversa-do-from"] });
+    expect(db.filtrosDaOrigem).toContainEqual({
+      metodo: "or",
+      args: ["external_id.eq.3EB0FOTO1234,external_id.like.*_3EB0FOTO1234"],
+    });
+  });
+
+  it("controle: sem citação, nada é procurado e o vínculo fica nulo", async () => {
+    const db = bancoDeMentira(FOTO);
+    await dispatchWahaEvent(db.admin as never, SESSION as never, citando(undefined), "req-1");
+
+    const entrada = db.inseridas.find((i) => i.tabela === "messages")?.linha;
+    expect(entrada?.reply_to_message_id).toBeNull();
+    expect(db.filtrosDaOrigem.some((f) => f.metodo === "or")).toBe(false);
+  });
+});

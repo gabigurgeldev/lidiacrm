@@ -1,8 +1,21 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import type * as CelularDaLoja from "@/lib/escalacao/celular-da-loja";
 
 // ingest.ts importa @/lib/audit (→ supabase/server → validação de env);
 // o mock corta a cadeia sem tocar no que está sob teste.
 vi.mock("@/lib/audit", () => ({ audit: vi.fn() }));
+
+// A regra da pausa tem teste próprio (lib/escalacao/celular-da-loja.test.ts);
+// aqui interessa o ROTEAMENTO: quando o ingest pausa, quando devolve, e que o
+// comando não vira mensagem. `ehComandoDeDevolucao` fica real de propósito.
+const pausar = vi.fn(async (_admin: unknown, _c: Record<string, unknown>) => "pausou" as const);
+const devolver = vi.fn(async (_admin: unknown, _c: Record<string, unknown>) => ({ ok: true }) as never);
+vi.mock("@/lib/escalacao/celular-da-loja", async (importOriginal) => ({
+  ...(await importOriginal<typeof CelularDaLoja>()),
+  pausarAutomaticoPeloCelular: (admin: unknown, c: Record<string, unknown>) => pausar(admin, c),
+  devolverAutomaticoPeloCelular: (admin: unknown, c: Record<string, unknown>) => devolver(admin, c),
+}));
 
 import { dispatchWahaEvent, parseChatId, type WahaEnvelope, type WahaPayload } from "@/lib/waha/ingest";
 
@@ -380,5 +393,97 @@ describe("precedência dos três candidatos a chat", () => {
       "req-1",
     );
     expect(rpcs.find((c) => c.fn === "fn_upsert_wa_contact")!.args.p_chat_id).toBe("5599888888888@c.us");
+  });
+});
+
+describe("o celular da loja assume a conversa — a IA para de falar por cima", () => {
+  beforeEach(() => {
+    pausar.mockClear();
+    devolver.mockClear();
+  });
+
+  it("mensagem digitada no celular pausa o automático daquela conversa", async () => {
+    // Caso real (floricultura, 2026-10-15): a atendente mandou as fotos dos
+    // buquês com preço pelo celular e a IA seguiu respondendo com outro valor.
+    const { admin } = bancoDeMentira();
+
+    await dispatchWahaEvent(admin as never, SESSION as never, envelope(CELULAR_NOWEB), "req-1");
+
+    expect(pausar, "a IA continuaria falando junto com o atendente").toHaveBeenCalledTimes(1);
+    expect(pausar.mock.calls[0]![1]).toMatchObject({
+      organizationId: "org-1",
+      conversationId: "conversa-1",
+      contactId: "contato-1",
+      channelSessionId: "sessao-1",
+    });
+  });
+
+  it("eco do próprio envio (já registrado pelo id) NÃO pausa — a IA não se cala sozinha", async () => {
+    const { admin } = bancoDeMentira([
+      { organization_id: "org-1", external_id: "2A1B890FB8AA87730CBC", direction: "outbound" },
+    ]);
+
+    await dispatchWahaEvent(admin as never, SESSION as never, envelope(CELULAR_NOWEB), "req-1");
+
+    expect(pausar).not.toHaveBeenCalled();
+  });
+
+  it("segunda entrega da mesma mensagem (message + message.any) não pausa de novo", async () => {
+    const { admin } = bancoDeMentira();
+
+    await dispatchWahaEvent(admin as never, SESSION as never, envelope(CELULAR_NOWEB), "req-1");
+    await dispatchWahaEvent(
+      admin as never,
+      SESSION as never,
+      { ...envelope(CELULAR_NOWEB), event: "message" },
+      "req-2",
+    );
+
+    expect(pausar).toHaveBeenCalledTimes(1);
+  });
+
+  it("`#ia` devolve ao automático e não vira mensagem no histórico", async () => {
+    const { admin, messages } = bancoDeMentira();
+
+    await dispatchWahaEvent(
+      admin as never,
+      SESSION as never,
+      envelope({ ...CELULAR_NOWEB, body: "  #IA " }),
+      "req-1",
+    );
+
+    expect(devolver).toHaveBeenCalledTimes(1);
+    expect(devolver.mock.calls[0]![1]).toMatchObject({ conversationId: "conversa-1" });
+    expect(messages, "o agente leria '#ia' como conversa com o cliente").toHaveLength(0);
+    expect(pausar, "o comando de devolver não pode ele mesmo pausar").not.toHaveBeenCalled();
+  });
+
+  it("controle: frase que só CONTÉM #ia é conversa — grava e pausa, não devolve", async () => {
+    const { admin, messages } = bancoDeMentira();
+
+    await dispatchWahaEvent(
+      admin as never,
+      SESSION as never,
+      envelope({ ...CELULAR_NOWEB, body: "olha a #ia aqui" }),
+      "req-1",
+    );
+
+    expect(devolver).not.toHaveBeenCalled();
+    expect(messages).toHaveLength(1);
+    expect(pausar).toHaveBeenCalledTimes(1);
+  });
+
+  it("mensagem do CLIENTE (inbound) não passa por pausa nenhuma", async () => {
+    const { admin } = bancoDeMentira();
+
+    await dispatchWahaEvent(
+      admin as never,
+      SESSION as never,
+      envelope({ ...CELULAR_NOWEB, id: "false_250302204792918@lid_9F9F", fromMe: false, body: "#ia" }),
+      "req-1",
+    ).catch(() => undefined);
+
+    expect(pausar).not.toHaveBeenCalled();
+    expect(devolver, "cliente mandando #ia não pode religar a IA").not.toHaveBeenCalled();
   });
 });

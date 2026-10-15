@@ -26,6 +26,7 @@ function fakeConfig(agentId: string): PublishedAgentConfig {
     replyAsAudio: false,
     replyAsAudioMirror: false,
     humanRequestTryFirst: false,
+    handoffOnCustomerImage: false,
     interactiveOptionsEnabled: true,
     audioVoice: 'pf_dora',
     multimodalInput: false,

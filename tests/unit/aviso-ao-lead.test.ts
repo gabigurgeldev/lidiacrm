@@ -43,6 +43,7 @@ const MOTIVOS: MotivoDoAviso[] = [
   "pediu_humano",
   "suspeita_de_opt_out",
   "orcamento_de_ia",
+  "enviou_foto",
   "outro",
 ];
 const ESTADOS: Array<{ rotulo: string; quem: QuemPodeAssumir | null }> = [
@@ -57,6 +58,7 @@ describe("motivoDoAviso traduz o que o banco grava", () => {
     expect(motivoDoAviso("requested_human")).toBe("pediu_humano");
     expect(motivoDoAviso("suspected_optout")).toBe("suspeita_de_opt_out");
     expect(motivoDoAviso("orcamento_de_ia")).toBe("orcamento_de_ia");
+    expect(motivoDoAviso("customer_image")).toBe("enviou_foto");
   });
 
   it("vocabulário ABERTO cai em 'outro', nunca em erro", () => {
