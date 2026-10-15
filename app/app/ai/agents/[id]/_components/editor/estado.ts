@@ -49,6 +49,7 @@ export interface FormState {
   reply_as_audio: boolean;
   reply_as_audio_mirror: boolean;
   human_request_try_first: boolean;
+  handoff_on_customer_image: boolean;
   interactive_options_enabled: boolean;
   audio_voice: VozDoAgente;
   followup: FollowupValue;
@@ -126,6 +127,7 @@ export function buildState(args: {
     reply_as_audio: version?.reply_as_audio ?? false,
     reply_as_audio_mirror: version?.reply_as_audio_mirror ?? false,
     human_request_try_first: version?.human_request_try_first ?? false,
+    handoff_on_customer_image: version?.handoff_on_customer_image ?? false,
     interactive_options_enabled: version?.interactive_options_enabled ?? true,
     // Voz fora do catálogo (vocabulário aberto no banco) abre na padrão em vez
     // de um Select em branco que o primeiro save trocaria em silêncio.
@@ -177,6 +179,7 @@ export function toVersionPayload(s: FormState) {
     reply_as_audio: s.reply_as_audio,
     reply_as_audio_mirror: s.reply_as_audio_mirror,
     human_request_try_first: s.human_request_try_first,
+    handoff_on_customer_image: s.handoff_on_customer_image,
     interactive_options_enabled: s.interactive_options_enabled,
     audio_voice: s.audio_voice,
     followup: s.followup,

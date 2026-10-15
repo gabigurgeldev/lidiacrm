@@ -74,6 +74,7 @@ import {
   isLeadInHandoff,
   performHumanHandoff,
 } from './human-handoff';
+import { clienteMandouFoto } from './foto-do-cliente';
 import { maybeCompact, renderCompactedSummary, trimTranscriptToBudget, type CompactionKnobs } from './compaction';
 import { pruneToolResults, type PruneToolResultsKnobs } from './prune-tool-results';
 import {
@@ -1901,6 +1902,32 @@ async function executarTurnoDoAgente(
       },
     );
     runLog.info('handoff humano acionado por pedido explícito do lead (detecção determinística)', {
+      kind: job.kind,
+      lead_avisado: aviso.avisado,
+    });
+    return; // bot silencia: o aviso já saiu, e nada mais sai neste turno
+  }
+
+  // Migration 0243: foto do cliente vai para uma pessoa, ANTES do modelo. Mesma
+  // ordem da passagem acima (avisa, depois trava) e pelo mesmo motivo. Não
+  // depende da ferramenta de passagem: a decisão é do código, não do modelo.
+  if (agentConfig?.handoffOnCustomerImage === true && clienteMandouFoto(openingContext.context.messages)) {
+    const aviso = await avisarLeadDaEscalacao(pool, avisoDaEscalacao.ids, {
+      ...avisoDaEscalacao.base,
+      motivo: 'enviou_foto',
+    });
+    await performHumanHandoff(
+      pool,
+      { tenantId, leadId, conversationId: input.conversationId },
+      {
+        reason: 'customer_image',
+        conversationSummary: buildHandoffSummary(previous),
+        inboxTitle: 'Cliente mandou foto — conferir e responder',
+        avisoAoLead: aviso,
+        log: runLog,
+      },
+    );
+    runLog.info('handoff humano acionado: cliente mandou foto (detecção determinística)', {
       kind: job.kind,
       lead_avisado: aviso.avisado,
     });

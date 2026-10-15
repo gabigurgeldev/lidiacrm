@@ -50,6 +50,7 @@ function buildFieldChanges(a: AgentVersionRow, b: AgentVersionRow): FieldChange[
     ["reply_as_audio", "reply_as_audio"],
     ["reply_as_audio_mirror", "reply_as_audio_mirror"],
     ["human_request_try_first", "human_request_try_first"],
+    ["handoff_on_customer_image", "handoff_on_customer_image"],
     ["interactive_options_enabled", "interactive_options_enabled"],
     ["audio_voice", "audio_voice"],
   ];

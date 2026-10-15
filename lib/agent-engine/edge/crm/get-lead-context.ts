@@ -154,6 +154,17 @@ interface HistoryRow {
   sent_at: string;
   /** Só para reconhecer opções tocáveis (migration 0236) — o resto não vai ao modelo. */
   metadata?: unknown;
+  /** A mensagem que o cliente citou ao responder (migration 0168). Não vai ao modelo cru. */
+  reply_to_message_id?: string | null;
+}
+
+/** A mensagem citada, só com o que basta para dizer ao modelo QUAL foi. */
+interface CitadaRow {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  type: string;
+  body: string | null;
+  media_derived_text: string | null;
 }
 
 export async function getLeadContext(
@@ -211,7 +222,7 @@ export async function getLeadContext(
     ? (
         await db.query<HistoryRow>(
           `select direction, type, body, media_url, media_storage_path, media_mime,
-                  media_derived_text, sent_at::text as sent_at, metadata
+                  media_derived_text, sent_at::text as sent_at, metadata, reply_to_message_id
            from messages
            where organization_id = $1 and conversation_id = $2
              and direction in ('inbound', 'outbound')
@@ -221,6 +232,29 @@ export async function getLeadContext(
         )
       ).rows.reverse()
     : [];
+
+  // Citações: a original pode estar FORA da janela do histórico (o cliente
+  // costuma citar uma foto de várias mensagens atrás), então é lida à parte,
+  // pelo id, e embutida na resposta que a citou. Sem isto, "Gostei desse" em
+  // cima de uma foto chegava solto e o agente perguntava "qual?" — medido numa
+  // floricultura real, 2026-10-15.
+  const idsCitados = [
+    ...new Set(
+      history
+        .map((m) => m.reply_to_message_id)
+        .filter((id): id is string => typeof id === 'string' && id !== ''),
+    ),
+  ];
+  const citadas = new Map<string, CitadaRow>();
+  if (idsCitados.length > 0) {
+    const { rows } = await db.query<CitadaRow>(
+      `select id, direction, type, body, media_derived_text
+       from messages
+       where organization_id = $1 and id = any($2::uuid[])`,
+      [input.tenantId, idsCitados],
+    );
+    for (const r of rows) citadas.set(r.id, r);
+  }
 
   // LGPD: base legal derivada DIRETO do contato (fonte da verdade, mesmo banco).
   // isProspecting=false: o MVP é inbound + follow-up — ambos respondem a lead que
@@ -249,6 +283,7 @@ export async function getLeadContext(
     },
     history,
     knobs.maxTokens,
+    citadas,
   );
   return { ok: true, context, tokenCount: countPayloadTokens(JSON.stringify(context)), lgpd };
 }
@@ -263,6 +298,7 @@ function fitToBudget(
   base: Omit<LeadContext, 'messages'>,
   history: HistoryRow[],
   maxTokens: number,
+  citadas: ReadonlyMap<string, CitadaRow> = new Map(),
 ): LeadContext {
   let messages: LeadContextMessage[] = history.map((m) => {
     const hasMedia = Boolean(m.media_storage_path || m.media_url);
@@ -270,9 +306,11 @@ function fitToBudget(
     // Onda 3: legenda e derivado (transcrição/visão/pdf) COEXISTEM, e o derivado
     // vem ENQUADRADO (frameMediaBody) — sem isso o agente caía no reflexo
     // "não consigo ver mídia" mesmo tendo o conteúdo. Sem derivado, marcador [tipo].
-    const body = derived
-      ? frameMediaBody(m.type, m.body, derived)
+    const proprio = derived
+      ? frameMediaBody(m.type, m.body, derived, m.direction)
       : (frameOpcoes(m) ?? m.body ?? (hasMedia ? `[${m.type}]` : ''));
+    const citada = m.reply_to_message_id ? citadas.get(m.reply_to_message_id) : undefined;
+    const body = citada ? `${frameCitacao(citada)}\n${proprio}` : proprio;
     return {
       direction: m.direction,
       body,
@@ -342,8 +380,22 @@ const MEDIA_NOUN: Record<string, string> = {
  * processado; trate como se tivesse visto/ouvido; nunca negue a mídia. Legenda do
  * cliente (se houver) e conteúdo derivado coexistem. @internal exposto p/ teste.
  */
-export function frameMediaBody(type: string, caption: string | null, derived: string): string {
+export function frameMediaBody(
+  type: string,
+  caption: string | null,
+  derived: string,
+  direction: 'inbound' | 'outbound' = 'inbound',
+): string {
   const noun = MEDIA_NOUN[type] ?? 'uma mídia';
+  // A mídia que NÓS mandamos (a atendente pelo celular, o composer) também
+  // chega descrita — e era rotulada "Mídia do cliente". O agente tratava a foto
+  // do catálogo que a loja enviou como se o cliente a tivesse mandado.
+  if (direction === 'outbound') {
+    const nossa = [`[Mídia enviada por nós ao cliente: ${noun}. O sistema já processou o conteúdo pra você.]`];
+    if (caption && caption.trim() !== '') nossa.push(`Legenda que enviamos: ${caption.trim()}`);
+    nossa.push(`Conteúdo: ${derived}`);
+    return nossa.join('\n');
+  }
   const parts = [
     `[Mídia do cliente: ele enviou ${noun} e o sistema já processou o conteúdo pra você. ` +
       `Trate o texto abaixo como se você mesma tivesse visto/ouvido — NUNCA responda que não ` +
@@ -352,6 +404,28 @@ export function frameMediaBody(type: string, caption: string | null, derived: st
   if (caption && caption.trim() !== '') parts.push(`Legenda do cliente: ${caption.trim()}`);
   parts.push(`Conteúdo: ${derived}`);
   return parts.join('\n');
+}
+
+const TETO_DA_CITACAO = 400;
+
+/**
+ * Diz ao modelo QUAL mensagem o cliente citou. O tom é imperativo de propósito:
+ * o modelo já tinha a lista de fotos no histórico e mesmo assim perguntava
+ * "qual?" — o que faltava era a ligação, não o conteúdo. @internal exposto p/ teste.
+ */
+export function frameCitacao(c: Pick<CitadaRow, 'direction' | 'type' | 'body' | 'media_derived_text'>): string {
+  const de = c.direction === 'outbound' ? 'uma mensagem NOSSA' : 'uma mensagem dele mesmo';
+  const noun = MEDIA_NOUN[c.type];
+  const partes: string[] = [];
+  if (noun) partes.push(noun);
+  if (c.media_derived_text && c.media_derived_text.trim() !== '') partes.push(`conteúdo: ${c.media_derived_text.trim()}`);
+  if (c.body && c.body.trim() !== '') partes.push(noun ? `legenda: ${c.body.trim()}` : `"${c.body.trim()}"`);
+  let resumo = partes.length > 0 ? partes.join(' — ') : `[${c.type}]`;
+  if (resumo.length > TETO_DA_CITACAO) resumo = `${resumo.slice(0, TETO_DA_CITACAO)}…`;
+  return (
+    `[O cliente respondeu CITANDO ${de} (${resumo}). É a ESSA que ele se refere — ` +
+    `não pergunte qual foi.]`
+  );
 }
 
 /** @internal exposto p/ teste — não usar fora de testes. */

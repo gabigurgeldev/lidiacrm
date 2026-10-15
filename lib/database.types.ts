@@ -386,6 +386,7 @@ export type Database = {
           reply_as_audio: boolean
           reply_as_audio_mirror: boolean
           human_request_try_first: boolean
+          handoff_on_customer_image: boolean
           interactive_options_enabled: boolean
           skill_names: string[] | null
           split_max_chars: number
@@ -428,6 +429,7 @@ export type Database = {
           reply_as_audio?: boolean
           reply_as_audio_mirror?: boolean
           human_request_try_first?: boolean
+          handoff_on_customer_image?: boolean
           interactive_options_enabled?: boolean
           skill_names?: string[] | null
           split_max_chars?: number
@@ -470,6 +472,7 @@ export type Database = {
           reply_as_audio?: boolean
           reply_as_audio_mirror?: boolean
           human_request_try_first?: boolean
+          handoff_on_customer_image?: boolean
           interactive_options_enabled?: boolean
           skill_names?: string[] | null
           split_max_chars?: number

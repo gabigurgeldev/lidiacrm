@@ -369,6 +369,22 @@
       "type": "table",
       "label": "agent_inbox_items",
       "sublabel": "kind='handoff' — quem assume lê aqui se o cliente foi avisado"
+    },
+    {
+      "id": "celularDaLoja",
+      "lane": "regra",
+      "col": 6,
+      "type": "service",
+      "label": "lib/escalacao/celular-da-loja.ts",
+      "sublabel": "mensagem do celular da loja pausa; #ia devolve"
+    },
+    {
+      "id": "fotoDoCliente",
+      "lane": "motor",
+      "col": 7,
+      "type": "service",
+      "label": "foto-do-cliente.ts (0243)",
+      "sublabel": "foto do cliente passa para uma pessoa antes do modelo"
     }
   ],
   "edges": [
@@ -749,6 +765,36 @@
       "from": "reply",
       "to": "avisoCrm",
       "label": "'Assumir eu' também avisa antes de calar o automático"
+    },
+    {
+      "id": "e64",
+      "from": "celularDaLoja",
+      "to": "conversas",
+      "label": "mensagem digitada no celular grava bot_silenced_until=infinity (eco do próprio envio não pausa)"
+    },
+    {
+      "id": "e65",
+      "from": "celularDaLoja",
+      "to": "retomada",
+      "label": "#ia no celular devolve pela MESMA regra do botão"
+    },
+    {
+      "id": "e66",
+      "from": "celularDaLoja",
+      "to": "comandoAtividade",
+      "label": "a pausa pelo celular aparece na linha do tempo, ensinando o #ia"
+    },
+    {
+      "id": "e67",
+      "from": "fotoDoCliente",
+      "to": "avisoMotor",
+      "label": "avisa o cliente que a foto chegou ANTES de armar a trava"
+    },
+    {
+      "id": "e68",
+      "from": "fotoDoCliente",
+      "to": "contacts",
+      "label": "performHumanHandoff: force_human + Central, motivo customer_image"
     }
   ],
   "cards": [

@@ -198,6 +198,8 @@ Enquanto você não mexe, o agente usa o **padrão**: as sempre ligadas e as da 
 | **Deixar o agente chamar uma pessoa quando perceber que não é caso dele** (`handoff_tool_enabled`) | ligado | Dá ao modelo a ferramenta `request_human_handoff`. Desligado, o **modelo** não consegue passar a conversa — mas a detecção fixa de "quero falar com atendente" continua ativa (guardrail nunca sai). |
 | **Palavras que chamam uma pessoa na hora** (`handoff_keywords`) | até 20 expressões de até 60 caracteres; padrão: "falar com humano", "atendente", "pessoa real" | Se a última mensagem do cliente **contém** qualquer uma (sem diferenciar maiúscula), a conversa passa para humano **sem chamar a IA**, com aviso ao cliente. Soma-se à detecção fixa em português. Cuidado com palavras genéricas demais ("ajuda") — passam tudo para humano. |
 
+| **Quando o cliente mandar uma foto, passar para uma pessoa** (`handoff_on_customer_image`) | desligado | A foto que o cliente manda passa a conversa para a equipe **sem chamar a IA**, com aviso de que a foto chegou, e o automático fica parado até alguém devolver. Para loja cujo catálogo não está todo no acervo — sem isto, o agente vê a foto e pode chutar disponibilidade ou preço. Não depende do interruptor acima. |
+
 Fluxo completo da passagem: [07](07-handoff-chamados-e-roteamento-humano.md).
 
 ### 3.11. Pedir ajuda sem sair da conversa (casos)
