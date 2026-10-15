@@ -23,7 +23,14 @@ import { useT } from "@/hooks/i18n/useT";
 
 type Estado =
   | { fase: "carregando" }
-  | { fase: "ok"; linha: string | null; conectado: boolean; expiraEmS: number }
+  | {
+      fase: "ok";
+      linha: string | null;
+      conectado: boolean;
+      /** O transporte já tem QR para esta sessão (SCAN_QR_CODE). */
+      qrPronto: boolean;
+      expiraEmS: number;
+    }
   | { fase: "invalido"; motivo: string };
 
 const MS_ENTRE_STATUS = 3_000;
@@ -40,6 +47,10 @@ export function PareamentoClient({ token }: { token: string }) {
   const t = useT();
   const [estado, setEstado] = useState<Estado>({ fase: "carregando" });
   const [tick, setTick] = useState(0);
+  // A imagem pode falhar mesmo com `qrPronto` (o QR expirou entre a consulta e
+  // o pedido da imagem). Um <img> quebrado é o quadro em branco que este
+  // componente existia para evitar — então ele some e volta o "Preparando".
+  const [imagemFalhou, setImagemFalhou] = useState(false);
 
   const conectado = estado.fase === "ok" && estado.conectado;
   const invalido = estado.fase === "invalido";
@@ -70,13 +81,19 @@ export function PareamentoClient({ token }: { token: string }) {
         // tique é melhor que dizer "link inválido" para um link que está válido.
         if (!r.ok) return;
         const corpo = (await r.json()) as {
-          data: { linha: string | null; conectado: boolean; expira_em_s: number };
+          data: {
+            linha: string | null;
+            conectado: boolean;
+            qr_pronto?: boolean;
+            expira_em_s: number;
+          };
         };
         if (cancelado) return;
         setEstado({
           fase: "ok",
           linha: corpo.data.linha,
           conectado: corpo.data.conectado,
+          qrPronto: corpo.data.qr_pronto ?? true,
           expiraEmS: corpo.data.expira_em_s,
         });
       } catch {
@@ -99,6 +116,15 @@ export function PareamentoClient({ token }: { token: string }) {
     const iv = setInterval(() => setTick((v) => v + 1), MS_ENTRE_QRS);
     return () => clearInterval(iv);
   }, [conectado, invalido]);
+
+  // O QR acabou de ficar pronto, ou a imagem falhou: pede uma nova no próximo
+  // tique de status (3s), sem esperar a renovação de 15s.
+  const qrPronto = estado.fase === "ok" && estado.qrPronto;
+  useEffect(() => {
+    if (!qrPronto || !imagemFalhou) return;
+    const iv = setInterval(() => setTick((v) => v + 1), MS_ENTRE_STATUS);
+    return () => clearInterval(iv);
+  }, [qrPronto, imagemFalhou]);
 
   // O contador desce sozinho entre uma consulta e outra — sem isto ele daria
   // saltos de 3s e pareceria travado.
@@ -173,12 +199,27 @@ export function PareamentoClient({ token }: { token: string }) {
           browser segura o frame anterior até decodificar o novo. Remontar o
           elemento a cada renovação é o que causaria o flash branco.
         */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={`/api/v1/pair/${token}/qr?t=${tick}`}
-          alt={t("QR Code para conectar WhatsApp")}
-          className="h-64 w-64 shrink-0 rounded-md border bg-white p-2"
-        />
+        <div className="relative h-64 w-64 shrink-0">
+          {estado.qrPronto && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={`/api/v1/pair/${token}/qr?t=${tick}`}
+              alt={t("QR Code para conectar WhatsApp")}
+              className="h-64 w-64 rounded-md border bg-white p-2"
+              onLoad={() => setImagemFalhou(false)}
+              onError={() => setImagemFalhou(true)}
+            />
+          )}
+          {(!estado.qrPronto || imagemFalhou) && (
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-md border bg-white p-4 text-center text-sm text-muted-foreground"
+              data-testid="pair-qr-preparando"
+            >
+              <CircleNotch size={20} className="animate-spin" aria-hidden />
+              {t("Preparando o QR Code…")}
+            </div>
+          )}
+        </div>
         <div className="space-y-2 text-sm">
           <p className="font-medium">{t("Escaneie com o WhatsApp")}</p>
           <ol className="list-decimal space-y-1 pl-4 text-muted-foreground">
