@@ -53,13 +53,35 @@ const PLAYBOOK_FALA_DE: Record<string, string[]> = {
     "crm_reschedule_appointment",
     "crm_cancel_appointment",
   ],
+  // Catálogo por nicho (migration 0242): cada playbook que fala de uma ação para a qual
+  // existe ferramenta tem de nomeá-la.
+  "comprovante-de-pagamento": ["crm_list_contact_orders", "open_human_case"],
+  "dados-pessoais-lgpd": ["crm_list_privacy_requests", "open_human_case"],
+  "cliente-insatisfeito": ["open_human_case", "request_human_handoff"],
+  "risco-a-vida": ["request_human_handoff"],
+  "retomada-de-conversa": ["get_lead_context", "get_lead_note"],
+  "curso-acesso-a-plataforma": ["crm_list_contact_orders", "open_human_case"],
+  "loja-rastreio-de-pedido": ["crm_list_contact_orders", "open_human_case"],
+  "loja-produto-com-problema": ["crm_list_contact_orders", "open_human_case"],
+  "loja-estoque-e-variacoes": ["crm_search_products"],
+  "servicos-retrabalho": ["open_human_case"],
 };
 
-/** Extrai os corpos `$body$…$body$` do baseline, com o nome do playbook. */
+/**
+ * Extrai os corpos `$body$…$body$` do baseline, com o nome do playbook.
+ *
+ * ⚠️ Duas correções que este padrão já pagou:
+ *  - O nome era `[a-z_]+`, cego a hífen: `objecao-preco` e todo o catálogo da 0242
+ *    passavam por fora da varredura, e o gate ficava verde sem tê-los lido.
+ *  - Entre o nome e o `$body$` não pode haver `;`: o `insert into skill_pointers
+ *    values (null, '<nome>', v_id);` também começa com `values (null, '<nome>',`, e sem
+ *    a trava o casamento atravessava o fim do statement e colava o CORPO DA SKILL
+ *    SEGUINTE no nome desta.
+ */
 function playbooksSemeados(): Map<string, string> {
   const sql = readFileSync(BASELINE, "utf8");
   const achados = new Map<string, string>();
-  const re = /values\s*\(\s*null,\s*'([a-z_]+)',[\s\S]*?\$body\$([\s\S]*?)\$body\$/g;
+  const re = /values\s*\(\s*null,\s*'([a-z0-9_-]+)',[^;]*?\$body\$([\s\S]*?)\$body\$/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(sql)) !== null) achados.set(m[1]!, m[2]!);
   return achados;

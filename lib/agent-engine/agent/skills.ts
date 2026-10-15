@@ -57,6 +57,8 @@ export interface SkillVersionRow {
   description: string;
   body: string;
   matcher: SkillMatcher;
+  /** Ramos para os quais a skill foi escrita (migration 0241). Vazio = universal. */
+  nichos: string[];
   created_at: Date;
 }
 
@@ -108,6 +110,8 @@ export async function insertSkillVersion(
     matcher: SkillMatcher;
     manifest?: unknown[];
     forkedFromVersionId?: string | null;
+    /** Ramos da skill (migration 0241). Default `[]` = universal. */
+    nichos?: readonly string[];
   },
 ): Promise<SkillVersionRow> {
   if (input.name.trim() === '') {
@@ -119,8 +123,8 @@ export async function insertSkillVersion(
   validateSkillBody(input.body);
   const matcher = skillMatcherSchema.parse(input.matcher);
   const { rows } = await db.query<SkillVersionRow>(
-    `insert into skill_versions (organization_id, name, description, body, matcher, manifest, forked_from_version_id)
-     values ($1, $2, $3, $4, $5, $6, $7)
+    `insert into skill_versions (organization_id, name, description, body, matcher, manifest, forked_from_version_id, nichos)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
      returning *`,
     [
       input.tenantId,
@@ -130,6 +134,7 @@ export async function insertSkillVersion(
       JSON.stringify(matcher),
       JSON.stringify(input.manifest ?? []),
       input.forkedFromVersionId ?? null,
+      [...(input.nichos ?? [])],
     ],
   );
   const row = rows[0];
@@ -168,13 +173,35 @@ export async function setSkillPointer(
 }
 
 /**
- * Resolve os ponteiros e devolve as skills ativas do run — skills de plataforma (globais)
- * + skills do tenant. Chamada no início de CADA run (sem cache de processo): ponteiro
- * movido ⇒ próximo run já vê a versão nova, sem restart. Ordem ESTÁVEL por nome (o índice
- * injetado é byte-determinístico — o prefixo de cache F2-17 depende disso). Se um tenant e
- * a plataforma têm skill de mesmo nome, a do tenant vence (override local).
+ * Quais skills OPCIONAIS a versão do agente ligou (`ai_agent_versions.skill_names`,
+ * migration 0241). `null` = padrão: universais + skills da própria organização — é o que
+ * todo agente anterior à 0241 tem, e o que vale sem agente publicado.
  */
-export async function loadSkills(db: Queryable, tenantId: string): Promise<LoadedSkill[]> {
+export interface LoadSkillsOptions {
+  skillNames: readonly string[] | null;
+}
+
+/**
+ * Resolve os ponteiros e devolve as skills ativas do run — skills de plataforma + skills
+ * do tenant, filtradas pelo AGENTE. Chamada no início de CADA run (sem cache de processo):
+ * ponteiro movido ⇒ próximo run já vê a versão nova, sem restart. Ordem ESTÁVEL por nome
+ * (o índice injetado é byte-determinístico — o prefixo de cache F2-17 depende disso). Se um
+ * tenant e a plataforma têm skill de mesmo nome, a do tenant vence (override local).
+ *
+ * Quem entra (migration 0241):
+ * - UNIVERSAL — nome que a PLATAFORMA publica com `nichos` vazio. Sempre ligada, com a
+ *   versão do tenant se ele tiver um fork. A universalidade é lida da plataforma, nunca do
+ *   fork: skill importada pela org nasce com `nichos` vazio e NÃO é universal.
+ * - `skillNames === null` — também as skills da própria organização (instaladas ou
+ *   importadas). Skill de nicho da plataforma fica de fora.
+ * - `skillNames` lista — também exatamente os nomes da lista. Nome que não existe mais é
+ *   ignorado: versão publicada é imutável e não pode quebrar quando uma skill sai.
+ */
+export async function loadSkills(
+  db: Queryable,
+  tenantId: string,
+  opts: LoadSkillsOptions = { skillNames: null },
+): Promise<LoadedSkill[]> {
   const { rows } = await db.query<{
     id: string;
     organization_id: string | null;
@@ -183,28 +210,44 @@ export async function loadSkills(db: Queryable, tenantId: string): Promise<Loade
     body: string;
     matcher: SkillMatcher;
     manifest: unknown[];
+    nichos: string[] | null;
   }>(
-    `select v.id, v.organization_id, v.name, v.description, v.body, v.matcher, v.manifest
+    `select v.id, v.organization_id, v.name, v.description, v.body, v.matcher, v.manifest, v.nichos
      from skill_pointers p
      join skill_versions v on v.id = p.version_id
      where p.organization_id is null or p.organization_id = $1`,
     [tenantId],
   );
+  const universais = new Set(
+    rows.filter((r) => r.organization_id === null && (r.nichos ?? []).length === 0).map((r) => r.name),
+  );
+  const listadas = opts.skillNames === null ? null : new Set(opts.skillNames);
   // tenant vence plataforma no mesmo nome; ordem final estável por nome (prefixo estável).
-  const byName = new Map<string, LoadedSkill>();
+  const byName = new Map<string, { skill: LoadedSkill; daOrg: boolean }>();
   for (const r of rows) {
     if (!byName.has(r.name) || r.organization_id !== null) {
       byName.set(r.name, {
-        versionId: r.id,
-        name: r.name,
-        description: r.description,
-        body: r.body,
-        matcher: r.matcher,
-        manifest: r.manifest ?? [],
+        skill: {
+          versionId: r.id,
+          name: r.name,
+          description: r.description,
+          body: r.body,
+          matcher: r.matcher,
+          manifest: r.manifest ?? [],
+        },
+        daOrg: r.organization_id !== null,
       });
     }
   }
-  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const ativa = (name: string, daOrg: boolean): boolean => {
+    if (universais.has(name)) return true;
+    if (listadas === null) return daOrg;
+    return listadas.has(name);
+  };
+  return [...byName.values()]
+    .filter(({ skill, daOrg }) => ativa(skill.name, daOrg))
+    .map(({ skill }) => skill)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**

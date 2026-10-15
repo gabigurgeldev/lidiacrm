@@ -1949,9 +1949,6 @@ export const DICIONARIO: Traducoes = {
   "gastos de": { es: "gastados de" },
   "gastos este mês": { es: "gastados este mes" },
   horas: { es: "horas" },
-  "instalada — já vale para os agentes desta organização.": {
-    es: "instalada — ya vale para los agentes de esta organización.",
-  },
   "lugares diferentes. Aqui você vê qual está atendendo cada um — e troca, se quiser.": {
     es: "lugares diferentes. Aquí ves cuál está atendiendo cada uno — y lo cambias, si quieres.",
   },
@@ -8441,6 +8438,19 @@ export const DICIONARIO: Traducoes = {
   "Prompt": { es: "Prompt" },
   "Frases de passagem": { es: "Frases de traspaso" },
   "Fora do agente": { es: "Fuera del agente" },
+  // ─── Habilidades do agente (skills por agente, migration 0241) ───
+  "Habilidades": { es: "Habilidades" },
+  "Situações que ele sabe conduzir": { es: "Situaciones que sabe conducir" },
+  "Cada habilidade é um roteiro para uma situação do atendimento. O agente só lê o roteiro quando a situação aparece na conversa.": { es: "Cada habilidad es un guion para una situación de la atención. El agente solo lee el guion cuando la situación aparece en la conversación." },
+  "Nenhuma habilidade disponível ainda.": { es: "Todavía no hay ninguna habilidad disponible." },
+  "Sempre ligadas": { es: "Siempre activas" },
+  "sempre ligada": { es: "siempre activa" },
+  "Da sua organização": { es: "De tu organización" },
+  "Usando o padrão: as sempre ligadas e as da sua organização. Marque as do seu ramo para ele conduzir essas situações também.": { es: "Usando el estándar: las siempre activas y las de tu organización. Marca las de tu rubro para que también conduzca esas situaciones." },
+  "Ver o catálogo de habilidades": { es: "Ver el catálogo de habilidades" },
+  "Voltou ao padrão: as sempre ligadas e as da organização.": { es: "Volvió al estándar: las siempre activas y las de la organización." },
+  "Deixou o padrão e passou a usar a lista escolhida.": { es: "Dejó el estándar y pasó a usar la lista elegida." },
+  "instalada — já vale para os agentes que usam o padrão. Nos outros, ligue na seção Habilidades do agente.": { es: "instalada — ya vale para los agentes que usan el estándar. En los demás, actívala en la sección Habilidades del agente." },
 };
 
 /**

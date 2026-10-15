@@ -387,6 +387,7 @@ export type Database = {
           reply_as_audio_mirror: boolean
           human_request_try_first: boolean
           interactive_options_enabled: boolean
+          skill_names: string[] | null
           split_max_chars: number
           split_messages: boolean
           status: string
@@ -428,6 +429,7 @@ export type Database = {
           reply_as_audio_mirror?: boolean
           human_request_try_first?: boolean
           interactive_options_enabled?: boolean
+          skill_names?: string[] | null
           split_max_chars?: number
           split_messages?: boolean
           status?: string
@@ -469,6 +471,7 @@ export type Database = {
           reply_as_audio_mirror?: boolean
           human_request_try_first?: boolean
           interactive_options_enabled?: boolean
+          skill_names?: string[] | null
           split_max_chars?: number
           split_messages?: boolean
           status?: string
@@ -6138,6 +6141,7 @@ export type Database = {
           manifest: Json
           matcher: Json
           name: string
+          nichos: string[]
           organization_id: string | null
         }
         Insert: {
@@ -6149,6 +6153,7 @@ export type Database = {
           manifest?: Json
           matcher?: Json
           name: string
+          nichos?: string[]
           organization_id?: string | null
         }
         Update: {
@@ -6160,6 +6165,7 @@ export type Database = {
           manifest?: Json
           matcher?: Json
           name?: string
+          nichos?: string[]
           organization_id?: string | null
         }
         Relationships: [

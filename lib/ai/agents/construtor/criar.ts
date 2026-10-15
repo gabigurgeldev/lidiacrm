@@ -31,6 +31,7 @@ import { resolverProvedorDoAgente } from "@/lib/ai/agents/provedor-do-agente";
 import { versionCreateSchema, type VersionInput } from "@/lib/ai/agents/validation";
 import { temChaveDeEmbedding } from "@/lib/ai/embeddings/chave";
 import { criarMaterialDeTexto } from "@/lib/ai/rag/criar-material";
+import { skillNamesDoNovoAgente } from "@/lib/ai/skills/skills-por-nicho";
 import { ligarPacote } from "@/lib/mcp/tools/selecao-por-pacote";
 import { incluirAgenteNoCoordenador, type ResultadoNoCoordenador } from "@/lib/coordenador/construtor";
 
@@ -116,6 +117,19 @@ export async function criarAgenteDaPrevia(
     .eq("is_archived", false)
     .maybeSingle();
 
+  // Skills do ramo já ligadas — a instalação automática. A lista explícita
+  // desligaria as skills que a organização já instalou ou importou, então elas
+  // entram junto. Ramo genérico ou desconhecido = padrão (`null`).
+  let skillNames = skillNamesDoNovoAgente(previa.nicho);
+  if (skillNames !== null) {
+    const { data: daOrg } = await admin
+      .from("skill_pointers")
+      .select("name")
+      .eq("organization_id", orgId);
+    const nomes = ((daOrg ?? []) as Array<{ name: string }>).map((p) => p.name);
+    skillNames = [...new Set([...skillNames, ...nomes])].sort();
+  }
+
   const montar = (knowledgeIds: string[]) =>
     versionCreateSchema.safeParse({
       system_prompt: previa.system_prompt,
@@ -127,6 +141,7 @@ export async function criarAgenteDaPrevia(
       handoff_keywords: previa.handoff_keywords.length > 0 ? previa.handoff_keywords : undefined,
       pipeline_ids: funil?.id ? [funil.id as string] : [],
       knowledge_source_ids: knowledgeIds,
+      skill_names: skillNames,
     });
 
   // A forma é conferida ANTES de qualquer escrita, com o acervo vazio; o acervo

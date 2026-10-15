@@ -36,6 +36,7 @@ import { CHAVE_DA_INSTALACAO, findCredential } from "./CredentialPicker";
 import { PainelDoOperador } from "./PainelDoOperador";
 import { PainelDeSeguranca } from "./PainelDeSeguranca";
 import type { MaterialDoAcervo } from "./BasesDoAgente";
+import type { HabilidadeDoCatalogo } from "./HabilidadesDoAgente";
 import type { IntegracaoDoAcervo } from "./IntegracoesDoAgente";
 import { FunisDoAgente, type CoberturaPorFunil } from "./FunisDoAgente";
 import { PublishConfirmDialog } from "./PublishConfirmDialog";
@@ -62,6 +63,7 @@ import { SecaoCapacidades } from "./editor/SecaoCapacidades";
 import { SecaoEstilo } from "./editor/SecaoEstilo";
 import { SecaoFollowup } from "./editor/SecaoFollowup";
 import { SecaoGatilho } from "./editor/SecaoGatilho";
+import { SecaoHabilidades } from "./editor/SecaoHabilidades";
 import { SecaoIdentidade } from "./editor/SecaoIdentidade";
 import { SecaoInstrucoes } from "./editor/SecaoInstrucoes";
 import { SecaoInteligencia } from "./editor/SecaoInteligencia";
@@ -154,6 +156,11 @@ type Props = (EditProps | CreateProps) & {
   materiais?: MaterialDoAcervo[];
   /** Integrações via API da organização (0223), com os endpoints — por prop, pelo mesmo motivo. */
   integracoes?: IntegracaoDoAcervo[];
+  /**
+   * As skills que este agente pode ligar (0241) — universais, da organização e
+   * de cada ramo. Por prop, pelo mesmo motivo do acervo.
+   */
+  habilidades?: HabilidadeDoCatalogo[];
   /** O envio de e-mail está configurado? A verificação por código depende dele. */
   emailConfigurado?: boolean;
   /**
@@ -448,6 +455,7 @@ export function AgentForm(props: Props) {
     { id: "numero", rotulo: t("Número") },
     { id: "inteligencia", rotulo: t("Inteligência") },
     { id: "capacidades", rotulo: t("Capacidades") },
+    { id: "habilidades", rotulo: t("Habilidades") },
     { id: "estilo", rotulo: t("Estilo de resposta") },
     { id: "gatilho", rotulo: t("Quando atende") },
     { id: "pessoa", rotulo: t("Passar para uma pessoa") },
@@ -600,6 +608,9 @@ export function AgentForm(props: Props) {
               integracoes={props.integracoes ?? []}
               emailConfigurado={props.emailConfigurado ?? false}
             />
+          </AncoraDaSecao>
+          <AncoraDaSecao id="habilidades">
+            <SecaoHabilidades {...secao} habilidades={props.habilidades ?? []} />
           </AncoraDaSecao>
           <AncoraDaSecao id="estilo">
             <SecaoEstilo {...secao} servicoDeVoz={props.servicoDeVoz ?? null} />

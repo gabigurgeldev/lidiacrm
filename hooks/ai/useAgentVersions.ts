@@ -31,6 +31,8 @@ export interface AgentVersionRow {
   knowledge_source_ids: string[];
   /** Integrações via API (0223). Opcional: linha anterior à migration não traz. */
   api_endpoint_ids?: string[] | null;
+  /** Skills opcionais ligadas (0241). `null` = padrão; opcional: linha anterior não traz. */
+  skill_names?: string[] | null;
   split_messages: boolean;
   split_max_chars: number;
   reply_as_audio: boolean;

@@ -6,7 +6,7 @@ O que o agente "sabe" vem de seis lugares. Saber qual usar para cada coisa é me
 |---|---|---|---|
 | **Instruções do agente** | Quem ele é, objetivo, roteiro, regras de conduta | Sempre | O agente |
 | **Memória da empresa** | Regras e combinados que valem para todos os atendimentos | Sempre | Organização |
-| **Skills** | Roteiros para situações específicas (objeção de preço, reativação…) | Índice sempre; corpo **só quando a situação aparece** | Organização |
+| **Skills** | Roteiros para situações específicas (objeção de preço, rastreio de pedido, urgência clínica…) | Índice sempre; corpo **só quando a situação aparece** | **Agente** (universais em todos; as de ramo, por agente) |
 | **Acervo (conhecimento)** | FAQ, políticas, tabelas, manuais, catálogo | **Sob demanda**, via busca | Os materiais marcados no agente |
 | **Memória do cliente** | O que o agente aprendeu sobre aquela pessoa | Índice sempre; corpo sob demanda | Um cliente |
 | **Checkpoint** | Resumo, compromissos e objeções do último turno | Sempre | Um cliente |
@@ -81,12 +81,26 @@ Uma skill é um **roteiro para uma situação**. Só o nome e a descrição fica
 
 | Origem | Como |
 |---|---|
-| **Catálogo** | "Skills prontas, mantidas pela plataforma" → **Instalar** ("já vale para os agentes desta organização"). |
+| **Catálogo** | "Skills prontas, mantidas pela plataforma" → **Instalar** (vale para os agentes que usam o padrão; nos outros, ligue em Agente › Habilidades). |
 | **Upload** | **Enviar skill (.zip)** com um `SKILL.md` e, opcionalmente, arquivos de apoio (*references*). |
 
 Ações: **Desinstalar**, ver **Histórico de versões**, **Publicar versão**, **Restaurar como nova versão**. Trocar/voltar versão é mover um ponteiro — sem reiniciar nada.
 
-### 3.2. Formato do `SKILL.md`
+### 3.2. Quais skills cada agente usa (migration 0241)
+
+Cada versão do agente guarda a sua lista em `ai_agent_versions.skill_names`. A tela é **Agente › Habilidades**.
+
+| Tipo | Quando vale |
+|---|---|
+| **Universal** (skill de plataforma com `nichos` vazio) | **Sempre**, em todo agente — não entra na lista. Hoje: `objecao-preco`, `agendamento`, `cliente-insatisfeito`, `comprovante-de-pagamento`, `dados-pessoais-lgpd`, `retomada-de-conversa`, `risco-a-vida`. |
+| **De ramo** (plataforma, `nichos` = `clinica`, `imobiliaria`, `servicos`, `curso`, `loja`) | Só se a lista do agente a tiver. |
+| **Da organização** (instalada ou importada) | Com a lista no **padrão** (`NULL`), sempre; com lista explícita, só se estiver nela. |
+
+**Instalação automática:** quem cria o agente a partir do modelo de um ramo (Novo agente › modelo) ou pelo **Criar com IA** recebe as skills daquele ramo já ligadas — a lista padrão mora em `lib/ai/skills/skills-por-nicho.ts`. Agente em branco, genérico ou criado antes da 0241 fica no padrão: universais + as da organização.
+
+Para ver o catálogo em vigor sem confiar nesta lista: `grep -n "^-- ---- skill" supabase/migrations/20261014130000_0242_habilidades_por_nicho.sql`.
+
+### 3.3. Formato do `SKILL.md`
 
 ```markdown
 ---

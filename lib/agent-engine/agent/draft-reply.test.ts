@@ -51,6 +51,7 @@ const AGENT: PublishedAgentConfig = {
   toolIds: [],
   knowledgeSourceIds: [],
   apiEndpointIds: [],
+  skillNames: null,
   activeKbVersionId: null,
   ragTopK: 5,
   ragSimilarityThreshold: 0.72,
