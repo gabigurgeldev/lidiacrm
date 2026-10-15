@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Habilidades (skills) por agente",
+    "subtitle": "o ramo escolhido na criação grava a lista de skills na versão do agente; o turno carrega universais + a lista; o corpo só entra quando a frase do cliente casa; cada ativação vira linha em skill_activations",
+    "output": "habilidades-por-agente.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "criacao", "label": "Criação do agente" },
+    { "id": "tela", "label": "Tela" },
+    { "id": "dados", "label": "Banco" },
+    { "id": "turno", "label": "Turno do agente" },
+    { "id": "retorno", "label": "Laço de retorno" }
+  ],
+  "mainPath": ["modelo", "mapa", "versao", "load", "match", "ativacoes"],
+  "nodes": [
+    {
+      "id": "modelo",
+      "lane": "criacao",
+      "col": 0,
+      "type": "lib",
+      "label": "montarModelo / criarAgenteDaPrevia",
+      "sublabel": "lib/ai/agents/modelos-por-nicho.ts e lib/ai/agents/construtor/criar.ts — o ramo vira skill_names"
+    },
+    {
+      "id": "mapa",
+      "lane": "criacao",
+      "col": 1,
+      "type": "lib",
+      "label": "SKILLS_POR_NICHO",
+      "sublabel": "lib/ai/skills/skills-por-nicho.ts — fonte única da lista padrão de cada ramo"
+    },
+    {
+      "id": "editor",
+      "lane": "tela",
+      "col": 1,
+      "type": "component",
+      "label": "Agente › Habilidades",
+      "sublabel": "app/app/ai/agents/[id]/_components/HabilidadesDoAgente.tsx — universais travadas, da organização, por ramo"
+    },
+    {
+      "id": "catalogo",
+      "lane": "tela",
+      "col": 2,
+      "type": "component",
+      "label": "IA › Skills (catálogo)",
+      "sublabel": "app/app/ai/skills — instalar/importar; a da organização entra no padrão do agente"
+    },
+    {
+      "id": "seeds",
+      "lane": "dados",
+      "col": 1,
+      "type": "database",
+      "label": "skill_versions.nichos + skill_pointers",
+      "sublabel": "migrations 0241/0242 — vazio = universal; 21 skills semeadas no padrão md5 da 0191"
+    },
+    {
+      "id": "versao",
+      "lane": "dados",
+      "col": 2,
+      "type": "database",
+      "label": "ai_agent_versions.skill_names",
+      "sublabel": "NULL = padrão (universais + da organização); imutável depois de publicada"
+    },
+    {
+      "id": "load",
+      "lane": "turno",
+      "col": 3,
+      "type": "lib",
+      "label": "loadSkills(…, { skillNames })",
+      "sublabel": "lib/agent-engine/agent/skills.ts — índice no prefixo estável do prompt"
+    },
+    {
+      "id": "match",
+      "lane": "turno",
+      "col": 4,
+      "type": "lib",
+      "label": "matchSkills",
+      "sublabel": "casamento determinístico pela última mensagem do cliente; corpo só no match"
+    },
+    {
+      "id": "ativacoes",
+      "lane": "retorno",
+      "col": 5,
+      "type": "database",
+      "label": "skill_activations + near-miss",
+      "sublabel": "cada skill usada fica registrada; probe sem hard-match vira candidato ao golden set"
+    }
+  ],
+  "edges": [
+    { "id": "e1", "from": "modelo", "to": "mapa", "label": "lista padrão do ramo" },
+    { "id": "e2", "from": "mapa", "to": "versao", "label": "grava skill_names no agente novo" },
+    { "id": "e3", "from": "editor", "to": "versao", "label": "liga/desliga — salva rascunho, publica" },
+    { "id": "e4", "from": "catalogo", "to": "seeds", "label": "fork-on-install copia nichos" },
+    { "id": "e5", "from": "seeds", "to": "editor", "label": "lista universais, da org e por ramo" },
+    { "id": "e6", "from": "versao", "to": "load", "label": "agentConfig.skillNames" },
+    { "id": "e7", "from": "seeds", "to": "load", "label": "ponteiros resolvidos a cada turno" },
+    { "id": "e8", "from": "load", "to": "match", "label": "skills ativas da versão" },
+    { "id": "e9", "from": "match", "to": "ativacoes", "label": "registra o uso" },
+    { "id": "e10", "from": "ativacoes", "to": "editor", "label": "skill que nunca casa ou erra é desligada ou republicada" }
+  ]
+}

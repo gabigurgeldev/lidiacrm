@@ -79,6 +79,12 @@ export interface PublishedAgentConfig {
    */
   apiEndpointIds: string[];
   /**
+   * Skills OPCIONAIS ligadas nesta versão (`ai_agent_versions.skill_names`, migration
+   * 0241). `null` = padrão (universais + skills da organização). Universais valem sempre
+   * e não entram na lista — ver `loadSkills`.
+   */
+  skillNames: string[] | null;
+  /**
    * LEGADO: a KB ativa do agente (`ai_agents.active_kb_version_id`).
    *
    * Só é usada quando `knowledgeSourceIds` vem vazio — o clone que ainda não
@@ -162,6 +168,7 @@ interface Row {
   pipeline_ids: string[] | null;
   knowledge_source_ids: string[] | null;
   api_endpoint_ids: string[] | null;
+  skill_names: string[] | null;
   trigger_config: unknown;
   version_created_by: string | null;
   agent_created_by: string | null;
@@ -200,6 +207,7 @@ const SELECT_AGENT_CONFIG_COLUMNS = `a.id as agent_id,
             v.pipeline_ids,
             v.knowledge_source_ids,
             v.api_endpoint_ids,
+            v.skill_names,
             v.trigger_config,
             v.created_by as version_created_by,
             a.created_by as agent_created_by`;
@@ -250,6 +258,7 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     // legado abaixo em vez de ficar sem material nenhum.
     knowledgeSourceIds: r.knowledge_source_ids ?? [],
     apiEndpointIds: r.api_endpoint_ids ?? [],
+    skillNames: r.skill_names ?? null,
     activeKbVersionId: r.active_kb_version_id,
     ragTopK,
     ragSimilarityThreshold,

@@ -168,6 +168,16 @@ Cada endpoint aparece com o tipo: **consulta** ou **correção, pede SIM**, e a 
 
 Endpoint desligado ou de integração arquivada é recusado ao salvar ("Um dos endpoints de integração marcados não existe mais…"). Tudo sobre o recurso: [10 §4](10-integracoes.md).
 
+### 3.8.2. Situações que ele sabe conduzir (habilidades)
+
+Seção **Habilidades**. Cada habilidade é um roteiro para uma situação (cliente irritado, "cadê meu pedido", sintoma urgente); o agente só lê o roteiro quando a situação aparece na conversa.
+
+- **Sempre ligadas** — valem para todo agente e aparecem travadas (objeção de preço, agendamento, cliente insatisfeito, comprovante de pagamento, dados pessoais, retomada de conversa, risco à vida).
+- **Da sua organização** — as que você instalou ou importou em IA › Skills.
+- **Por ramo** — clínica, imobiliária, serviços, curso e loja. Agente criado a partir do modelo de um ramo (ou pelo Criar com IA) já nasce com as do ramo ligadas.
+
+Enquanto você não mexe, o agente usa o **padrão**: as sempre ligadas e as da organização. Detalhes: [09 — Conhecimento, memória e skills](09-conhecimento-memoria-skills.md#32-quais-skills-cada-agente-usa-migration-0241).
+
 ### 3.9. Quando ele entra em ação (gatilhos)
 
 | Campo | Padrão | Efeito no atendimento real |

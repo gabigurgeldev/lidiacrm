@@ -24,7 +24,7 @@ export const DUPLICATE_AGENT_COLUMNS =
  * basta, se o INSERT não a escreve a cópia nasce com o default do banco.
  */
 export const DUPLICATE_VERSION_COLUMNS =
-  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, reply_as_audio, reply_as_audio_mirror, human_request_try_first, interactive_options_enabled, handoff_on_customer_image, audio_voice, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,api_endpoint_ids,change_summary";
+  "id, organization_id, agent_id, version_number, system_prompt, provider, model, credential_id, tool_ids, trigger_config, channel_session_id, max_steps, token_budget, cost_budget_cents, history_message_window, history_token_window, handoff_keywords, handoff_tool_enabled, cases_enabled, split_messages, split_max_chars, reply_as_audio, reply_as_audio_mirror, human_request_try_first, interactive_options_enabled, handoff_on_customer_image, audio_voice, followup, operator_enabled, operator_model, operator_tool_ids, status, published_at, superseded_at, created_at, created_by,pipeline_ids,knowledge_source_ids,api_endpoint_ids,skill_names,change_summary";
 
 export type DuplicateAgentError =
   | "not_found"
@@ -93,6 +93,8 @@ function versionPayloadFrom(src: Record<string, unknown>) {
     pipeline_ids: src.pipeline_ids ?? [],
     knowledge_source_ids: src.knowledge_source_ids ?? [],
     api_endpoint_ids: src.api_endpoint_ids ?? [],
+    // `null` é o padrão (universais + skills da organização), não "nenhuma".
+    skill_names: src.skill_names ?? null,
   };
 }
 

@@ -73,6 +73,13 @@ export default async function NewAgentPage({
       onde: ondeTrabalha(activeOrg.name, estado?.welcome?.o_que_faz || undefined),
       capacidades: capacidadesPadraoDoOnboarding(),
     });
+    // A lista do ramo é EXPLÍCITA — e uma lista explícita desliga o que não está
+    // nela. As skills que a organização instalou ou importou entram junto, para
+    // o agente novo não nascer sem o que o dono já escolheu para todos.
+    if (inicial.skill_names !== null) {
+      const daOrganizacao = escopo.habilidades.filter((h) => h.daOrganizacao && !h.universal).map((h) => h.name);
+      inicial = { ...inicial, skill_names: [...new Set([...inicial.skill_names, ...daOrganizacao])].sort() };
+    }
   }
 
   return (
@@ -103,6 +110,7 @@ export default async function NewAgentPage({
         cobertura={escopo.cobertura}
         materiais={escopo.materiais}
         integracoes={escopo.integracoes}
+        habilidades={escopo.habilidades}
         emailConfigurado={isEmailConfigured()}
       />
     </PaginaAjustes>

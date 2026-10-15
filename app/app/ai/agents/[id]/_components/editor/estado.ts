@@ -61,6 +61,11 @@ export interface FormState {
   pipeline_ids: string[];
   knowledge_source_ids: string[];
   api_endpoint_ids: string[];
+  /**
+   * Skills opcionais ligadas (0241). `null` = padrão (universais + as da
+   * organização) — e é um valor, não ausência: vai assim para o servidor.
+   */
+  skill_names: string[] | null;
 }
 
 /** O que toda seção do editor recebe: o formulário, como mudá-lo e os erros. */
@@ -145,6 +150,9 @@ export function buildState(args: {
     knowledge_source_ids: version?.knowledge_source_ids ?? [],
     // `?? []` = nenhum sistema externo. Mesma direção segura.
     api_endpoint_ids: version?.api_endpoint_ids ?? [],
+    // `?? null` = padrão. Agente em branco nasce no padrão; o modelo por ramo
+    // (`montarModelo`) já traz a lista do ramo em `inicial`.
+    skill_names: version?.skill_names ?? null,
   };
 }
 
@@ -183,6 +191,7 @@ export function toVersionPayload(s: FormState) {
     pipeline_ids: s.pipeline_ids,
     knowledge_source_ids: s.knowledge_source_ids,
     api_endpoint_ids: s.api_endpoint_ids,
+    skill_names: s.skill_names,
   };
 }
 

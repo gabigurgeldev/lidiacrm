@@ -63,6 +63,7 @@ begin
     or new.pipeline_ids           is distinct from old.pipeline_ids
     or new.knowledge_source_ids   is distinct from old.knowledge_source_ids
     or new.api_endpoint_ids       is distinct from old.api_endpoint_ids
+    or new.skill_names            is distinct from old.skill_names
     or new.version_number         is distinct from old.version_number
     or new.agent_id               is distinct from old.agent_id
     or new.organization_id        is distinct from old.organization_id

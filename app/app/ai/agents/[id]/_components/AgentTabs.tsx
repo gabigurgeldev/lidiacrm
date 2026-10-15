@@ -15,6 +15,7 @@ import { Sparkle } from "@/lib/ui/icons";
 import { AgentForm, type ChannelSessionLite, type VersaoDoFormulario } from "./AgentForm";
 import type { CoberturaPorFunil } from "./FunisDoAgente";
 import type { MaterialDoAcervo } from "./BasesDoAgente";
+import type { HabilidadeDoCatalogo } from "./HabilidadesDoAgente";
 import type { IntegracaoDoAcervo } from "./IntegracoesDoAgente";
 import type { FunilDaResposta } from "@/hooks/pipelines/usePipelines";
 import { TestPanel } from "./TestPanel";
@@ -34,6 +35,8 @@ interface Props {
   /** O acervo da organização, para a seção "o que ele consulta" (0181). */
   materiais?: MaterialDoAcervo[];
   integracoes?: IntegracaoDoAcervo[];
+  /** Skills que o agente pode ligar (0241). */
+  habilidades?: HabilidadeDoCatalogo[];
   emailConfigurado?: boolean;
   agent: AgentRow;
   draft: AgentVersionRow | null;
@@ -139,6 +142,7 @@ export function AgentTabs(props: Props) {
           cobertura={props.cobertura}
           materiais={props.materiais}
           integracoes={props.integracoes}
+          habilidades={props.habilidades}
           emailConfigurado={props.emailConfigurado}
           routerMembership={props.routerMembership}
           readOnly={props.readOnly}
