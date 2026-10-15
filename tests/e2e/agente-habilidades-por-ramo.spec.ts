@@ -14,7 +14,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 import { loginComoAdmin, lerCreds, type CredsE2E } from "./helpers/login-admin";
 
@@ -30,7 +30,7 @@ test.beforeEach(async ({ page }) => {
   creds = await loginComoAdmin(page, creds);
 });
 
-const caixa = (page: import("@playwright/test").Page, nome: string) => page.getByTestId(`habilidade-${nome}`);
+const caixa = (page: Page, nome: string) => page.getByTestId(`habilidade-${nome}`);
 
 test.describe("Habilidades por ramo", () => {
   test("o modelo de loja já liga as habilidades de loja, e só elas", async ({ page }) => {
@@ -58,14 +58,18 @@ test.describe("Habilidades por ramo", () => {
     const nome = `Vendas da Loja ${Date.now()}`;
     await page.locator("#name").fill(nome);
 
-    // Comboboxes do Radix: as opções só existem no DOM com o menu aberto.
+    // Comboboxes do Radix: as opções só existem no DOM com o menu aberto. Sempre
+    // abre e escolhe, como `agente-novo-e-uso.spec.ts`: a primeira versão desta
+    // spec pulava o campo cujo texto não começava com "Selecione" — e o da chave
+    // diz "Escolha uma chave". O campo ficava vazio, o Criar desabilitado, e o
+    // caso reprovava por um defeito do instrumento, não do produto.
     for (const id of ["model", "credential_id", "channel_session_id"]) {
       const gatilho = page.locator(`#${id}`);
       if ((await gatilho.count()) === 0) continue;
-      const texto = (await gatilho.textContent()) ?? "";
-      if (!/^Selecione/.test(texto.trim())) continue;
       await gatilho.click();
-      await page.getByRole("option").first().click();
+      const opcoes = page.getByRole("option");
+      expect(await opcoes.count(), `o campo "${id}" abriu sem nenhuma opção para escolher`).toBeGreaterThan(0);
+      await opcoes.first().click();
     }
 
     // O dono tira uma e liga outra antes de criar — a escolha dele vale.
