@@ -300,6 +300,6 @@ export function pedidoDeCorrecao(achados: readonly Achado[]): string {
   return [
     "O prompt que você escreveu tem estes problemas. Corrija APENAS isto e devolva o agente completo, mantendo todo o resto igual:",
     ...erros.map((a, i) => `${i + 1}. ${a.mensagem}`),
-    'Para fato que não está no que o dono contou: tire o valor do prompt e escreva a regra "se perguntarem, diga que vai confirmar com a equipe".',
+    'Para fato que não está no que o dono contou: tire o valor do prompt e escreva a regra "se perguntarem e não estiver no conhecimento, não afirme nada sobre isso".',
   ].join("\n");
 }

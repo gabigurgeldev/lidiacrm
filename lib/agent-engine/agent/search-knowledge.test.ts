@@ -22,7 +22,7 @@ describe('searchKnowledge', () => {
       { organizationId: 'org1', kbVersionId: 'kb1', query: 'frete', topK: 5, threshold: 0.72 },
       { embed },
     );
-    expect(out).toEqual({ ok: true, results: [hit] });
+    expect(out).toEqual({ ok: true, results: [hit], topScore: 0.91 });
     // `ponto` viaja junto desde a 0181: é dele que sai QUAL binding de chave
     // vale. Sem o campo, indexar e consultar poderiam usar chaves diferentes
     // sem ninguém conseguir dizer qual.
@@ -251,6 +251,91 @@ describe('searchKnowledge', () => {
 
     const registro = queries.find((q) => q.sql.includes('knowledge_searches'));
     expect(registro!.params[4]).toBe(0.71);
+  });
+});
+
+describe('searchKnowledge — sem fonte, o modelo é proibido de afirmar', () => {
+  const comLinhas = (rows: unknown[]) => ({
+    query: async (sql: string) => (sql.includes('retrieve_top_k_chunks') ? { rows } : { rows: [] }),
+  });
+  const base = { organizationId: 'org-1', kbVersionId: 'kb-1', query: 'tem na cor azul?', topK: 5, threshold: 0.4 };
+  const embed = { embed: async () => ({ embedding: [0.1] }) } as never;
+  // As frases que a medição de 2026-10-15 achou em produção, convidando a inventar.
+  const CONVITE = /o que (voc[êe] )?j[áa] sabe|vou confirmar|siga sem/i;
+
+  it('zero acertos devolve instrução do modo — equipe chama a passagem', async () => {
+    const r = await searchKnowledge(
+      comLinhas([{ chunk_id: 'c1', knowledge_source_id: null, content: 'x', similarity: 0.39, metadata: null }]) as never,
+      { ...base, modo: 'equipe' },
+      embed,
+    );
+    expect(r.ok && r.results).toEqual([]);
+    expect(r.ok && r.topScore).toBe(0.39);
+    expect(r.ok && r.instrucao).toContain('request_human_handoff');
+    expect(r.ok && r.instrucao).not.toMatch(CONVITE);
+  });
+
+  it('zero acertos em só-agente: diz que não sabe, sem prometer retorno', async () => {
+    const r = await searchKnowledge(comLinhas([]) as never, { ...base, modo: 'so_agente' }, embed);
+    expect(r.ok && r.instrucao).toMatch(/não tem essa informação/);
+    expect(r.ok && r.instrucao).not.toContain('request_human_handoff');
+  });
+
+  it('sem modo informado, a saída é a segura (não prometer ninguém)', async () => {
+    const r = await searchKnowledge(comLinhas([]) as never, base, embed);
+    expect(r.ok && r.instrucao).not.toContain('request_human_handoff');
+  });
+
+  it('faixa cinza: trecho por pouco acima do limiar vai marcado, com instrução', async () => {
+    const r = await searchKnowledge(
+      comLinhas([
+        { chunk_id: 'c1', knowledge_source_id: null, content: 'forte', similarity: 0.8, metadata: null },
+        { chunk_id: 'c2', knowledge_source_id: null, content: 'parecido', similarity: 0.45, metadata: null },
+      ]) as never,
+      { ...base, faixaCinza: 0.15 },
+      embed,
+    );
+    expect(r.ok && r.results.map((h) => [h.chunk_id, h.relevancia])).toEqual([
+      ['c1', undefined],
+      ['c2', 'baixa'],
+    ]);
+    expect(r.ok && r.instrucao).toMatch(/parecido não serve/);
+  });
+
+  it('acerto forte não ganha instrução nem marca', async () => {
+    const r = await searchKnowledge(
+      comLinhas([{ chunk_id: 'c1', knowledge_source_id: null, content: 'forte', similarity: 0.8, metadata: null }]) as never,
+      { ...base, faixaCinza: 0.15 },
+      embed,
+    );
+    expect(r.ok && r.instrucao).toBeUndefined();
+    expect(r.ok && r.results[0]?.relevancia).toBeUndefined();
+  });
+
+  it('as três falhas nomeiam a causa e mandam NÃO afirmar — nunca "o que você já sabe"', async () => {
+    const semMaterial = await searchKnowledge(
+      { query: vi.fn() } as never,
+      { organizationId: 'o', query: 'oi', topK: 5, threshold: 0.4, modo: 'equipe' },
+    );
+    const semChave = await searchKnowledge(
+      { query: vi.fn() } as never,
+      { ...base, modo: 'equipe' },
+      { embed: async () => { throw Object.assign(new Error('x'), { code: 'embedding_sem_chave' }); } } as never,
+    );
+    const foraDoAr = await searchKnowledge(
+      { query: vi.fn() } as never,
+      { ...base, modo: 'equipe' },
+      { embed: async () => { throw new Error('timeout'); } } as never,
+    );
+    const codigos = [semMaterial, semChave, foraDoAr].map((r) => (r.ok ? null : r.error.code));
+    expect(codigos).toEqual(['no_knowledge_base', 'knowledge_sem_chave', 'knowledge_unavailable']);
+    for (const r of [semMaterial, semChave, foraDoAr]) {
+      expect(r.ok).toBe(false);
+      if (r.ok) continue;
+      expect(r.error.message).not.toMatch(CONVITE);
+      expect(r.instrucao).toMatch(/não afirme/i);
+      expect(r.instrucao).not.toMatch(CONVITE);
+    }
   });
 });
 

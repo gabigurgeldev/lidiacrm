@@ -250,3 +250,24 @@ describe("projeção — o que o Conversador pode ver", () => {
     });
   });
 });
+
+describe("projeção — a instrução de quando falta fonte chega inteira ao modelo", () => {
+  // A instrução cita `request_human_handoff`, que o detector de vazamento acusa.
+  // Sob `message`/`error` ela seria traduzida para "não consegui concluir essa
+  // verificação" — e o modelo, sem saber o que fazer, voltaria a improvisar. Por
+  // isso ela viaja em `instrucao`, que não é chave de erro.
+  it("`instrucao` sobrevive com o nome da ferramenta; a mensagem de erro segue traduzível", () => {
+    const instrucao = "NADA no material responde a isso. Chame request_human_handoff AGORA.";
+    expect(detectarVazamentoInterno(instrucao).achou, "controle: o detector acusa o nome").toBe(true);
+
+    const projetado = projetarRetornoDeTool({
+      ok: false,
+      error: { code: "no_knowledge_base", message: "este agente não tem material de consulta habilitado." },
+      instrucao,
+    }) as { instrucao: string };
+    expect(projetado.instrucao).toBe(instrucao);
+
+    const vazio = projetarRetornoDeTool({ ok: true, results: [], topScore: 0.3, instrucao }) as { instrucao: string };
+    expect(vazio.instrucao).toBe(instrucao);
+  });
+});

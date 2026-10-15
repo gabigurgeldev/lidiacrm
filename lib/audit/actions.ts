@@ -556,6 +556,8 @@ export const AUDIT_ACTIONS = [
   "suporte.identidade_buscada",
   "suporte.leitura",
   "suporte.acao_executada",
+  // ── Agente sem fonte (Onda 1): o que ele faz quando o material não responde ──
+  "ai.quando_nao_sabe_changed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

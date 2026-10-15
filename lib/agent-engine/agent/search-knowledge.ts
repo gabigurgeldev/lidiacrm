@@ -22,6 +22,9 @@ import { MODELO_DE_EMBEDDING } from '@/lib/ai/embeddings/chave';
 import { buscarPorMapa, SQL_MAPAS_DAS_FONTES, type DepsDaBusca } from '@/lib/ai/knowledge/buscar-por-mapa';
 import type { Citation } from '@/lib/ai/citations/types';
 import type { Logger } from '../obs/logger';
+import type { ModoSemFonte } from '@/lib/schemas/settings';
+
+import { INSTRUCAO_FAIXA_CINZA, instrucaoBuscaIndisponivel, instrucaoSemFonte } from './instrucao-sem-fonte';
 
 export interface KnowledgeHit {
   chunk_id: string;
@@ -31,11 +34,22 @@ export interface KnowledgeHit {
   metadata: Record<string, unknown> | null;
   /** Nome do material de onde o trecho saiu. Ausente no caminho legado. */
   source_name?: string | null;
+  /**
+   * `'baixa'` = passou do limiar mas por pouco (faixa cinza). Medido em produção
+   * (2026-10-15): 22 de 74 buscas com acerto tinham o MELHOR trecho nesta faixa —
+   * produto parecido entrando na resposta como se fosse o perguntado.
+   */
+  relevancia?: 'baixa';
 }
 
+/**
+ * `instrucao` é o que o modelo deve FAZER com o resultado. Viaja fora de
+ * `error.message` de propósito — ver o cabeçalho de `instrucao-sem-fonte.ts`.
+ * `topScore` é o melhor candidato mesmo abaixo do limiar: o turno o guarda.
+ */
 export type SearchKnowledgeResult =
-  | { ok: true; results: KnowledgeHit[] }
-  | { ok: false; error: { code: string; message: string } };
+  | { ok: true; results: KnowledgeHit[]; topScore: number | null; instrucao?: string }
+  | { ok: false; error: { code: string; message: string }; instrucao: string };
 
 /** Piso real da similaridade de cosseno — `1 - distância`, com distância em [0,2]. */
 const PISO_SIMILARIDADE = -1;
@@ -55,21 +69,30 @@ export async function searchKnowledge(
     jobId?: string | null;
     /** Só para telemetria: QUAL assistente perguntou. */
     agentId?: string | null;
+    /**
+     * Quem atende quando falta fonte (`modo-sem-fonte.ts`). Decide a instrução
+     * de busca vazia/falha. Ausente = `so_agente`: sem saber se há equipe, a
+     * saída segura é não prometer ninguém.
+     */
+    modo?: ModoSemFonte;
+    /** Largura da faixa cinza acima do limiar. Ausente = 0 (sem faixa). */
+    faixaCinza?: number;
   },
   deps?: { embed?: typeof embedText; log?: Logger; chaveDoMapa?: DepsDaBusca['chaveDoMapa'] },
 ): Promise<SearchKnowledgeResult> {
   const embed = deps?.embed ?? embedText;
   const fontes = args.knowledgeSourceIds ?? [];
   const usaFontes = fontes.length > 0;
+  const modo: ModoSemFonte = args.modo ?? 'so_agente';
 
+  // As três falhas desta função diziam "responda com o que você já sabe" — o
+  // convite a inventar que a medição de 2026-10-15 achou em produção. Agora a
+  // mensagem só nomeia a causa, e o que fazer vai em `instrucao`.
   if (!usaFontes && !args.kbVersionId) {
     return {
       ok: false,
-      error: {
-        code: 'no_knowledge_base',
-        message:
-          'este agente não tem material de consulta habilitado — responda com o que você já sabe e não invente fatos.',
-      },
+      error: { code: 'no_knowledge_base', message: 'este agente não tem material de consulta habilitado.' },
+      instrucao: instrucaoBuscaIndisponivel(modo),
     };
   }
 
@@ -131,7 +154,12 @@ export async function searchKnowledge(
           )
         ).rows;
 
-    const results = rows.filter((r) => r.similarity >= args.threshold);
+    // Faixa cinza: acima do limiar, mas por pouco. O trecho continua indo ao
+    // modelo (às vezes É a resposta), marcado para ele não tomar parecido por igual.
+    const tetoDaFaixaCinza = args.threshold + Math.max(0, args.faixaCinza ?? 0);
+    const results = rows
+      .filter((r) => r.similarity >= args.threshold)
+      .map((r) => (r.similarity < tetoDaFaixaCinza ? { ...r, relevancia: 'baixa' as const } : r));
     // Sem depender da ordem das linhas. O `filter` descarta o NaN que o pgvector
     // devolve para chunk de embedding zerado — ele contaminaria o `Math.max` e
     // anularia o top_score de linhas BOAS na mesma busca. Sobra o array vazio,
@@ -174,7 +202,11 @@ export async function searchKnowledge(
       });
     }
 
-    return { ok: true, results };
+    if (results.length === 0) return { ok: true, results, topScore, instrucao: instrucaoSemFonte(modo) };
+    if (results.some((r) => r.relevancia === 'baixa')) {
+      return { ok: true, results, topScore, instrucao: INSTRUCAO_FAIXA_CINZA };
+    }
+    return { ok: true, results, topScore };
   } catch (err) {
     // Falta de chave é ESTADO do tenant e merece uma frase própria: "a base caiu"
     // manda o operador procurar um incidente que não existe.
@@ -187,18 +219,15 @@ export async function searchKnowledge(
         ok: false,
         error: {
           code: 'knowledge_sem_chave',
-          message:
-            'a consulta ao material da empresa está desligada por falta de chave de IA — responda com o que você já sabe e não invente fatos.',
+          message: 'a consulta ao material da empresa está desligada por falta de chave de IA.',
         },
+        instrucao: instrucaoBuscaIndisponivel(modo),
       };
     }
     return {
       ok: false,
-      error: {
-        code: 'knowledge_unavailable',
-        message:
-          'a base de conhecimento está indisponível agora — responda com o que você já sabe e não invente fatos.',
-      },
+      error: { code: 'knowledge_unavailable', message: 'a base de conhecimento está indisponível agora.' },
+      instrucao: instrucaoBuscaIndisponivel(modo),
     };
   }
 }

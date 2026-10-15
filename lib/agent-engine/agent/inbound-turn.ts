@@ -35,6 +35,7 @@ import type { ChannelAdapter, ChannelSendResult } from '../channel-adapter';
 import { withFields, type Logger } from '../obs/logger';
 import { getLeadContext, type LeadContext, type LeadContextResult } from '../edge/crm/get-lead-context';
 import { citationsFromHits, searchKnowledge } from './search-knowledge';
+import { lerAjustesDeFonte, resolverModoSemFonte } from './modo-sem-fonte';
 import type { CrmEdgeConfig } from '../edge/crm/mcp-client';
 import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
 // applySendOutcome é disposição de FILA (cancel/reschedule + cache de opt-out), não
@@ -290,9 +291,10 @@ export const AGENT_TOOL_DEFS = {
   search_knowledge: {
     description:
       'Busca na BASE DE CONHECIMENTO da organização (FAQ, políticas, catálogo) os trechos mais ' +
-      'relevantes para uma pergunta. Use ANTES de responder qualquer dúvida factual sobre produto, ' +
-      'preço, prazo, política ou funcionamento — responda com base nos trechos retornados e não ' +
-      'invente o que não encontrar. Sem resultados = diga que vai confirmar, nunca chute.',
+      'relevantes para uma pergunta. Use ANTES de afirmar qualquer fato sobre a empresa: produto, ' +
+      'característica, estoque, preço, prazo, política, horário, endereço. Afirme só o que os trechos ' +
+      'sustentarem. Quando o retorno trouxer o campo `instrucao`, siga-o — é ele que diz o que fazer ' +
+      'quando o material não responde. Nunca chute nem prometa confirmar depois.',
     inputSchema: z.object({
       query: z.string().min(2).describe('a pergunta ou termos a buscar, em pt-br'),
     }).passthrough(),
@@ -2138,6 +2140,19 @@ async function executarTurnoDoAgente(
   // Citações acumuladas por buscas de conhecimento DESTE turno — anexadas à
   // próxima outbound enviada (shape de lib/ai/citations/types, que a UI já lê).
   let pendingCitations: ReturnType<typeof citationsFromHits> = [];
+  // Fundamentação do turno (Onda 1). O modo decide o que o agente faz quando o
+  // material não responde; as contagens dizem se ESTE turno teve fonte.
+  // `semFonteNoTurno()` = buscou e nenhuma busca achou nada acima do limiar.
+  const ajustesDeFonte = await lerAjustesDeFonte(pool, tenantId);
+  const modoSemFonte = resolverModoSemFonte({
+    escolhaDaOrg: ajustesDeFonte.escolha,
+    equipeConfigurada: ajustesDeFonte.equipeConfigurada,
+    handoffDisponivel: agentConfig?.handoffToolEnabled ?? true,
+  }).modo;
+  let buscasFeitas = 0;
+  let buscasComFonte = 0;
+  let topScoreDoTurno: number | null = null;
+  const semFonteNoTurno = (): boolean => buscasFeitas > 0 && buscasComFonte === 0;
   let runError: Error | null = null;
   const noteRunError = (err: Error): void => {
     runError ??= err;
@@ -2369,23 +2384,26 @@ async function executarTurnoDoAgente(
     search_knowledge: tool({
       ...AGENT_TOOL_DEFS.search_knowledge,
       execute: async ({ query }) => {
-        const fontes = agentConfig?.knowledgeSourceIds ?? [];
-        if (fontes.length === 0 && agentConfig?.activeKbVersionId == null) {
-          return {
-            ok: false,
-            error: { code: 'no_knowledge_base', message: 'este agente não tem material de consulta habilitado — siga sem ele.' },
-          };
-        }
+        // Sem material, `searchKnowledge` devolve `no_knowledge_base` com a
+        // instrução do modo — o atalho que vivia aqui tinha outro texto ("siga
+        // sem ele") e era a terceira versão da mesma frase.
         const out = await searchKnowledge(pool, {
           organizationId: tenantId,
-          knowledgeSourceIds: fontes,
+          knowledgeSourceIds: agentConfig?.knowledgeSourceIds ?? [],
           kbVersionId: agentConfig?.activeKbVersionId ?? null,
           query,
           topK: agentConfig?.ragTopK ?? 5,
           threshold: agentConfig?.ragSimilarityThreshold ?? 0.4,
           jobId: job.id,
           agentId: agentConfig?.agentId ?? null,
+          modo: modoSemFonte,
+          faixaCinza: ajustesDeFonte.faixaCinza,
         }, { log: runLog });
+        buscasFeitas += 1;
+        if (out.ok) {
+          if (out.topScore !== null) topScoreDoTurno = Math.max(topScoreDoTurno ?? -Infinity, out.topScore);
+          if (out.results.length > 0) buscasComFonte += 1;
+        }
         if (out.ok && out.results.length > 0) {
           // As citações são montadas AQUI, pelo código, a partir do resultado
           // cru — é por isso que os ids podem sair do que vai ao modelo sem
@@ -3958,6 +3976,12 @@ async function executarTurnoDoAgente(
     kind: job.kind,
     messages_sent: outcomes.length,
     model: turn.model,
+    // Fundamentação: contagens e score, nunca a pergunta (pode ter PII).
+    buscas: buscasFeitas,
+    buscas_com_fonte: buscasComFonte,
+    sem_fonte: semFonteNoTurno(),
+    top_score: topScoreDoTurno,
+    modo_sem_fonte: modoSemFonte,
   });
 }
 
