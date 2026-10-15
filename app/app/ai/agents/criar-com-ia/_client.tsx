@@ -381,7 +381,8 @@ export function CriarComIa({ canais, mapa }: { canais: Canal[]; mapa: MapaDePaco
       const { lacunas: _lacunas, ...resto } = sincronizarAnexosGuardados(previa, anexos);
       const res = await apiClient.post<RespostaDaCriacao>(
         "/api/v1/ai/agents/construtor/criar",
-        { ...resto, fontes_existentes: existentes, channel_session_id: canal },
+        // O ramo vai junto: é ele que liga as skills do nicho no agente novo.
+        { ...resto, fontes_existentes: existentes, channel_session_id: canal, ...(nicho ? { nicho } : {}) },
         TEMPO,
       );
       setCriado(res.data);

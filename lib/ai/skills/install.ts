@@ -68,6 +68,7 @@ interface PlatformSkillRow {
   body: string;
   matcher: SkillMatcher;
   manifest: unknown[];
+  nichos: string[] | null;
 }
 
 /**
@@ -81,7 +82,7 @@ export async function installPlatformSkill(
   input: { organizationId: string; name: string; createdBy: string | null },
 ): Promise<{ versionId: string }> {
   const { rows } = await deps.db.query<PlatformSkillRow>(
-    `select v.id, v.name, v.description, v.body, v.matcher, v.manifest
+    `select v.id, v.name, v.description, v.body, v.matcher, v.manifest, v.nichos
      from skill_pointers p
      join skill_versions v on v.id = p.version_id
      where p.organization_id is null and p.name = $1`,
@@ -100,6 +101,9 @@ export async function installPlatformSkill(
     matcher: platform.matcher,
     manifest: platform.manifest,
     forkedFromVersionId: platform.id,
+    // o fork leva os ramos da origem — a tela agrupa por eles. Quem decide se é
+    // universal continua sendo a versão de PLATAFORMA (ver loadSkills).
+    nichos: platform.nichos ?? [],
   });
 
   await setSkillPointer(deps.db, { tenantId: input.organizationId, name: platform.name, versionId: version.id });

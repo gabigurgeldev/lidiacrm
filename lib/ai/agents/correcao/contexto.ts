@@ -63,7 +63,7 @@ function nomesDasFerramentas(toolCalls: unknown): string[] {
 }
 
 /** Colunas que aceitam null no schema; nas outras, null = "use o padrão". */
-const NULO_VALE = new Set<string>(["credential_id", "operator_model"]);
+const NULO_VALE = new Set<string>(["credential_id", "operator_model", "skill_names"]);
 
 /**
  * Da linha de `ai_agent_versions`, só o CONTEÚDO, na forma de

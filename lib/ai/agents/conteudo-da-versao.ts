@@ -56,6 +56,7 @@ export const COLUNAS_DO_CONTEUDO = [
   "pipeline_ids",
   "knowledge_source_ids",
   "api_endpoint_ids",
+  "skill_names",
 ] as const;
 
 export function conteudoDaVersao(v: VersionInput) {
@@ -91,5 +92,7 @@ export function conteudoDaVersao(v: VersionInput) {
     pipeline_ids: v.pipeline_ids,
     knowledge_source_ids: v.knowledge_source_ids ?? [],
     api_endpoint_ids: v.api_endpoint_ids ?? [],
+    // `null` é valor, não ausência: significa "padrão" (universais + skills da org).
+    skill_names: v.skill_names ?? null,
   };
 }

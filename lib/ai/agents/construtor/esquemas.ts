@@ -284,6 +284,13 @@ export const previaSchema = z.strictObject({
    * criação confere que são desta organização antes de ligar.
    */
   fontes_existentes: z.array(z.string().uuid()).max(20).optional(),
+  /**
+   * O ramo que a entrevista detectou. Decide as skills que o agente já nasce
+   * com ligadas (`lib/ai/skills/skills-por-nicho.ts`). Ausente = padrão.
+   * Valor desconhecido (sessão guardada de uma versão antiga da tela) também
+   * vira padrão: errar o ramo não pode impedir de criar o agente.
+   */
+  nicho: z.enum(NICHOS).optional().catch(undefined),
 });
 
 export type Previa = z.infer<typeof previaSchema>;

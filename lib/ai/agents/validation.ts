@@ -195,6 +195,14 @@ const versionShapeSchema = z
       .array(z.string().uuid())
       .max(TETO_ENDPOINTS_POR_AGENTE, `No máximo ${TETO_ENDPOINTS_POR_AGENTE} endpoints por agente.`)
       .default([]),
+    /**
+     * Skills OPCIONAIS ligadas nesta versão (migration 0241) — as de nicho e as da
+     * organização. As universais valem sempre e não entram aqui. `null` = padrão
+     * (universais + skills da organização), que é o que todo agente anterior à 0241
+     * tem. Sem `.refine()` de existência: skill é linha de tabela (mesmo motivo de
+     * `pipeline_ids`); nome que não existe é ignorado pelo runtime (`loadSkills`).
+     */
+    skill_names: z.array(z.string().trim().min(1).max(120)).max(40).nullable().default(null),
   })
   .strict();
 

@@ -17,6 +17,8 @@
  * tudo continua editável. Por isso ele é puro — o chamador passa as capacidades
  * e o "onde trabalha", e recebe os campos.
  */
+import { eNicho } from "@/lib/ai/agents/construtor/nicho";
+import { skillNamesDoNovoAgente } from "@/lib/ai/skills/skills-por-nicho";
 import { PACOTES, type PacoteDeFunil } from "@/lib/onboarding/pacotes-de-funil";
 import { PROMPT_TEMPLATES, type PromptTemplate } from "@/lib/schemas/onboarding";
 
@@ -168,6 +170,11 @@ export interface CamposDoModelo {
   system_prompt: string;
   tool_ids: string[];
   handoff_keywords: string[];
+  /**
+   * As skills do ramo já ligadas (`lib/ai/skills/skills-por-nicho.ts`) — é a
+   * instalação automática. `null` no genérico = padrão da organização.
+   */
+  skill_names: string[] | null;
 }
 
 /**
@@ -199,6 +206,7 @@ export function montarModelo(
     system_prompt,
     tool_ids: [...ctx.capacidades],
     handoff_keywords: [...new Set([...PALAVRAS_DE_SEMPRE, ...modelo.palavrasDePassagem])],
+    skill_names: skillNamesDoNovoAgente(eNicho(modelo.id) ? modelo.id : null),
   };
 }
 

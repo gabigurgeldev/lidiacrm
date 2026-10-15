@@ -62,6 +62,12 @@ export function VersionDiff({ versionA, versionB }: Props) {
   const t = useT();
   const tools = diffArr(versionA.tool_ids ?? [], versionB.tool_ids ?? []);
   const handoffKw = diffArr(versionA.handoff_keywords ?? [], versionB.handoff_keywords ?? []);
+  // Skills (0241). `null` é o PADRÃO, não "nenhuma": trocar padrão por lista (ou o
+  // contrário) é mudança mesmo quando os nomes coincidem, e aparece como tal.
+  const skillsA = versionA.skill_names ?? null;
+  const skillsB = versionB.skill_names ?? null;
+  const habilidades = diffArr(skillsA ?? [], skillsB ?? []);
+  const padraoMudou = (skillsA === null) !== (skillsB === null);
   const followupFlows = diffArr(
     versionA.followup?.flow_pointer_ids ?? [],
     versionB.followup?.flow_pointer_ids ?? [],
@@ -113,6 +119,21 @@ export function VersionDiff({ versionA, versionB }: Props) {
         <Pills label={t("Adicionadas")} tone="add" items={tools.added} />
         <Pills label={t("Removidas")} tone="del" items={tools.removed} />
         {tools.added.length === 0 && tools.removed.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{t("Sem mudanças.")}</p>
+        ) : null}
+      </Section>
+
+      <Section title={t("Habilidades")}>
+        <Pills label={t("Adicionadas")} tone="add" items={habilidades.added} />
+        <Pills label={t("Removidas")} tone="del" items={habilidades.removed} />
+        {padraoMudou ? (
+          <p className="text-xs text-muted-foreground">
+            {skillsB === null
+              ? t("Voltou ao padrão: as sempre ligadas e as da organização.")
+              : t("Deixou o padrão e passou a usar a lista escolhida.")}
+          </p>
+        ) : null}
+        {habilidades.added.length === 0 && habilidades.removed.length === 0 && !padraoMudou ? (
           <p className="text-xs text-muted-foreground">{t("Sem mudanças.")}</p>
         ) : null}
       </Section>

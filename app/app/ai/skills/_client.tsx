@@ -50,7 +50,7 @@ export function SkillsClient({ initialState }: Props) {
     setPendingName(name);
     install.mutate(name, {
       onSuccess: () => {
-        toast.success(`Skill "${name}" ${t("instalada — já vale para os agentes desta organização.")}`);
+        toast.success(`Skill "${name}" ${t("instalada — já vale para os agentes que usam o padrão. Nos outros, ligue na seção Habilidades do agente.")}`);
         setPendingName(null);
       },
       onError: (err) => {
