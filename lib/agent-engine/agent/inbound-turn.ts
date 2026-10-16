@@ -36,6 +36,11 @@ import { withFields, type Logger } from '../obs/logger';
 import { getLeadContext, type LeadContext, type LeadContextResult } from '../edge/crm/get-lead-context';
 import { citationsFromHits, searchKnowledge } from './search-knowledge';
 import { lerAjustesDeFonte, resolverModoSemFonte } from './modo-sem-fonte';
+import { avisarSemFonte } from './aviso-sem-fonte';
+import { decidirFallbackSemFonte, MAX_VETOS_DE_FONTE } from './fallback-sem-fonte';
+import { registrarResultados } from './fontes-do-turno';
+import type { ContextoDeFundamentacao } from '../guardrails/grounding';
+import { MOTIVO_FORA_DA_BASE } from '@/lib/escalacao/motivos';
 import type { CrmEdgeConfig } from '../edge/crm/mcp-client';
 import { WahaChannelAdapter } from '../edge/channel/waha-adapter';
 // applySendOutcome é disposição de FILA (cancel/reschedule + cache de opt-out), não
@@ -2153,6 +2158,34 @@ async function executarTurnoDoAgente(
   let buscasComFonte = 0;
   let topScoreDoTurno: number | null = null;
   const semFonteNoTurno = (): boolean => buscasFeitas > 0 && buscasComFonte === 0;
+  // Fontes do turno para o gate de fundamentação (`grounding.ts`): os trechos
+  // achados e o que as ferramentas devolveram. A abertura (com a fala do
+  // cliente) só vale para conferir NÚMERO — preenchida quando é montada.
+  const trechosDoTurno: string[] = [];
+  const resultadosDoTurno: string[] = [];
+  let textoDaAbertura = '';
+  let vetosDeFonte = 0;
+  let seqNoPrimeiroVetoDeFonte: number | null = null;
+  let runtimeAssumeSemFonte = false;
+  let passouNoTurno = false;
+  // As instruções que valem como fonte: a camada do AGENTE e a memória da org —
+  // nunca a camada plataforma, que cita "estoque", "preço" e "prazo" em abstrato.
+  // Sem agente publicado (caminho de fallback, raro) vale o system inteiro.
+  const instrucoesComoFonte = `${agentConfig?.systemPrompt ?? system}\n${renderOrgMemory(orgMemory)}`;
+  const contextoDeFundamentacao = (): ContextoDeFundamentacao | undefined => {
+    if (!ajustesDeFonte.conferenciaLigada) return undefined;
+    const fontes = [instrucoesComoFonte, ...trechosDoTurno, ...resultadosDoTurno].join('\n');
+    return {
+      modo: modoSemFonte,
+      // Lido na hora do envio: a ferramenta é removida do turno mais abaixo
+      // quando o agente não tem material.
+      buscaDisponivel: rawTools.search_knowledge !== undefined,
+      buscasFeitas,
+      buscasComFonte,
+      fontes,
+      fontesDeNumeros: `${fontes}\n${textoDaAbertura}`,
+    };
+  };
   let runError: Error | null = null;
   const noteRunError = (err: Error): void => {
     runError ??= err;
@@ -2403,6 +2436,7 @@ async function executarTurnoDoAgente(
         if (out.ok) {
           if (out.topScore !== null) topScoreDoTurno = Math.max(topScoreDoTurno ?? -Infinity, out.topScore);
           if (out.results.length > 0) buscasComFonte += 1;
+          for (const h of out.results) trechosDoTurno.push(h.content);
         }
         if (out.ok && out.results.length > 0) {
           // As citações são montadas AQUI, pelo código, a partir do resultado
@@ -2527,6 +2561,17 @@ async function executarTurnoDoAgente(
       ...AGENT_TOOL_DEFS.send_message,
       // Um envio por vez, na ordem que o modelo escreveu (ver `em-ordem.ts`).
       execute: emOrdem(async ({ body }: { body: string }) => {
+        if (runtimeAssumeSemFonte) {
+          // O 2º veto de fundamentação já passou a resposta para o runtime
+          // (`fallback-sem-fonte.ts`). Mais uma tentativa seria a mesma afirmação.
+          return {
+            ok: false,
+            error: {
+              code: 'grounding_sem_fonte',
+              message: 'o sistema vai cuidar da resposta a este cliente — não envie mais nada e encerre o turno.',
+            },
+          };
+        }
         if (seq >= maxSendsPerTurn) {
           return {
             ok: false,
@@ -2558,6 +2603,7 @@ async function executarTurnoDoAgente(
             agentConfig?.casesEnabled === true
               ? await hasOpenCaseForContact(pool, tenantId, input.conversationId)
               : false;
+          const fundamentacao = contextoDeFundamentacao();
           // Args reusados EXATAMENTE (mesmo objeto) no re-run do fail-safe abaixo — só
           // hasOpenCase/openedCaseThisTurn mudam depois do auto-abre-caso.
           const beforeSendArgs = {
@@ -2587,6 +2633,9 @@ async function executarTurnoDoAgente(
             // não é dele, e a única saída seria o silêncio. O follow-up determinístico
             // idem (ver GateContext.internalVocabularyEnforced).
             enforceInternalVocabulary: true,
+            // Conferência de fundamentação: arma só aqui, pela mesma razão do gate de
+            // vocabulário — é o único corpo escrito pelo modelo. Desligada na org = ausente.
+            ...(fundamentacao !== undefined ? { grounding: fundamentacao } : {}),
             // Fencing do coordenador: sob o lock do envio, confere se este agente
             // ainda é o dono na geração que recebeu. Ausente no caminho legado.
             ...(concessaoDoEnvio !== null ? { coordenacao: concessaoDoEnvio } : {}),
@@ -2685,6 +2734,27 @@ async function executarTurnoDoAgente(
               hasOpenCase: hasOpenCase || openedCaseThisTurn,
               enforceInternalVocabulary: false,
             });
+          }
+          if (chain.status === 'vetoed' && chain.code === 'grounding_sem_fonte') {
+            // Fundamentação: o 1º veto ensina (buscar, ou seguir a instrução de
+            // quando falta fonte). Insistiu: o runtime assume a saída depois do
+            // laço (`decidirFallbackSemFonte`) — nunca libera a afirmação, ao
+            // contrário do gate de vocabulário: aqui o "termo feio" seria um fato
+            // inventado sobre a empresa.
+            vetosDeFonte += 1;
+            seqNoPrimeiroVetoDeFonte ??= seq;
+            vetosDoTurno.push(chain.code);
+            if (vetosDeFonte >= MAX_VETOS_DE_FONTE) {
+              runtimeAssumeSemFonte = true;
+              return {
+                ok: false,
+                error: {
+                  code: chain.code,
+                  message: 'o sistema vai cuidar da resposta a este cliente — não envie mais nada e encerre o turno.',
+                },
+              };
+            }
+            return { ok: false, error: { code: chain.code, message: chain.message } };
           }
           if (chain.status === 'vetoed') {
             // Teto do dia: não há o que o modelo reescrever — tentar de novo só
@@ -2921,20 +2991,30 @@ async function executarTurnoDoAgente(
           // em cima seria o robô dizendo duas vezes a mesma coisa, com palavras
           // diferentes. Confiamos na fala dele e registramos que o piso não foi
           // preciso.
+          // Turno que buscou e não achou (ou teve afirmação vetada por falta de
+          // fonte): a passagem é por FALTA DE INFORMAÇÃO, e o motivo é do sistema —
+          // é o que a deixa contável por motivo, em vez do texto livre do modelo.
+          const foraDaBase = semFonteNoTurno() || vetosDeFonte > 0;
           const aviso =
             seq === 0
               ? await avisarLeadDaEscalacao(pool, avisoDaEscalacao.ids, {
                   ...avisoDaEscalacao.base,
-                  motivo: 'pediu_humano',
+                  motivo: foraDaBase ? 'sem_informacao' : 'pediu_humano',
                 })
               : ({ avisado: true } as const);
           const res = await applyRequestHumanHandoff(
             pool,
             { tenantId, leadId, conversationId: input.conversationId },
-            { conversationSummary: buildHandoffSummary(previous), avisoAoLead: aviso, log: runLog },
+            {
+              conversationSummary: buildHandoffSummary(previous),
+              avisoAoLead: aviso,
+              ...(foraDaBase ? { motivoDoSistema: MOTIVO_FORA_DA_BASE } : {}),
+              log: runLog,
+            },
             raw,
           );
           if (!res.ok) return res; // erro de ensino (payload fora da whitelist)
+          passouNoTurno = true;
           return { ok: true, status: res.status, message: res.message };
         } catch (err) {
           noteRunError(err instanceof Error ? err : new Error(String(err)));
@@ -3314,14 +3394,16 @@ async function executarTurnoDoAgente(
 
   // Circuit breaker de tools (F2-15): estado no closure DESTA invocação — zera
   // entre runs por construção (mesma garantia de isolamento do resto do run).
-  const tools = wrapToolsWithBreaker(rawTools, {
+  // O que as ferramentas devolvem é fonte de fato para o gate de fundamentação.
+  // `registrarResultados` só observa: o resultado volta ao modelo intacto.
+  const tools = registrarResultados(wrapToolsWithBreaker(rawTools, {
     thresholds: deps.knobs.breaker,
     // `consultar_sistema` é leitura; `propor_acao`, `verificar_identidade` e
     // `escolher_conta` mandam mensagem/e-mail ou gravam — ficam de fora.
     readOnlyTools: [...READ_ONLY_TOOLS, ...readOnlyDeIntegracao],
     log: runLog, // os warns dos gates do breaker saem carimbados com o run
     ...(deps.ensaio?.aoChamarFerramenta !== undefined ? { aoChamar: deps.ensaio.aoChamarFerramenta } : {}),
-  });
+  }), (texto) => resultadosDoTurno.push(texto));
 
   // F3-11: stage-classifier auxiliar. Roda ANTES do turno (modelo BARATO pelo seam
   // agnóstico) e sugere o estágio; a sugestão entra como HINT no SUFIXO por-lead — o modelo
@@ -3466,6 +3548,9 @@ async function executarTurnoDoAgente(
   );
   const openingText =
     openingSuffixes.length === 0 ? openingBase : `${openingBase}\n\n${openingSuffixes.join('\n\n')}`;
+  // Fonte só de NÚMERO para o gate de fundamentação: o pedido que o cliente citou,
+  // a data do bloco "Agora". Nunca de afirmação verbal (ver `grounding.ts`).
+  textoDaAbertura = openingText;
   // Onda 3 (aprimoramento): mídia inbound recente vira part nativa (image/file) SÓ para
   // provider+modelo capazes (T2 modelCapabilities) — modelo incapaz/desconhecido → [] e o
   // derivado textual (já embutido em openingText via LeadContextMessage) cobre sozinho.
@@ -3570,6 +3655,53 @@ async function executarTurnoDoAgente(
       });
       throw new JobSettledError('teto do dia do número atingido no envio — job reagendado para a próxima abertura');
     }
+  }
+
+  // ── SEM FONTE: O RUNTIME ASSUME ────────────────────────────────────────────
+  //
+  // O gate de fundamentação vetou e o modelo não fez o que a instrução mandava
+  // (insistiu na afirmação, ou desistiu sem passar a conversa). Regra inteira em
+  // `fallback-sem-fonte.ts`. Vem ANTES do resgate de turno mudo de propósito: o
+  // resgate cobraria o modelo a responder de novo — e a resposta que ele tem é a
+  // afirmação sem fonte que acabou de ser vetada.
+  const acaoSemFonte = decidirFallbackSemFonte({
+    modo: modoSemFonte,
+    vetosDeFonte,
+    passouNoTurno,
+    falouDepoisDoVeto: seqNoPrimeiroVetoDeFonte !== null && seq > seqNoPrimeiroVetoDeFonte,
+    clienteBloqueado: optedOutThisTurn,
+  });
+  if (acaoSemFonte === 'passar_para_equipe') {
+    // O modelo já falou algo depois do veto ⇒ confiamos que avisou (mesma regra
+    // da ferramenta de passagem: aviso do sistema só quando ninguém falou).
+    const falou = seqNoPrimeiroVetoDeFonte !== null && seq > seqNoPrimeiroVetoDeFonte;
+    const aviso = falou
+      ? ({ avisado: true } as const)
+      : await avisarLeadDaEscalacao(pool, avisoDaEscalacao.ids, {
+          ...avisoDaEscalacao.base,
+          motivo: 'sem_informacao',
+        });
+    await performHumanHandoff(
+      pool,
+      { tenantId, leadId, conversationId: input.conversationId },
+      {
+        reason: MOTIVO_FORA_DA_BASE,
+        conversationSummary: buildHandoffSummary(previous),
+        avisoAoLead: aviso,
+        log: runLog,
+      },
+    );
+    runLog.info('sem fonte: o runtime passou a conversa para a equipe', { vetos: vetosDeFonte });
+  } else if (acaoSemFonte === 'dizer_que_nao_sabe') {
+    const desfecho =
+      seq >= maxSendsPerTurn
+        ? ({ enviado: false, porque: 'max_sends_per_turn' } as const)
+        : await avisarSemFonte(pool, avisoDaEscalacao.ids, { ...avisoDaEscalacao.base, now: clock() });
+    runLog.info('sem fonte: o runtime disse ao cliente que não tem a informação', {
+      vetos: vetosDeFonte,
+      enviado: desfecho.enviado,
+      ...(desfecho.enviado ? {} : { porque: desfecho.porque }),
+    });
   }
 
   // ── TURNO MUDO ─────────────────────────────────────────────────────────────

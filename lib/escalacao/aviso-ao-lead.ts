@@ -52,6 +52,7 @@
 import { createHash } from "node:crypto";
 
 import type { QuemPodeAssumir } from "./disponibilidade";
+import { MOTIVO_FORA_DA_BASE, MOTIVO_FOTO_DO_CLIENTE } from "./motivos";
 
 /**
  * Por que a IA está saindo de campo. É o mesmo vocabulário de
@@ -72,6 +73,8 @@ export type MotivoDoAviso =
   | "orcamento_de_ia"
   /** O cliente mandou uma foto e o agente está configurado para passar (migration 0243). */
   | "enviou_foto"
+  /** O material do agente não tinha a resposta (Onda 1). */
+  | "sem_informacao"
   /** O sistema decidiu escalar (sentimento, baixa confiança, etapa, termo jurídico…). */
   | "outro";
 
@@ -83,7 +86,8 @@ export function motivoDoAviso(reason: string): MotivoDoAviso {
   if (reason === "requested_human") return "pediu_humano";
   if (reason === "suspected_optout") return "suspeita_de_opt_out";
   if (reason === "orcamento_de_ia") return "orcamento_de_ia";
-  if (reason === "customer_image") return "enviou_foto";
+  if (reason === MOTIVO_FOTO_DO_CLIENTE) return "enviou_foto";
+  if (reason === MOTIVO_FORA_DA_BASE) return "sem_informacao";
   return "outro";
 }
 
@@ -136,6 +140,13 @@ const ABERTURAS: Record<MotivoDoAviso, readonly string[]> = {
     "Recebi sua foto! Vou pedir para alguém da equipe conferir e te responder.",
     "Foto recebida. Uma pessoa do nosso time vai olhar com calma e já te retorna.",
     "Chegou sua imagem por aqui — passei para um atendente verificar pra você.",
+  ],
+  // A pergunta tem resposta, só não no material do agente: diz isso sem
+  // prometer que a resposta existe nem dar prazo — o fecho cuida da espera.
+  sem_informacao: [
+    "Essa informação eu não tenho aqui comigo, então chamei alguém da equipe para te responder certinho.",
+    "Não quero te passar nada errado: pedi para uma pessoa do time confirmar isso pra você.",
+    "Sobre isso, quem sabe responder é a nossa equipe — já deixei o pedido com eles.",
   ],
   outro: [
     "Esse caso é melhor resolvido por uma pessoa. Já acionei o time.",

@@ -28,6 +28,16 @@ Agora:
 - **Trecho só parecido com a pergunta não vira resposta**: quando o material
   traz algo próximo (outro modelo, outro serviço), o agente é avisado de que
   parecido não serve.
+- **Conferência antes de enviar**: nova conferência "Só afirmar o que tem
+  fonte" em *Segurança*. A mensagem que afirma preço, prazo, estoque,
+  característica ou endereço sem fonte neste atendimento não sai; o agente é
+  orientado a buscar no material ou a seguir a sua escolha acima.
+- **Se o agente insistir, o sistema assume**: no modo *Chamar alguém da
+  equipe*, a conversa é passada com o motivo "Faltou informação no material do
+  agente" (visível no aviso da Central); no modo *Dizer que não sabe*, o
+  cliente recebe uma mensagem curta dizendo que essa informação não está
+  disponível, sem promessa de retorno. Quem pediu para parar continua sem
+  receber nada.
 - **Agentes criados pelo assistente de criação** deixam de receber a regra
   "diga que vai confirmar com a equipe".
 

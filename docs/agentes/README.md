@@ -47,7 +47,7 @@
    │ 5. Pediu humano / pediu para parar? → avisa e silencia (sem IA)          │
    │ 6. Modelo conversa usando ferramentas (responder, buscar no acervo,      │
    │    mover etapa, agendar retorno, chamar humano, abrir chamado…)          │
-   │ 7. Cada mensagem passa pela cadeia de 10 conferências (Segurança)        │
+   │ 7. Cada mensagem passa pela cadeia de conferências (Segurança)           │
    │ 8. Fecha o turno com um checkpoint (resumo, compromissos, objeções)      │
    └─────────────────────────────────┬───────────────────────────────────────┘
                                      ▼
