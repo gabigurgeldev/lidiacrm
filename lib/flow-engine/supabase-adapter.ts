@@ -420,15 +420,16 @@ async function carregarFatos(
 ): Promise<FatosDaExecucao> {
   let lead: FatosDaExecucao["lead"] = null;
   let contactId = exec.contact_id;
+  const leadId = exec.lead_id ?? (await leadAbertoDoContato(admin, orgId, contactId));
 
-  if (exec.lead_id !== null) {
+  if (leadId !== null) {
     const { data } = await admin
       .from("crm_leads")
       .select(
         "id, title, status, stage_id, pipeline_id, owner_user_id, value_cents, source, tags, custom_fields, contact_id, created_at",
       )
       .eq("organization_id", orgId)
-      .eq("id", exec.lead_id)
+      .eq("id", leadId)
       .maybeSingle();
     const l = data as Record<string, unknown> | null;
     if (l !== null) {
@@ -440,7 +441,7 @@ async function carregarFatos(
         .from("crm_lead_scores")
         .select("ai_probability, ai_probability_band")
         .eq("organization_id", orgId)
-        .eq("lead_id", exec.lead_id)
+        .eq("lead_id", leadId)
         .maybeSingle();
       const s = sc as { ai_probability: number | null; ai_probability_band: string | null } | null;
       // Nome da etapa: `stage_id` sozinho não serve para avisar ninguém ("etapa
@@ -498,6 +499,43 @@ async function carregarFatos(
 
   const assigned_user = await carregarDono(admin, orgId, lead?.owner_user_id ?? null);
   return { lead, contact, assigned_user };
+}
+
+/**
+ * O lead da execução que nasceu de um evento de CONTATO.
+ *
+ * O gatilho de mensagem recebida (e o de palavra-chave) arma a execução com
+ * `lead_id` nulo — o evento é da mensagem, não do lead (`trigger-matcher.ts`).
+ * Sem esta busca, todo bloco que precisa de lead morria: medido em produção
+ * (EDUCATEC, 2026-10-16), o fluxo "mensagem do anúncio → distribuir na fila"
+ * parava em `sem_lead_para_distribuir` com o contato tendo lead aberto, e o
+ * ramo "Ninguém disponível" — que avisava o gerente — nunca era alcançado.
+ *
+ * Resolvido AQUI, a cada passo, e não ao armar: o lead da primeira mensagem
+ * nasce na ingestão (`garantirLeadDaConversa`) DEPOIS de o evento
+ * `message.received` ser emitido. Buscar ao armar perderia justamente o
+ * primeiro contato, que é o caso de anúncio.
+ *
+ * "O" lead é o aberto: a regra do produto é um lead por demanda, e
+ * `garantirLeadDaConversa` não abre um segundo enquanto houver um aberto. O
+ * `order` só desempata um clone antigo que tenha dois.
+ */
+async function leadAbertoDoContato(
+  admin: SupabaseClient,
+  orgId: string,
+  contactId: string | null,
+): Promise<string | null> {
+  if (contactId === null) return null;
+  const { data } = await admin
+    .from("crm_leads")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("contact_id", contactId)
+    .eq("status", "open")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as { id: string } | null)?.id ?? null;
 }
 
 async function carregarDono(
