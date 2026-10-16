@@ -53,6 +53,28 @@ describe("scripts/vps/lidiacrm-watchdog.sh", () => {
     expect(script).toContain('[ -z "$err" ] && [ "$code" != 255 ]');
   });
 
+  /**
+   * Incidente de 2026-10-16: depois de 2 h falhando no attach da overlay do
+   * EasyPanel, o contêiner do kong SUMIU. O vigia só olhava contêiner parado e
+   * ficou 11 h sem ter o que curar, mandando e-mail de hora em hora.
+   */
+  it("recria serviço sem contêiner nenhum, e a cura de ausentes roda a cada passada", () => {
+    expect(script).toContain("curar_ausentes() {");
+    const corpoCurar = /\ncurar\(\) \{([\s\S]*?)\n\}/.exec(script)?.[1] ?? "";
+    expect(corpoCurar).toContain("curar_ausentes");
+    expect(script).toMatch(/sem conteiner — recriando \(compose up --no-deps\)/);
+  });
+
+  it("só ressuscita serviço que DEVE ficar de pé: `migrate` (restart: no) nunca entra", () => {
+    expect(script).toContain(
+      'select(.value.restart=="unless-stopped" or .value.restart=="always")',
+    );
+  });
+
+  it("projeto inteiro sem contêiner rodando é parada deliberada e é pulado", () => {
+    expect(script).toContain('[ -n "$ref" ] || continue');
+  });
+
   it("não passa a senha SMTP na linha de comando (aparece em `ps`)", () => {
     expect(script).toContain("-K -");
     expect(script).not.toMatch(/--user\s+"?\$/);

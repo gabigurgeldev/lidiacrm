@@ -152,6 +152,24 @@ timer, e faz duas coisas:
    (`docker stop`: exit 0/137/143, sem erro) **não é tocada**. No máximo uma
    tentativa a cada 5 min por contêiner, e nada nos 3 min seguintes ao boot (o
    Docker ainda está subindo tudo).
+
+   Também recria serviço que **sumiu** — declarado com `restart: unless-stopped`
+   ou `always` e sem contêiner nenhum — desde que outro contêiner do mesmo
+   projeto esteja rodando (é dele que o vigia lê pasta e `-f` do Compose).
+   Projeto inteiro sem contêiner rodando é tratado como parada deliberada
+   (`compose down` pelo painel) e não é tocado; `migrate` (`restart: no`) nunca
+   entra. Existe para o incidente de **2026-10-16**: depois de 2 h falhando no
+   attach da rede overlay do EasyPanel (`attaching to network failed ... context
+   deadline exceeded`), o contêiner do `kong` desapareceu, o vigia — que só
+   olhava contêiner parado — ficou sem o que curar, e o login caiu por 13 h. O
+   cron de `docker image prune` da VPS ainda apagou a imagem; o `compose up`
+   puxa de novo.
+
+   Essa parte usa `jq` para ler o `docker compose config`; sem `jq` no host ela
+   não recria nada (a cura de contêiner parado segue funcionando).
+
+   **Quem instalou o vigia antes desta versão precisa recopiar o script** (a
+   linha `install -m 755 ...` de "Instalar" abaixo); o timer e o `.env` não mudam.
 2. **Avisa.** Sonda `/api/v1/health` e, depois de `LIMITE` falhas seguidas
    (padrão 3, ≈3 min), manda e-mail com o corpo do health, os contêineres
    parados e a memória. Reavisa a cada hora enquanto seguir fora e manda um
