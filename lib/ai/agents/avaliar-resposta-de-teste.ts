@@ -68,6 +68,10 @@ const NAO_AVALIAVEIS_SEM_TURNO: ReadonlyArray<{ gate: string; porque: string }> 
   { gate: "spinning", porque: "depende das últimas mensagens enviadas por este número" },
   { gate: "promise", porque: "depende da tabela de preços e condições da organização" },
   { gate: "semantic_promise", porque: "usa uma chamada de modelo extra, que o teste não gasta" },
+  {
+    gate: "grounding",
+    porque: "depende do que o agente buscou no material e do que as ferramentas devolveram durante o atendimento",
+  },
   { gate: "case_promise", porque: "depende de haver um chamado aberto para este contato" },
   { gate: "disclosure", porque: "depende de esta ser a primeira mensagem ao contato" },
 ];
