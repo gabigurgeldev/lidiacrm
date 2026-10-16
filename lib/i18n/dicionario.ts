@@ -274,6 +274,7 @@ export const DICIONARIO: Traducoes = {
   "Toque em Configurações → Aparelhos conectados.": { es: "Toque en Configuración → Dispositivos vinculados." },
   "Toque em Conectar um aparelho e aponte para este QR.": { es: "Toque en Vincular un dispositivo y apunte a este QR." },
   "O QR se renova sozinho.": { es: "El QR se renueva solo." },
+  "Preparando o QR Code…": { es: "Preparando el código QR…" },
   "Este link é pessoal e expira sozinho. Não repasse para outras pessoas.": { es: "Este enlace es personal y expira solo. No lo reenvíe a otras personas." },
   "Token de envio (API Oficial)": { es: "Token de envío (API Oficial)" },
   "cole o token que aparece na instância": { es: "pegue el token que aparece en la instancia" },

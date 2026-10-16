@@ -18,7 +18,8 @@
 import { NextResponse } from "next/server";
 
 import { checkRateLimit } from "@/lib/ai/dispatcher/rate-limit";
-import { linhaParaPagina } from "@/lib/channels/pareamento/canal";
+import { audit } from "@/lib/audit";
+import { linhaParaPagina, prepararSessaoParaQr } from "@/lib/channels/pareamento/canal";
 import {
   lerLinkDePareamento,
   marcarLinkComoUsado,
@@ -31,6 +32,13 @@ export const runtime = "nodejs";
 
 /** 3s de polling × 30 min = ~600 chamadas legítimas. 90/min dá folga de 4×. */
 const TETO_POR_MINUTO = 90;
+
+/**
+ * No máximo UM reinício de sessão a cada 45s por link. Subir a sessão até o QR
+ * leva poucos segundos; o teto existe para a sessão que volta a FAILED logo
+ * depois de subir, que sem ele seria reiniciada (com logout) a cada tique.
+ */
+const SEGUNDOS_ENTRE_REINICIOS = 45;
 
 export async function GET(
   req: Request,
@@ -88,12 +96,40 @@ export async function GET(
   const conectado = canal.status === "WORKING";
   if (conectado) await marcarLinkComoUsado(admin, link.id);
 
+  // O link costuma ser gerado para canal CAÍDO, e o transporte só entrega QR
+  // para sessão em SCAN_QR_CODE. Sem subir a sessão daqui, a página mostrava o
+  // quadro do QR em branco até o link expirar (medido em produção: canal em
+  // FAILED, `/qr` respondendo 422 a cada renovação).
+  let qrPronto = false;
+  if (!conectado) {
+    const preparo = await prepararSessaoParaQr(
+      admin,
+      { organizationId: link.organizationId, channelSessionId: link.channelSessionId },
+      async () =>
+        (await checkRateLimit(`pair:restart:${token.slice(0, 32)}`, 1, SEGUNDOS_ENTRE_REINICIOS))
+          .allowed,
+    );
+    qrPronto = preparo.qrPronto;
+    if (preparo.reiniciou) {
+      void audit({
+        action: "channel.pairing_session_restarted",
+        actorUserId: null,
+        organizationId: link.organizationId,
+        resourceType: "channel_session",
+        resourceId: link.channelSessionId,
+        requestId: req.headers.get("x-request-id"),
+        metadata: { pairing_link_id: link.id, force: preparo.reiniciou.forcar },
+      });
+    }
+  }
+
   return NextResponse.json(
     {
       data: {
         linha: canal.nome,
         status: canal.status,
         conectado,
+        qr_pronto: qrPronto,
         expira_em_s: segundosAteExpirar(link.expiresAt),
       },
     },
