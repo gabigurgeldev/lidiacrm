@@ -239,6 +239,10 @@ export function citationsFromHits(hits: KnowledgeHit[]): Citation[] {
     knowledge_source_id: h.knowledge_source_id,
     score: h.similarity,
     snippet: h.content.slice(0, 240),
+    // Nome e tipo no TOPO: o painel da Caixa de entrada lê daqui. O tipo só
+    // existia dentro de `metadata`, e o selo caía sempre no genérico "Fonte".
+    ...(h.source_name ? { source_name: h.source_name } : {}),
+    ...(typeof h.metadata?.source_type === 'string' ? { source_type: h.metadata.source_type } : {}),
     ...(h.metadata !== null ? { metadata: h.metadata } : {}),
   }));
 }

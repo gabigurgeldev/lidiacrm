@@ -45,7 +45,8 @@ Preparar o material exige uma chave **OpenAI** ou **OpenRouter** (modelo de embe
 - A ferramenta `search_knowledge` só existe no turno se o agente tem material marcado (ou se a empresa já tem **Respostas ensinadas pela equipe** — ver 1.6).
 - O agente é instruído a buscar **antes** de responder qualquer fato da empresa (produto, característica, estoque, preço, prazo, política, horário, endereço) e **só afirma o que tem fonte**. Quando o material não responde, segue *Quando o agente não souber responder* (chamar a equipe ou dizer que não sabe) — nunca chuta e nunca promete "vou confirmar".
 - Parâmetros (por agente em `ai_agents.config`, ou do servidor): **top-K** = 5 trechos, **similaridade mínima** = 0,40 (calibrada: pergunta literal ≈ 0,85, paráfrase 0,49–0,65, irrelevante ≈ 0,27), teto de **2.000 tokens** de trechos (`RAG_MAX_TOKENS`).
-- As **citações** são anexadas à mensagem enviada e aparecem na Caixa de entrada (botão de citação).
+- As **fontes** de cada resposta ficam gravadas na mensagem e aparecem **só para quem atende**, na Caixa de entrada (botão ⓘ ao lado da hora): *"Fonte: Tabela de preços 2026, trecho 3"*, com o tipo do material e a semelhança. Toda mensagem do turno leva as fontes de todas as buscas feitas até ela.
+- Mensagem do agente que afirma algo da empresa **sem nenhum trecho do material** aparece com o selo **"sem trecho do material"**. Não quer dizer que inventou — pode ter vindo das instruções do agente ou de uma ferramenta —, mas é a mensagem que vale conferir.
 
 ### 1.5. Dicas de conteúdo
 

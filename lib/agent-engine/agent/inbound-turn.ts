@@ -41,6 +41,7 @@ import { decidirFallbackSemFonte, MAX_VETOS_DE_FONTE } from './fallback-sem-font
 import { registrarResultados } from './fontes-do-turno';
 import { lerFontesDeTodosOsAgentes, materiaisDoTurno } from './fontes-da-organizacao';
 import { registrarLacuna } from './lacuna-do-acervo';
+import { acumularCitacoes, anexarCitacoes } from './citacao-interna';
 import type { ContextoDeFundamentacao } from '../guardrails/grounding';
 import { MOTIVO_FORA_DA_BASE } from '@/lib/escalacao/motivos';
 import type { CrmEdgeConfig } from '../edge/crm/mcp-client';
@@ -2144,9 +2145,9 @@ async function executarTurnoDoAgente(
   // Códigos de todo veto da cadeia de envio devolvido ao modelo neste turno —
   // o que decide se o turno sem resposta merece resgate ou só aviso.
   const vetosDoTurno: string[] = [];
-  // Citações acumuladas por buscas de conhecimento DESTE turno — anexadas à
-  // próxima outbound enviada (shape de lib/ai/citations/types, que a UI já lê).
-  let pendingCitations: ReturnType<typeof citationsFromHits> = [];
+  // Citações acumuladas por buscas de conhecimento DESTE turno — cada outbound
+  // enviada leva todas as que existiam quando saiu (`citacao-interna.ts`).
+  let citacoesDoTurno: ReturnType<typeof citationsFromHits> = [];
   // Fundamentação do turno (Onda 1). O modo decide o que o agente faz quando o
   // material não responde; as contagens dizem se ESTE turno teve fonte.
   // `semFonteNoTurno()` = buscou e nenhuma busca achou nada acima do limiar.
@@ -2453,7 +2454,7 @@ async function executarTurnoDoAgente(
           // As citações são montadas AQUI, pelo código, a partir do resultado
           // cru — é por isso que os ids podem sair do que vai ao modelo sem
           // perder nada: quem precisa deles é esta linha, não o modelo.
-          pendingCitations = citationsFromHits(out.results);
+          citacoesDoTurno = acumularCitacoes(citacoesDoTurno, citationsFromHits(out.results));
         }
         // `chunk_id` e `knowledge_source_id` viajavam CRUS para o modelo em toda
         // busca com RAG — dois UUIDs por resultado, sem uso nenhum do lado dele
@@ -2783,23 +2784,14 @@ async function executarTurnoDoAgente(
           }
           const outcome = chain.outcome;
           outcomes.push(outcome);
-          if (outcome.kind === 'sent' && pendingCitations.length > 0) {
-            try {
-              await pool.query(
-                `update messages
-                 set metadata = coalesce(metadata, '{}'::jsonb)
-                   || jsonb_build_object('citations', $3::jsonb, 'ai_generated', true)
-                 where organization_id = $1 and id = $2`,
-                [tenantId, outcome.messageId, JSON.stringify(pendingCitations)],
-              );
-            } catch (err) {
-              // citação é enriquecimento, não invariante — falha só loga.
-              runLog.warn('citações não anexadas à outbound', {
-                message_id: outcome.messageId,
-                error: (err instanceof Error ? err.message : String(err)).slice(0, 120),
-              });
-            }
-            pendingCitations = [];
+          // Citação interna (só o atendente vê): toda mensagem do agente leva as
+          // fontes do turno, e a factual sem trecho sai marcada `sem_fonte`.
+          const idDaMensagem =
+            outcome.kind === 'sent' || outcome.kind === 'already_sent' || outcome.kind === 'queued'
+              ? outcome.messageId
+              : null;
+          if (idDaMensagem) {
+            await anexarCitacoes(pool, { tenantId, messageId: idDaMensagem }, { body, citacoes: citacoesDoTurno }, runLog);
           }
           switch (outcome.kind) {
             case 'sent':

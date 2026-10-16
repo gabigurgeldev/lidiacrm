@@ -667,6 +667,13 @@ export const DICIONARIO: Traducoes = {
   "Escreva a pergunta.": { es: "Escriba la pregunta." },
   "Escreva a resposta.": { es: "Escriba la respuesta." },
   "Pronto: o agente passa a usar esta resposta em alguns instantes.": { es: "Listo: el agente empezará a usar esta respuesta en unos instantes." },
+  // Citação interna da fonte (Onda 1)
+  "Fontes da resposta": { es: "Fuentes de la respuesta" },
+  "Esta resposta não usou nenhum trecho do material da empresa.": { es: "Esta respuesta no usó ningún fragmento del material de la empresa." },
+  "Fonte: {nome}, trecho {n}": { es: "Fuente: {nome}, fragmento {n}" },
+  "Fonte: {nome}": { es: "Fuente: {nome}" },
+  "sem trecho do material": { es: "sin fragmento del material" },
+  "Afirma algo sobre a empresa sem trecho do material. Pode ter vindo das instruções do agente ou de uma ferramenta — confira.": { es: "Afirma algo sobre la empresa sin fragmento del material. Puede venir de las instrucciones del agente o de una herramienta — revíselo." },
   "Este agente não pode chamar uma pessoa (a opção acima está desligada), então ele diz que não sabe e segue.": { es: "Este agente no puede llamar a una persona (la opción de arriba está desactivada), así que dice que no sabe y sigue." },
   "Ainda não escolhido: hoje o agente chama a equipe, porque há gente com disponibilidade cadastrada para atender.": { es: "Aún sin elegir: hoy el agente llama al equipo, porque hay personas con disponibilidad registrada para atender." },
   "Ainda não escolhido: hoje o agente diz que não sabe, porque ninguém tem disponibilidade cadastrada para atender.": { es: "Aún sin elegir: hoy el agente dice que no sabe, porque nadie tiene disponibilidad registrada para atender." },

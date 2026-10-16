@@ -13,7 +13,7 @@ import { conexaoNaTela } from "@/lib/channels/tipo-de-conexao";
 import { MediaRenderer } from "@/components/inbox/media/MediaRenderer";
 import { ContactCard } from "@/components/inbox/media/ContactCard";
 import { OpcoesCard, SeloDeEscolha } from "@/components/inbox/media/OpcoesCard";
-import { extractCitations, isAiGeneratedMessage } from "@/lib/ai/citations/types";
+import { extractCitations, isAiGeneratedMessage, isSemFonteMessage } from "@/lib/ai/citations/types";
 
 interface Props {
   message: Message;
@@ -111,6 +111,9 @@ export function MessageBubble({
   const aiGenerated = isAiGeneratedMessage(message.metadata);
   const citations = extractCitations(message.metadata);
   const showCitationButton = isOutbound && aiGenerated && (debugCitations ?? false);
+  // Afirmou fato da empresa sem trecho do material (gravado pelo motor). Só
+  // para quem atende — a mesma chave que mostra as fontes.
+  const semFonte = showCitationButton && isSemFonteMessage(message.metadata);
   /**
    * A HORA DENTRO DA BOLHA, com o texto correndo em volta.
    *
@@ -330,6 +333,15 @@ export function MessageBubble({
             <span title={t("O autor editou esta mensagem")}>{t("editada")}</span>
           )}
           <span>{time}</span>
+          {semFonte && (
+            <span
+              className="font-semibold text-current underline decoration-dotted underline-offset-2"
+              title={t("Afirma algo sobre a empresa sem trecho do material. Pode ter vindo das instruções do agente ou de uma ferramenta — confira.")}
+              data-testid="mensagem-sem-fonte"
+            >
+              {t("sem trecho do material")}
+            </span>
+          )}
           {showCitationButton && <CitationButton citations={citations} messageId={message.id} />}
           {isOutbound && !isFailed && <AckIndicator status={message.status} t={t} />}
           {isFailed && (
