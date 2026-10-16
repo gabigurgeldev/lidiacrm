@@ -260,7 +260,7 @@ O agente pensa num funil próprio de 7 passos. Para o card andar no **seu** funi
 
 ## 5. Aba "Confere antes de enviar" (papel Segurança)
 
-Mostra as **10 conferências de saída** (na ordem) e a **1 de entrada**. Oito não se desligam, e a tela diz por quê. Duas custam uma chamada de modelo e têm interruptor **por organização** (vale para todos os agentes):
+Mostra as **conferências de saída** (na ordem) e a **de entrada**. As que não custam nada não se desligam, e a tela diz por quê. Duas custam uma chamada de modelo e têm interruptor **por organização** (vale para todos os agentes):
 
 | Conferência | Custo | Estados |
 |---|---|---|

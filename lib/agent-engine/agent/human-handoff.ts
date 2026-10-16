@@ -24,6 +24,7 @@ import type pg from 'pg';
 
 import { deveAnunciarPassagem, payloadDoAnuncio } from '@/lib/escalacao/anuncio-da-passagem';
 import { expectativaDeAtendimento } from '@/lib/escalacao/disponibilidade';
+import { MOTIVO_PEDIU_HUMANO, rotuloDoMotivo } from '@/lib/escalacao/motivos';
 import { ehOptOutProvavel } from '@/lib/opt-out/deteccao';
 import { emitAgentActivityForContact } from '@/lib/leads/agent-activity';
 
@@ -285,7 +286,8 @@ export async function performHumanHandoff(
     [
       ids.tenantId,
       opts.inboxTitle ?? 'Handoff humano solicitado — assumir a conversa',
-      `Motivo: ${opts.reason}. ${linhaDoAviso(opts.avisoAoLead)}Resumo da conversa até aqui:\n${opts.conversationSummary}`,
+      // Rótulo legível para quem atende; motivo livre (texto de quem escalou) passa como veio.
+      `Motivo: ${rotuloDoMotivo(opts.reason)}. ${linhaDoAviso(opts.avisoAoLead)}Resumo da conversa até aqui:\n${opts.conversationSummary}`,
       ids.leadId,
     ],
   );
@@ -442,6 +444,13 @@ export async function applyRequestHumanHandoff(
     conversationSummary: string;
     /** Ver `performHumanHandoff` — o desfecho do aviso vira linha no aviso da Central. */
     avisoAoLead?: { avisado: boolean; porque?: string };
+    /**
+     * Motivo que o RUNTIME conhece melhor que o modelo (ex.: `fora_da_base`,
+     * quando o turno buscou e nada achou). Vence o `reason` livre do modelo na
+     * coluna — é o que torna a passagem CONTÁVEL por motivo — e o texto do modelo
+     * não se perde: vai ao resumo da Central.
+     */
+    motivoDoSistema?: string;
     log: Logger;
   },
   rawInput: unknown,
@@ -455,9 +464,13 @@ export async function applyRequestHumanHandoff(
     return { ok: false, error: { code: 'invalid_payload', message: `payload inválido em request_human_handoff (${zodIssuesSummary(parsed.error)}). ${PAYLOAD_TEACHING}` } };
   }
 
+  const doModelo = parsed.data.reason;
   await performHumanHandoff(db, ids, {
-    reason: parsed.data.reason ?? 'requested_human',
-    conversationSummary: opts.conversationSummary,
+    reason: opts.motivoDoSistema ?? doModelo ?? MOTIVO_PEDIU_HUMANO,
+    conversationSummary:
+      opts.motivoDoSistema !== undefined && doModelo !== undefined
+        ? `O que o agente anotou: ${doModelo}\n${opts.conversationSummary}`
+        : opts.conversationSummary,
     ...(opts.avisoAoLead !== undefined ? { avisoAoLead: opts.avisoAoLead } : {}),
     log: opts.log,
   });

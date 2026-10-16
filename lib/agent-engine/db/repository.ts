@@ -87,6 +87,10 @@ export type InboxKind =
   // (migration 0236) O cliente votou numa enquete e o voto chegou sem a opção
   // decifrada — quem esperava a escolha não sabe o que ele tocou.
   | 'escolha_nao_lida'
+  // (migration 0245) O cliente perguntou algo que o material do agente não
+  // responde. Um aviso por lacuna aberta (ref = knowledge_gaps.id), com o botão
+  // de responder e ensinar o agente.
+  | 'knowledge_gap'
   | 'other';
 
 export interface InboxItemRow {

@@ -177,6 +177,38 @@
       "type": "table",
       "label": "last_index_status",
       "sublabel": "indexando | sem_credencial | success | failed — a tela deixa de mentir"
+    },
+    {
+      "id": "lacuna",
+      "lane": "retorno",
+      "col": 7,
+      "type": "table",
+      "label": "knowledge_gaps (0245)",
+      "sublabel": "a pergunta que a busca não achou — anonimizada, deduplicada, com contador"
+    },
+    {
+      "id": "centralLacuna",
+      "lane": "humano",
+      "col": 4,
+      "type": "frontend",
+      "label": "Central › Responder e ensinar o agente",
+      "sublabel": "manager+ escreve a resposta; nada é gerado por modelo"
+    },
+    {
+      "id": "ensinar",
+      "lane": "borda",
+      "col": 4,
+      "type": "api",
+      "label": "PATCH /api/v1/ai/lacunas/[id]",
+      "sublabel": "ensinar ou descartar; auditado (ai.lacuna_ensinada)"
+    },
+    {
+      "id": "ensinadas",
+      "lane": "dados",
+      "col": 4,
+      "type": "table",
+      "label": "Respostas ensinadas pela equipe",
+      "sublabel": "ai_knowledge_sources.todos_os_agentes — todo agente consulta, sem republicar"
     }
   ],
   "edges": [
@@ -205,7 +237,14 @@
     { "id": "e23", "from": "busca", "to": "resposta", "label": "os trechos entram no turno" },
     { "id": "e24", "from": "resposta", "to": "telemetria", "label": "registra acertos e melhor nota" },
     { "id": "e25", "from": "chunks", "to": "trechos", "label": "a pessoa audita o que ele leu" },
-    { "id": "e26", "from": "fonte", "to": "escolha", "label": "o acervo alimenta o seletor" }
+    { "id": "e26", "from": "fonte", "to": "escolha", "label": "o acervo alimenta o seletor" },
+    { "id": "e27", "from": "busca", "to": "lacuna", "label": "turno sem fonte registra a pergunta (lacuna-do-acervo.ts)" },
+    { "id": "e28", "from": "lacuna", "to": "central", "label": "um aviso knowledge_gap por lacuna aberta" },
+    { "id": "e29", "from": "central", "to": "centralLacuna", "label": "o dono lê \"(N vezes)\"" },
+    { "id": "e30", "from": "centralLacuna", "to": "ensinar", "label": "responde e ensina" },
+    { "id": "e31", "from": "ensinar", "to": "ensinadas", "label": "par pergunta–resposta" },
+    { "id": "e32", "from": "ensinadas", "to": "evento", "label": "knowledge_source.updated" },
+    { "id": "e33", "from": "ensinadas", "to": "busca", "label": "somada aos materiais de todo agente (fontes-da-organizacao.ts)" }
   ],
   "cards": [
     {
@@ -236,6 +275,16 @@
         "o worker de FAQ fazia o inverso: quem indexasse por último apagava o acervo do outro, em silêncio",
         "com um ponteiro por fonte a competição some por construção, não por disciplina",
         "as versões legadas (multi-fonte) continuam válidas: a busca casa (kb_version_id, knowledge_source_id) e devolve para cada fonte só o que é dela"
+      ]
+    },
+    {
+      "dot": "green",
+      "title": "O laço de retorno da falta de fonte (Onda 1)",
+      "items": [
+        "o agente não afirma sem fonte: chama a equipe ou diz que não sabe — e a pergunta vira lacuna em knowledge_gaps",
+        "a mesma pergunta, escrita de jeitos diferentes, incrementa o contador em vez de abrir outro aviso",
+        "o dono responde uma vez na Central; a resposta entra no material que todo agente consulta e a lacuna fecha",
+        "se a pergunta volta depois de respondida, a lacuna reabre: o par ensinado não cobriu aquela forma de perguntar"
       ]
     }
   ]

@@ -13,6 +13,8 @@ export default async function AgentInboxPage() {
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) redirect("/app");
   const canResolve = ROLE_RANK[activeOrg.role] >= ROLE_RANK.agent;
+  // Ensinar o agente (Central de lacunas) é o gate humano da base: manager+.
+  const canTeach = ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
   const idioma = user.idioma;
 
   return (
@@ -23,7 +25,7 @@ export default async function AgentInboxPage() {
         idioma,
       )}
     >
-      <AgentInboxList canResolve={canResolve} />
+      <AgentInboxList canResolve={canResolve} canTeach={canTeach} />
     </PaginaAjustes>
   );
 }

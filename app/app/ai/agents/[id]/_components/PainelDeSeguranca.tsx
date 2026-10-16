@@ -5,7 +5,7 @@
  *
  * ═══ O DEFEITO QUE ISTO FECHA ═══
  *
- * A cadeia de dez conferências roda desde sempre e é boa: veto instrutivo, trace
+ * A cadeia de conferências roda desde sempre e é boa: veto instrutivo, trace
  * por linha, custo zero nas determinísticas. Mas o dono do negócio **não sabia
  * que ela existia**. A própria spec 16 §3.3 escreveu que o que faltava ao
  * terceiro papel era *superfície* — e o épico foi entregue com dois papéis na
@@ -17,7 +17,7 @@
  *
  * ═══ POR QUE NÃO HÁ NENHUM INTERRUPTOR AQUI ═══
  *
- * Nove das dez não se desligam, e isso é decisão de produto, não rigidez: um
+ * Só as que custam dinheiro se desligam, e isso é decisão de produto, não rigidez: um
  * botão que queima o número do cliente, ou que escreve para quem pediu para
  * parar, não é preferência — é sabotagem do negócio dele, e **oferecer** o
  * controle já ensina que é opcional. Onde não há escolha, a tela diz por quê em

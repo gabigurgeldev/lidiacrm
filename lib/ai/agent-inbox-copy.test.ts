@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  copyDaLacuna,
   copyDaPromessaSemDono,
   kindLabel,
   KIND_LABEL,
@@ -124,5 +125,24 @@ describe("copyDaPromessaSemDono — o aviso só afirma o que foi apurado", () =>
         expect(texto.toLowerCase(), `jargão "${jargao}" no texto de ${porque}`).not.toContain(jargao);
       }
     }
+  });
+});
+
+describe("copyDaLacuna (migration 0245)", () => {
+  it("o título traz a pergunta e quantas vezes ela voltou", () => {
+    const { title } = copyDaLacuna("vocês têm na cor azul?", 5);
+    expect(title).toContain("vocês têm na cor azul?");
+    expect(title).toContain("(5 vezes)");
+    expect(copyDaLacuna("x", 1).title).toContain("(1 vez)");
+  });
+
+  it("pergunta longa é recortada no título", () => {
+    const { title } = copyDaLacuna("a".repeat(400), 2);
+    expect(title.length).toBeLessThan(260);
+    expect(title).toContain("…");
+  });
+
+  it("o corpo não promete que o agente aprendeu sozinho", () => {
+    expect(copyDaLacuna("x", 1).body.toLowerCase()).not.toMatch(/aprendeu|aprende sozinho/);
   });
 });

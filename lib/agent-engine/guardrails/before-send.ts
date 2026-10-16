@@ -67,6 +67,7 @@ import { escalateLgpdVeto, isLegalBasisValid } from './lgpd/legal-basis';
 import type { LgpdInput } from './lgpd/legal-basis';
 import { detectHumanPromise } from './human-promise';
 import { detectarVazamentoInterno, renderVetoDeVazamento } from './vazamento-interno';
+import { decidirFundamentacao, renderVetoDeFundamentacao, type ContextoDeFundamentacao } from './grounding';
 // Módulo PURO de propósito (`capabilities`, não `index`): o seam não arrasta o
 // adapter — e com ele o cliente HTTP do canal — para dentro do worker.
 import { capabilitiesOfSession, DEFAULT_CHANNEL_PROVIDER } from '@/lib/channels/capabilities';
@@ -243,6 +244,15 @@ export interface GateContext {
    * gate persegue —, e ele continua contando no cap diário (`recordSend`).
    */
   spinningEnforced?: boolean;
+  /**
+   * Insumos do `groundingGate` (conferência de fundamentação). **Ausente =
+   * DESARMADO**, pela mesma razão do `internalVocabularyEnforced`: só o caminho
+   * do AGENTE tem modelo para ensinar e fontes do turno para conferir. Texto
+   * escrito em código (aviso de escalação, re-entrada de follow-up, a mensagem
+   * de "não tenho essa informação") não afirma nada da empresa, e vetá-lo seria
+   * drop silencioso.
+   */
+  grounding?: ContextoDeFundamentacao;
 }
 
 /**
@@ -383,6 +393,40 @@ export const semanticPromiseGate: Gate = {
       reason: renderSemanticPromiseVeto(ctx.semanticPromise.suspectPhrase),
       // detail é LOGADO: só o rótulo da camada, nunca a frase (trecho da candidata — sem PII).
       detail: { promise_layer: 'semantic' },
+    };
+  },
+};
+
+/**
+ * Gate de FUNDAMENTAÇÃO (Onda 1) — a mensagem afirma fato da empresa (preço, prazo,
+ * estoque, característica, compatibilidade, endereço…) que nenhuma fonte do turno
+ * sustenta? A regra e o porquê estão em `grounding.ts`. Desarmado (campo ausente) =
+ * no-op.
+ *
+ * Posição 6.2: logo depois das duas camadas de promessa comercial e antes do
+ * `casePromiseGate` — promessa de preço fora da tabela tem veto próprio e mais
+ * específico; esta é a rede para o resto do que o modelo afirma. Antes do
+ * `disclosureGate` porque a emenda dele não é fala do modelo.
+ *
+ * O `detail` leva só categorias e contagem — nunca o trecho (pode ter PII). O
+ * fail-safe (2º veto no turno ⇒ o runtime passa a conversa ou diz que não sabe)
+ * vive no `send_message` do inbound-turn, como o do `case_promise`.
+ */
+export const groundingGate: Gate = {
+  name: 'grounding',
+  evaluate: (ctx) => {
+    if (ctx.grounding === undefined) return { pass: true };
+    const decisao = decidirFundamentacao(ctx.body, ctx.grounding);
+    if (decisao.pass) return { pass: true };
+    return {
+      pass: false,
+      code: 'grounding_sem_fonte',
+      reason: renderVetoDeFundamentacao(decisao),
+      detail: {
+        categorias: decisao.categorias.join(','),
+        frases: decisao.frases,
+        sem_busca: decisao.semBusca ? 1 : 0,
+      },
     };
   },
 };
@@ -591,8 +635,12 @@ const spinningGate: Gate = {
  * nasce DESARMADO por default (ver `GateContext.internalVocabularyEnforced`): só o
  * caminho do agente o arma, então, como a v5, a v6 não muda o destino de nenhum envio
  * que já existia — muda o TRACE, e passa a medir o vazamento onde há modelo para ensinar.
+ * v7 = insere `coordenacaoGate` logo após o stop (migration 0229). v8 = insere
+ * `groundingGate` entre `semantic_promise` e `case_promise` — a conferência de
+ * fundamentação (Onda 1). Nasce DESARMADO (ver `GateContext.grounding`): só o
+ * `send_message` do agente o arma, e só com a conferência ligada na organização.
  */
-export const BEFORE_SEND_CHAIN_VERSION = 7;
+export const BEFORE_SEND_CHAIN_VERSION = 8;
 
 /**
  * Ordem FINAL da cadeia (F4-08/F4-09; edge-contract §before_send / blueprint órgão 5) — DADO
@@ -606,6 +654,7 @@ export const BEFORE_SEND_CHAIN_VERSION = 7;
  *   (4) spinning — template idêntico em massa (F2-12);
  *   (5) promise — validação determinística de preço/desconto/parcelamento (F4-01);
  *   (6) semantic_promise — promessa em texto livre que a regex não pega (F4-02);
+ *   (6.2) grounding — fato da empresa sem fonte no turno (Onda 1); desarmado fora do agente;
  *   (6.5) case_promise — anti-alucinação de casos humanos (spec 15 §10.2, Wave 4);
  *   (6.7) internal_vocabulary — vazamento de vocabulário interno ao cliente (doutrina
  *         `separacao-fala-e-operacao.md`); antes do disclosure porque ele pode emendar o corpo;
@@ -621,6 +670,7 @@ export const BEFORE_SEND_GATES: readonly Gate[] = [
   spinningGate,
   promiseGate,
   semanticPromiseGate,
+  groundingGate,
   casePromiseGate,
   internalVocabularyGate,
   disclosureGate,
@@ -733,6 +783,8 @@ export interface RunBeforeSendArgs {
    * diário (`recordSend`) continua valendo — o aviso é uma mensagem de verdade.
    */
   enforceSpinning?: boolean;
+  /** Arma o `groundingGate` com as fontes do turno. Ausente = desarmado (ver `GateContext.grounding`). */
+  grounding?: ContextoDeFundamentacao;
   /**
    * Concessão do coordenador de atendimento (migration 0229) que autoriza este
    * envio. Presente = o gate `coordenacao` confere, SOB o lock, se o executor
@@ -850,6 +902,7 @@ export async function runBeforeSend(args: RunBeforeSendArgs): Promise<BeforeSend
       hasOpenCase: args.hasOpenCase ?? false,
       openedCaseThisTurn: args.openedCaseThisTurn ?? false,
       internalVocabularyEnforced: args.enforceInternalVocabulary ?? false,
+      ...(args.grounding !== undefined ? { grounding: args.grounding } : {}),
     };
 
     const trace: GateTraceEntry[] = [];

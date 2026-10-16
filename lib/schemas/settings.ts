@@ -35,6 +35,69 @@ export type AiDispatchMode = (typeof AI_DISPATCH_MODES)[number];
 export const aiDispatchModeSchema = z.enum(AI_DISPATCH_MODES).catch("native");
 
 /**
+ * O que o agente faz quando o material da empresa não responde à pergunta.
+ *
+ * - `equipe`: avisa que vai chamar alguém e passa a conversa;
+ * - `so_agente`: diz com clareza que não tem a informação, sem prometer retorno
+ *   nem fila — para a empresa que não tem ninguém atendendo pela Caixa de entrada.
+ *
+ * A AUSÊNCIA de escolha tem significado próprio (decidir pela equipe
+ * configurada), por isso o campo é opcional e não tem default aqui: quem resolve
+ * é `resolverModoSemFonte`, que conhece a equipe.
+ */
+export const MODOS_SEM_FONTE = ["equipe", "so_agente"] as const;
+export type ModoSemFonte = (typeof MODOS_SEM_FONTE)[number];
+
+/** Limites da faixa cinza da busca (similaridade logo acima do limiar). */
+export const FAIXA_CINZA_PADRAO = 0.15;
+export const FAIXA_CINZA_MAX = 0.3;
+
+/**
+ * `organizations.settings.ai` — leitura DEFENSIVA (jsonb livre): campo com forma
+ * errada cai no padrão e nunca derruba o turno, o mesmo cuidado de
+ * `llmSettingsSchema` (`lib/agent-engine/edge/llm/credentials.ts`).
+ *
+ * `.passthrough()` preserva as chaves que este build não conhece: a escrita faz
+ * merge sobre o objeto lido, e um clone mais novo pode ter gravado outras.
+ */
+export const orgAiSettingsSchema = z
+  .object({
+    fallback_sem_fonte: z.enum(MODOS_SEM_FONTE).optional().catch(undefined),
+    /** Conferência de fonte antes de enviar. Ausente = LIGADA. */
+    grounding_gate: z.boolean().optional().catch(undefined),
+    faixa_cinza: z.number().min(0).max(FAIXA_CINZA_MAX).optional().catch(undefined),
+  })
+  .passthrough()
+  .catch({});
+export type OrgAiSettings = z.infer<typeof orgAiSettingsSchema>;
+
+/** O que a tela grava. Escrita é ESTRITA: valor fora da lista é 422, não default. */
+export const salvarAjustesDeFonteSchema = z
+  .object({
+    fallback_sem_fonte: z.enum(MODOS_SEM_FONTE).nullable().optional(),
+    grounding_gate: z.boolean().optional(),
+  })
+  .strict();
+export type SalvarAjustesDeFonte = z.infer<typeof salvarAjustesDeFonteSchema>;
+
+/**
+ * O merge do PATCH, puro. Campo AUSENTE no corpo = não mexa (um cliente antigo
+ * que só manda o modo não pode religar/desligar a conferência por acidente);
+ * `fallback_sem_fonte: null` = voltar a decidir pela equipe, e a chave SAI em
+ * vez de virar `null` gravado. As demais chaves de `settings.ai` sobrevivem.
+ */
+export function mesclarAjustesDeFonte(aiAtual: unknown, input: SalvarAjustesDeFonte): Record<string, unknown> {
+  const base =
+    aiAtual !== null && typeof aiAtual === "object" && !Array.isArray(aiAtual)
+      ? { ...(aiAtual as Record<string, unknown>) }
+      : {};
+  if (input.fallback_sem_fonte === null) delete base.fallback_sem_fonte;
+  else if (input.fallback_sem_fonte !== undefined) base.fallback_sem_fonte = input.fallback_sem_fonte;
+  if (input.grounding_gate !== undefined) base.grounding_gate = input.grounding_gate;
+  return base;
+}
+
+/**
  * G3-05: vocabulário canônico de tags de conversa, persistido em
  * organizations.settings.canonical_conversation_tags (spec 13 §3.3 — org-scoped,
  * não pipeline-scoped). Schema declarativo; usado para validar o que o inbox lê

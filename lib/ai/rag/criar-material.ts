@@ -48,6 +48,12 @@ export interface NovoMaterialDeTexto {
    * nome e precisa saber que ele colide.
    */
   renomearSeEmUso?: boolean;
+  /**
+   * Todo agente da organização consulta este material, além dos escolhidos na
+   * versão publicada (migration 0245). Usado pelas respostas ensinadas na
+   * Central de lacunas.
+   */
+  todosOsAgentes?: boolean;
 }
 
 export type MaterialCriado =
@@ -94,6 +100,7 @@ export async function criarMaterialDeTexto(
         is_active: true,
         source_metadata: metadata,
         ingested_at: new Date().toISOString(),
+        ...(m.todosOsAgentes === true ? { todos_os_agentes: true } : {}),
       })
       .select("id")
       .single();

@@ -5,6 +5,7 @@ import { useT } from "@/hooks/i18n/useT";
 import { HandoffKeywordsInput } from "../HandoffKeywordsInput";
 import type { PropsDaSecao } from "./estado";
 import { Bloco } from "./pecas";
+import { QuandoNaoSabe } from "./QuandoNaoSabe";
 
 /**
  * As duas formas de o agente envolver uma pessoa: PASSAR a conversa (ele sai) e
@@ -55,6 +56,8 @@ export function SecaoPessoa({ form, patch, disabled }: PropsDaSecao) {
           />
         </Bloco>
       </Grupo>
+
+      <QuandoNaoSabe handoffLigado={form.handoff_tool_enabled} disabled={disabled} />
 
       <Grupo
         titulo={t("Pedir ajuda sem sair da conversa")}

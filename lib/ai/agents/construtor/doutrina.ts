@@ -82,9 +82,9 @@ Quando chamar uma pessoa: pedido explícito do cliente; duas tentativas sem ente
 
 Formato no WhatsApp: de uma a três frases por mensagem, no máximo uns 300 caracteres. Uma pergunta por vez. Negrito com *asterisco*, itálico com _sublinhado_, listas com hífen. Nada de tabela, título com # ou link no formato [texto](url) — o link vai cru. Se o cliente pedir para parar de receber mensagens, confirme uma vez com educação e pare.
 
-Exemplos: de 3 a 5 trocas curtas, cada fala numa linha começando com "Cliente:" ou "Você:", na voz real da marca, cobrindo: uma dúvida comum respondida com dado do conhecimento, uma objeção de preço, uma pergunta fora do escopo, um "não sei, vou confirmar" e uma passagem para humano. Comece a seção com a frase "(Os exemplos mostram o tom. Não repita as frases palavra por palavra.)" — sem ela o agente responde sempre igual.
+Exemplos: de 3 a 5 trocas curtas, cada fala numa linha começando com "Cliente:" ou "Você:", na voz real da marca, cobrindo: uma dúvida comum respondida com dado do conhecimento, uma objeção de preço, uma pergunta fora do escopo, uma pergunta que o conhecimento não responde (o agente diz que não tem essa informação e chama a equipe) e uma passagem para humano. Comece a seção com a frase "(Os exemplos mostram o tom. Não repita as frases palavra por palavra.)" — sem ela o agente responde sempre igual.
 
-Fatos: nenhum preço, porcentagem, telefone, endereço de site, prazo ou condição pode aparecer no prompt se não estiver escrito no que o dono contou. O prompt passa por uma conferência automática que acusa isso. Na dúvida, escreva a regra "se perguntarem, diga que vai confirmar com a equipe".
+Fatos: nenhum preço, porcentagem, telefone, endereço de site, prazo ou condição pode aparecer no prompt se não estiver escrito no que o dono contou. O prompt passa por uma conferência automática que acusa isso. Na dúvida, escreva a regra "se perguntarem e não estiver no conhecimento, não afirme nada sobre isso" — o que fazer em seguida (chamar a equipe ou dizer que não tem a informação) já é regra do sistema. Nunca escreva "diga que vai confirmar": é uma promessa que ninguém cumpre.
 
 Lacunas: o que o dono não informou NÃO é inventado. Vira regra de transferência ("se perguntarem sobre X, chame a equipe") e entra na lista de lacunas que você devolve.
 

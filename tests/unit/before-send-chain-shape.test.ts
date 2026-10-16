@@ -32,6 +32,7 @@ const ORDEM_ESPERADA = [
   "spinning",
   "promise",
   "semantic_promise",
+  "grounding",
   "case_promise",
   "internal_vocabulary",
   "disclosure",
@@ -65,8 +66,8 @@ describe("forma da cadeia before_send", () => {
     // O par (tamanho, versão) é o que amarra os dois. Acrescentar um gate sem
     // bumpar deixa o trace de auditoria mentindo sobre qual cadeia rodou — e o
     // trace é justamente a prova que as Fases 0–2 usam para dizer "não regrediu".
-    expect(BEFORE_SEND_GATES).toHaveLength(11);
-    expect(BEFORE_SEND_CHAIN_VERSION).toBe(7);
+    expect(BEFORE_SEND_GATES).toHaveLength(12);
+    expect(BEFORE_SEND_CHAIN_VERSION).toBe(8);
   });
 
   it("internal_vocabulary roda ANTES do disclosure — inspeciona o texto do modelo, não o emendado", () => {

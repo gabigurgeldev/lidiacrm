@@ -27,7 +27,7 @@
  * verdade (arquivo de teste pode importar `pg`) e reprova nos DOIS sentidos:
  * conferência que roda e não aparece, e conferência que aparece e não roda.
  *
- * ## A política: 9 não se desligam, e isso não é rigidez
+ * ## A política: só as que custam dinheiro têm escolha, e isso não é rigidez
  *
  * Um botão só existe onde há escolha real. Desligar o que impede o número do
  * cliente de ser bloqueado, ou o que respeita quem pediu para parar, não é
@@ -143,6 +143,16 @@ export const CONFERENCIAS_DE_SAIDA: readonly ConferenciaDeSaida[] = [
     escolha: { custo: "+1 consulta ao modelo por mensagem enviada" },
     porQueNaoSeDesliga: "",
     camada: "promessa_semantica",
+  },
+  {
+    nome: "grounding",
+    rotulo: "Só afirmar o que tem fonte",
+    oQueProtege:
+      "Barra a mensagem que afirma preço, prazo, estoque, característica ou endereço que não está no material da empresa, numa ferramenta ou nas instruções do agente.",
+    escolha: null,
+    porQueNaoSeDesliga:
+      "Afirmar o que a empresa não disse é o erro mais caro do atendimento automático: o cliente acredita, e a empresa responde por isso. Regra fixa, sem custo.",
+    camada: null,
   },
   {
     nome: "case_promise",

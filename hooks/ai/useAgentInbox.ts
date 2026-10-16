@@ -13,6 +13,15 @@ export interface AgentInboxItem {
   ref_id: string | null;
   status: "open" | "ack" | "resolved";
   created_at: string;
+  /** Só nos avisos `knowledge_gap` (migration 0245): a pergunta que o material não responde. */
+  lacuna?: AgentInboxLacuna;
+}
+
+export interface AgentInboxLacuna {
+  id: string;
+  pergunta: string;
+  ocorrencias: number;
+  status: "aberta" | "respondida" | "descartada";
 }
 
 export interface AgentInboxData {
@@ -37,6 +46,23 @@ export function useUpdateInboxItem() {
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: "open" | "resolved" }) =>
       apiClient.patch(`/api/v1/ai/inbox/${id}`, { status }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ["agent-inbox"] }),
+  });
+}
+
+/**
+ * Central de lacunas (0245): ensinar a resposta ou descartar a pergunta.
+ * Fecha o aviso no servidor, então a lista é recarregada.
+ */
+export function useResolverLacuna() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      input: { id: string; acao: "ensinar"; pergunta: string; resposta: string } | { id: string; acao: "descartar" },
+    ) => {
+      const { id, ...corpo } = input;
+      return apiClient.patch(`/api/v1/ai/lacunas/${id}`, corpo);
+    },
     onSettled: () => qc.invalidateQueries({ queryKey: ["agent-inbox"] }),
   });
 }

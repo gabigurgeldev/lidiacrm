@@ -17,13 +17,28 @@ interface Props {
 }
 
 const SOURCE_LABEL: Record<string, string> = {
-  faq: "FAQ",
-  policy: "Política",
+  faq: "Perguntas e respostas",
+  documento: "Documento",
+  policy: "Documento",
+  conversas: "Conversa",
   conversation: "Conversa",
   conversations: "Conversa",
+  catalogo: "Catálogo",
   catalog: "Catálogo",
   nuvemshop_catalog: "Catálogo",
 };
+
+/**
+ * "Fonte: Tabela de preços 2026, trecho 3" — o atendente reconhece o material
+ * pelo NOME que deu a ele no acervo. Citação antiga (sem nome gravado) cai no
+ * tipo do material.
+ */
+export function rotuloDaFonte(c: Citation, t: (texto: string) => string): string | null {
+  if (!c.source_name) return null;
+  return typeof c.trecho === "number"
+    ? t("Fonte: {nome}, trecho {n}").replace("{nome}", c.source_name).replace("{n}", String(c.trecho))
+    : t("Fonte: {nome}").replace("{nome}", c.source_name);
+}
 
 export function CitationsPanel({
   open,
@@ -36,12 +51,12 @@ export function CitationsPanel({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>{t("Citações da resposta IA")}</SheetTitle>
+          <SheetTitle>{t("Fontes da resposta")}</SheetTitle>
         </SheetHeader>
         <div className="mt-4 space-y-4 overflow-y-auto pr-2">
           {citations.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {t("Resposta sem RAG hits — modelo respondeu sem usar a base de conhecimento.")}
+              {t("Esta resposta não usou nenhum trecho do material da empresa.")}
             </p>
           ) : (
             citations.map((c, i) => {
@@ -61,6 +76,11 @@ export function CitationsPanel({
                     </span>
                   )}
                 </div>
+                {rotuloDaFonte(c, t) && (
+                  <p className="mb-1 text-xs font-medium" data-testid="citacao-fonte">
+                    {rotuloDaFonte(c, t)}
+                  </p>
+                )}
                 {c.source_anchor && (
                   <p className="mb-1 text-xs text-muted-foreground">
                     {c.source_anchor}
