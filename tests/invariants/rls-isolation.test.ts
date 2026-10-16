@@ -199,6 +199,13 @@ beforeAll(() => {
             );
         end if;
 
+        -- migration 0245 — a pergunta do cliente (anonimizada) que o material
+        -- não respondia. É fala de cliente de outra empresa: só a policy separa.
+        if not exists (select 1 from public.knowledge_gaps where organization_id = v_org) then
+          insert into public.knowledge_gaps (organization_id, chave, pergunta)
+            values (v_org, 'rls invariante', 'rls invariante?');
+        end if;
+
       end loop;
     end
     $seed$;
@@ -237,6 +244,8 @@ export const TABLES = [
   // lia e escrevia. É o modo de falha que o aviso acima descreve, encontrado vivo.
   "org_guardrail_layers",
   "push_subscriptions",
+  // migration 0245 — lacunas do acervo (pergunta do cliente, anonimizada).
+  "knowledge_gaps",
   // ⚠️ `flow_executions`, `flow_execution_frames` e `flow_execution_joins`
   // (migration 0207) NÃO entram aqui, e a ausência é deliberada — pelo mesmo
   // motivo de `webhook_lead_captures` acima. As policies delas exigem

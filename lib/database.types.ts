@@ -874,6 +874,7 @@ export type Database = {
           source_metadata: Json
           source_type: string
           status: string
+          todos_os_agentes: boolean
           updated_at: string
         }
         Insert: {
@@ -891,6 +892,7 @@ export type Database = {
           source_metadata?: Json
           source_type: string
           status?: string
+          todos_os_agentes?: boolean
           updated_at?: string
         }
         Update: {
@@ -908,6 +910,7 @@ export type Database = {
           source_metadata?: Json
           source_type?: string
           status?: string
+          todos_os_agentes?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -4386,6 +4389,66 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "judge_alignment_pool_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      knowledge_gaps: {
+        Row: {
+          chave: string
+          created_at: string
+          faq_item_id: string | null
+          id: string
+          ocorrencias: number
+          organization_id: string
+          pergunta: string
+          primeira_em: string
+          respondida_em: string | null
+          respondida_por: string | null
+          status: string
+          ultima_em: string
+        }
+        Insert: {
+          chave: string
+          created_at?: string
+          faq_item_id?: string | null
+          id?: string
+          ocorrencias?: number
+          organization_id: string
+          pergunta: string
+          primeira_em?: string
+          respondida_em?: string | null
+          respondida_por?: string | null
+          status?: string
+          ultima_em?: string
+        }
+        Update: {
+          chave?: string
+          created_at?: string
+          faq_item_id?: string | null
+          id?: string
+          ocorrencias?: number
+          organization_id?: string
+          pergunta?: string
+          primeira_em?: string
+          respondida_em?: string | null
+          respondida_por?: string | null
+          status?: string
+          ultima_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_gaps_faq_item_id_fkey"
+            columns: ["faq_item_id"]
+            isOneToOne: false
+            referencedRelation: "ai_faq_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_gaps_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"

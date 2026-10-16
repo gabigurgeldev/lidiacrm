@@ -39,6 +39,8 @@ import { lerAjustesDeFonte, resolverModoSemFonte } from './modo-sem-fonte';
 import { avisarSemFonte } from './aviso-sem-fonte';
 import { decidirFallbackSemFonte, MAX_VETOS_DE_FONTE } from './fallback-sem-fonte';
 import { registrarResultados } from './fontes-do-turno';
+import { lerFontesDeTodosOsAgentes, materiaisDoTurno } from './fontes-da-organizacao';
+import { registrarLacuna } from './lacuna-do-acervo';
 import type { ContextoDeFundamentacao } from '../guardrails/grounding';
 import { MOTIVO_FORA_DA_BASE } from '@/lib/escalacao/motivos';
 import type { CrmEdgeConfig } from '../edge/crm/mcp-client';
@@ -2148,7 +2150,16 @@ async function executarTurnoDoAgente(
   // Fundamentação do turno (Onda 1). O modo decide o que o agente faz quando o
   // material não responde; as contagens dizem se ESTE turno teve fonte.
   // `semFonteNoTurno()` = buscou e nenhuma busca achou nada acima do limiar.
-  const ajustesDeFonte = await lerAjustesDeFonte(pool, tenantId);
+  const [ajustesDeFonte, fontesDeTodos] = await Promise.all([
+    lerAjustesDeFonte(pool, tenantId),
+    // Respostas ensinadas pela Central de lacunas (0245): valem para todo agente.
+    lerFontesDeTodosOsAgentes(pool, tenantId),
+  ]);
+  const materiais = materiaisDoTurno({
+    doAgente: agentConfig?.knowledgeSourceIds ?? [],
+    deTodos: fontesDeTodos,
+    temIndiceLegado: agentConfig?.activeKbVersionId != null,
+  });
   const modoSemFonte = resolverModoSemFonte({
     escolhaDaOrg: ajustesDeFonte.escolha,
     equipeConfigurada: ajustesDeFonte.equipeConfigurada,
@@ -2422,7 +2433,7 @@ async function executarTurnoDoAgente(
         // sem ele") e era a terceira versão da mesma frase.
         const out = await searchKnowledge(pool, {
           organizationId: tenantId,
-          knowledgeSourceIds: agentConfig?.knowledgeSourceIds ?? [],
+          knowledgeSourceIds: materiais,
           kbVersionId: agentConfig?.activeKbVersionId ?? null,
           query,
           topK: agentConfig?.ragTopK ?? 5,
@@ -3180,7 +3191,7 @@ async function executarTurnoDoAgente(
   // ponteiro legado (`activeKbVersionId`) segue valendo para o clone que ainda
   // não aplicou a migration. Ferramenta que só sabe responder "não tenho base"
   // não é neutra: gasta contexto e degrada a escolha do modelo.
-  if ((agentConfig?.knowledgeSourceIds?.length ?? 0) === 0 && agentConfig?.activeKbVersionId == null) {
+  if (materiais.length === 0 && agentConfig?.activeKbVersionId == null) {
     delete rawTools.search_knowledge;
   }
 
@@ -3701,6 +3712,21 @@ async function executarTurnoDoAgente(
       vetos: vetosDeFonte,
       enviado: desfecho.enviado,
       ...(desfecho.enviado ? {} : { porque: desfecho.porque }),
+    });
+  }
+
+  // ── LACUNA DO ACERVO ───────────────────────────────────────────────────────
+  //
+  // O turno buscou e não achou, ou teve afirmação vetada por falta de fonte: a
+  // pergunta do cliente vira (ou incrementa) um aviso na Central, para o dono
+  // responder uma vez e ensinar o agente (`lacuna-do-acervo.ts`). Fora do
+  // ensaio (o rascunho não é atendimento de verdade) e fora do opt-out (quem
+  // pediu para parar não está perguntando nada ao negócio).
+  if ((semFonteNoTurno() || vetosDeFonte > 0) && !optedOutThisTurn && deps.ensaio === undefined) {
+    const lacuna = await registrarLacuna(pool, tenantId, skillSignal, runLog);
+    runLog.info('lacuna do acervo', {
+      registrada: lacuna.registrada,
+      ...(lacuna.registrada ? { ocorrencias: lacuna.ocorrencias } : { porque: lacuna.porque }),
     });
   }
 

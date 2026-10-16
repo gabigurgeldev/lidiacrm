@@ -42,8 +42,8 @@ Preparar o material exige uma chave **OpenAI** ou **OpenRouter** (modelo de embe
 
 ### 1.4. Como a busca funciona no atendimento
 
-- A ferramenta `search_knowledge` só existe no turno se o agente tem material marcado.
-- O agente é instruído a buscar **antes** de responder qualquer dúvida factual (produto, preço, prazo, política) e a dizer que vai confirmar quando não achar — nunca chutar.
+- A ferramenta `search_knowledge` só existe no turno se o agente tem material marcado (ou se a empresa já tem **Respostas ensinadas pela equipe** — ver 1.6).
+- O agente é instruído a buscar **antes** de responder qualquer fato da empresa (produto, característica, estoque, preço, prazo, política, horário, endereço) e **só afirma o que tem fonte**. Quando o material não responde, segue *Quando o agente não souber responder* (chamar a equipe ou dizer que não sabe) — nunca chuta e nunca promete "vou confirmar".
 - Parâmetros (por agente em `ai_agents.config`, ou do servidor): **top-K** = 5 trechos, **similaridade mínima** = 0,40 (calibrada: pergunta literal ≈ 0,85, paráfrase 0,49–0,65, irrelevante ≈ 0,27), teto de **2.000 tokens** de trechos (`RAG_MAX_TOKENS`).
 - As **citações** são anexadas à mensagem enviada e aparecem na Caixa de entrada (botão de citação).
 
@@ -53,6 +53,17 @@ Preparar o material exige uma chave **OpenAI** ou **OpenRouter** (modelo de embe
 - Escreva como o cliente pergunta (inclua sinônimos).
 - Tabelas de preço: uma linha por item, com nome e preço na mesma linha.
 - Evite PDFs escaneados (imagem não vira texto).
+
+### 1.6. Perguntas que o material não responde (Central de lacunas)
+
+Toda vez que o agente busca e não acha nada — ou tenta afirmar algo sem fonte e é barrado —, a pergunta do cliente vira um aviso na **Central de avisos**: *"Clientes perguntaram X e o material do agente não tem a resposta (N vezes)"*.
+
+- A pergunta é guardada **sem dados pessoais** (nome, telefone, e-mail, CPF são trocados por marcadores; se sobrar algum, a pergunta não é guardada).
+- Perguntas iguais escritas de jeitos diferentes (acento, maiúsculas, "bom dia", "por favor") somam no mesmo aviso — o número entre parênteses diz quantas vezes ela apareceu.
+- **Responder e ensinar o agente** (gerente ou administrador): escreva a resposta — e, se quiser, reescreva a pergunta. O par entra no material **Respostas ensinadas pela equipe**, que **todos os agentes** consultam, sem precisar republicar nenhum. Vale assim que a indexação termina (segundos).
+- **Não é para o material**: a pergunta para de gerar aviso.
+- Se uma pergunta já respondida voltar, o aviso reabre: o par ensinado não cobriu aquela forma de perguntar.
+- Nada entra na base sem alguém da equipe escrever ou aprovar.
 
 ---
 

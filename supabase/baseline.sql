@@ -10116,6 +10116,10 @@ alter table public.agent_inbox_items
     -- não entregou o voto decifrado: o fluxo/agente esperando a escolha não
     -- sabe o que ele tocou. Entra NESTA lista, no fim.
     'escolha_nao_lida',
+    -- (migration 0245) O cliente perguntou algo que o material do agente não
+    -- responde. Um aviso por lacuna aberta (ref = knowledge_gaps.id), com o
+    -- botão de responder e ensinar o agente. Entra NESTA lista, no fim.
+    'knowledge_gap',
     'other'
   ));
 
@@ -24214,6 +24218,60 @@ update playbook_pointers p
  where p.organization_id is null
    and p.layer = 'platform'
    and exists (select 1 from nova);
+
+-- ---- lacunas do acervo e material que todo agente consulta (migration 0245) ----
+--
+-- Antes da VARREDURA anon (não cria função). O kind 'knowledge_gap' está no
+-- bloco ÚNICO de agent_inbox_items_kind_check — reconstruir aqui de novo seria
+-- o que `baseline-constraint-reconstruida.test.ts` reprova. Idempotente.
+
+alter table public.ai_knowledge_sources
+  add column if not exists todos_os_agentes boolean not null default false;
+
+comment on column public.ai_knowledge_sources.todos_os_agentes is
+  'true = todo agente da organização consulta este material, além dos escolhidos na versão publicada. Usado pelas respostas ensinadas na Central de lacunas.';
+
+create index if not exists ai_knowledge_sources_todos_os_agentes_idx
+  on public.ai_knowledge_sources (organization_id)
+  where todos_os_agentes;
+
+create table if not exists public.knowledge_gaps (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  chave text not null,
+  pergunta text not null,
+  ocorrencias integer not null default 1,
+  primeira_em timestamptz not null default now(),
+  ultima_em timestamptz not null default now(),
+  status text not null default 'aberta',
+  faq_item_id uuid references public.ai_faq_items(id) on delete set null,
+  respondida_por uuid references auth.users(id) on delete set null,
+  respondida_em timestamptz,
+  created_at timestamptz not null default now()
+);
+
+alter table public.knowledge_gaps drop constraint if exists knowledge_gaps_status_check;
+alter table public.knowledge_gaps add constraint knowledge_gaps_status_check
+  check (status in ('aberta', 'respondida', 'descartada'));
+
+create unique index if not exists knowledge_gaps_org_chave_uidx
+  on public.knowledge_gaps (organization_id, chave);
+create index if not exists knowledge_gaps_org_abertas_idx
+  on public.knowledge_gaps (organization_id, ultima_em desc)
+  where status = 'aberta';
+
+alter table public.knowledge_gaps enable row level security;
+
+drop policy if exists tenant_isolation_knowledge_gaps_all on public.knowledge_gaps;
+create policy tenant_isolation_knowledge_gaps_all on public.knowledge_gaps
+  for select using (
+    organization_id in (select public.fn_user_org_ids())
+    or public.fn_is_platform_admin()
+  );
+revoke insert, update, delete, truncate on public.knowledge_gaps from anon, authenticated;
+revoke all on public.knowledge_gaps from anon;
+
+notify pgrst, 'reload schema';
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

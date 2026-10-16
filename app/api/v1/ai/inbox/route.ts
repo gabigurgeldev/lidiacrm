@@ -51,11 +51,30 @@ export async function GET(req: NextRequest): Promise<Response> {
     return fail("internal_error", "Falha ao carregar os avisos.", 500, { requestId });
   }
 
+  // Lacunas do acervo (0245): o aviso carrega a pergunta e o estado para a tela
+  // abrir "Responder e ensinar" sem uma segunda ida por item.
+  const items = data ?? [];
+  const idsDeLacuna = items
+    .filter((i) => i.kind === "knowledge_gap" && i.ref_kind === "knowledge_gap" && i.ref_id !== null)
+    .map((i) => i.ref_id as string);
+  const lacunas = new Map<string, { id: string; pergunta: string; ocorrencias: number; status: string }>();
+  if (idsDeLacuna.length > 0) {
+    const { data: linhas } = await admin
+      .from("knowledge_gaps")
+      .select("id, pergunta, ocorrencias, status")
+      .eq("organization_id", org.orgId)
+      .in("id", idsDeLacuna);
+    for (const l of linhas ?? []) lacunas.set(l.id, l);
+  }
+  const itemsComLacuna = items.map((i) =>
+    i.ref_id !== null && lacunas.has(i.ref_id) ? { ...i, lacuna: lacunas.get(i.ref_id) } : i,
+  );
+
   const { count: openCount } = await admin
     .from("agent_inbox_items")
     .select("id", { count: "exact", head: true })
     .eq("organization_id", org.orgId)
     .eq("status", "open");
 
-  return ok({ items: data ?? [], open_count: openCount ?? 0 }, { requestId });
+  return ok({ items: itemsComLacuna, open_count: openCount ?? 0 }, { requestId });
 }

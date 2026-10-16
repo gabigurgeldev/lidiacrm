@@ -562,6 +562,9 @@ export const AUDIT_ACTIONS = [
   "suporte.acao_executada",
   // ── Agente sem fonte (Onda 1): o que ele faz quando o material não responde ──
   "ai.quando_nao_sabe_changed",
+  // ── Central de lacunas (0245): o dono responde o que o material não sabia ──
+  "ai.lacuna_ensinada",
+  "ai.lacuna_descartada",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -79,6 +79,8 @@ export const KIND_LABEL = {
   turno_sem_resposta: "Um cliente ficou sem resposta do agente",
   // (migration 0236) Diz o que o CLIENTE fez: tocou numa opção, e ninguém leu.
   escolha_nao_lida: "Um cliente escolheu uma opção que não conseguimos ler",
+  // (migration 0245) Diz o que falta e de quem: a resposta, no material.
+  knowledge_gap: "Pergunta que o material do agente não responde",
   other: "Aviso do assistente",
 } as const satisfies Record<InboxKind, string>;
 
@@ -147,4 +149,33 @@ export function copyDaPromessaSemDono(
   };
 
   return { title, body: CORPO[porque] };
+}
+
+/** Teto do trecho da pergunta no título: o aviso é lido numa lista, não num relatório. */
+const TETO_DA_PERGUNTA_NO_TITULO = 120;
+
+/**
+ * O texto do aviso de lacuna do acervo (migration 0245).
+ *
+ * A pergunta chega JÁ anonimizada pelo motor (`lacuna-do-acervo.ts`) — este
+ * módulo só a recorta. O contador diz quantas vezes ela voltou, e é ele que
+ * decide a prioridade de quem lê: a pergunta que cinco clientes fizeram vale
+ * mais que a que um fez.
+ *
+ * O corpo não promete que o agente "aprendeu" sozinho: só entra no material o
+ * que alguém da equipe escrever ou aprovar.
+ */
+export function copyDaLacuna(pergunta: string, ocorrencias: number): { title: string; body: string } {
+  const recorte =
+    pergunta.length > TETO_DA_PERGUNTA_NO_TITULO
+      ? `${pergunta.slice(0, TETO_DA_PERGUNTA_NO_TITULO - 1).trimEnd()}…`
+      : pergunta;
+  const vezes = ocorrencias === 1 ? "1 vez" : `${ocorrencias} vezes`;
+  return {
+    title: `Clientes perguntaram “${recorte}” e o material do agente não tem a resposta (${vezes})`,
+    body:
+      "O agente não respondeu por conta própria: chamou a equipe ou disse que não tinha a informação, " +
+      "conforme o que está configurado. Escreva a resposta aqui para ensinar o agente — ela passa a " +
+      "valer para todos os agentes da empresa assim que o material for atualizado.",
+  };
 }
