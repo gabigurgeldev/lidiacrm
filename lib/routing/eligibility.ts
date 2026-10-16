@@ -85,6 +85,33 @@ export function isHeartbeatStale(
   return now.getTime() - last > timeoutMinutes * 60_000;
 }
 
+/**
+ * O que a tela Equipe mostra no status. Pura pela mesma razão do resto deste
+ * arquivo: é a pergunta "esta pessoa recebe conversa agora?" vista de fora, e
+ * duas respostas divergentes (tela diz Online, roteamento não escolhe) é o
+ * defeito que mais confunde quem opera.
+ *
+ * - `follows_schedule` (migration 0246): a jornada manda, heartbeat não conta.
+ * - sem ela: online só com heartbeat fresco (AT-08).
+ * - nos dois casos, fora da janela é "fora do horário": o roteamento não a
+ *   escolhe, e a tela dizer "Online" ali era prometer o que não acontece.
+ */
+export type StatusDoAtendente = "online" | "fora_do_horario" | "offline";
+
+export function statusDoAtendente(
+  a: {
+    isAvailable: boolean;
+    followsSchedule: boolean;
+    lastHeartbeatAt: string | null;
+    schedule?: Pick<AvailabilitySchedule, "timezone" | "windows"> | null;
+  },
+  now: Date,
+): StatusDoAtendente {
+  if (!a.isAvailable) return "offline";
+  if (!a.followsSchedule && isHeartbeatStale(a.lastHeartbeatAt, now)) return "offline";
+  return isWithinSchedule(a.schedule ?? null, now) ? "online" : "fora_do_horario";
+}
+
 export interface AttendantEligibilityInput {
   isAvailable: boolean;
   capacity: number;

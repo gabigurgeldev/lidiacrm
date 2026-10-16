@@ -11,7 +11,7 @@ import {
   useUpdateRouting,
   type AttendantAvailability,
 } from "@/hooks/team/useAttendants";
-import { isHeartbeatStale } from "@/lib/routing/eligibility";
+import { statusDoAtendente } from "@/lib/routing/eligibility";
 import {
   ROUTING_MODES,
   type RoutingConfig,
@@ -91,11 +91,26 @@ function summarizeSchedule(windows: ScheduleWindow[], t: (texto: string) => stri
 }
 
 function StatusBadge({ attendant, now }: { attendant: Attendant; now: Date }) {
+  const t = useT();
   const a = attendant.availability;
-  const online = !!a?.is_available && !isHeartbeatStale(a.last_heartbeat_at, now);
-  return online ? (
-    <Badge variant="default">Online</Badge>
-  ) : (
+  const status = statusDoAtendente(
+    {
+      isAvailable: !!a?.is_available,
+      followsSchedule: !!a?.follows_schedule,
+      lastHeartbeatAt: a?.last_heartbeat_at ?? null,
+      schedule: a?.schedule ?? null,
+    },
+    now,
+  );
+  if (status === "online") return <Badge variant="default">Online</Badge>;
+  if (status === "fora_do_horario") {
+    return (
+      <Badge variant="outline" className="text-muted-foreground">
+        {t("Fora do horário")}
+      </Badge>
+    );
+  }
+  return (
     <Badge variant="outline" className="text-muted-foreground">
       Offline
     </Badge>
@@ -441,6 +456,16 @@ export function AttendantsClient({ canManage }: Props) {
                 <TableHead>Capacidade</TableHead>
                 <TableHead>{t("Horário")}</TableHead>
                 {canManage ? <TableHead className="w-[120px]">{t("Disponível")}</TableHead> : null}
+                {canManage ? (
+                  <TableHead className="w-[150px]">
+                    {/* O cabeçalho diz o efeito, não o nome da coluna do banco:
+                        quem opera pergunta "fica online sozinho no horário?",
+                        e a resposta tem de estar escrita onde se liga. */}
+                    <span title={t("Ligado: a pessoa recebe conversas dentro do horário dela, mesmo com o sistema fechado. Desligado: só enquanto o sistema está aberto.")}>
+                      {t("Segue o horário")}
+                    </span>
+                  </TableHead>
+                ) : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -507,6 +532,26 @@ export function AttendantsClient({ canManage }: Props) {
                           aria-label={`Disponibilidade de ${a.name}`}
                           onCheckedChange={(v) =>
                             patch.mutate({ userId: a.userId, patch: { is_available: v } })
+                          }
+                        />
+                      </TableCell>
+                    ) : null}
+                    {canManage ? (
+                      <TableCell>
+                        <Switch
+                          checked={!!a.availability?.follows_schedule}
+                          aria-label={`${t("Segue o horário")}: ${a.name}`}
+                          onCheckedChange={(v) =>
+                            patch.mutate({
+                              userId: a.userId,
+                              // Ligar "segue o horário" liga também a
+                              // disponibilidade: é o que a pessoa quer dizer com
+                              // "ativa sozinho". Desligar não mexe nela — a chave
+                              // "Disponível" continua sendo a pausa.
+                              patch: v
+                                ? { follows_schedule: true, is_available: true }
+                                : { follows_schedule: false },
+                            })
                           }
                         />
                       </TableCell>

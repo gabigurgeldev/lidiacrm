@@ -24088,6 +24088,15 @@ create trigger trg_ai_agent_versions_content_immutable
   before update on public.ai_agent_versions
   for each row execute function fn_ai_agent_version_content_immutable();
 
+-- ---- atendente disponível pelo horário (migration 0246) ----
+-- Ver o cabeçalho de supabase/migrations/20261016220000_0246_disponivel_pelo_horario.sql.
+-- Coluna nova com default que preserva o comportamento atual. Idempotente.
+alter table public.attendant_availability
+  add column if not exists follows_schedule boolean not null default false;
+
+comment on column public.attendant_availability.follows_schedule is
+  'true = disponível pela jornada (schedule), sem depender de aba aberta: a varredura de heartbeat não derruba. false = online só enquanto o app pinga (heartbeat de 15 min).';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

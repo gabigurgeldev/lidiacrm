@@ -5,6 +5,7 @@ import {
   isAttendantEligible,
   isHeartbeatStale,
   isWithinSchedule,
+  statusDoAtendente,
 } from "./eligibility";
 import { availabilityScheduleSchema } from "@/lib/schemas/routing";
 
@@ -89,5 +90,66 @@ describe("isHeartbeatStale (AT-08 auto-offline, clock mockado)", () => {
 
   it("sem heartbeat (null) ⇒ velho ⇒ auto-offline", () => {
     expect(isHeartbeatStale(null, now)).toBe(true);
+  });
+});
+
+describe("statusDoAtendente — o que a tela Equipe diz bate com o roteamento", () => {
+  const fresco = new Date(MON_1400_BRT.getTime() - 60_000).toISOString();
+  const velho = new Date(
+    MON_1400_BRT.getTime() - (HEARTBEAT_TIMEOUT_MINUTES + 1) * 60_000,
+  ).toISOString();
+
+  it("segue o horário, dentro da janela, SEM heartbeat ⇒ online (a jornada manda)", () => {
+    expect(
+      statusDoAtendente(
+        { isAvailable: true, followsSchedule: true, lastHeartbeatAt: null, schedule: schedule8to18Mon },
+        MON_1400_BRT,
+      ),
+    ).toBe("online");
+  });
+
+  it("segue o horário, fora da janela ⇒ fora do horário", () => {
+    expect(
+      statusDoAtendente(
+        { isAvailable: true, followsSchedule: true, lastHeartbeatAt: null, schedule: schedule8to18Mon },
+        MON_1900_BRT,
+      ),
+    ).toBe("fora_do_horario");
+  });
+
+  it("segue o horário mas pausado (Disponível desligado) ⇒ offline", () => {
+    expect(
+      statusDoAtendente(
+        { isAvailable: false, followsSchedule: true, lastHeartbeatAt: fresco, schedule: schedule8to18Mon },
+        MON_1400_BRT,
+      ),
+    ).toBe("offline");
+  });
+
+  it("sem seguir o horário, heartbeat velho ⇒ offline mesmo dentro da janela", () => {
+    expect(
+      statusDoAtendente(
+        { isAvailable: true, followsSchedule: false, lastHeartbeatAt: velho, schedule: schedule8to18Mon },
+        MON_1400_BRT,
+      ),
+    ).toBe("offline");
+  });
+
+  it("sem seguir o horário, heartbeat fresco mas fora da janela ⇒ fora do horário, não Online", () => {
+    expect(
+      statusDoAtendente(
+        { isAvailable: true, followsSchedule: false, lastHeartbeatAt: fresco, schedule: schedule8to18Mon },
+        MON_1900_BRT,
+      ),
+    ).toBe("fora_do_horario");
+  });
+
+  it("janela vazia (24 horas) e seguindo o horário ⇒ online a qualquer hora", () => {
+    expect(
+      statusDoAtendente(
+        { isAvailable: true, followsSchedule: true, lastHeartbeatAt: null, schedule: null },
+        MON_1900_BRT,
+      ),
+    ).toBe("online");
   });
 });

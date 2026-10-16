@@ -19,7 +19,7 @@ import { isAttendantEligible, OPEN_LOAD_STATUSES } from "@/lib/routing/eligibili
 import { availabilityScheduleSchema } from "@/lib/schemas/routing";
 
 const COLUNAS_DISPONIBILIDADE =
-  "user_id, is_available, capacity, schedule, last_heartbeat_at, updated_at";
+  "user_id, is_available, capacity, schedule, follows_schedule, last_heartbeat_at, updated_at";
 
 export interface AtendenteDoRoster {
   userId: string;
@@ -28,6 +28,8 @@ export interface AtendenteDoRoster {
   /** null quando a pessoa nunca configurou disponibilidade. */
   capacidade: number | null;
   agenda: unknown;
+  /** true = a jornada manda; a varredura de heartbeat não derruba (migration 0246). */
+  segueHorario: boolean;
   ultimoSinalDeVida: string | null;
   atualizadoEm: string | null;
   /** Conversas abertas atribuídas — mesma contagem que o worker de roteamento usa. */
@@ -70,6 +72,7 @@ export async function carregarRosterDeAtendimento(
     is_available: boolean;
     capacity: number;
     schedule: unknown;
+    follows_schedule: boolean | null;
     last_heartbeat_at: string | null;
     updated_at: string | null;
   };
@@ -102,6 +105,7 @@ export async function carregarRosterDeAtendimento(
       disponivel: a?.is_available ?? false,
       capacidade: a?.capacity ?? null,
       agenda: a?.schedule ?? { timezone: "America/Sao_Paulo", windows: [] },
+      segueHorario: a?.follows_schedule ?? false,
       ultimoSinalDeVida: a?.last_heartbeat_at ?? null,
       atualizadoEm: a?.updated_at ?? null,
       cargaAtual: cargaPorUsuario.get(m.user_id) ?? 0,

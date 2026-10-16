@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/shell/header/AppHeader";
 import { useInboundMessageAlerts } from "@/hooks/notifications/useInboundMessageAlerts";
 import { useCrmAlerts } from "@/hooks/notifications/useCrmAlerts";
 import { useNotifyOpenFromServiceWorker } from "@/lib/notifications/notify_open";
+import { useHeartbeat } from "@/hooks/team/useHeartbeat";
 import { cabecalhoEscondidoEm } from "@/lib/navigation/casca";
 import type { NavGroupId } from "@/lib/navigation/registry";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,7 @@ export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, children }: Ap
   useInboundMessageAlerts();
   useCrmAlerts();
   useNotifyOpenFromServiceWorker();
+  useHeartbeat();
   const pathname = usePathname();
   // A regra mora em `lib/navigation/casca.ts` porque o rodapé da barra lateral
   // precisa da MESMA resposta — ele adota as ações de conta que o cabeçalho

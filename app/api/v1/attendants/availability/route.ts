@@ -26,13 +26,15 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 const SELECT_COLS =
-  "user_id, is_available, capacity, schedule, notification_phone, last_heartbeat_at, updated_at";
+  "user_id, is_available, capacity, schedule, follows_schedule, notification_phone, last_heartbeat_at, updated_at";
 
 interface AvailabilityRow {
   user_id: string;
   is_available: boolean;
   capacity: number;
   schedule: unknown;
+  follows_schedule: boolean;
+  notification_phone: string | null;
   last_heartbeat_at: string | null;
   updated_at: string | null;
 }
@@ -79,6 +81,25 @@ export async function GET(_req: NextRequest): Promise<Response> {
   // NA ROTA, não na função compartilhada: e-mail é PII e a superfície do agente
   // não recebe e-mail nem telefone de atendente.
   const names = new Map<string, { name: string | null; email: string | null }>();
+
+  // Telefone de aviso: também PII, e pelo mesmo motivo fica na rota e não no
+  // roster. Faltava aqui — o diálogo de horário abria com o campo VAZIO para
+  // quem já tinha número, e salvar o horário gravava `null` por cima dele.
+  const { data: fones, error: fErr } = await admin
+    .from("attendant_availability")
+    .select("user_id, notification_phone")
+    .eq("organization_id", activeOrg.orgId)
+    .in(
+      "user_id",
+      roster.map((m) => m.userId),
+    );
+  if (fErr) return fail("internal_error", fErr.message, 500, { requestId });
+  const fonePorUsuario = new Map(
+    ((fones ?? []) as Array<{ user_id: string; notification_phone: string | null }>).map(
+      (f) => [f.user_id, f.notification_phone] as const,
+    ),
+  );
+
   await Promise.all(
     roster.map(async ({ userId }) => {
       const { data: userRes } = await admin.auth.admin.getUserById(userId);
@@ -98,6 +119,8 @@ export async function GET(_req: NextRequest): Promise<Response> {
     is_available: m.disponivel,
     capacity: m.capacidade,
     schedule: m.agenda,
+    follows_schedule: m.segueHorario,
+    notification_phone: fonePorUsuario.get(m.userId) ?? null,
     last_heartbeat_at: m.ultimoSinalDeVida,
     updated_at: m.atualizadoEm,
     current_load: m.cargaAtual,

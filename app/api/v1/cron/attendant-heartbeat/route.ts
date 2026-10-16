@@ -10,6 +10,11 @@
  * O cutoff (now − timeout) e o predicado de "velho" são lógica pura em
  * lib/routing/eligibility.ts (isHeartbeatStale), testada com clock mockado — a
  * regra dos 15min é constante NOMEADA única, não número mágico espalhado.
+ *
+ * Quem tem `follows_schedule` NÃO entra na varredura (migration 0246): para essa
+ * pessoa a jornada é quem manda, e a elegibilidade já exige estar dentro da
+ * janela. Derrubá-la por falta de aba aberta era exatamente o defeito — numa VPS
+ * real ninguém ficava online mais de ~20 min.
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
@@ -41,6 +46,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     .from("attendant_availability")
     .update({ is_available: false, updated_at: new Date().toISOString() })
     .eq("is_available", true)
+    .eq("follows_schedule", false)
     .or(`last_heartbeat_at.is.null,last_heartbeat_at.lt.${cutoff}`)
     .select("user_id");
 

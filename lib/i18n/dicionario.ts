@@ -8454,6 +8454,8 @@ export const DICIONARIO: Traducoes = {
   "Voltou ao padrão: as sempre ligadas e as da organização.": { es: "Volvió al estándar: las siempre activas y las de la organización." },
   "Deixou o padrão e passou a usar a lista escolhida.": { es: "Dejó el estándar y pasó a usar la lista elegida." },
   "instalada — já vale para os agentes que usam o padrão. Nos outros, ligue na seção Habilidades do agente.": { es: "instalada — ya vale para los agentes que usan el estándar. En los demás, actívala en la sección Habilidades del agente." },
+  "Segue o horário": { es: "Sigue el horario" },
+  "Ligado: a pessoa recebe conversas dentro do horário dela, mesmo com o sistema fechado. Desligado: só enquanto o sistema está aberto.": { es: "Activado: la persona recibe conversaciones dentro de su horario, incluso con el sistema cerrado. Desactivado: solo mientras el sistema está abierto." },
 };
 
 /**

@@ -114,9 +114,12 @@ export const availabilityPatchSchema = z
     // o bloco manda mensagem quando este atendente é o dono do lead. `null`
     // limpa o campo; string vazia não é aceita (usa `null` pra "sem telefone").
     notification_phone: z.string().regex(E164, "telefone precisa estar em E.164 (+DDI...)").nullable(),
+    // true = disponível pela jornada, sem depender de aba aberta (migration 0246).
+    follows_schedule: z.boolean(),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, {
-    message: "Informe ao menos um campo (is_available, capacity, schedule ou notification_phone).",
+    message:
+      "Informe ao menos um campo (is_available, capacity, schedule, notification_phone ou follows_schedule).",
   });
 export type AvailabilityPatch = z.infer<typeof availabilityPatchSchema>;

@@ -5,10 +5,11 @@
  * membro da org. requireRole("agent") + checagem (user_id == auth.uid() OR
  * role>=manager). A RLS de attendant_availability (own OR manager) é backstop.
  *
- * Persistência do <AttendantStatusToggle> (spec 04 §8) + heartbeat AT-08:
- * quando is_available=true, bumpa last_heartbeat_at=now — "online" é também o
- * ping de vida (o useHeartbeat/60s do inbox chama este PATCH). O cron
- * attendant-heartbeat marca offline quem não pinga há 15min.
+ * Persistência da chave "Disponível" da tela Equipe + heartbeat AT-08: quando
+ * is_available=true, bumpa last_heartbeat_at=now. O ping periódico NÃO passa
+ * por aqui — é `POST /api/v1/attendants/heartbeat` (useHeartbeat), que não
+ * audita a cada minuto. O cron attendant-heartbeat marca offline quem não pinga
+ * há 15min, exceto quem tem `follows_schedule` (a jornada manda).
  *
  * org_id de fonte confiável (activeOrg do cookie), NUNCA do body. Upsert por
  * unique(organization_id, user_id).
@@ -27,7 +28,7 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 const SELECT_COLS =
-  "user_id, is_available, capacity, schedule, notification_phone, last_heartbeat_at, updated_at";
+  "user_id, is_available, capacity, schedule, follows_schedule, notification_phone, last_heartbeat_at, updated_at";
 
 export async function PATCH(
   req: NextRequest,
@@ -90,6 +91,7 @@ export async function PATCH(
   if (input.capacity !== undefined) patch.capacity = input.capacity;
   if (input.schedule !== undefined) patch.schedule = input.schedule;
   if (input.notification_phone !== undefined) patch.notification_phone = input.notification_phone;
+  if (input.follows_schedule !== undefined) patch.follows_schedule = input.follows_schedule;
   // "online" = ping de vida (heartbeat AT-08).
   if (input.is_available === true) patch.last_heartbeat_at = now;
 

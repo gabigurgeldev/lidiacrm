@@ -1514,9 +1514,11 @@ export type Database = {
       attendant_availability: {
         Row: {
           capacity: number
+          follows_schedule: boolean
           id: string
           is_available: boolean
           last_heartbeat_at: string | null
+          notification_phone: string | null
           organization_id: string
           schedule: Json
           updated_at: string
@@ -1524,9 +1526,11 @@ export type Database = {
         }
         Insert: {
           capacity?: number
+          follows_schedule?: boolean
           id?: string
           is_available?: boolean
           last_heartbeat_at?: string | null
+          notification_phone?: string | null
           organization_id: string
           schedule?: Json
           updated_at?: string
@@ -1534,9 +1538,11 @@ export type Database = {
         }
         Update: {
           capacity?: number
+          follows_schedule?: boolean
           id?: string
           is_available?: boolean
           last_heartbeat_at?: string | null
+          notification_phone?: string | null
           organization_id?: string
           schedule?: Json
           updated_at?: string
