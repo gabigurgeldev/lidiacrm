@@ -16,6 +16,7 @@ import type { Queryable } from '../queue/queue';
 import { acumularCitacoes, anexarCitacoes, semFonteNaMensagem } from './citacao-interna';
 import { citationsFromHits } from './search-knowledge';
 
+const MSG = '44444444-4444-4444-8444-444444444444';
 const log: Logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 const tabela: Citation = { chunk_id: 'c1', knowledge_source_id: 's1', source_name: 'Tabela de preços 2026', score: 0.8 };
 const politica: Citation = { chunk_id: 'c2', knowledge_source_id: 's2', source_name: 'Política de troca', score: 0.7 };
@@ -47,7 +48,7 @@ describe('semFonteNaMensagem', () => {
 describe('anexarCitacoes', () => {
   it('grava ai_generated, sem_fonte e as citações — filtrando pela organização', async () => {
     const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
-    await anexarCitacoes({ query } as unknown as Queryable, { tenantId: 'org-1', messageId: 'm-1' }, { body: 'Tem sim!', citacoes: [tabela] }, log);
+    await anexarCitacoes({ query } as unknown as Queryable, { tenantId: 'org-1', messageId: MSG }, { body: 'Tem sim!', citacoes: [tabela] }, log);
 
     const [sql, valores] = query.mock.calls[0]!;
     expect(sql).toMatch(/'ai_generated', true/);
@@ -55,20 +56,26 @@ describe('anexarCitacoes', () => {
     expect(sql).toMatch(/ch\.position \+ 1/);
     expect(sql).toMatch(/ch\.organization_id = \$1/);
     expect(sql).toMatch(/m\.organization_id = \$1/);
-    expect(valores).toEqual(['org-1', 'm-1', JSON.stringify([tabela]), false]);
+    expect(valores).toEqual(['org-1', MSG, JSON.stringify([tabela]), false]);
   });
 
   it('mensagem do agente sem busca também é gravada — vazia e, se factual, sem_fonte', async () => {
     const query = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
-    await anexarCitacoes({ query } as unknown as Queryable, { tenantId: 'o', messageId: 'm' }, { body: 'Entregamos em 2 dias.', citacoes: [] }, log);
-    expect(query.mock.calls[0]![1]).toEqual(['o', 'm', '[]', true]);
+    await anexarCitacoes({ query } as unknown as Queryable, { tenantId: 'o', messageId: MSG }, { body: 'Entregamos em 2 dias.', citacoes: [] }, log);
+    expect(query.mock.calls[0]![1]).toEqual(['o', MSG, '[]', true]);
+  });
+
+  it('id que não é de mensagem real (canal do ensaio) não toca no banco — erro ali abortaria a transação do ensaio', async () => {
+    const query = vi.fn();
+    await anexarCitacoes({ query } as unknown as Queryable, { tenantId: 'o', messageId: 'ensaio-job-1' }, { body: 'x', citacoes: [] }, log);
+    expect(query).not.toHaveBeenCalled();
   });
 
   it('falha só loga — a mensagem já saiu', async () => {
     const warn = vi.fn();
     const query = vi.fn().mockRejectedValue(new Error('timeout'));
     await expect(
-      anexarCitacoes({ query } as unknown as Queryable, { tenantId: 'o', messageId: 'm' }, { body: 'x', citacoes: [] }, { ...log, warn }),
+      anexarCitacoes({ query } as unknown as Queryable, { tenantId: 'o', messageId: MSG }, { body: 'x', citacoes: [] }, { ...log, warn }),
     ).resolves.toBeUndefined();
     expect(warn).toHaveBeenCalled();
   });

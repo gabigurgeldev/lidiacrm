@@ -52,12 +52,19 @@ export function semFonteNaMensagem(body: string, citacoes: readonly Citation[]):
   return citacoes.length === 0 && detectarAfirmacaoFactual(body).length > 0;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function anexarCitacoes(
   db: Queryable,
   ids: { tenantId: string; messageId: string },
   input: { body: string; citacoes: readonly Citation[] },
   log: Logger,
 ): Promise<void> {
+  // Só mensagem de verdade tem linha em `messages`. O canal do ensaio devolve
+  // `ensaio-<job>-<seq>`, e comparar isso com a coluna uuid é ERRO de banco —
+  // que, dentro da transação do ensaio, aborta tudo o que vem depois, mesmo com
+  // o `catch` abaixo. Medido no `test:db` (ensaio-nao-deixa-rastro).
+  if (!UUID.test(ids.messageId)) return;
   try {
     await db.query(
       `update messages m
