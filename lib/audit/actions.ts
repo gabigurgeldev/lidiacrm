@@ -560,6 +560,9 @@ export const AUDIT_ACTIONS = [
   "suporte.identidade_buscada",
   "suporte.leitura",
   "suporte.acao_executada",
+  // ── Assinatura do atendente (nome em cima da mensagem do inbox) ──
+  // Metadata: `{ ativa, nome }`. É preferência da pessoa, gravada em user_metadata.
+  "profile.signature_changed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

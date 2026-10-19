@@ -10,6 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ApiError } from "@/lib/api/types";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
+import { assinar } from "@/lib/assinatura-do-atendente";
 import { audit } from "@/lib/audit";
 import {
   capabilitiesOfSession,
@@ -285,7 +286,25 @@ export interface OpcoesDeEnvio {
    * em `metadata.midia_do_disparo`, que é de onde a tela o assina para mostrar.
    */
   midiaCompartilhada?: { path: string; mime: string };
+  /**
+   * Nome da ASSINATURA do atendente (`lib/assinatura-do-atendente`). Só a rota
+   * do inbox passa, e com o nome do JWT validado — nunca do body. Agendada,
+   * automação, fluxo, disparo, MCP e agente chamam o handler sem isto, e por
+   * isso saem sem assinatura.
+   */
+  assinarComo?: string | null;
 }
+
+/** Tipos cujo corpo é texto que o cliente LÊ: a mensagem ou a legenda da mídia. */
+const TIPOS_ASSINAVEIS: ReadonlySet<SendMessageInput["type"]> = new Set([
+  "text",
+  "image",
+  "video",
+  "document",
+]);
+
+/** Limite de texto do WhatsApp — o mesmo teto do schema, agora com a assinatura dentro. */
+const LIMITE_DO_CORPO = 4096;
 
 export async function sendMessageHandler(
   supabase: SB,
@@ -495,6 +514,28 @@ export async function sendMessageHandler(
     }
   }
 
+  // ─── ASSINATURA: o nome do atendente em cima do texto ─────────────────────
+  //
+  // Aplicada no corpo ANTES do insert, e o MESMO corpo vai ao canal: o que fica
+  // gravado é o que o cliente recebeu (o dedup de eco do Stevo casa por
+  // `body`). Só texto e legenda não-vazia — `input.type`, não `tipoEfetivo`,
+  // porque enquete rebaixada para texto não foi digitada por ninguém.
+  const assinarComo = opcoes.assinarComo?.trim() || null;
+  let metadataDaAssinatura: Record<string, unknown> = {};
+  if (assinarComo && TIPOS_ASSINAVEIS.has(input.type) && corpoEfetivo?.trim()) {
+    corpoEfetivo = assinar(corpoEfetivo, assinarComo);
+    if (corpoEfetivo.length > LIMITE_DO_CORPO) {
+      throw new ApiError(
+        422,
+        "validation_error",
+        undefined,
+        ctx.requestId,
+        `A mensagem com a assinatura passa de ${LIMITE_DO_CORPO} caracteres. Encurte o texto ou desligue a assinatura.`,
+      );
+    }
+    metadataDaAssinatura = { assinado_por: assinarComo };
+  }
+
   const now = new Date().toISOString();
   // ─── A CITAÇÃO, e a checagem que ela obriga ────────────────────────────────
   //
@@ -552,6 +593,7 @@ export async function sendMessageHandler(
       ...(ctx.actor.type === "ai_agent" ? { ai_actor_id: ctx.actor.id } : {}),
       ...(midiaCompartilhada ? { midia_do_disparo: midiaCompartilhada.path } : {}),
       ...metadataDasOpcoes,
+      ...metadataDaAssinatura,
     },
   };
 
@@ -758,7 +800,8 @@ export async function sendMessageHandler(
             url: signed.signedUrl,
             mime: mimeDaMidia ?? "application/octet-stream",
             filename,
-            caption: input.body ?? null,
+            // `corpoEfetivo`: a legenda já assinada, igual à que foi gravada.
+            caption: corpoEfetivo,
             // Vídeo normalizado no upload (`.wa.mp4`) sai sem pedir conversão ao WAHA.
             pronto: videoJaPronto(caminhoDaMidia),
           },

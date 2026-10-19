@@ -77,6 +77,15 @@ export function useUser(): AuthUser {
   return useAuth().user;
 }
 
+/**
+ * O usuário quando há provider, `null` quando não há — para componente que
+ * também vive FORA do shell autenticado (ou em teste isolado) e trata a falta
+ * de usuário como "sem preferência", em vez de quebrar a tela.
+ */
+export function useUserOpcional(): AuthUser | null {
+  return useContext(Ctx)?.user ?? null;
+}
+
 export function useActiveOrg(): ActiveOrg | null {
   return useAuth().activeOrg;
 }

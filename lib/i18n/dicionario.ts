@@ -158,6 +158,24 @@ export const DICIONARIO: Traducoes = {
   Enviar: { es: "Enviar" },
   "Enviar modelo": { es: "Enviar plantilla" },
   "Escolha um modelo aprovado…": { es: "Elige una plantilla aprobada…" },
+  // ─── Inbox: assinatura do atendente ───
+  // "Assinatura" sozinha já é a de COBRANÇA (es: "Suscripción") — por isso
+  // toda chave daqui diz de que assinatura se trata.
+  "Assinatura das mensagens": { es: "Firma de los mensajes" },
+  "Assinatura ligada": { es: "Firma activada" },
+  "Assinatura desligada": { es: "Firma desactivada" },
+  "Assinatura ligada.": { es: "Firma activada." },
+  "Assinatura desligada.": { es: "Firma desactivada." },
+  "Assinar minhas mensagens": { es: "Firmar mis mensajes" },
+  "Nome da assinatura": { es: "Nombre de la firma" },
+  "Ex.: Maria": { es: "Ej.: María" },
+  "O cliente vê assim:": { es: "El cliente lo ve así:" },
+  "Olá! Como posso ajudar?": { es: "¡Hola! ¿En qué puedo ayudarte?" },
+  "Assinando como": { es: "Firmando como" },
+  "Use um nome de 1 a 40 caracteres, sem * nem quebra de linha.": {
+    es: "Usa un nombre de 1 a 40 caracteres, sin * ni salto de línea.",
+  },
+  "Não foi possível salvar a assinatura.": { es: "No se pudo guardar la firma." },
 
   // ─── Painel do contato ───
   CONTATO: { es: "CONTACTO" },

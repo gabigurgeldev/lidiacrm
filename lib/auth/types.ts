@@ -1,3 +1,4 @@
+import type { AssinaturaDoAtendente } from "@/lib/assinatura-do-atendente";
 import type { Idioma } from "@/lib/i18n/idiomas";
 
 /**
@@ -130,6 +131,16 @@ export interface AuthUser {
    * o anti-pattern "tela oferece o que o código ignora".
    */
   timezone?: string | null;
+  /**
+   * Assinatura das mensagens que a pessoa manda pelo inbox, de
+   * `user_metadata.assinatura` (schema em `lib/assinatura-do-atendente`).
+   *
+   * Vem no AuthUser porque os dois lados precisam dela na hora do envio: a rota
+   * assina com o nome do JWT validado — nunca com um nome vindo do body, senão
+   * um atendente assinaria como outro — e o Composer desenha a bolha otimista
+   * já assinada. `null`/ausente = sem assinatura.
+   */
+  assinatura?: AssinaturaDoAtendente | null;
   organizations: UserOrgMembership[];
 }
 

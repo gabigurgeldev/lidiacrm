@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Assinatura do atendente — Inbox › botão de assinatura",
+    "subtitle": "o atendente liga e define o nome; a rota assina texto e legenda com o nome do JWT; o cliente e a bolha veem *Nome:* em cima",
+    "output": "assinatura-do-atendente.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    { "id": "tela", "label": "Onde a pessoa está" },
+    { "id": "borda", "label": "Action e rota" },
+    { "id": "regra", "label": "Regra (pura)" },
+    { "id": "envio", "label": "Envio reaproveitado" },
+    { "id": "dados", "label": "Banco" },
+    { "id": "retorno", "label": "Laço de retorno" }
+  ],
+  "mainPath": ["botao", "action", "metadata", "auth", "rota", "envio", "canal", "bolha"],
+  "nodes": [
+    { "id": "botao", "lane": "tela", "col": 0, "type": "component", "label": "Composer › AssinaturaDoAtendenteButton", "sublabel": "liga/desliga + nome; faixa 'Assinando como' acima do campo" },
+    { "id": "bolha", "lane": "tela", "col": 5, "type": "component", "label": "MessageBubble", "sublabel": "separarAssinatura: nome em negrito, sem asteriscos (só mensagem nossa e humana)" },
+    { "id": "otimista", "lane": "tela", "col": 2, "type": "module", "label": "useSendMessage onMutate", "sublabel": "bolha otimista já assinada — sem pulo no refetch" },
+    { "id": "action", "lane": "borda", "col": 1, "type": "route", "label": "salvarAssinatura (server action)", "sublabel": "Zod + updateUser + revalidatePath" },
+    { "id": "rota", "lane": "borda", "col": 3, "type": "route", "label": "POST /api/v1/messages", "sublabel": "assinarComo = nome do JWT, nunca do body" },
+    { "id": "regra", "lane": "regra", "col": 2, "type": "module", "label": "lib/assinatura-do-atendente", "sublabel": "schema central · assinar · separarAssinatura · lerAssinatura (nunca lança)" },
+    { "id": "auth", "lane": "regra", "col": 3, "type": "module", "label": "loadAuthUser", "sublabel": "AuthUser.assinatura lida de user_metadata" },
+    { "id": "envio", "lane": "envio", "col": 4, "type": "service", "label": "sendMessageHandler", "sublabel": "assina texto e legenda; gravado = enviado; 422 se passar de 4096" },
+    { "id": "canal", "lane": "envio", "col": 5, "type": "service", "label": "adapters (WAHA · Cloud · Zernio · Stevo)", "sublabel": "recebem o corpo já assinado" },
+    { "id": "metadata", "lane": "dados", "col": 1, "type": "table", "label": "auth.users.user_metadata.assinatura", "sublabel": "{ ativa, nome } por pessoa" },
+    { "id": "mensagem", "lane": "dados", "col": 4, "type": "table", "label": "messages", "sublabel": "body assinado + metadata.assinado_por" },
+    { "id": "audit", "lane": "retorno", "col": 1, "type": "table", "label": "api_audit_log profile.signature_changed", "sublabel": "quem ligou, desligou ou trocou o nome" }
+  ],
+  "edges": [
+    { "id": "e1", "from": "botao", "to": "action", "label": "salvar" },
+    { "id": "e2", "from": "action", "to": "metadata", "label": "updateUser" },
+    { "id": "e3", "from": "action", "to": "audit", "label": "signature_changed" },
+    { "id": "e4", "from": "action", "to": "regra", "label": "valida o nome" },
+    { "id": "e5", "from": "metadata", "to": "auth", "label": "getUser()" },
+    { "id": "e6", "from": "auth", "to": "rota", "label": "AuthUser.assinatura" },
+    { "id": "e7", "from": "auth", "to": "otimista", "label": "AuthProvider" },
+    { "id": "e8", "from": "botao", "to": "rota", "label": "Enter envia" },
+    { "id": "e9", "from": "rota", "to": "envio", "label": "assinarComo" },
+    { "id": "e10", "from": "envio", "to": "regra", "label": "assinar()" },
+    { "id": "e11", "from": "envio", "to": "mensagem", "label": "insert" },
+    { "id": "e12", "from": "envio", "to": "canal", "label": "mesmo corpo" },
+    { "id": "e13", "from": "mensagem", "to": "bolha", "label": "thread" },
+    { "id": "e14", "from": "bolha", "to": "regra", "label": "separarAssinatura" },
+    { "id": "e15", "from": "otimista", "to": "bolha", "label": "antes do servidor" },
+    { "id": "e16", "from": "bolha", "to": "botao", "label": "nome errado? corrige no mesmo botão" }
+  ]
+}

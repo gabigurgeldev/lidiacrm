@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 
 import { ApiError } from "@/lib/api/types";
+import { nomeParaAssinar } from "@/lib/assinatura-do-atendente";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { sendMessageSchema, validateRequest, type SendMessageInput } from "@/lib/schemas";
@@ -46,6 +47,9 @@ export async function POST(req: NextRequest): Promise<Response> {
         requestId,
       },
       input as SendMessageInput,
+      // A assinatura sai do JWT validado (`user_metadata`), nunca do body: o
+      // nome é o de quem está logado. Só esta rota passa — é o envio do inbox.
+      { assinarComo: nomeParaAssinar(user.assinatura) },
     );
     return ok(message, { status: 201, requestId });
   } catch (err) {
