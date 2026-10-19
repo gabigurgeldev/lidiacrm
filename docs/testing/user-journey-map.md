@@ -2467,7 +2467,7 @@ completo em `/login` e é o gate que pegaria contraste insuficiente sobre o vidr
 Ele não roda nesta máquina; a prova é a do CI. O cálculo de J33.3 é o que
 sustenta a expectativa até lá.
 
-## J34 — Assinar as mensagens com o próprio nome `[P1]` (2026-10-19)
+## J36 — Assinar as mensagens com o próprio nome `[P1]` (2026-10-19)
 
 O atendente liga a assinatura no botão ao lado do emoji, no composer do inbox,
 e define o nome. Cada mensagem que manda pelo inbox sai com `*Nome:*` na
@@ -2481,15 +2481,15 @@ Bolha: `tests/unit/inbox-assinatura-na-bolha.test.tsx`.
 
 | # | Caso | Expectativa | Resultado |
 |---|------|-------------|-----------|
-| J34.1 | Ligar mostra "Assinando como …" acima do campo | quem digita sabe que o nome vai junto antes do Enter | e2e (CI) |
-| J34.2 | A preferência sobrevive ao recarregar | mora em `user_metadata`, não no estado da tela | e2e (CI) |
-| J34.3 | Texto sai assinado, e o gravado é igual ao enviado | linha e payload do `/api/sendText` com `*Nome:*\n…` | PASS (unit) |
-| J34.4 | Legenda assinada; mídia sem legenda não ganha texto | só texto que o cliente lê | PASS (unit) |
-| J34.5 | Enquete, nota interna, IA, automação, agendada saem sem | só a rota do inbox passa `assinarComo` | PASS (unit, enquete) |
-| J34.6 | Bolha desenha o nome em negrito; cliente que escreve `*Promo:*` fica literal | só mensagem nossa e humana | PASS (unit) + e2e (CI, `font-weight` medido) |
-| J34.7 | Texto que com a assinatura passa de 4096 é recusado com motivo | 422 com "encurte o texto ou desligue a assinatura" | PASS (unit) |
+| J36.1 | Ligar mostra "Assinando como …" acima do campo | quem digita sabe que o nome vai junto antes do Enter | e2e (CI) |
+| J36.2 | A preferência sobrevive ao recarregar | mora em `user_metadata`, não no estado da tela | e2e (CI) |
+| J36.3 | Texto sai assinado, e o gravado é igual ao enviado | linha e payload do `/api/sendText` com `*Nome:*\n…` | PASS (unit) |
+| J36.4 | Legenda assinada; mídia sem legenda não ganha texto | só texto que o cliente lê | PASS (unit) |
+| J36.5 | Enquete, nota interna, IA, automação, agendada saem sem | só a rota do inbox passa `assinarComo` | PASS (unit, enquete) |
+| J36.6 | Bolha desenha o nome em negrito; cliente que escreve `*Promo:*` fica literal | só mensagem nossa e humana | PASS (unit) + e2e (CI, `font-weight` medido) |
+| J36.7 | Texto que com a assinatura passa de 4096 é recusado com motivo | 422 com "encurte o texto ou desligue a assinatura" | PASS (unit) |
 
-**NÃO MEDIDO, declarado:** J34.1, J34.2 e a bolha pela tela não rodaram nesta
+**NÃO MEDIDO, declarado:** J36.1, J36.2 e a bolha pela tela não rodaram nesta
 máquina — o e2e local não sobe aqui (sem CLI do Supabase no Windows). A prova
 é a do CI. Nota interna, IA e automação sem assinatura são garantidas pela
 ESTRUTURA (só `app/api/v1/messages/route.ts` passa `assinarComo`), não por um
