@@ -5,9 +5,9 @@
  *
  * `*Maria:*\nmensagem` — o negrito do WhatsApp na primeira linha, o texto
  * embaixo. É o MESMO texto que o cliente recebe e que fica gravado em
- * `messages.body`: o dedup de eco do Stevo casa por `body`
- * (`lib/channels/stevo/ingest.ts`), então gravar uma coisa e mandar outra
- * duplicaria a mensagem no histórico. Por isso a tela não guarda o nome à
+ * `messages.body`: há canal cujo dedup de eco casa por `body` (ver a ingestão
+ * em `lib/channels/`), então gravar uma coisa e mandar outra duplicaria a
+ * mensagem no histórico. Por isso a tela não guarda o nome à
  * parte — ela RELÊ o prefixo com `separarAssinatura` e desenha o nome em
  * negrito, sem os asteriscos.
  *
