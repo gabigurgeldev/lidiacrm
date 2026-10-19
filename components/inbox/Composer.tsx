@@ -15,6 +15,9 @@ import { ContactPickerDialog } from "@/components/inbox/composer/ContactPickerDi
 import { OpcoesDialog } from "@/components/inbox/composer/OpcoesDialog";
 import { AudioRecorder } from "@/components/inbox/composer/AudioRecorder";
 import { EmojiButton } from "@/components/inbox/composer/EmojiButton";
+import { AssinaturaDoAtendenteButton } from "@/components/inbox/composer/AssinaturaDoAtendente";
+import { useUserOpcional } from "@/hooks/auth/AuthProvider";
+import type { AssinaturaDoAtendente } from "@/lib/assinatura-do-atendente";
 import { resolveSlash, TemplateMenu } from "@/components/inbox/composer/TemplateMenu";
 import { useCreateNote } from "@/hooks/inbox/useCreateNote";
 import { useMessageTemplates, type MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
@@ -72,6 +75,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   ref,
 ) {
   const t = useT();
+  const usuario = useUserOpcional();
+  // O que acabou de ser salvo vale na hora; o do provider chega com o refresh.
+  const [assinaturaSalva, setAssinaturaSalva] = useState<AssinaturaDoAtendente | null>(null);
+  const assinatura = assinaturaSalva ?? usuario?.assinatura ?? null;
   const [text, setText] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
@@ -267,6 +274,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             </button>
           </div>
         )}
+        {/*
+          A assinatura ligada fica À VISTA, como a nota: quem digita precisa
+          saber que o nome vai junto para o cliente antes de apertar Enter.
+        */}
+        {mode === "reply" && assinatura?.ativa && (
+          <div className="mb-1.5 px-1 text-xs text-muted-foreground">
+            {t("Assinando como")} <span className="font-semibold text-foreground">{assinatura.nome}</span>
+          </div>
+        )}
         <div className="flex items-end gap-1.5">
           {!gravando && (
             <>
@@ -305,6 +321,15 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                   });
                 }}
               />
+              {/* Nota interna nunca chega ao cliente — não há o que assinar. */}
+              {mode === "reply" && (
+                <AssinaturaDoAtendenteButton
+                  valor={assinatura}
+                  nomePadrao={usuario?.full_name ?? null}
+                  onSalvo={setAssinaturaSalva}
+                  disabled={isDisabled}
+                />
+              )}
               <textarea
                 ref={taRef}
                 value={text}

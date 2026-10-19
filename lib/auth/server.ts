@@ -12,6 +12,7 @@ import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { empresaExigeMfa, exigeCadastroDeMfa } from "@/lib/auth/politica-mfa";
+import { lerAssinatura } from "@/lib/assinatura-do-atendente";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import type { AuthUser, Role, UserOrgMembership, ActiveOrg } from "./types";
 
@@ -247,6 +248,7 @@ export async function loadAuthUser(): Promise<AuthUser | null> {
     locale,
     idioma,
     timezone,
+    assinatura: lerAssinatura(user.user_metadata),
     organizations: memberships,
   };
 }

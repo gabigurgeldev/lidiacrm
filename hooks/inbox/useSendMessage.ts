@@ -2,6 +2,8 @@
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
+import { useUserOpcional } from "@/hooks/auth/AuthProvider";
+import { assinar, nomeParaAssinar } from "@/lib/assinatura-do-atendente";
 import type { Message } from "@/lib/types/messaging";
 
 interface SendArgs {
@@ -34,6 +36,10 @@ interface MessagesPage {
 
 export function useSendMessage() {
   const qc = useQueryClient();
+  // Só para a bolha otimista: quem assina de verdade é a rota, com o nome do
+  // JWT. Sem isto a bolha apareceria sem o nome e "ganharia" a assinatura no
+  // refetch — o texto pulando de lugar na frente de quem acabou de enviar.
+  const nomeDaAssinatura = nomeParaAssinar(useUserOpcional()?.assinatura);
 
   return useMutation({
     mutationFn: async (input: SendArgs) =>
@@ -67,7 +73,11 @@ export function useSendMessage() {
         ack: null,
         error_code: null,
         error_message: null,
-        body: args.body ?? null,
+        // Mesma regra do handler: texto com conteúdo (mídia nem chega aqui).
+        body:
+          args.body && nomeDaAssinatura && (args.type ?? "text") === "text" && args.body.trim()
+            ? assinar(args.body, nomeDaAssinatura)
+            : (args.body ?? null),
         media_url: args.media_url ?? null,
         media_mime: args.media_mime ?? null,
         media_size_bytes: null,

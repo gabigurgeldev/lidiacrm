@@ -14,6 +14,7 @@ import { MediaRenderer } from "@/components/inbox/media/MediaRenderer";
 import { ContactCard } from "@/components/inbox/media/ContactCard";
 import { OpcoesCard, SeloDeEscolha } from "@/components/inbox/media/OpcoesCard";
 import { extractCitations, isAiGeneratedMessage } from "@/lib/ai/citations/types";
+import { separarAssinatura } from "@/lib/assinatura-do-atendente";
 
 interface Props {
   message: Message;
@@ -128,6 +129,16 @@ export function MessageBubble({
    */
   const horaFlutuante =
     !hasMedia && !isContact && !isOpcoes && !apagada && !citada && Boolean(message.body?.trim());
+
+  /**
+   * A assinatura do atendente (`*Maria:*` na 1ª linha) desenhada como o
+   * WhatsApp desenha: o nome em negrito, sem os asteriscos. Só em mensagem
+   * NOSSA e humana — um cliente que escreve `*Promo:*` não está assinando.
+   */
+  const assinado =
+    isOutbound && message.sent_via !== "ai" && message.body
+      ? separarAssinatura(message.body)
+      : { nome: null, corpo: message.body ?? "" };
 
   const senderLabel = (() => {
     if (!isOutbound) return null;
@@ -293,7 +304,17 @@ export function MessageBubble({
                   horaFlutuante && "bolha-texto",
                 )}
               >
-                {message.body}
+                {assinado.nome ? (
+                  <>
+                    <span className="font-semibold" data-assinatura>
+                      {assinado.nome}:
+                    </span>
+                    {"\n"}
+                    {assinado.corpo}
+                  </>
+                ) : (
+                  message.body
+                )}
               </p>
             )}
           </>

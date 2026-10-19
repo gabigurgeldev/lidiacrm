@@ -187,4 +187,6 @@ export {
   FilePdf,
   FileXls,
   Stop,
+  // assinatura do atendente no composer do inbox
+  Signature,
 } from "@phosphor-icons/react/dist/ssr";
