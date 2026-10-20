@@ -6,6 +6,11 @@
 #     de um reboot ("network <id> not found", Exited 255), que o
 #     `restart: unless-stopped` não resolve. Parada deliberada (docker stop: exit
 #     0/137/143, sem State.Error) NÃO é tocada.
+#     Também recria serviço que SUMIU (sem contêiner nenhum) enquanto o resto do
+#     projeto segue de pé — incidente de 2026-10-16: depois de 2 h falhando no
+#     attach da overlay `easypanel`, o contêiner do kong desapareceu e o vigia,
+#     que só olhava contêiner parado, ficou 11 h sem ter o que curar. Projeto
+#     inteiro sem contêiner (`compose down` pelo painel) é deliberado e é pulado.
 #  2. AVISAR: sonda /api/v1/health e manda e-mail (SMTP/SES do próprio app) quando
 #     fica fora por LIMITE sondagens seguidas, e de novo quando volta.
 #
@@ -84,6 +89,34 @@ curar() {
         log "curar: $svc recriado"
       else
         log "curar: $svc FALHOU ao recriar"
+      fi
+    done
+  done
+  curar_ausentes
+}
+
+# serviço declarado com restart unless-stopped/always e SEM contêiner, num projeto
+# que tem outros contêineres rodando. `migrate` (restart: no) nunca entra.
+curar_ausentes() {
+  local p ref wd cfg args f svc tem last
+  for p in $PROJETOS; do
+    ref=$(docker ps --filter "label=com.docker.compose.project=$p" --format '{{.Names}}' | head -1)
+    [ -n "$ref" ] || continue   # nada rodando: projeto parado de propósito
+    wd=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$ref")
+    cfg=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$ref")
+    args=(); for f in ${cfg//,/ }; do args+=(-f "$f"); done
+    tem=" $(docker ps -a --filter "label=com.docker.compose.project=$p" --format '{{.Label "com.docker.compose.service"}}' | sort -u | xargs) "
+    for svc in $(docker compose -p "$p" --project-directory "$wd" "${args[@]}" config --format json 2>/dev/null \
+                 | jq -r '.services|to_entries[]|select(.value.restart=="unless-stopped" or .value.restart=="always")|.key'); do
+      case "$tem" in *" $svc "*) continue ;; esac
+      last=$(cat "$ESTADO/curou.$p.$svc" 2>/dev/null || echo 0)
+      [ $(( $(agora) - last )) -lt 300 ] && continue
+      agora > "$ESTADO/curou.$p.$svc"
+      log "curar: $p/$svc sem conteiner — recriando (compose up --no-deps)"
+      if docker compose -p "$p" --project-directory "$wd" "${args[@]}" up -d --no-deps "$svc" >> "$LOG" 2>&1; then
+        log "curar: $p/$svc recriado"
+      else
+        log "curar: $p/$svc FALHOU ao recriar"
       fi
     done
   done
