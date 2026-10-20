@@ -4155,6 +4155,13 @@ export const DICIONARIO: Traducoes = {
   "Quebrar linha sem enviar": { es: "Salto de línea sin enviar" },
   "Assumir conversa": { es: "Asumir conversación" },
   "Fechar conversa": { es: "Cerrar conversación" },
+  "Reabrindo...": { es: "Reabriendo..." },
+  "Tira a conversa de Fechadas e a devolve a uma aba.": {
+    es: "Saca la conversación de Cerradas y la devuelve a una pestaña.",
+  },
+  "Reabrir na Fila": { es: "Reabrir en la Cola" },
+  "Reabrir em Minhas (você assume)": { es: "Reabrir en Mías (tú la asumes)" },
+  "Reabrir com o automático": { es: "Reabrir con el automático" },
   "Mostrar atalhos": { es: "Mostrar atajos" },
 
   // ─── Inbox: tags de contato/conversa ───

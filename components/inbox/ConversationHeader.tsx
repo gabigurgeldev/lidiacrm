@@ -10,7 +10,10 @@ import { JanelaSelo } from "@/components/inbox/JanelaSelo";
 import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import {
   ArrowBendUpLeft,
+  ArrowCounterClockwise,
   CalendarPlus,
+  CaretDown,
+  CheckCircle,
   Clock,
   DotsThreeVertical,
   FilePdf,
@@ -20,7 +23,6 @@ import {
   Robot,
   UserCircle,
   UsersThree,
-  X,
 } from "@/lib/ui/icons";
 import {
   DropdownMenu,
@@ -39,6 +41,7 @@ import { useAuth } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useReleaseConversation } from "@/hooks/inbox/useReleaseConversation";
 import { useCloseConversation } from "@/hooks/inbox/useCloseConversation";
+import { useReopenConversation } from "@/hooks/inbox/useReopenConversation";
 import { useResumeAiAttendance } from "@/hooks/inbox/useResumeAiAttendance";
 import { usePauseAiAttendance } from "@/hooks/inbox/usePauseAiAttendance";
 import { useAutomaticoAtivo } from "@/hooks/ai/useAutomaticoAtivo";
@@ -46,6 +49,8 @@ import { OwnerBadge } from "@/components/kanban/OwnerBadge";
 import { comandoDaConversa, ROTULO_DO_MOTIVO } from "@/lib/inbox/comando-da-conversa";
 import { ReassignDialog } from "@/components/inbox/ReassignDialog";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
+import type { InboxTab } from "@/components/inbox/InboxFilters";
+import type { ReopenDestino } from "@/lib/schemas/messaging";
 import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
 
@@ -53,7 +58,20 @@ interface Props {
   conversation: ConversationWithContact;
   /** Clicar no rosto/nome abre "Dados do contato" — como no WhatsApp. */
   onAbrirPerfil?: () => void;
+  /**
+   * Leva a inbox para a aba onde a conversa foi parar. Sem isto, reabrir a
+   * partir de "Fechadas" tiraria a conversa da lista que a pessoa está vendo, e
+   * ela não saberia onde encontrá-la de novo.
+   */
+  onIrParaAba?: (aba: InboxTab) => void;
 }
+
+/** Para onde a conversa reaberta vai, e em qual aba ela aparece. */
+const ABA_DO_DESTINO: Record<ReopenDestino, InboxTab> = {
+  fila: "unassigned",
+  minhas: "mine",
+  automatico: "ai",
+};
 
 const STATUS_LABEL: Record<string, string> = {
   open: "Aberta",
@@ -78,12 +96,13 @@ function lembreteVigente(snoozeUntil: string | null): boolean {
   return snoozeUntil != null && new Date(snoozeUntil).getTime() > Date.now();
 }
 
-export function ConversationHeader({ conversation, onAbrirPerfil }: Props) {
+export function ConversationHeader({ conversation, onAbrirPerfil, onIrParaAba }: Props) {
   const t = useT();
   const { user } = useAuth();
   const claim = useClaimConversation();
   const release = useReleaseConversation();
   const close = useCloseConversation();
+  const reopen = useReopenConversation();
   const retomar = useResumeAiAttendance();
   const pausar = usePauseAiAttendance();
   const snooze = useSnoozeConversation();
@@ -110,7 +129,11 @@ export function ConversationHeader({ conversation, onAbrirPerfil }: Props) {
     useChannelSessions().data?.find((c) => c.id === canal?.id)?.provider_mode ?? null;
   const status = conversation.status;
   const isMineAssigned = conversation.assigned_to_user_id === user.id;
-  const isOpen = status === "open" || conversation.assigned_to_user_id == null;
+  const encerrada = status === "closed" || status === "archived";
+  // Encerrada NÃO entra aqui: antes, a fechada sem dono mostrava "Assumir", que a
+  // reabria como efeito colateral. Quem tira a conversa de "Fechadas" agora é o
+  // "Reabrir", que pergunta para qual aba ela volta.
+  const isOpen = !encerrada && (status === "open" || conversation.assigned_to_user_id == null);
 
   /**
    * QUEM MANDA, uma pergunta com uma resposta.
@@ -132,7 +155,6 @@ export function ConversationHeader({ conversation, onAbrirPerfil }: Props) {
     automaticoDaOrg: automaticoDaOrg.data,
   });
 
-  const encerrada = status === "closed" || status === "archived";
   /**
    * A VOLTA aparece sempre que há algo a devolver — inclusive em conversa
    * ENCERRADA. Antes ela era condicionada a `status !== "closed"`, e o resultado
@@ -168,6 +190,16 @@ export function ConversationHeader({ conversation, onAbrirPerfil }: Props) {
   const lembreteAtivo = lembreteVigente(conversation.snooze_until ?? null);
   const exportar = (formato: "pdf" | "xlsx") =>
     `/api/v1/conversations/${conversation.id}/export?formato=${formato}`;
+  const reabrir = (destino: ReopenDestino) =>
+    reopen.mutate(
+      { conversation_id: conversation.id, destino },
+      { onSuccess: () => onIrParaAba?.(ABA_DO_DESTINO[destino]) },
+    );
+  const fecharConversa = () => {
+    if (confirm(t("Fechar esta conversa?"))) {
+      close.mutate({ conversation_id: conversation.id });
+    }
+  };
 
   return (
     // CABEÇALHO DE MENSAGEIRO: rosto, nome e UMA linha de contexto à esquerda;
@@ -274,8 +306,43 @@ export function ConversationHeader({ conversation, onAbrirPerfil }: Props) {
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         {/* A AÇÃO PRINCIPAL — a que a conversa pede agora. Uma de cada vez: sem
             dono, "Assumir"; com o automático travado, "Devolver ao automático".
-            O rótulo e o `data-testid` são contrato das specs de ponta a ponta. */}
-        {isOpen ? (
+            O rótulo e o `data-testid` são contrato das specs de ponta a ponta.
+            Encerrada: "Reabrir", com a aba de destino escolhida na hora. */}
+        {encerrada ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                className="h-9 rounded-full px-4"
+                disabled={reopen.isPending}
+                data-testid="reabrir-conversa"
+                title={t("Tira a conversa de Fechadas e a devolve a uma aba.")}
+              >
+                <ArrowCounterClockwise size={16} aria-hidden className="mr-1.5" />
+                {reopen.isPending ? t("Reabrindo...") : t("Reabrir")}
+                <CaretDown size={14} aria-hidden className="ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuItem data-testid="reabrir-na-fila" onSelect={() => reabrir("fila")}>
+                {t("Reabrir na Fila")}
+              </DropdownMenuItem>
+              <DropdownMenuItem data-testid="reabrir-em-minhas" onSelect={() => reabrir("minhas")}>
+                {t("Reabrir em Minhas (você assume)")}
+              </DropdownMenuItem>
+              {/* Sem automático configurado na org, este destino seria uma
+                  conversa "com o automático" que ninguém responde. */}
+              {automaticoDaOrg.data !== false && (
+                <DropdownMenuItem
+                  data-testid="reabrir-com-o-automatico"
+                  onSelect={() => reabrir("automatico")}
+                >
+                  {t("Reabrir com o automático")}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : isOpen ? (
           <Button
             size="sm"
             className="h-9 rounded-full px-4"
@@ -314,6 +381,25 @@ export function ConversationHeader({ conversation, onAbrirPerfil }: Props) {
           </Button>
         ) : null}
 
+        {/* FECHAR fica à vista: é o gesto que encerra todo atendimento, e no ⋮
+            ele era a ação mais procurada e a menos achada. Só o ícone no
+            aperto; o rótulo aparece onde cabe. */}
+        {aberta && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-9 rounded-full px-3 text-muted-foreground hover:text-foreground"
+            disabled={close.isPending}
+            data-testid="fechar-conversa"
+            aria-label={t("Fechar conversa")}
+            title={t("Fechar conversa")}
+            onClick={fecharConversa}
+          >
+            <CheckCircle size={18} aria-hidden />
+            <span className="ml-1.5 hidden lg:inline">{t("Fechar")}</span>
+          </Button>
+        )}
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -336,7 +422,7 @@ export function ConversationHeader({ conversation, onAbrirPerfil }: Props) {
                 {t("Liberar")}
               </DropdownMenuItem>
             )}
-            {isOpen && podeDevolver && (
+            {(isOpen || encerrada) && podeDevolver && (
               <DropdownMenuItem
                 data-testid="devolver-ao-automatico"
                 disabled={retomar.isPending}
@@ -438,23 +524,6 @@ export function ConversationHeader({ conversation, onAbrirPerfil }: Props) {
                 {t("Exportar conversa em Excel")}
               </a>
             </DropdownMenuItem>
-            {aberta && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="text-destructive focus:text-destructive"
-                  disabled={close.isPending}
-                  onSelect={() => {
-                    if (confirm(t("Fechar esta conversa?"))) {
-                      close.mutate({ conversation_id: conversation.id });
-                    }
-                  }}
-                >
-                  <X size={16} aria-hidden className="mr-2" />
-                  {t("Fechar conversa")}
-                </DropdownMenuItem>
-              </>
-            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
