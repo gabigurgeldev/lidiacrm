@@ -65,11 +65,11 @@ const conversation = {
   contacts: { id: "ct-1", display_name: "Fulana", name: null, phone_number: "5511999" },
 } as unknown as React.ComponentProps<typeof ConversationHeader>["conversation"];
 
-function renderHeader() {
+function renderHeader(conv = conversation) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <ConversationHeader conversation={conversation} />
+      <ConversationHeader conversation={conv} />
     </QueryClientProvider>,
   );
 }
@@ -111,7 +111,10 @@ describe("header do inbox — não trava a largura da tela", () => {
     expect(screen.getByRole("button", { name: "Assumir" })).toBeTruthy();
     const menu = screen.getByTestId("menu-acoes-conversa");
     fireEvent.keyDown(menu, { key: "Enter" });
-    for (const rotulo of ["Transferir", "Lembrar", "Ativar fluxo", "Ver contato", "Fechar conversa"]) {
+    // "Fechar conversa" saiu do ⋮ para a barra (pedido do dono, 2026-10-20) —
+    // não sumiu: está à vista, e é isso que se cobra aqui.
+    expect(screen.getByTestId("fechar-conversa").getAttribute("aria-label")).toBe("Fechar conversa");
+    for (const rotulo of ["Transferir", "Lembrar", "Ativar fluxo", "Ver contato"]) {
       expect(await screen.findByText(rotulo), `a ação "${rotulo}" sumiu do ⋮`).toBeTruthy();
     }
   });
@@ -123,5 +126,17 @@ describe("header do inbox — não trava a largura da tela", () => {
     const xlsx = screen.getByTestId("exportar-conversa-excel") as HTMLAnchorElement;
     expect(pdf.getAttribute("href")).toBe("/api/v1/conversations/cv-1/export?formato=pdf");
     expect(xlsx.getAttribute("href")).toBe("/api/v1/conversations/cv-1/export?formato=xlsx");
+  });
+
+  it("conversa FECHADA oferece Reabrir com a aba de destino — e não Assumir nem Fechar", async () => {
+    // Antes: fechada sem dono mostrava "Assumir", que a reabria por efeito
+    // colateral, e quem não era dono não tinha volta nenhuma.
+    renderHeader({ ...conversation, status: "closed" } as typeof conversation);
+    expect(screen.queryByRole("button", { name: "Assumir" })).toBeNull();
+    expect(screen.queryByTestId("fechar-conversa")).toBeNull();
+    const reabrir = screen.getByTestId("reabrir-conversa");
+    fireEvent.keyDown(reabrir, { key: "Enter" });
+    expect(await screen.findByTestId("reabrir-na-fila")).toBeTruthy();
+    expect(screen.getByTestId("reabrir-em-minhas")).toBeTruthy();
   });
 });

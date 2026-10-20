@@ -24,6 +24,8 @@ export function useCloseConversation() {
     },
     onSuccess: (_data, args) => {
       qc.invalidateQueries({ queryKey: ["conversations"] });
+      // As contagens das abas: a conversa trocou de aba e o número tem que acompanhar.
+      qc.invalidateQueries({ queryKey: ["conversation-counts"] });
       qc.invalidateQueries({ queryKey: ["conversation", args.conversation_id] });
     },
   });

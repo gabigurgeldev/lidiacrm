@@ -189,6 +189,20 @@ export const claimConversationSchema = z.object({
 
 export type ClaimConversationInput = z.infer<typeof claimConversationSchema>;
 
+/**
+ * Reabrir uma conversa encerrada escolhendo PARA ONDE ela volta. Cada destino é
+ * uma aba da inbox: `fila` (sem dono), `minhas` (quem clicou assume) e
+ * `automatico` (o atendimento automático retoma).
+ */
+export const REOPEN_DESTINOS = ["fila", "minhas", "automatico"] as const;
+export type ReopenDestino = (typeof REOPEN_DESTINOS)[number];
+
+export const reopenConversationSchema = z.object({
+  destino: z.enum(REOPEN_DESTINOS),
+});
+
+export type ReopenConversationInput = z.infer<typeof reopenConversationSchema>;
+
 /** G3-01: transferência imediata (decisão G1-06d) — reatribui com motivo opcional. */
 export const transferConversationSchema = z.object({
   to_user_id: z.string().uuid(),

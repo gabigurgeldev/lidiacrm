@@ -463,7 +463,11 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         )}
         {selectedConversation ? (
           <>
-            <ConversationHeader conversation={selectedConversation} onAbrirPerfil={abrirPerfil} />
+            <ConversationHeader
+              conversation={selectedConversation}
+              onAbrirPerfil={abrirPerfil}
+              onIrParaAba={(aba) => setFilterValue({ ...filterValue, tab: aba })}
+            />
             <div className="min-h-0 flex-1 overflow-hidden">
               <ChatThread
                 conversationId={selectedConversation.id}

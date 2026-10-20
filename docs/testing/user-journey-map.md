@@ -2494,3 +2494,27 @@ máquina — o e2e local não sobe aqui (sem CLI do Supabase no Windows). A prov
 é a do CI. Nota interna, IA e automação sem assinatura são garantidas pela
 ESTRUTURA (só `app/api/v1/messages/route.ts` passa `assinarComo`), não por um
 teste de cada caminho.
+
+## J37 — Fechar a conversa e reabrir numa aba `[P1]` (2026-10-20)
+
+"Fechar" fica à vista no cabeçalho da conversa (não mais no ⋮). A conversa em
+Fechadas mostra "Reabrir", com a aba de destino: Fila, Minhas (você assume) ou
+com o automático. A inbox vai para a aba escolhida.
+
+Spec: `tests/e2e/inbox-fechar-e-reabrir.spec.ts`. Evidência:
+`.superpowers/evidence/inbox-fechar-e-reabrir/`. Rota:
+`app/api/v1/conversations/[id]/reopen/route.ts` — teste
+`tests/unit/conversa-reabrir.test.ts`. Tela: `tests/unit/inbox-header-nao-trava.test.tsx`.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J37.1 | Conversa aberta mostra "Fechar" na barra | sem abrir menu; fechada não mostra | PASS (unit) + e2e (CI) |
+| J37.2 | Fechada mostra "Reabrir", e não "Assumir" | a volta por efeito colateral sumiu | PASS (unit) + e2e (CI) |
+| J37.3 | Reabrir em Minhas | `claimed` com quem clicou; aba Minhas | PASS (unit, RPC) + e2e (CI, banco) |
+| J37.4 | Reabrir na Fila | `open` sem dono; aba Fila | PASS (unit, RPC) + e2e (CI, banco) |
+| J37.5 | Reabrir com o automático | reabre ANTES de devolver (a devolução preserva encerrada) | PASS (unit, ordem) |
+| J37.6 | Alguém mexeu no meio / já aberta | 409, sem audit | PASS (unit) |
+
+**NÃO MEDIDO, declarado:** a tela não rodou nesta máquina — o e2e local não sobe
+aqui (sem CLI do Supabase no Windows). A prova pela tela é a do CI. J37.5 não
+tem e2e: depende de automático configurado na org de teste.
