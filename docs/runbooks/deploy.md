@@ -143,7 +143,7 @@ salva esse caso — o Docker desiste da partida. Resultado: `supabase.<domínio>
 respondendo 502, o CRM sem login, e ninguém avisado.
 
 `scripts/vps/lidiacrm-watchdog.sh` roda **no host**, a cada minuto, via systemd
-timer, e faz duas coisas:
+timer, e faz três coisas:
 
 1. **Cura.** Contêiner de projeto Compose parado por falha de partida (tem
    `State.Error`, ou saiu com 255) volta com `docker start`; se isso falhar, é
@@ -151,7 +151,9 @@ timer, e faz duas coisas:
    próprio Compose gravou nas labels do contêiner. Parada deliberada
    (`docker stop`: exit 0/137/143, sem erro) **não é tocada**. No máximo uma
    tentativa a cada 5 min por contêiner, e nada nos 3 min seguintes ao boot (o
-   Docker ainda está subindo tudo).
+   Docker ainda está subindo tudo). Serviço `unless-stopped`/`always` que
+   **sumiu** (sem contêiner nenhum, incidente de 2026-10-16 com o kong) é
+   recriado do mesmo jeito, desde que o resto do projeto esteja de pé.
 2. **Avisa.** Sonda `/api/v1/health` e, depois de `LIMITE` falhas seguidas
    (padrão 3, ≈3 min), manda e-mail com o corpo do health, os contêineres
    parados e a memória. Reavisa a cada hora enquanto seguir fora e manda um
@@ -159,6 +161,37 @@ timer, e faz duas coisas:
    dele na hora — nenhum segredo é copiado para o vigia. Por viver no host, o
    aviso sai **mesmo com o Supabase ou o app fora**, que é exatamente quando
    um alerta feito dentro do app não existiria.
+3. **Avisa do tempo real.** O check `realtime` do health é `degraded` quando
+   falha — a rota segue 200, porque o atendimento continua —, então o item 2
+   não o vê. O vigia lê esse check pelo nome, com contador próprio, e manda
+   "Tempo real fora — telas não atualizam sozinhas" (e "recuperado" na volta).
+
+### Realtime fora
+
+Sintoma: Inbox e telas só atualizam recarregando; o health mostra
+`"realtime":{"status":"degraded","error":"http_503"}`; o Kong loga `DNS
+resolution failed ... realtime-dev.supabase-realtime`. Causa vista em
+**2026-10-20**: o `kong.yml` roteia `/realtime/v1` para
+`realtime-dev.supabase-realtime` (o nome é o tenant do Realtime), e o compose
+gerado pelo EasyPanel tira o `container_name` do serviço `realtime`. Conserto:
+no `docker-compose.yml` do projeto supabase, dentro do serviço `realtime`:
+
+```yaml
+    networks:
+      default:
+        aliases:
+          - realtime-dev.supabase-realtime
+```
+
+e recriar só ele (sem tocar no resto):
+
+```bash
+docker compose -p lidiacrm_supabase --project-directory . -f docker-compose.yml -f docker-compose.override.yml up -d --no-deps realtime
+docker exec lidiacrm_supabase-kong-1 getent hosts realtime-dev.supabase-realtime   # tem de devolver um IP
+```
+
+Um "Implantar" do projeto supabase no EasyPanel pode regravar o compose e
+apagar o alias — o vigia avisa em ~3 min se isso acontecer.
 
 ### Instalar (uma vez por VPS, como root)
 

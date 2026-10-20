@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
 # lidiacrm-watchdog — vigia da produção (VPS EasyPanel). Roda a cada minuto via
-# systemd timer (lidiacrm-watchdog.timer). Duas obrigações:
+# systemd timer (lidiacrm-watchdog.timer). Três obrigações:
 #
 #  1. CURAR: sobe contêiner Compose que morreu na PARTIDA — o caso do kong depois
 #     de um reboot ("network <id> not found", Exited 255), que o
 #     `restart: unless-stopped` não resolve. Parada deliberada (docker stop: exit
 #     0/137/143, sem State.Error) NÃO é tocada.
+#     Também recria serviço que SUMIU (sem contêiner nenhum) enquanto o resto do
+#     projeto segue de pé — incidente de 2026-10-16: depois de 2 h falhando no
+#     attach da overlay `easypanel`, o contêiner do kong desapareceu e o vigia,
+#     que só olhava contêiner parado, ficou 11 h sem ter o que curar. Projeto
+#     inteiro sem contêiner (`compose down` pelo painel) é deliberado e é pulado.
 #  2. AVISAR: sonda /api/v1/health e manda e-mail (SMTP/SES do próprio app) quando
 #     fica fora por LIMITE sondagens seguidas, e de novo quando volta.
+#  3. TEMPO REAL: o check `realtime` do health é `degraded` (a rota segue 200),
+#     então a sonda do item 2 não o vê; ele tem contador e e-mail próprios.
 #
 # Configuração em /etc/lidiacrm-watchdog.env (HEALTH_URL é obrigatório; ALERTA_PARA,
 # LIMITE, LEMBRETE_MIN, PROJETOS e ENV_APP são opcionais). Instalação em
@@ -24,7 +31,8 @@ ENV_APP="/etc/easypanel/projects/lidiacrm/crm/code/deploy/easypanel/.env"
 ESTADO="/var/lib/lidiacrm-watchdog"
 LOG="/var/log/lidiacrm-watchdog.log"
 
-[ -r /etc/lidiacrm-watchdog.env ] && . /etc/lidiacrm-watchdog.env
+CONF="${LIDIACRM_WATCHDOG_ENV:-/etc/lidiacrm-watchdog.env}"   # outro caminho só no teste (tests/shell)
+[ -r "$CONF" ] && . "$CONF"
 mkdir -p "$ESTADO"
 
 exec 9>"$ESTADO/lock"
@@ -87,6 +95,34 @@ curar() {
       fi
     done
   done
+  curar_ausentes
+}
+
+# serviço declarado com restart unless-stopped/always e SEM contêiner, num projeto
+# que tem outros contêineres rodando. `migrate` (restart: no) nunca entra.
+curar_ausentes() {
+  local p ref wd cfg args f svc tem last
+  for p in $PROJETOS; do
+    ref=$(docker ps --filter "label=com.docker.compose.project=$p" --format '{{.Names}}' | head -1)
+    [ -n "$ref" ] || continue   # nada rodando: projeto parado de propósito
+    wd=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$ref")
+    cfg=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$ref")
+    args=(); for f in ${cfg//,/ }; do args+=(-f "$f"); done
+    tem=" $(docker ps -a --filter "label=com.docker.compose.project=$p" --format '{{.Label "com.docker.compose.service"}}' | sort -u | xargs) "
+    for svc in $(docker compose -p "$p" --project-directory "$wd" "${args[@]}" config --format json 2>/dev/null \
+                 | jq -r '.services|to_entries[]|select(.value.restart=="unless-stopped" or .value.restart=="always")|.key'); do
+      case "$tem" in *" $svc "*) continue ;; esac
+      last=$(cat "$ESTADO/curou.$p.$svc" 2>/dev/null || echo 0)
+      [ $(( $(agora) - last )) -lt 300 ] && continue
+      agora > "$ESTADO/curou.$p.$svc"
+      log "curar: $p/$svc sem conteiner — recriando (compose up --no-deps)"
+      if docker compose -p "$p" --project-directory "$wd" "${args[@]}" up -d --no-deps "$svc" >> "$LOG" 2>&1; then
+        log "curar: $p/$svc recriado"
+      else
+        log "curar: $p/$svc FALHOU ao recriar"
+      fi
+    done
+  done
 }
 
 # ── 2. sondar e avisar ────────────────────────────────────────────────────────
@@ -110,7 +146,9 @@ Sondagens falhas seguidas antes de voltar: $falhas
 Horário (UTC): $(date -u +%FT%TZ)"
       rm -f "$ESTADO/alertado_em"
     fi
-    echo 0 > "$ESTADO/falhas"; rm -f "$corpo"; return 0
+    echo 0 > "$ESTADO/falhas"
+    sondar_realtime "$corpo"
+    rm -f "$corpo"; return 0
   fi
 
   falhas=$((falhas + 1)); echo "$falhas" > "$ESTADO/falhas"
@@ -135,6 +173,55 @@ O watchdog já tenta subir contêiner que morreu na partida. Log: $LOG"
     fi
   fi
   rm -f "$corpo"
+}
+
+# ── 3. tempo real ─────────────────────────────────────────────────────────────
+# O health responde 200 com o Realtime fora (é `degraded`: atendimento segue, só
+# as telas param de atualizar ao vivo). Por isso a sonda acima não vê, e este
+# bloco lê o check pelo nome. Incidente de 2026-10-20: 631/631 websockets com
+# 503 por horas, health "healthy", ninguém avisado. Contador e aviso próprios —
+# o assunto do e-mail não pode dizer "fora do ar" de um CRM que está atendendo.
+sondar_realtime() { # $1 corpo do health que respondeu 200
+  local st detalhe falhas alertado_em
+  st=$(grep -o '"realtime":{"status":"[a-z]*"' "$1" | sed 's/.*"status":"//; s/"$//')
+  [ -n "$st" ] || return 0   # imagem anterior ao check: nada a julgar
+  falhas=$(cat "$ESTADO/rt_falhas" 2>/dev/null || echo 0)
+
+  if [ "$st" = ok ]; then
+    if [ -f "$ESTADO/rt_alertado_em" ]; then
+      log "realtime: recuperou apos $falhas sondagens falhas"
+      enviar_email "[Gestalt CRM] Tempo real recuperado" \
+"As telas do CRM voltaram a atualizar ao vivo.
+
+Sondagens falhas seguidas antes de voltar: $falhas
+Horário (UTC): $(date -u +%FT%TZ)"
+      rm -f "$ESTADO/rt_alertado_em"
+    fi
+    echo 0 > "$ESTADO/rt_falhas"; return 0
+  fi
+
+  detalhe=$(grep -o '"realtime":{[^}]*}' "$1")
+  falhas=$((falhas + 1)); echo "$falhas" > "$ESTADO/rt_falhas"
+  log "realtime: FALHA #$falhas ($detalhe)"
+  [ "$falhas" -ge "$LIMITE" ] || return 0
+  alertado_em=$(cat "$ESTADO/rt_alertado_em" 2>/dev/null || echo 0)
+  if [ "$alertado_em" = 0 ] || [ $(( $(agora) - alertado_em )) -ge $(( LEMBRETE_MIN * 60 )) ]; then
+    enviar_email "[Gestalt CRM] Tempo real fora — telas não atualizam sozinhas" \
+"O CRM está no ar e atendendo, mas o Realtime do Supabase não responde:
+Inbox e telas só mostram novidade recarregando a página.
+
+$HEALTH_URL => $detalhe
+Sondagens falhas seguidas: $falhas
+
+Causa já vista (2026-10-20): o Kong não resolve realtime-dev.supabase-realtime,
+porque o compose do EasyPanel tirou o container_name do serviço realtime.
+Confira com:
+  docker exec lidiacrm_supabase-kong-1 getent hosts realtime-dev.supabase-realtime
+Conserto em docs/runbooks/deploy.md, seção \"Realtime fora\".
+
+Horário (UTC): $(date -u +%FT%TZ)"
+    agora > "$ESTADO/rt_alertado_em"
+  fi
 }
 
 if [ "${1:-}" = "--testar-email" ]; then

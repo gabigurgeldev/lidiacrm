@@ -1,5 +1,5 @@
 /**
- * GET /api/v1/health — Supabase, Redis e WAHA respondem?
+ * GET /api/v1/health — Supabase, Realtime, Redis e WAHA respondem?
  *
  * ─── Por que cada check diz a CAUSA, e não só "down" ─────────────────────────
  * A versão anterior devolvia `error: "fetch failed"` — a mensagem que o `fetch`
@@ -176,6 +176,55 @@ async function checkWaha(): Promise<Check> {
 }
 
 /**
+ * O Realtime responde pelo MESMO caminho que o navegador usa?
+ *
+ * Existe porque em 2026-10-20 o Realtime da produção estava 100% fora — 631 de
+ * 631 websockets com 503 numa hora — enquanto esta rota dizia "healthy". O Kong
+ * roteia `/realtime/v1` para `realtime-dev.supabase-realtime` (o nome É o
+ * tenant), e o compose gerado pelo EasyPanel tira o `container_name` que dava
+ * esse nome ao contêiner: o Kong não resolvia o host e devolvia 503. O check do
+ * Supabase acima passa pelo `/rest/v1`, que vai a outro upstream, e não via nada.
+ *
+ * `/realtime/v1/api/ping` passa pelo mesmo upstream do websocket (o `kong.yml`
+ * roteia `/realtime/v1/api` e `/realtime/v1/websocket` ao mesmo host), então a
+ * falha de hoje aparece aqui como 503. A anon key vai em header — nunca em query
+ * string, que vaza em log de proxy.
+ *
+ * `degraded`, nunca `down`: sem Realtime as telas só deixam de atualizar ao vivo
+ * — mensagem chega, atendimento segue, recarregar mostra tudo. `down` viraria
+ * 503, e o vigia da VPS mandaria "PRODUÇÃO FORA DO AR" para um sistema que está
+ * atendendo. O vigia lê este check pelo nome e avisa com o assunto certo.
+ */
+async function checkRealtime(): Promise<Check> {
+  const t0 = Date.now();
+  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  try {
+    const res = await withTimeout(
+      fetch(`${url.replace(/\/$/, "")}/realtime/v1/api/ping`, {
+        headers: { apikey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY },
+        cache: "no-store",
+      }),
+    );
+    if (res.ok) return { status: "ok", latency_ms: Date.now() - t0, target: alvoDe(url) };
+    return {
+      status: "degraded",
+      latency_ms: Date.now() - t0,
+      error: `http_${res.status}`,
+      reason: motivoDoStatusHttp(res.status),
+      target: alvoDe(url),
+    };
+  } catch (e) {
+    return {
+      status: "degraded",
+      latency_ms: Date.now() - t0,
+      error: e instanceof Error ? e.message : String(e),
+      reason: classificarFalhaDeAlcance(e),
+      target: alvoDe(url),
+    };
+  }
+}
+
+/**
  * O segredo interno dos crons também abre o modo verboso. Mesmo contrato de
  * `/api/v1/system/agent`: Bearer, comparação em tempo constante, e segredo vazio
  * nunca vira credencial válida.
@@ -220,8 +269,9 @@ function semAlvo(check: Check): Check {
 }
 
 export async function GET(req: NextRequest) {
-  const [supabase, redis, waha] = await Promise.all([
+  const [supabase, realtime, redis, waha] = await Promise.all([
     checkSupabase(),
+    checkRealtime(),
     checkRedis(),
     checkWaha(),
   ]);
@@ -230,6 +280,7 @@ export async function GET(req: NextRequest) {
   const filtrar = verboso ? (c: Check) => c : semAlvo;
   const checks = {
     supabase: filtrar(supabase),
+    realtime: filtrar(realtime),
     redis: filtrar(redis),
     waha: filtrar(waha),
     ai_encryption_key: checkChaveDeCifragemDaIa(),
