@@ -129,19 +129,8 @@ export async function ensureTenantForUser(
     },
   });
 
-  // Os mesmos efeitos de `finishOnboarding` — quem escuta `tenant.onboarded`
-  // não pode deixar de ouvir só porque o assistente saiu do caminho.
-  await admin
-    .from("event_log")
-    .insert({
-      organization_id: org.id,
-      event_type: "tenant.onboarded",
-      payload: { completed_by: user.id, origem: "cadastro" },
-    })
-    .then(
-      () => undefined,
-      () => undefined,
-    );
+  // O mesmo registro de `finishOnboarding` — a trilha não pode perder o
+  // onboarding só porque o assistente saiu do caminho.
   void audit({
     action: "onboarding.completed",
     actorUserId: user.id,

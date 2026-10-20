@@ -251,12 +251,6 @@ export async function criarAgenteDaPrevia(
     },
   });
 
-  await admin.from("event_log").insert({
-    organization_id: orgId,
-    event_type: "ai_agent.created",
-    payload: { agent_id: agentId, source: "construtor", published: false },
-  });
-
   const avisos: string[] = [];
   if (!provedor.ok) {
     avisos.push(

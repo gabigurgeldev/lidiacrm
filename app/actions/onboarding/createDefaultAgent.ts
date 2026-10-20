@@ -371,13 +371,6 @@ export async function createDefaultAgent(formData: FormData): Promise<CreateAgen
     },
   });
 
-  // Emit a domain event for downstream listeners (Spec 01 §7 event log).
-  await admin.from("event_log").insert({
-    organization_id: ctx.orgId,
-    event_type: "ai_agent.created",
-    payload: { agent_id: agent.id, source: "onboarding", published: publicacao.published },
-  });
-
   // Não deu para SABER se há canal: não publica (falha fechado na ação) e não
   // avança (falha aberto na informação) — a tela explica e oferece seguir. Um
   // redirect aqui deixaria como única pista um badge "Rascunho" numa tela que a

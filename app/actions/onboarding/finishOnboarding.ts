@@ -1,9 +1,9 @@
 "use server";
 
 /**
- * Server Action: finalize onboarding — stamps `onboarded_at`, audits, and
- * emits the `tenant.onboarded` domain event. Idempotent: only fires the
- * event the first time `onboarded_at` flips from NULL.
+ * Server Action: finalize onboarding — stamps `onboarded_at` and audits
+ * `onboarding.completed` + `tenant.onboarded`. Idempotent: only audits the
+ * first time `onboarded_at` flips from NULL.
  */
 import { redirect } from "next/navigation";
 
@@ -41,12 +41,6 @@ export async function finishOnboarding(): Promise<FinishOnboardingResult> {
       .eq("id", ctx.orgId)
       .is("onboarded_at", null);
     if (error) return { ok: false, error: "db_error", details: error.message };
-
-    await admin.from("event_log").insert({
-      organization_id: ctx.orgId,
-      event_type: "tenant.onboarded",
-      payload: { completed_by: ctx.userId },
-    });
 
     await audit({
       action: "onboarding.completed",

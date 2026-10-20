@@ -8,7 +8,7 @@
  * Validates credential, channel_session, model and tool_ids before commit.
  *
  * Maps validation errors to 422 with stable codes (PublishErrorCode).
- * Emits event_log 'ai_agent.published' fire-and-forget after commit.
+ * Audita 'ai_agent.published' fire-and-forget after commit.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
@@ -95,23 +95,9 @@ export async function POST(req: NextRequest, ctx: Ctx): Promise<Response> {
     return fail("internal_error", "Erro ao publicar.", 500, { requestId });
   }
 
-  // event_log + audit fire-and-forget.
-  void admin
-    .from("event_log")
-    .insert({
-      organization_id: activeOrg.orgId,
-      event_type: "ai_agent.published",
-      payload: {
-        agent_id: result.agent_id,
-        version_id: result.version_id,
-        previous_version_id: result.previous_version_id,
-        published_at: result.published_at,
-      },
-    })
-    .then(({ error }) => {
-      if (error) console.error("[ai_agents/publish] event_log error", error.message);
-    });
-
+  // Só audit: o `event_log` que saía daqui nunca gravou (sem `entity_kind`, que
+  // é NOT NULL) e nenhum handler escuta `ai_agent.published`. Ver
+  // tests/unit/event-log-insert-com-entity-kind.test.ts.
   void audit({
     action: "ai_agent.published",
     actorUserId: authUser.id,

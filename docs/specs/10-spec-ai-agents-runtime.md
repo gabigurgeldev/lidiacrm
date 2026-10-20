@@ -365,7 +365,7 @@ Novos `event_type` que o módulo emite/consome:
 | `ai_agent.run_started` | worker `agent-runner` | observability sink | `{run_id, agent_id, version_id, conversation_id}` |
 | `ai_agent.run_completed` | worker `agent-runner` | observability sink, billing | `{run_id, status, tokens_in, tokens_out, cost_cents, latency_ms, steps_count}` |
 | `ai_agent.handoff_triggered` | runtime (tool ou sentinela) | worker pipeline (atribuição humana) | `{run_id, conversation_id, reason, urgency}` |
-| `ai_agent.published` | endpoint `:publish` | audit sink | `{agent_id, version_id, previous_version_id}` |
+| ~~`ai_agent.published`~~ | — | — | Não vai ao `event_log`: nenhum consumidor, e o insert nunca gravou (faltava `entity_kind`, NOT NULL). O fato fica só no `api_audit_log` (`ai_agent.published`). Guarda: `tests/unit/event-log-insert-com-entity-kind.test.ts`. |
 
 ---
 
@@ -506,7 +506,6 @@ Resposta:
        where id=$version_id;
      update ai_agents set published_version_id=$version_id, updated_at=now()
        where id=$agent_id;
-     insert into event_log (event_type, payload) values ('ai_agent.published', ...);
    commit;
    ```
 6. Audit log entry `ai_agent.published`
