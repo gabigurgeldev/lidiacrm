@@ -1,6 +1,7 @@
 "use client";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { useInvalidacaoAgrupada } from "@/hooks/realtime/useInvalidacaoAgrupada";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
 import { useRefetchDeSeguranca } from "@/hooks/realtime/useRefetchDeSeguranca";
 import { apiClient } from "@/lib/api/client";
@@ -54,10 +55,14 @@ export function useMessagesRealtime(conversationId: string | null) {
     refetchOnWindowFocus: true,
   });
 
-  const onChange = useCallback(() => {
-    if (conversationId) qc.invalidateQueries({ queryKey: ["messages", conversationId] });
-    qc.invalidateQueries({ queryKey: ["conversations"] });
-  }, [qc, conversationId]);
+  // Agrupado: INSERT, ack e mídia persistida da mesma mensagem chegam em
+  // rajada, e cada um relia o hilo E a lista — ver `useInvalidacaoAgrupada`.
+  const onChange = useInvalidacaoAgrupada(
+    useCallback(() => {
+      if (conversationId) qc.invalidateQueries({ queryKey: ["messages", conversationId] });
+      qc.invalidateQueries({ queryKey: ["conversations"] });
+    }, [qc, conversationId]),
+  );
 
   const { status: realtimeStatus, ultimaEntrega } = useRealtimeChannel({
     name: conversationId ? `messages-${conversationId}` : "messages-disabled",
@@ -95,6 +100,9 @@ export function useMessagesRealtime(conversationId: string | null) {
     // a resposta do cliente, e 45s de tela parada lê como "a mensagem não
     // chegou". Uma consulta leve (uma página) por conversa aberta.
     intervaloMs: 15_000,
+    // Os 15s valem para o canal CAÍDO. Assinado, quem entrega é o Realtime e a
+    // conferência cai para 5 min — ver `statusDoCanal` no hook.
+    statusDoCanal: realtimeStatus,
     enabled: !!conversationId,
   });
 

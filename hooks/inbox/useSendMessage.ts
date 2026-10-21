@@ -42,8 +42,14 @@ export function useSendMessage() {
   const nomeDaAssinatura = nomeParaAssinar(useUserOpcional()?.assinatura);
 
   return useMutation({
+    // UMA tentativa. O cliente repete POST que estoura o teto de tempo, e o
+    // envio é o caso em que repetir é o pior a fazer: o servidor costuma ter
+    // aceitado a primeira — só demorou a responder —, e cada repetição vira
+    // outra mensagem no WhatsApp do cliente. Mensagem dobrada não se desfaz;
+    // um erro na tela, sim (o `onError` relê o hilo e a mensagem aparece se
+    // tiver saído). Visto em produção com a CPU saturada.
     mutationFn: async (input: SendArgs) =>
-      apiClient.post<{ data: Message }>("/api/v1/messages", input),
+      apiClient.post<{ data: Message }>("/api/v1/messages", input, { semRepetir: true }),
     onMutate: async (args) => {
       // Opções: o tipo e o corpo saem do servidor (o canal pode rebaixar para
       // texto), então o otimista mentiria — espera a resposta, como o contato.
