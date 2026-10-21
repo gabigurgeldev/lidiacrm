@@ -11,6 +11,12 @@
  *   2. **Eventos.** Cadastro, cobrança paga, estorno, chargeback e cancelamento
  *      vão para `POST /api/v1/events`, que é de onde o Back Office tira receita e
  *      comissão.
+ *   3. **Avisos de cobrança.** O Back Office é quem manda ao cliente, pelo
+ *      WhatsApp, o aviso de fatura (pendente/vencida) e o de fim do teste
+ *      grátis. O CRM manda o DADO: `invoice.updated` (estado da fatura),
+ *      `subscription.updated` (status e fim do teste) e `customer.phone` (o
+ *      WhatsApp do dono). O Asaas foi calado (`notificationDisabled`) para o
+ *      cliente não receber o mesmo aviso duas vezes.
  *
  * ═══ Autenticação ═══
  * `Authorization: Bearer <BACKOFFICE_API_KEY>`, `X-Timestamp` (unix) e
@@ -187,7 +193,14 @@ export type TipoDeEvento =
   | "payment.succeeded"
   | "payment.refunded"
   | "payment.chargeback"
-  | "subscription.canceled";
+  | "subscription.canceled"
+  | "invoice.updated"
+  | "subscription.updated";
+
+type MetodoDoBackoffice = "pix" | "boleto" | "credit_card" | "manual";
+
+/** Status de fatura no contrato do Back Office. */
+export type StatusDaFatura = "pending" | "overdue" | "paid" | "canceled";
 
 export interface EventoParaBackoffice {
   event_id: string;
@@ -197,10 +210,30 @@ export interface EventoParaBackoffice {
     external_id: string;
     amount_cents?: number;
     currency: "BRL";
-    method: "pix" | "boleto" | "credit_card" | "manual";
+    method: MetodoDoBackoffice;
     paid_at?: string;
   };
-  subscription?: { external_id?: string; amount_cents?: number; status?: string };
+  subscription?: {
+    external_id?: string;
+    amount_cents?: number;
+    status?: string;
+    /** `YYYY-MM-DD` (dia de São Paulo). O Back Office avisa o fim do teste por ela. */
+    trial_ends_at?: string | null;
+    subscribe_url?: string | null;
+  };
+  /**
+   * A fatura como está agora. `external_id` = id da cobrança no Asaas — o MESMO
+   * `payment.external_id` do `payment.succeeded` dela, que é como o Back Office
+   * baixa a fatura que espelhou.
+   */
+  invoice?: {
+    external_id: string;
+    amount_cents: number;
+    due_date: string;
+    payment_url?: string | null;
+    status: StatusDaFatura;
+    method?: MetodoDoBackoffice;
+  };
 }
 
 const METODOS: Record<string, "pix" | "boleto" | "credit_card"> = {
@@ -232,11 +265,77 @@ export function instanteDoPagamento(data: string | null | undefined, agora: Date
   return `${dia}T15:00:00.000Z`;
 }
 
+/** Só `https` vai para a mensagem que o Back Office manda ao cliente. */
+function linkSeguro(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Status do Asaas → status da fatura no Back Office. O que não está aqui
+ * (estorno, chargeback, análise de risco…) não vira `invoice.updated`: estorno e
+ * chargeback já têm evento próprio.
+ *
+ * Não há status "recusada" no Asaas: cartão recusado na captura deixa a
+ * cobrança `PENDING` — e ela continua, de fato, em aberto.
+ */
+function statusDaFatura(status: string): StatusDaFatura | null {
+  if (status === "PENDING") return "pending";
+  if (status === "OVERDUE") return "overdue";
+  if (STATUS_PAGOS.has(status)) return "paid";
+  if (status === "DELETED") return "canceled";
+  return null;
+}
+
+/**
+ * `invoice.updated` da cobrança, ou null quando o estado dela não interessa ao
+ * Back Office ou falta o vencimento (obrigatório no contrato).
+ *
+ * O `event_id` de pendente e vencida leva o VENCIMENTO: o Asaas pode mudar a
+ * data de uma cobrança em aberto, e a data nova é outro estado — tem de chegar.
+ * Paga e cancelada são finais.
+ *
+ * Paga também vai, além do `payment.succeeded`: se um `pending` reenviado pela
+ * fila chegar ao Back Office DEPOIS do pagamento, sem a fatura espelhada lá, ele
+ * nasceria em aberto e o cliente seria cobrado de uma fatura paga. Com o `paid`
+ * explícito, qualquer ordem de chegada termina em paga (o Back Office não
+ * reabre fatura baixada).
+ */
+function eventoDaFatura(p: PagamentoAsaas, agora: Date): EventoParaBackoffice | null {
+  const status = statusDaFatura(p.status);
+  const vencimento = (p.dueDate ?? "").slice(0, 10);
+  if (!status || !/^\d{4}-\d{2}-\d{2}$/.test(vencimento)) return null;
+  const metodo = METODOS[p.billingType ?? ""];
+  const sufixo = status === "pending" || status === "overdue" ? `${status}_${vencimento}` : status;
+  return {
+    event_id: `crm_pay_${p.id}_${sufixo}`,
+    type: "invoice.updated",
+    occurred_at: agora.toISOString(),
+    invoice: {
+      external_id: p.id,
+      amount_cents: Math.round(p.value * 100),
+      due_date: vencimento,
+      payment_url: linkSeguro(p.invoiceUrl),
+      status,
+      ...(metodo ? { method: metodo } : {}),
+    },
+    ...(p.subscription ? { subscription: { external_id: p.subscription } } : {}),
+  };
+}
+
 /**
  * Os eventos que o estado ATUAL de uma cobrança implica. Estorno e chargeback
  * levam junto o `payment.succeeded` (mesmo `event_id`, então não duplica): se a
  * conciliação vir a cobrança já estornada, o Back Office precisa conhecer o
  * pagamento para estornar a comissão dele.
+ *
+ * Pendente, vencida, paga e cancelada também viram `invoice.updated`: é por ele
+ * que o Back Office manda o aviso de cobrança ao cliente pelo WhatsApp (o Asaas
+ * não notifica mais — `notificationDisabled` em `lib/billing/asaas.ts`).
  */
 export function eventosDaCobranca(p: PagamentoAsaas, agora: Date = new Date()): EventoParaBackoffice[] {
   const dataPaga = p.confirmedDate ?? p.paymentDate ?? null;
@@ -278,13 +377,102 @@ export function eventosDaCobranca(p: PagamentoAsaas, agora: Date = new Date()): 
       payment: pagamento,
     });
   }
+  const fatura = eventoDaFatura(p, agora);
+  if (fatura) eventos.push(fatura);
   return eventos;
+}
+
+// ---------------------------------------------------------------------------
+// Assinatura (teste grátis e status) → `subscription.updated`
+// ---------------------------------------------------------------------------
+
+/** O que `eventoDaAssinatura` lê de `assinaturas` (subconjunto de `Assinatura`). */
+export interface AssinaturaParaBackoffice {
+  status: string;
+  isenta: boolean;
+  trial_termina_em: string | null;
+  pago_ate: string | null;
+  cancelada_em?: string | null;
+  valor_centavos: number;
+  asaas_subscription_id: string | null;
+}
+
+/**
+ * Status do CRM → status do Back Office. O Back Office só trata `trial` como
+ * teste grátis e `canceled` como cancelamento; os outros dois ficam gravados
+ * como estão.
+ */
+const STATUS_NO_BACKOFFICE: Record<string, string> = {
+  trial: "trial",
+  ativa: "active",
+  inadimplente: "past_due",
+  cancelada: "canceled",
+};
+
+function diaEmSaoPaulo(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isFinite(d.getTime()) ? hojeEmSaoPaulo(d) : null;
+}
+
+/** Onde o cliente assina — a tela de pagamento. Só vai se for `https`. */
+function urlDeAssinar(): string | null {
+  return linkSeguro(`${env.NEXT_PUBLIC_APP_URL.trim().replace(/\/+$/, "")}/assinatura`);
+}
+
+/**
+ * `subscription.updated` do estado atual da assinatura, ou null quando ela não
+ * interessa ao Back Office (isenta nunca é cobrada; status desconhecido).
+ *
+ * `event_id` = organização + status + a data que define aquele estado: fim do
+ * teste (estender o teste é estado novo, e o aviso tem de acompanhar a data
+ * nova), `pago_ate` para ativa/inadimplente (cada renovação ou atraso é outro
+ * estado) e o dia do cancelamento. Repetir o mesmo estado não reenvia nada.
+ */
+export function eventoDaAssinatura(
+  organizationId: string,
+  a: AssinaturaParaBackoffice,
+  agora: Date = new Date(),
+): EventoParaBackoffice | null {
+  if (a.isenta) return null;
+  const status = STATUS_NO_BACKOFFICE[a.status];
+  if (!status) return null;
+  const fimDoTeste = diaEmSaoPaulo(a.trial_termina_em);
+  const marca =
+    status === "trial"
+      ? (fimDoTeste ?? "sem_data")
+      : status === "canceled"
+        ? (diaEmSaoPaulo(a.cancelada_em) ?? diaEmSaoPaulo(a.pago_ate) ?? "sem_data")
+        : (diaEmSaoPaulo(a.pago_ate) ?? "nunca_pagou");
+  return {
+    event_id: `crm_org_${organizationId}_sub_${status}_${marca}`,
+    type: "subscription.updated",
+    occurred_at: agora.toISOString(),
+    subscription: {
+      status,
+      // Fora do teste vai `null`: o Back Office limpa a data e não avisa fim de
+      // teste de quem já saiu dele.
+      trial_ends_at: status === "trial" ? fimDoTeste : null,
+      subscribe_url: urlDeAssinar(),
+      amount_cents: a.valor_centavos,
+      ...(a.asaas_subscription_id ? { external_id: a.asaas_subscription_id } : {}),
+    },
+  };
 }
 
 interface ClienteDoBackoffice {
   external_id: string;
   name?: string;
   email?: string;
+  /** WhatsApp do dono, só dígitos (com 55). É para onde o Back Office manda o aviso de cobrança. */
+  phone?: string;
+}
+
+/** Só dígitos, 10 a 13 — o resto não é um WhatsApp possível e não vai. */
+export function telefoneDoDono(bruto: unknown): string | null {
+  if (typeof bruto !== "string") return null;
+  const digitos = bruto.replace(/\D/g, "");
+  return digitos.length >= 10 && digitos.length <= 13 ? digitos : null;
 }
 
 /** Cliente no Back Office = a organização (mesmo id das criadas por `/backoffice/tenants`). */
@@ -298,10 +486,15 @@ async function clienteDaOrganizacao(admin: Admin, organizationId: string): Promi
   const o = org as { display_name: string | null; created_by: string | null } | null;
   if (o?.display_name) cliente.name = o.display_name.slice(0, 200);
   if (o?.created_by) {
-    // O e-mail do dono é o que o Back Office usa para barrar autoindicação.
+    // O e-mail do dono é o que o Back Office usa para barrar autoindicação; o
+    // WhatsApp (gravado pelo cadastro em `user_metadata.phone`) é para onde vai
+    // o aviso de cobrança. Organização criada PELO Back Office não tem
+    // `created_by` — lá o Back Office já tem o WhatsApp do dono.
     const { data } = await admin.auth.admin.getUserById(o.created_by).catch(() => ({ data: null }));
     const email = data?.user?.email;
     if (email) cliente.email = email;
+    const telefone = telefoneDoDono(data?.user?.user_metadata?.phone);
+    if (telefone) cliente.phone = telefone;
   }
   return cliente;
 }
@@ -310,19 +503,22 @@ async function clienteDaOrganizacao(admin: Admin, organizationId: string): Promi
  * Põe os eventos na fila e agenda o envio para depois da resposta. Nunca lança:
  * falhar aqui não pode derrubar o webhook do Asaas nem o cadastro — a cobrança
  * já está gravada, e a conciliação horária passa por ela de novo.
+ *
+ * Devolve quantos eventos NOVOS entraram na fila (0 quando já estavam lá ou
+ * quando falhou) — é o "fez alguma coisa?" de quem precisa decidir se audita.
  */
 export async function emitirParaBackoffice(
   admin: Admin,
   organizationId: string,
   eventos: EventoParaBackoffice[],
-): Promise<void> {
-  if (!backofficeLigado() || eventos.length === 0) return;
+): Promise<number> {
+  if (!backofficeLigado() || eventos.length === 0) return 0;
   try {
     const ids = eventos.map((e) => e.event_id);
     const { data: existentes } = await admin.from("backoffice_saida").select("event_id").in("event_id", ids);
     const ja = new Set(((existentes ?? []) as Array<{ event_id: string }>).map((r) => r.event_id));
     const novos = eventos.filter((e) => !ja.has(e.event_id));
-    if (novos.length === 0) return;
+    if (novos.length === 0) return 0;
 
     const [cliente, indicacao] = await Promise.all([
       clienteDaOrganizacao(admin, organizationId),
@@ -348,11 +544,13 @@ export async function emitirParaBackoffice(
     await depoisDaResposta("backoffice", async () => {
       await enviarPendentes(admin, { eventIds: enfileirados });
     });
+    return enfileirados.length;
   } catch (e) {
     logger.warn("backoffice: evento não enfileirado", {
       organization_id: organizationId,
       erro: e instanceof Error ? e.message : String(e),
     });
+    return 0;
   }
 }
 
@@ -360,6 +558,79 @@ export async function emitirParaBackoffice(
 export async function emitirCobranca(admin: Admin, organizationId: string, p: PagamentoAsaas): Promise<void> {
   if (!backofficeLigado()) return;
   await emitirParaBackoffice(admin, organizationId, eventosDaCobranca(p));
+}
+
+/** Atalho do billing: a assinatura como está agora → `subscription.updated` na fila. */
+export async function emitirAssinatura(
+  admin: Admin,
+  organizationId: string,
+  a: AssinaturaParaBackoffice,
+): Promise<number> {
+  if (!backofficeLigado()) return 0;
+  const evento = eventoDaAssinatura(organizationId, a);
+  return evento ? emitirParaBackoffice(admin, organizationId, [evento]) : 0;
+}
+
+/** Teto da passada de conciliação. Teste dura dias, então isto é folga, não fila. */
+const LOTE_DE_TESTES = 500;
+const FATIA_DA_CONSULTA = 50;
+
+/**
+ * A passada da conciliação horária (`billing-conciliar`): todo teste grátis em
+ * andamento chega ao Back Office com a sua data de fim. Cobre o que nasceu
+ * antes de o aviso existir, e qualquer `subscription.updated` que não entrou na
+ * fila no momento da mudança. O `event_id` leva a data de fim, então rodar de
+ * novo não reenvia nada — e a pergunta "já está na fila?" é UMA consulta para o
+ * lote inteiro, não uma por organização.
+ *
+ * Fatura em aberto não precisa de passada própria: a mesma conciliação já passa
+ * cada cobrança das assinaturas que confere por `gravarCobranca`, que enfileira
+ * o `invoice.updated`.
+ *
+ * Devolve quantos eventos entraram na fila agora. Nunca lança.
+ */
+export async function conciliarTestesNoBackoffice(admin: Admin, agora: Date = new Date()): Promise<number> {
+  if (!backofficeLigado()) return 0;
+  try {
+    // Desde ontem: o Back Office também avisa NO DIA do fim.
+    const desde = new Date(agora.getTime() - 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await admin
+      .from("assinaturas")
+      .select("organization_id, status, isenta, trial_termina_em, pago_ate, cancelada_em, valor_centavos, asaas_subscription_id")
+      .eq("status", "trial")
+      .eq("isenta", false)
+      .gte("trial_termina_em", desde)
+      .order("trial_termina_em", { ascending: true })
+      .limit(LOTE_DE_TESTES);
+    if (error) throw new Error(error.message);
+
+    const candidatos = ((data ?? []) as Array<AssinaturaParaBackoffice & { organization_id: string }>)
+      .map((a) => ({ organizationId: a.organization_id, evento: eventoDaAssinatura(a.organization_id, a, agora) }))
+      .filter((c): c is { organizationId: string; evento: EventoParaBackoffice } => c.evento !== null);
+    if (candidatos.length === 0) return 0;
+
+    // Em fatias: a lista vai na URL do PostgREST, e 500 ids não cabem nela.
+    const ja = new Set<string>();
+    const ids = candidatos.map((c) => c.evento.event_id);
+    for (let i = 0; i < ids.length; i += FATIA_DA_CONSULTA) {
+      const { data: existentes, error: erroFila } = await admin
+        .from("backoffice_saida")
+        .select("event_id")
+        .in("event_id", ids.slice(i, i + FATIA_DA_CONSULTA));
+      if (erroFila) throw new Error(erroFila.message);
+      for (const r of (existentes ?? []) as Array<{ event_id: string }>) ja.add(r.event_id);
+    }
+
+    let enfileirados = 0;
+    for (const c of candidatos) {
+      if (ja.has(c.evento.event_id)) continue;
+      enfileirados += await emitirParaBackoffice(admin, c.organizationId, [c.evento]);
+    }
+    return enfileirados;
+  } catch (e) {
+    logger.warn("backoffice: conciliação dos testes falhou", { erro: e instanceof Error ? e.message : String(e) });
+    return 0;
+  }
 }
 
 export async function emitirCancelamento(

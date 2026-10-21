@@ -5,7 +5,7 @@
  * Quem escreve é só isto aqui, com service role: o cliente não tem grant de
  * escrita nas tabelas (migration 0217), senão ele mesmo esticaria `pago_ate`.
  */
-import { emitirCobranca } from "@/lib/backoffice/saida";
+import { backofficeLigado, emitirAssinatura, emitirCobranca } from "@/lib/backoffice/saida";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { env } from "@/lib/env";
 
@@ -169,6 +169,13 @@ export async function abrirAssinatura(
     },
     { onConflict: "organization_id", ignoreDuplicates: true },
   );
+  // O Back Office passa a conhecer o teste (e a data de fim, que é quando ele
+  // avisa o cliente). Lê a linha de volta: com `ignoreDuplicates`, a que vale é
+  // a que já estava, não a que tentamos gravar.
+  if (backofficeLigado()) {
+    const { data } = await admin.from("assinaturas").select(COLUNAS).eq("organization_id", organizationId).maybeSingle();
+    if (data) await emitirAssinatura(admin, organizationId, data as Assinatura);
+  }
 }
 
 /** Grava/atualiza uma cobrança vinda do Asaas. */
@@ -230,5 +237,10 @@ export async function recalcularAssinatura(admin: Admin, organizationId: string)
     .update({ pago_ate: pagoAte, status, updated_at: agora })
     .eq("organization_id", organizationId);
   invalidarAcesso(organizationId);
-  return { ...atual, pago_ate: pagoAte, status };
+  const depois = { ...atual, pago_ate: pagoAte, status };
+  // Mudou o status (teste → ativa, ativa → inadimplente…): o Back Office ajusta
+  // a régua de avisos. Mesmo status (ex.: renovação em dia), nada sai: para a
+  // régua do Back Office nada mudou.
+  if (status !== atual.status) await emitirAssinatura(admin, organizationId, depois);
+  return depois;
 }

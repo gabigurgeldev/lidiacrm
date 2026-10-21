@@ -5,17 +5,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const envMock = vi.hoisted(() => ({
   BACKOFFICE_URL: "https://bo.test/",
   BACKOFFICE_API_KEY: "bo_live_teste",
+  NEXT_PUBLIC_APP_URL: "https://crm.test/",
 }));
 vi.mock("@/lib/env", () => ({ env: envMock }));
 
 import {
   classificar,
+  conciliarTestesNoBackoffice,
   enviarPendentes,
   esperaDaTentativa,
+  eventoDaAssinatura,
   eventosDaCobranca,
   instanteDoPagamento,
   normalizarCodigo,
   precoComDesconto,
+  telefoneDoDono,
   validarCodigo,
 } from "./saida";
 
@@ -55,9 +59,67 @@ describe("cobrança do Asaas → eventos", () => {
     );
   });
 
-  it("pendente ou vencida não gera nada", () => {
+  const fatura = { ...base, dueDate: "2026-10-10", invoiceUrl: "https://www.asaas.com/i/abc" };
+
+  it("pendente vira invoice.updated com vencimento, link, valor e método", () => {
+    const ev = eventosDaCobranca({ ...fatura, status: "PENDING" }, AGORA);
+    expect(ev).toEqual([
+      {
+        event_id: "crm_pay_pay_1_pending_2026-10-10",
+        type: "invoice.updated",
+        occurred_at: AGORA.toISOString(),
+        invoice: {
+          external_id: "pay_1",
+          amount_cents: 60000,
+          due_date: "2026-10-10",
+          payment_url: "https://www.asaas.com/i/abc",
+          status: "pending",
+          method: "pix",
+        },
+        subscription: { external_id: "sub_1" },
+      },
+    ]);
+  });
+
+  it("vencida é outro estado; vencimento novo é outro evento", () => {
+    const [vencida] = eventosDaCobranca({ ...fatura, status: "OVERDUE" }, AGORA);
+    expect(vencida).toMatchObject({
+      event_id: "crm_pay_pay_1_overdue_2026-10-10",
+      invoice: { status: "overdue" },
+    });
+    const [adiada] = eventosDaCobranca({ ...fatura, status: "PENDING", dueDate: "2026-10-20" }, AGORA);
+    expect(adiada!.event_id).toBe("crm_pay_pay_1_pending_2026-10-20");
+  });
+
+  it("excluída no Asaas vira fatura cancelada", () => {
+    const ev = eventosDaCobranca({ ...fatura, status: "DELETED" }, AGORA);
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ event_id: "crm_pay_pay_1_canceled", invoice: { status: "canceled" } });
+  });
+
+  it("paga leva o payment.succeeded E a fatura paga, com o MESMO id externo", () => {
+    const ev = eventosDaCobranca({ ...fatura, status: "RECEIVED", paymentDate: "2026-10-09" }, AGORA);
+    expect(ev.map((e) => e.type)).toEqual(["payment.succeeded", "invoice.updated"]);
+    expect(ev[1]).toMatchObject({ event_id: "crm_pay_pay_1_paid", invoice: { status: "paid" } });
+    expect(ev[1]!.invoice!.external_id).toBe(ev[0]!.payment!.external_id);
+  });
+
+  it("cartão leva method credit_card; link não-https e método desconhecido não vão", () => {
+    const [cartao] = eventosDaCobranca({ ...fatura, status: "PENDING", billingType: "CREDIT_CARD" }, AGORA);
+    expect(cartao!.invoice!.method).toBe("credit_card");
+    const [outro] = eventosDaCobranca(
+      { ...fatura, status: "PENDING", billingType: "UNDEFINED", invoiceUrl: "http://inseguro" },
+      AGORA,
+    );
+    expect(outro!.invoice!.payment_url).toBeNull();
+    expect(outro!.invoice).not.toHaveProperty("method");
+  });
+
+  it("sem vencimento, ou em estado que não é de fatura, não vira invoice.updated", () => {
     expect(eventosDaCobranca({ ...base, status: "PENDING" }, AGORA)).toEqual([]);
-    expect(eventosDaCobranca({ ...base, status: "OVERDUE" }, AGORA)).toEqual([]);
+    expect(eventosDaCobranca({ ...fatura, status: "AWAITING_RISK_ANALYSIS" }, AGORA)).toEqual([]);
+    const estorno = eventosDaCobranca({ ...fatura, status: "REFUNDED", paymentDate: "2026-09-10" }, AGORA);
+    expect(estorno.map((e) => e.type)).toEqual(["payment.succeeded", "payment.refunded"]);
   });
 
   it("estornada leva o pagamento junto, e o estorno é total", () => {
@@ -75,6 +137,77 @@ describe("cobrança do Asaas → eventos", () => {
     expect(instanteDoPagamento("2026-09-30", AGORA)).toBe(AGORA.toISOString());
     expect(instanteDoPagamento("2026-09-10", AGORA)).toBe("2026-09-10T15:00:00.000Z");
     expect(instanteDoPagamento(null, AGORA)).toBe(AGORA.toISOString());
+  });
+});
+
+describe("assinatura → subscription.updated", () => {
+  const ORG = "22222222-2222-4222-8222-222222222222";
+  const base = {
+    status: "trial",
+    isenta: false,
+    trial_termina_em: "2026-10-07T21:30:00.000Z", // 18h30 de 07/10 em São Paulo
+    pago_ate: null,
+    cancelada_em: null,
+    valor_centavos: 120000,
+    asaas_subscription_id: null,
+  };
+
+  it("teste leva o fim (dia de São Paulo) e o link de assinar; o event_id leva a data", () => {
+    expect(eventoDaAssinatura(ORG, base, AGORA)).toEqual({
+      event_id: `crm_org_${ORG}_sub_trial_2026-10-07`,
+      type: "subscription.updated",
+      occurred_at: AGORA.toISOString(),
+      subscription: {
+        status: "trial",
+        trial_ends_at: "2026-10-07",
+        subscribe_url: "https://crm.test/assinatura",
+        amount_cents: 120000,
+      },
+    });
+    // 01h UTC de 08/10 ainda é 07/10 em São Paulo.
+    const tarde = eventoDaAssinatura(ORG, { ...base, trial_termina_em: "2026-10-08T01:00:00.000Z" }, AGORA);
+    expect(tarde!.subscription!.trial_ends_at).toBe("2026-10-07");
+  });
+
+  it("teste estendido é evento novo", () => {
+    const antes = eventoDaAssinatura(ORG, base, AGORA)!;
+    const depois = eventoDaAssinatura(ORG, { ...base, trial_termina_em: "2026-10-14T21:30:00.000Z" }, AGORA)!;
+    expect(depois.event_id).not.toBe(antes.event_id);
+  });
+
+  it("mapeia os status do CRM para os que o Back Office entende", () => {
+    const ativa = eventoDaAssinatura(
+      ORG,
+      { ...base, status: "ativa", pago_ate: "2026-11-10T00:00:00.000Z", asaas_subscription_id: "sub_9" },
+      AGORA,
+    );
+    expect(ativa).toMatchObject({
+      event_id: `crm_org_${ORG}_sub_active_2026-11-09`,
+      subscription: { status: "active", trial_ends_at: null, external_id: "sub_9" },
+    });
+    expect(eventoDaAssinatura(ORG, { ...base, status: "inadimplente" }, AGORA)).toMatchObject({
+      event_id: `crm_org_${ORG}_sub_past_due_nunca_pagou`,
+      subscription: { status: "past_due" },
+    });
+    expect(
+      eventoDaAssinatura(ORG, { ...base, status: "cancelada", cancelada_em: "2026-09-30T15:00:00.000Z" }, AGORA),
+    ).toMatchObject({ event_id: `crm_org_${ORG}_sub_canceled_2026-09-30`, subscription: { status: "canceled" } });
+  });
+
+  it("isenta e status desconhecido não saem", () => {
+    expect(eventoDaAssinatura(ORG, { ...base, isenta: true }, AGORA)).toBeNull();
+    expect(eventoDaAssinatura(ORG, { ...base, status: "outro" }, AGORA)).toBeNull();
+  });
+});
+
+describe("telefone do dono", () => {
+  it("só dígitos, de 10 a 13", () => {
+    expect(telefoneDoDono("5511987654321")).toBe("5511987654321");
+    expect(telefoneDoDono("+55 (11) 98765-4321")).toBe("5511987654321");
+    expect(telefoneDoDono("11987654321")).toBe("11987654321");
+    expect(telefoneDoDono("123")).toBeNull();
+    expect(telefoneDoDono(undefined)).toBeNull();
+    expect(telefoneDoDono(5511987654321)).toBeNull();
   });
 });
 
@@ -193,5 +326,103 @@ describe("validarCodigo", () => {
     expect((await validarCodigo("NADA")).estado).toBe("invalido");
     fetchMock.mockRejectedValueOnce(new Error("ECONNREFUSED"));
     expect(await validarCodigo("JOAO10")).toEqual({ estado: "indisponivel", codigo: "JOAO10" });
+  });
+});
+
+describe("conciliarTestesNoBackoffice", () => {
+  const ORG_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const ORG_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const teste = (org: string, fim: string) => ({
+    organization_id: org,
+    status: "trial",
+    isenta: false,
+    trial_termina_em: fim,
+    pago_ate: null,
+    cancelada_em: null,
+    valor_centavos: 120000,
+    asaas_subscription_id: null,
+  });
+
+  /** Admin falso: assinaturas em teste, a fila com o que já foi, e o que é gravado. */
+  function adminDaConciliacao(testes: Array<Record<string, unknown>>, jaNaFila: string[]) {
+    const gravados: Array<Record<string, unknown>> = [];
+    const filtros: Array<[string, unknown]> = [];
+    const consulta = (linhas: () => unknown[]) => {
+      const q: Record<string, unknown> = {};
+      for (const m of ["select", "eq", "gte", "lte", "order", "limit", "not"]) {
+        q[m] = (col: string, v: unknown) => {
+          if (m === "eq" || m === "gte") filtros.push([col, v]);
+          return q;
+        };
+      }
+      // `in` é o último elo nas duas consultas à fila ("já está lá?" e o envio
+      // logo depois de enfileirar), e as duas só querem saber dos ids pedidos.
+      q.in = (_c: string, ids: string[]) => ({
+        then: (r: (v: unknown) => unknown) =>
+          Promise.resolve({
+            data: jaNaFila.filter((id) => ids.includes(id)).map((event_id) => ({ event_id })),
+            error: null,
+          }).then(r),
+      });
+      q.maybeSingle = async () => ({ data: null, error: null });
+      q.then = (r: (v: unknown) => unknown) => Promise.resolve({ data: linhas(), error: null }).then(r);
+      return q;
+    };
+    const admin = {
+      from: (tabela: string) => {
+        if (tabela === "assinaturas") return consulta(() => testes);
+        if (tabela === "organizations" || tabela === "backoffice_indicacoes") return consulta(() => []);
+        if (tabela === "backoffice_saida") {
+          return {
+            ...consulta(() => []),
+            upsert: async (linhas: Array<Record<string, unknown>>) => {
+              gravados.push(...linhas);
+              return { error: null };
+            },
+          };
+        }
+        throw new Error(`tabela inesperada: ${tabela}`);
+      },
+    };
+    return { admin: admin as never, gravados, filtros };
+  }
+
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("enfileira só o teste que ainda não foi, com a data de fim no event_id", async () => {
+    const { admin, gravados, filtros } = adminDaConciliacao(
+      [teste(ORG_A, "2026-10-03T12:00:00.000Z"), teste(ORG_B, "2026-10-05T12:00:00.000Z")],
+      [`crm_org_${ORG_A}_sub_trial_2026-10-03`],
+    );
+    expect(await conciliarTestesNoBackoffice(admin, AGORA)).toBe(1);
+    expect(gravados.map((g) => g.event_id)).toEqual([`crm_org_${ORG_B}_sub_trial_2026-10-05`]);
+    expect(gravados[0]).toMatchObject({
+      organization_id: ORG_B,
+      tipo: "subscription.updated",
+      payload: { product: "gestalt-crm", customer: { external_id: ORG_B } },
+    });
+    // Só teste em andamento (desde ontem, por causa do aviso do próprio dia) e não isento.
+    expect(filtros).toEqual(
+      expect.arrayContaining([
+        ["status", "trial"],
+        ["isenta", false],
+        ["trial_termina_em", new Date(AGORA.getTime() - 24 * 60 * 60 * 1000).toISOString()],
+      ]),
+    );
+  });
+
+  it("tudo já na fila: não grava nada e devolve 0", async () => {
+    const { admin, gravados } = adminDaConciliacao(
+      [teste(ORG_A, "2026-10-03T12:00:00.000Z")],
+      [`crm_org_${ORG_A}_sub_trial_2026-10-03`],
+    );
+    expect(await conciliarTestesNoBackoffice(admin, AGORA)).toBe(0);
+    expect(gravados).toHaveLength(0);
   });
 });

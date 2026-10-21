@@ -11,6 +11,7 @@
  */
 import { z } from "zod";
 
+import { backofficeLigado } from "@/lib/backoffice/saida";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
 
@@ -245,6 +246,28 @@ function titularNoFio(t: Titular) {
 // Operações
 // ---------------------------------------------------------------------------
 
+/**
+ * O Asaas avisa o cliente da cobrança? NÃO quando o Back Office de afiliados
+ * está ligado: é ele quem manda o aviso de cobrança, pelo WhatsApp, a partir do
+ * `invoice.updated` (`lib/backoffice/saida.ts`) — os dois juntos mandariam o
+ * mesmo aviso duas vezes.
+ *
+ * Sem o Back Office (instalação self-host comum) o campo NEM VAI: o Asaas segue
+ * como o operador deixou no painel dele. Mandar `false` reativaria, a cada
+ * checkout, a notificação que alguém desligou à mão lá; e calar o Asaas sem
+ * ninguém no lugar deixaria o cliente sem aviso nenhum.
+ *
+ * Vale para cliente novo e para todo cliente atualizado no checkout; os que já
+ * existiam antes disto são acertados por `scripts/asaas-desligar-notificacoes.ts`.
+ */
+export function notificacoesDoAsaasDesligadas(): boolean {
+  return backofficeLigado();
+}
+
+function campoDeNotificacao(): { notificationDisabled?: true } {
+  return notificacoesDoAsaasDesligadas() ? { notificationDisabled: true } : {};
+}
+
 export async function criarCliente(t: Titular, organizationId: string): Promise<string> {
   const r = await chamar("POST", "/customers", clienteSchema, {
     name: t.nome.trim(),
@@ -254,6 +277,7 @@ export async function criarCliente(t: Titular, organizationId: string): Promise<
     postalCode: soDigitos(t.cep),
     addressNumber: t.numero.trim(),
     externalReference: organizationId,
+    ...campoDeNotificacao(),
   });
   return r.id;
 }
@@ -266,6 +290,14 @@ export async function atualizarCliente(clienteId: string, t: Titular): Promise<v
     mobilePhone: soDigitos(t.telefone),
     postalCode: soDigitos(t.cep),
     addressNumber: t.numero.trim(),
+    ...campoDeNotificacao(),
+  });
+}
+
+/** Só o `notificationDisabled` de um cliente que já existe — o resto do cadastro não muda. */
+export async function desligarNotificacoesDoCliente(clienteId: string): Promise<void> {
+  await chamar("PUT", `/customers/${encodeURIComponent(clienteId)}`, clienteSchema, {
+    notificationDisabled: true,
   });
 }
 
