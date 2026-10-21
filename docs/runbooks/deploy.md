@@ -193,6 +193,49 @@ docker exec lidiacrm_supabase-kong-1 getent hosts realtime-dev.supabase-realtime
 Um "Implantar" do projeto supabase no EasyPanel pode regravar o compose e
 apagar o alias — o vigia avisa em ~3 min se isso acontecer.
 
+### Tudo lento, login dizendo "senha incorreta", Sair com tela de erro
+
+Sintoma: o CRM inteiro lento, o Inbox demora para enviar, o login recusa senha
+certa e o "Sair" abre "Algo deu errado". O health segue **200** — ele não mede
+a CPU. Causa vista em **2026-10-21**: o GoTrue (serviço `auth`) sem pool de
+conexões configurado guarda só 2 conexões ociosas (padrão do `database/sql` do
+Go) e abre uma conexão Postgres **nova** a cada consulta. Medido: ~44
+conexões/s, cada uma um fork + SCRAM no Postgres; load 10–12 em 2 vCPU, 45% da
+CPU em modo sistema, e o próprio GoTrue sem conseguir conectar a tempo (349
+respostas `504` em 10 min). O app lê qualquer falha do GoTrue como "senha
+incorreta".
+
+Diagnóstico (cada linha é uma pergunta, rode antes de mexer):
+
+```bash
+uptime                                                         # load >> nº de vCPU?
+AP=$(docker inspect -f '{{.State.Pid}}' lidiacrm_supabase-auth-1)
+nsenter -t $AP -n ss -tan state time-wait '( dport = :5432 )' | wc -l   # milhares = churn
+docker logs --since 5m lidiacrm_supabase-auth-1 2>&1 | grep -c '504: Processing'
+```
+
+Conserto: no `docker-compose.yml` do projeto supabase (não no
+`docker-compose.override.yml`, que o EasyPanel regrava), no `environment` do
+serviço `auth`, logo abaixo de `GOTRUE_DB_DATABASE_URL`:
+
+```yaml
+      GOTRUE_DB_MAX_POOL_SIZE: 20
+      GOTRUE_DB_MAX_IDLE_POOL_SIZE: 10
+      GOTRUE_DB_CONN_MAX_IDLE_TIME: 5m
+```
+
+e recriar só ele (o login fica fora por segundos):
+
+```bash
+docker compose -p lidiacrm_supabase --project-directory . -f docker-compose.yml -f docker-compose.override.yml up -d --no-deps auth
+docker logs lidiacrm_supabase-auth-1 2>&1 | grep -oE '"limit_max_(open|idle)_conns":[0-9]+' | sort -u   # 20 e 10
+```
+
+Os nomes vêm de `internal/conf/configuration.go` do `supabase/auth` (conferido na
+`v2.186.0`). Como o alias do Realtime, um "Implantar" ou uma restauração do
+template do projeto supabase pode apagar essas linhas — confira depois de
+qualquer um dos dois.
+
 ### Instalar (uma vez por VPS, como root)
 
 ```bash
