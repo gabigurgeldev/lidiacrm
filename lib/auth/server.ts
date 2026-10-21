@@ -6,12 +6,14 @@
  * intentional here because we resolve the user from the validated JWT first
  * and then filter by `user_id` (a trusted source).
  */
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { empresaExigeMfa, exigeCadastroDeMfa } from "@/lib/auth/politica-mfa";
+import { temFatorTotpVerificado } from "@/lib/auth/fatores";
 import { lerAssinatura } from "@/lib/assinatura-do-atendente";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import type { AuthUser, Role, UserOrgMembership, ActiveOrg } from "./types";
@@ -102,12 +104,31 @@ export function ehSessaoAusente(error: { name?: string } | null | undefined): bo
   return error?.name === "AuthSessionMissingError";
 }
 
-export async function loadAuthUser(): Promise<AuthUser | null> {
+/**
+ * O `getUser()` da requisição — UMA ida ao GoTrue por render, não uma por
+ * chamador.
+ *
+ * Medido em produção em 2026-10-21: cada página chamava `getUser()` 3–4 vezes
+ * (proxy, layout, page, e o `listFactors()` do gate de MFA, que por dentro
+ * chama `getUser()` de novo), e o GoTrue — sem pool de conexão — respondia 504
+ * em ~10% dos `GET /user`. Cada chamada repetida era um 504 a mais sorteado.
+ *
+ * `cache()` do React só memoriza DENTRO de um render de Server Component: o
+ * layout e a page dividem a resposta. Em Route Handler e Server Action ele é
+ * passagem direta — por isso as rotas de API deixaram de chamar `getUser()`
+ * antes de `loadAuthUser()`, em vez de contar com este cache.
+ */
+export const usuarioDaRequisicao = cache(async () => {
+  const supabase = await createClient();
+  return supabase.auth.getUser();
+});
+
+export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
   const supabase = await createClient();
   const {
     data: { user },
     error,
-  } = await supabase.auth.getUser();
+  } = await usuarioDaRequisicao();
   // ⚠️ O `error` era DESCARTADO — nem chegava a ser desestruturado —, e aqui
   // `user: null` é tão ambíguo quanto o `data: null` que a query logo abaixo
   // trata com todo o cuidado: significa "não está logado" (estado normal) E
@@ -249,9 +270,10 @@ export async function loadAuthUser(): Promise<AuthUser | null> {
     idioma,
     timezone,
     assinatura: lerAssinatura(user.user_metadata),
+    mfa_fator_verificado: temFatorTotpVerificado(user),
     organizations: memberships,
   };
-}
+});
 
 /**
  * Resolves the active organization for the current request.
@@ -278,11 +300,18 @@ export async function requireAuth(): Promise<AuthUser> {
 /**
  * Returns true if the current session has at least one verified TOTP factor.
  * Use only in Server Components / Server Actions (cookie session).
+ *
+ * Quem já tem o AuthUser em mãos passa-o: a resposta sai de `user.factors`, sem
+ * ida nenhuma ao GoTrue. Sem ele, lê do `getUser()` da requisição (o mesmo do
+ * `loadAuthUser`, memorizado no render). NUNCA `auth.mfa.listFactors()`: por
+ * dentro ele chama `getUser()` de novo só para filtrar a mesma lista.
  */
-export async function isMfaEnrolled(): Promise<boolean> {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.mfa.listFactors();
-  return !!data?.totp?.some((f) => f.status === "verified");
+export async function isMfaEnrolled(authUser?: AuthUser | null): Promise<boolean> {
+  if (typeof authUser?.mfa_fator_verificado === "boolean") return authUser.mfa_fator_verificado;
+  const {
+    data: { user },
+  } = await usuarioDaRequisicao();
+  return temFatorTotpVerificado(user);
 }
 
 /**
@@ -364,13 +393,13 @@ export async function sessionAal(): Promise<"aal1" | "aal2" | null> {
  * cadastrar. Quem ainda não tem fator continua sendo tratado pelo gate de
  * cadastro do `app/app/layout.tsx`.
  */
-export async function mfaEmDivida(): Promise<boolean> {
+export async function mfaEmDivida(authUser?: AuthUser | null): Promise<boolean> {
   // ⚠️ NÃO PERGUNTA MAIS A POLÍTICA, e a mudança é o que impede o cadastro
   // opcional de virar um buraco: começava por `requiresMfa(...)`, então, com a
   // exigência desligada, quem ativasse a verificação POR VONTADE PRÓPRIA teria o
   // fator ignorado na sessão — o mesmo que não ter.
   //
   // Cadastrar e provar são perguntas diferentes. Quem TEM fator prova, sempre.
-  if (!(await isMfaEnrolled())) return false;
+  if (!(await isMfaEnrolled(authUser))) return false;
   return (await sessionAal()) !== "aal2";
 }

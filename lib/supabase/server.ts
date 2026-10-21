@@ -10,6 +10,9 @@ import { cookieSecure } from "@/lib/supabase/cookie-secure";
 import { cookies } from "next/headers";
 import { env } from "@/lib/env";
 
+/** Nome do cookie de sessão — o mesmo do browser e do `proxy.ts`. */
+export const NOME_DO_COOKIE_DE_SESSAO = "sb-deskcomm-auth";
+
 export async function createClient() {
   const cookieStore = await cookies();
 
@@ -31,7 +34,7 @@ export async function createClient() {
     },
     // D-01.01: cookie name canônico alinhado ao middleware.
     cookieOptions: {
-      name: "sb-deskcomm-auth",
+      name: NOME_DO_COOKIE_DE_SESSAO,
       sameSite: "strict",
       httpOnly: true,
       secure: cookieSecure(),

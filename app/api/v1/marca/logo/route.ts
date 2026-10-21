@@ -142,7 +142,7 @@ async function abrirContexto(escopo: Escopo): Promise<{ ctx: Contexto } | { recu
     // `app/actions/settings/updateMarcaDaOrganizacao.ts`. Em uma linha: a função
     // parou de consultar a política, então quem TEM fator prova sempre. Passar
     // papel aqui não é só inútil, é o modelo mental errado gravado no código.
-    if (await mfaEmDivida()) {
+    if (await mfaEmDivida(user)) {
       return {
         recusa: {
           codigo: "mfa_required",
@@ -171,7 +171,7 @@ async function abrirContexto(escopo: Escopo): Promise<{ ctx: Contexto } | { recu
   }
   // DEPOIS do papel, de propósito — mesma ordem de `updateMarcaDaOrganizacao.ts`:
   // quem nem tem o papel recebe `forbidden_role`, que é a verdade sobre ele.
-  if (await mfaEmDivida()) {
+  if (await mfaEmDivida(user)) {
     return {
       recusa: {
         codigo: "mfa_required",

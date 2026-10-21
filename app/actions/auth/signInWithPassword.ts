@@ -14,10 +14,17 @@ import {
   registrarFalhaDeLogin,
   AUTH_LIMITS,
 } from "@/lib/auth/rate-limit";
+import { classificarErroDeLogin } from "@/lib/auth/erro-do-gotrue";
+import { fatorTotpVerificado } from "@/lib/auth/fatores";
 
 export type SignInResult = {
   ok: false;
-  error: "invalid_credentials" | "rate_limited" | "validation_error" | "mfa_required";
+  error:
+    | "invalid_credentials"
+    | "rate_limited"
+    | "validation_error"
+    | "mfa_required"
+    | "service_unavailable";
   details?: Record<string, unknown>;
   challengeId?: string;
 };
@@ -74,25 +81,43 @@ export async function signInWithPassword(
   });
 
   if (error || !data.user) {
-    // Só senha errada gasta o orçamento da conta.
-    await registrarFalhaDeLogin(parsed.data.email, AUTH_LIMITS.login);
+    // Só senha errada gasta o orçamento da conta — e só senha errada é dita
+    // como senha errada. Um 504 do GoTrue virava "Email ou senha incorretos."
+    // para quem digitou a senha certa, e ainda contava no bloqueio. Regra e
+    // medição em `lib/auth/erro-do-gotrue.ts`.
+    const desfecho = classificarErroDeLogin(error);
+    if (desfecho === "credencial") {
+      await registrarFalhaDeLogin(parsed.data.email, AUTH_LIMITS.login);
+    }
     await audit({
       action: "auth.login_failed",
       metadata: {
         email_hash: hashEmail(parsed.data.email),
         reason: error?.message ?? "unknown",
+        desfecho,
+        error_name: error?.name ?? null,
+        status: error?.status ?? null,
       },
       requestId,
       ip,
       userAgent,
     });
-    return { ok: false, error: "invalid_credentials" };
+    if (desfecho === "credencial") return { ok: false, error: "invalid_credentials" };
+    if (desfecho === "limite") return { ok: false, error: "rate_limited" };
+    return { ok: false, error: "service_unavailable" };
   }
 
   // MFA gating — if the user has any verified TOTP factor enrolled, they must
   // complete the challenge in /login/mfa before reaching the app.
-  const { data: factorsData } = await supabase.auth.mfa.listFactors();
-  const verifiedTotp = factorsData?.totp?.find((f) => f.status === "verified");
+  //
+  // Quando os fatores já vieram no `data.user` do login, lê dali: `listFactors()`
+  // refaz o `GET /user` no GoTrue só para devolver a mesma lista. O GoTrue
+  // OMITE `factors` quando a lista está vazia, e ausente aqui não pode virar
+  // "sem MFA" — pularia o desafio de quem tem fator. Então ausente pergunta.
+  const verifiedTotp = Array.isArray(data.user.factors)
+    ? fatorTotpVerificado(data.user)
+    : ((await supabase.auth.mfa.listFactors()).data?.totp?.find((f) => f.status === "verified") ??
+      null);
   if (verifiedTotp) {
     return { ok: false, error: "mfa_required", challengeId: verifiedTotp.id };
   }

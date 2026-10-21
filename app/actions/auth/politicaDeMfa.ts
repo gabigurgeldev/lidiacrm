@@ -91,7 +91,7 @@ export async function desativarMfaDaConta(): Promise<ResultadoDaPolitica> {
   if (!user) return { ok: false, erro: "Sua sessão expirou. Entre de novo." };
   const org = await resolveActiveOrg(user);
 
-  if (!(await isMfaEnrolled())) return { ok: true };
+  if (!(await isMfaEnrolled(user))) return { ok: true };
 
   const admin = createAdminClient();
 

@@ -104,7 +104,7 @@ export async function updateMarcaDaOrganizacao(
   // olhar a sessão; agora não consulta — quem TEM fator prova, qualquer que seja
   // o papel. A cobrança aqui fica MAIS abrangente, não menos: um manager com
   // fator e sessão `aal1` passava por este ponto e agora é barrado.
-  if (await mfaEmDivida()) {
+  if (await mfaEmDivida(authUser)) {
     return { ok: false, error: "mfa_required" };
   }
 

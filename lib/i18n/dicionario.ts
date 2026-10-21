@@ -5691,6 +5691,9 @@ export const DICIONARIO: Traducoes = {
   "Muitas tentativas. Aguarde alguns minutos.": {
     es: "Demasiados intentos. Espera unos minutos.",
   },
+  "Instabilidade no login. Tente de novo em instantes.": {
+    es: "Inestabilidad al iniciar sesión. Inténtalo de nuevo en unos instantes.",
+  },
   "Não tem conta?": { es: "¿No tienes cuenta?" },
   "Recuperar senha": { es: "Recuperar contraseña" },
   "Informe seu e-mail e enviaremos um link de redefinição": {

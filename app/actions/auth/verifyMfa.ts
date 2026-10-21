@@ -8,9 +8,12 @@ import { safeNext } from "@/lib/auth/safe-next";
 import { createClient } from "@/lib/supabase/server";
 import { audit } from "@/lib/audit";
 import { cookieSecure } from "@/lib/supabase/cookie-secure";
+import { classificarErroDeMfa, ehFalhaDeServico } from "@/lib/auth/erro-do-gotrue";
+import { fatorTotpVerificado } from "@/lib/auth/fatores";
 
 export type VerifyMfaResult =
   | { ok: false; error: "mfa_invalid" }
+  | { ok: false; error: "service_unavailable" }
   | { ok: false; error: "mfa_locked"; retry_in_seconds: number };
 
 const ATTEMPT_COOKIE = "mfa_attempts";
@@ -35,12 +38,19 @@ export async function verifyMfa(code: string, next?: string): Promise<VerifyMfaR
 
   const {
     data: { user },
+    error: userErr,
   } = await supabase.auth.getUser();
+  // GoTrue fora do ar não é "sessão acabou": mandar para o `/login` aqui
+  // jogava fora a senha que a pessoa acabou de acertar. Sem sessão de fato,
+  // aí sim volta ao login.
+  if (!user && ehFalhaDeServico(userErr)) {
+    return { ok: false, error: "service_unavailable" };
+  }
   if (!user) redirect("/login");
 
-  // Sanity-check: must have a verified TOTP factor.
-  const { data: factorsData } = await supabase.auth.mfa.listFactors();
-  const totp = factorsData?.totp?.find((f) => f.status === "verified");
+  // Sanity-check: must have a verified TOTP factor. Lido do `user` acima —
+  // `listFactors()` refaria o mesmo `GET /user` no GoTrue.
+  const totp = fatorTotpVerificado(user);
   if (!totp) redirect("/app/inbox");
 
   // Lockout check (cookie counter).
@@ -64,6 +74,10 @@ export async function verifyMfa(code: string, next?: string): Promise<VerifyMfaR
     factorId: totp.id,
   });
   if (challengeErr || !challenge) {
+    // Desafio que não saiu por instabilidade não é código errado.
+    if (classificarErroDeMfa(challengeErr) === "indisponivel") {
+      return { ok: false, error: "service_unavailable" };
+    }
     return { ok: false, error: "mfa_invalid" };
   }
 
@@ -72,6 +86,24 @@ export async function verifyMfa(code: string, next?: string): Promise<VerifyMfaR
     challengeId: challenge.id,
     code,
   });
+
+  // Só o código RECUSADO pelo GoTrue gasta tentativa. Um 504 no meio do verify
+  // trancava por 60s quem digitou o código certo (`lib/auth/erro-do-gotrue.ts`).
+  if (verifyErr && classificarErroDeMfa(verifyErr) === "indisponivel") {
+    await audit({
+      action: "auth.mfa_failed",
+      actorUserId: user.id,
+      metadata: {
+        desfecho: "indisponivel",
+        error_name: verifyErr.name,
+        status: verifyErr.status ?? null,
+      },
+      requestId,
+      ip,
+      userAgent,
+    });
+    return { ok: false, error: "service_unavailable" };
+  }
 
   if (verifyErr) {
     const newAttempts = attempts + 1;

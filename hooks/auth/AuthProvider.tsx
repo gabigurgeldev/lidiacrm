@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import { createClient } from "@/lib/supabase/browser";
+import { signOut as signOutAction } from "@/app/actions/auth/signOut";
+import { sairComFallback } from "@/lib/auth/sair";
 import type { AuthUser, ActiveOrg, Role } from "@/lib/auth/types";
 import { ROLE_RANK } from "@/lib/auth/types";
 
@@ -56,10 +58,10 @@ export function AuthProvider({
       activeOrg,
       isAuthenticated: true,
       refreshing,
-      signOut: async () => {
-        const { signOut } = await import("@/app/actions/auth/signOut");
-        await signOut();
-      },
+      // Import ESTÁTICO: o `import()` dinâmico buscava um chunk que, depois de
+      // um deploy, já não existia — e "Sair" virava tela de erro. A falha da
+      // própria ação também não chega à tela: `sairComFallback` leva ao login.
+      signOut: () => sairComFallback(signOutAction),
     }),
     [user, activeOrg, refreshing],
   );

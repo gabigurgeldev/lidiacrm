@@ -43,11 +43,20 @@ function montarStub({ role, temFator, aal }: Cenario) {
   return {
     rpc: vi.fn(async () => ({ data: role, error: null })),
     auth: {
+      // Os fatores vêm do `user` do `getUser()` — `isMfaEnrolled` não chama
+      // mais `listFactors()`, que por dentro refazia o mesmo `GET /user`. O
+      // AuthUser do `preparar` vem SEM `mfa_fator_verificado`, então este é o
+      // caminho exercitado: o de quem não sabe e pergunta.
+      getUser: vi.fn(async () => ({
+        data: {
+          user: {
+            id: USER_ID,
+            factors: temFator ? [{ id: "f1", factor_type: "totp", status: "verified" }] : [],
+          },
+        },
+        error: null,
+      })),
       mfa: {
-        listFactors: vi.fn(async () => ({
-          data: { totp: temFator ? [{ id: "f1", status: "verified" }] : [] },
-          error: null,
-        })),
         getAuthenticatorAssuranceLevel: vi.fn(async () => ({
           data: { currentLevel: aal, nextLevel: temFator ? "aal2" : aal },
           error: null,

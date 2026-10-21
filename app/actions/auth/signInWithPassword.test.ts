@@ -21,7 +21,12 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 
 const signIn = vi.fn(async () => ({
   data: { user: null, session: null },
-  error: { message: "Invalid login credentials", status: 400 },
+  error: {
+    name: "AuthApiError",
+    message: "Invalid login credentials",
+    status: 400,
+    code: "invalid_credentials",
+  },
 }));
 
 describe("signInWithPassword — teto de tentativas", () => {
@@ -33,7 +38,12 @@ describe("signInWithPassword — teto de tentativas", () => {
     } as never);
     signIn.mockResolvedValue({
       data: { user: null, session: null },
-      error: { message: "Invalid login credentials", status: 400 },
+      error: {
+    name: "AuthApiError",
+    message: "Invalid login credentials",
+    status: 400,
+    code: "invalid_credentials",
+  },
     } as never);
     vi.mocked(createClient).mockResolvedValue({
       auth: {
@@ -80,5 +90,67 @@ describe("signInWithPassword — teto de tentativas", () => {
     // Nenhuma das dez foi barrada: se o sucesso contasse, a 6ª seria.
     expect(resultados.filter((r) => r?.error === "rate_limited")).toHaveLength(0);
     expect(signIn).toHaveBeenCalledTimes(10);
+  });
+});
+
+/**
+ * O GoTrue que NÃO RESPONDE não é senha errada. Medido em produção em
+ * 2026-10-21: 349 respostas 504 em 10 minutos, cada uma virando "Email ou senha
+ * incorretos." e uma tentativa no bloqueio de quem digitou a senha certa.
+ */
+describe("signInWithPassword — instabilidade não é senha errada", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    signIn.mockClear();
+    vi.mocked(headers).mockResolvedValue({
+      get: (k: string) => (k === "x-forwarded-for" ? "203.0.113.88" : null),
+    } as never);
+    vi.mocked(createClient).mockResolvedValue({
+      auth: { signInWithPassword: signIn, mfa: { listFactors: vi.fn() } },
+    } as never);
+  });
+
+  it.each([
+    ["504 do gateway", { name: "AuthRetryableFetchError", message: "Gateway Timeout", status: 504 }],
+    ["rede caída", { name: "AuthRetryableFetchError", message: "fetch failed", status: 0 }],
+    ["500 do GoTrue", { name: "AuthApiError", message: "unexpected", status: 500 }],
+  ])("%s devolve service_unavailable e NÃO conta tentativa", async (_rotulo, erro) => {
+    const { signInWithPassword } = await import("./signInWithPassword");
+    const input = { email: `instavel-${erro.status}@example.com`, password: "senha-certa-123" };
+    signIn.mockResolvedValue({ data: { user: null, session: null }, error: erro } as never);
+
+    const resultados = [];
+    for (let i = 0; i < 8; i++) resultados.push(await signInWithPassword(input));
+
+    // Oito falhas de serviço contra a mesma conta: se contassem, da 6ª em
+    // diante viria rate_limited sem nem falar com o provedor.
+    expect(resultados.map((r) => r.error)).toEqual(Array(8).fill("service_unavailable"));
+    expect(signIn).toHaveBeenCalledTimes(8);
+
+    // E a conta segue com o orçamento inteiro: a senha errada de verdade, a
+    // seguir, ainda é dita como senha errada — não como bloqueio.
+    signIn.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { name: "AuthApiError", message: "Invalid login credentials", status: 400, code: "invalid_credentials" },
+    } as never);
+    expect((await signInWithPassword(input)).error).toBe("invalid_credentials");
+  });
+
+  it("fatores que vieram no login dispensam o listFactors", async () => {
+    const { signInWithPassword } = await import("./signInWithPassword");
+    const listFactors = vi.fn();
+    vi.mocked(createClient).mockResolvedValue({
+      auth: { signInWithPassword: signIn, mfa: { listFactors } },
+    } as never);
+    signIn.mockResolvedValue({
+      data: {
+        user: { id: "u1", factors: [{ id: "f7", factor_type: "totp", status: "verified" }] },
+        session: {},
+      },
+      error: null,
+    } as never);
+    const r = await signInWithPassword({ email: "mfa@example.com", password: "senha-certa-123" });
+    expect(r).toMatchObject({ error: "mfa_required", challengeId: "f7" });
+    expect(listFactors).not.toHaveBeenCalled();
   });
 });

@@ -10,7 +10,9 @@ import { useT } from "@/hooks/i18n/useT";
 import { loginSchema, type LoginInput } from "@/lib/auth/schemas";
 import { Button } from "@/components/ui/button";
 import { CampoDeAcesso } from "@/components/auth/CampoDeAcesso";
-import { signInWithPassword } from "@/app/actions/auth/signInWithPassword";
+import { signInWithPassword, type SignInResult } from "@/app/actions/auth/signInWithPassword";
+import { MENSAGEM_DE_INSTABILIDADE } from "@/lib/auth/erro-do-gotrue";
+import { ehRedirectDoNext } from "@/lib/auth/redirect-do-next";
 
 export function LoginForm({ next }: { next?: string }) {
   const t = useT();
@@ -32,7 +34,17 @@ export function LoginForm({ next }: { next?: string }) {
     startTransition(async () => {
       // Server Action redirects on success — no return value reaches here.
       // On failure, an error discriminator is returned and rendered inline.
-      const res = await signInWithPassword(values, next);
+      let res: SignInResult | undefined;
+      try {
+        res = await signInWithPassword(values, next);
+      } catch (err) {
+        // A ação redireciona no sucesso — esse "erro" é a navegação.
+        if (ehRedirectDoNext(err)) throw err;
+        // Rede caída ou servidor sem resposta: a ação nem chegou a dizer nada.
+        // Sem isto a promessa rejeitada subia até a tela de erro do Next.
+        setServerError(t(MENSAGEM_DE_INSTABILIDADE));
+        return;
+      }
       if (!res) {
         // Should be unreachable (redirect throws), but guard anyway.
         router.replace(next || "/app/inbox");
@@ -47,6 +59,8 @@ export function LoginForm({ next }: { next?: string }) {
       }
       if (res.error === "invalid_credentials") {
         setServerError(t("Email ou senha incorretos."));
+      } else if (res.error === "service_unavailable") {
+        setServerError(t(MENSAGEM_DE_INSTABILIDADE));
       } else if (res.error === "rate_limited") {
         setServerError(t("Muitas tentativas. Aguarde alguns minutos."));
       } else if (res.error === "validation_error") {

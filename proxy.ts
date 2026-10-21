@@ -3,6 +3,7 @@ import { cookieSecure } from "@/lib/supabase/cookie-secure";
 import { NextResponse, type NextRequest } from "next/server";
 import { env } from "@/lib/env";
 import { isPublicPath } from "@/lib/auth/public-paths";
+import { dispensaDoGetUser } from "@/lib/auth/proxy-dispensa";
 import {
   verifyImpersonateCookieEdge,
   IMPERSONATE_COOKIE_NAME_EDGE,
@@ -30,6 +31,22 @@ export async function proxy(request: NextRequest) {
   const isAdminSurface = host.startsWith("admin.") || pathname.startsWith("/admin");
 
   if (isPublicPath(pathname)) {
+    return response;
+  }
+
+  // Prefetch, Server Action e avatar/mídia se autenticam sozinhos logo depois;
+  // o `getUser()` daqui era uma ida a mais ao GoTrue por requisição. As regras
+  // (e por que só valem com o token longe de vencer) em `lib/auth/proxy-dispensa.ts`.
+  const dispensa = dispensaDoGetUser(
+    {
+      method: request.method,
+      pathname,
+      header: (nome) => request.headers.get(nome),
+      cookie: (nome) => request.cookies.get(nome)?.value,
+    },
+    COOKIE_NAME,
+  );
+  if (dispensa) {
     return response;
   }
 
