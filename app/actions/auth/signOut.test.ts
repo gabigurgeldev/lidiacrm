@@ -12,8 +12,8 @@ vi.mock("next/headers", () => ({
   headers: async () => ({ get: () => null }),
   cookies: async () => ({
     getAll: () => [
-      { name: "sb-deskcomm-auth.0", value: "a" },
-      { name: "sb-deskcomm-auth.1", value: "b" },
+      { name: "sessao-teste.0", value: "a" },
+      { name: "sessao-teste.1", value: "b" },
       { name: "active_org", value: "o" },
       { name: "sidebar_collapsed", value: "1" },
     ],
@@ -24,6 +24,7 @@ vi.mock("next/navigation", () => ({ redirect: (u: string) => redirect(u) }));
 vi.mock("@/lib/audit", () => ({ audit: (e: unknown) => audit(e) }));
 vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("@/lib/supabase/server", () => ({
+  NOME_DO_COOKIE_DE_SESSAO: "sessao-teste",
   createClient: async () => ({ auth: { signOut: signOutSdk } }),
 }));
 vi.mock("@/lib/auth/server", () => ({
@@ -56,7 +57,7 @@ describe("signOut", () => {
     });
     await signOut();
     const apagados = apagar.mock.calls.map((c) => c[0]);
-    expect(apagados).toEqual(expect.arrayContaining(["sb-deskcomm-auth.0", "sb-deskcomm-auth.1", "active_org"]));
+    expect(apagados).toEqual(expect.arrayContaining(["sessao-teste.0", "sessao-teste.1", "active_org"]));
     expect(apagados).not.toContain("sidebar_collapsed");
     expect(redirect).toHaveBeenCalledWith("/login");
   });

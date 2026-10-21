@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 
 import { dispensaDoGetUser, FOLGA_DE_VALIDADE_S, validadeDaSessao, type PedidoNoProxy } from "./proxy-dispensa";
 
-const COOKIE = "sb-deskcomm-auth";
+// Nome qualquer: a regra recebe o nome do cookie por parâmetro.
+const COOKIE = "sessao-teste";
 const AGORA = 1_800_000_000;
 
 function sessao(expiresAt: number): string {

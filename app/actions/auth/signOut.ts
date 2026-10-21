@@ -1,13 +1,10 @@
 "use server";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, NOME_DO_COOKIE_DE_SESSAO } from "@/lib/supabase/server";
 import { audit } from "@/lib/audit";
 import { logger } from "@/lib/logger";
 import { usuarioDaRequisicao } from "@/lib/auth/server";
-
-/** Prefixo do cookie de sessão — o mesmo `cookieOptions.name` de `lib/supabase/server.ts`. */
-const PREFIXO_DO_COOKIE_DE_SESSAO = "sb-deskcomm-auth";
 
 /**
  * Sair NUNCA termina numa tela de erro.
@@ -56,7 +53,7 @@ export async function signOut(): Promise<void> {
   }
   if (falhou) {
     for (const { name } of store.getAll()) {
-      if (name.startsWith(PREFIXO_DO_COOKIE_DE_SESSAO)) store.delete(name);
+      if (name.startsWith(NOME_DO_COOKIE_DE_SESSAO)) store.delete(name);
     }
   }
 
