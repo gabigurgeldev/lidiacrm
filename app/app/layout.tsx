@@ -169,7 +169,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }
   }
 
-  const enrolled = await isMfaEnrolled();
+  const enrolled = await isMfaEnrolled(user);
   // A decisão deixou de ser uma constante de papel: ela lê a política de quem
   // pode exigir (a plataforma e a empresa). Ver `lib/auth/politica-mfa.ts`.
   const needsMfaGate = await requiresMfa(

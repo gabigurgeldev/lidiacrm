@@ -33,13 +33,11 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
   const supabase = await createClient();
-  // `getUser()` e nunca `getSession()`: o primeiro valida o JWT no servidor, o
-  // segundo confia no cookie local. Regra do CLAUDE.md, sem exceção.
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
+  // `loadAuthUser()` valida o JWT com `getUser()`, nunca `getSession()` (que
+  // confia no cookie local) — regra do CLAUDE.md, sem exceção. E é a ÚNICA ida
+  // ao GoTrue desta rota: um `getUser()` solto antes dele dobrava a conta.
+  const user = await loadAuthUser();
+  if (!user) {
     return fail("unauthenticated", "Auth required.", 401, { requestId });
   }
 
@@ -55,8 +53,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     });
   }
 
-  const authUser = await loadAuthUser();
-  const orgId = authUser ? (await resolveActiveOrg(authUser))?.orgId : undefined;
+  const orgId = (await resolveActiveOrg(user))?.orgId;
   // ⚠️ Sem organização ativa a resposta é VAZIA, nunca "busque em tudo". Um
   // `organization_id` indefinido num filtro é o caminho mais curto para uma
   // busca que atravessa inquilinos — e a RLS sozinha ainda devolveria as linhas

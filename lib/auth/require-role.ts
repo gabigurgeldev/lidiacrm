@@ -110,7 +110,9 @@ export async function requireRole(min: Role, opts: RequireRoleOpts = {}): Promis
   // Fica DEPOIS do rank e ANTES do retorno de sucesso, de propósito: quem não
   // tem papel suficiente continua levando 403 por falta de papel, sem que a
   // resposta revele o estado de MFA de quem nem chegaria lá.
-  if (rank >= ROLE_RANK[min] && (await mfaEmDivida())) {
+  // O `user` vai junto: os fatores já vieram no `getUser()` do `loadAuthUser`,
+  // e sem ele `mfaEmDivida` perguntaria ao GoTrue de novo.
+  if (rank >= ROLE_RANK[min] && (await mfaEmDivida(user))) {
     void audit({
       action: "authz.denied",
       actorUserId: user.id,

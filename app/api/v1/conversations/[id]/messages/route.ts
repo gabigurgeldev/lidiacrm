@@ -24,16 +24,12 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const { id: conversationId } = await ctx.params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
+  const user = await loadAuthUser();
+  if (!user) {
     return fail("unauthenticated", "Auth required.", 401, { requestId });
   }
 
-  const authUser = await loadAuthUser();
-  const activeOrg = authUser ? await resolveActiveOrg(authUser) : null;
+  const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) {
     return fail("no_active_org", "No active organization.", 403, { requestId });
   }

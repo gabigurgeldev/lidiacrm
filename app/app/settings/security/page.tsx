@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 export default async function SecurityPage() {
   const user = await requireAuth();
   const org = await resolveActiveOrg(user);
-  const enrolled = await isMfaEnrolled();
+  const enrolled = await isMfaEnrolled(user);
 
   let empresaExige = false;
   if (org) {

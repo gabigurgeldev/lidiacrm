@@ -26,11 +26,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
+  const user = await loadAuthUser();
+  if (!user) {
     return fail("unauthenticated", "Auth required.", 401, { requestId });
   }
 
@@ -51,8 +48,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     });
   }
 
-  const authUser = await loadAuthUser();
-  const orgId = authUser ? (await resolveActiveOrg(authUser))?.orgId : undefined;
+  const orgId = (await resolveActiveOrg(user))?.orgId;
 
   try {
     const { contacts, cursor, has_more } = await listContactsHandler(

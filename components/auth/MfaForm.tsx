@@ -6,7 +6,9 @@ import Link from "next/link";
 import { useT } from "@/hooks/i18n/useT";
 import { TOTPInput } from "@/components/auth/TOTPInput";
 import { Button } from "@/components/ui/button";
-import { verifyMfa } from "@/app/actions/auth/verifyMfa";
+import { verifyMfa, type VerifyMfaResult } from "@/app/actions/auth/verifyMfa";
+import { MENSAGEM_DE_INSTABILIDADE } from "@/lib/auth/erro-do-gotrue";
+import { ehRedirectDoNext } from "@/lib/auth/redirect-do-next";
 
 interface MfaFormProps {
   next?: string;
@@ -40,9 +42,19 @@ export function MfaForm({ next }: MfaFormProps) {
     if (finalCode.length !== 6 || locked) return;
     setError(null);
     startTransition(async () => {
-      const res = await verifyMfa(finalCode, next);
+      let res: VerifyMfaResult | undefined;
+      try {
+        res = await verifyMfa(finalCode, next);
+      } catch (err) {
+        if (ehRedirectDoNext(err)) throw err;
+        setError(t(MENSAGEM_DE_INSTABILIDADE));
+        return;
+      }
       if (!res) return; // server-side redirect on success
-      if (res.error === "mfa_locked") {
+      if (res.error === "service_unavailable") {
+        // O código pode estar certo: não apaga o que a pessoa digitou.
+        setError(t(MENSAGEM_DE_INSTABILIDADE));
+      } else if (res.error === "mfa_locked") {
         setLocked(true);
         setSecondsLeft(res.retry_in_seconds ?? 60);
         setError(

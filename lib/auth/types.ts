@@ -141,6 +141,17 @@ export interface AuthUser {
    * já assinada. `null`/ausente = sem assinatura.
    */
   assinatura?: AssinaturaDoAtendente | null;
+  /**
+   * Tem fator TOTP verificado? Lido de `user.factors`, que o `getUser()` já
+   * trouxe — `auth.mfa.listFactors()` refaz o `GET /user` no GoTrue só para
+   * devolver a mesma lista.
+   *
+   * Opcional porque `undefined` quer dizer "não sei": quem monta um AuthUser
+   * sem passar por `loadAuthUser` (os testes, por exemplo) faz `isMfaEnrolled`
+   * cair na pergunta ao GoTrue em vez de responder `false` por omissão — o que
+   * desligaria a MFA de quem a tem.
+   */
+  mfa_fator_verificado?: boolean;
   organizations: UserOrgMembership[];
 }
 

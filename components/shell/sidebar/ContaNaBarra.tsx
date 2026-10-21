@@ -17,6 +17,7 @@ import { ShieldCheck, SignOut, UserCircle } from "@/lib/ui/icons";
 import { canSee, NAV_DESTINATIONS } from "@/lib/navigation/registry";
 import { mostraPortaDoAdmin, PORTA_DO_ADMIN } from "@/lib/navigation/porta-do-admin";
 import { cn } from "@/lib/utils";
+import { sairComFallback } from "@/lib/auth/sair";
 
 /**
  * Quem está logado, no RODAPÉ DA BARRA — e a única saída da conta no produto.
@@ -170,7 +171,10 @@ export function ContaNaBarra({ compacto }: { compacto: boolean }) {
           disabled={isPending}
           onClick={() =>
             startTransition(async () => {
-              await signOut();
+              // O `signOut` do contexto já cai para `/login` se a ação falhar
+              // (`lib/auth/sair.ts`); embrulhar de novo aqui é a última rede —
+              // "Sair" não pode terminar na tela de erro por nenhum caminho.
+              await sairComFallback(signOut);
             })
           }
         >
