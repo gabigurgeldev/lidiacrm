@@ -1,6 +1,7 @@
 "use client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import type { RealtimeStatus } from "@/hooks/realtime/useRealtimeChannel";
 
 /**
  * O REFETCH DE SEGURANÇA — uma peça com três papéis.
@@ -53,8 +54,29 @@ interface Opts<T> {
   ultimaEntrega: RefObject<number | null>;
   /** De quanto em quanto tempo conferir. */
   intervaloMs?: number;
+  /**
+   * O status da ASSINATURA do canal (de `useRealtimeChannel`). Ausente = o
+   * comportamento de antes, para quem ainda não passa o status.
+   *
+   * Presente e `subscribed`, a conferência cai para `intervaloComCanalAssinadoMs`.
+   * Com o canal saudável o intervalo curto era só carga: no inbox, 15s por
+   * conversa aberta e 45s pela lista, em cada aba, mesmo com o Realtime
+   * entregando — numa VPS de 2 vCPU com a CPU saturada.
+   *
+   * ⚠️ CAI, NÃO DESLIGA. `subscribed` descreve a assinatura, não a entrega, e o
+   * cabeçalho deste arquivo conta o dia em que o canal disse SUBSCRIBED e não
+   * entregou nada. Desligar de vez com o canal assinado cegaria o detector
+   * justamente no único estado em que só ele enxerga a perda.
+   */
+  statusDoCanal?: RealtimeStatus;
+  /** Intervalo com o canal assinado. Só vale quando `statusDoCanal` é passado. */
+  intervaloComCanalAssinadoMs?: number;
   enabled?: boolean;
 }
+
+/** Com o canal assinado: uma conferência a cada 5 minutos, o bastante para o
+ *  detector seguir vivo e barato o bastante para não pesar. */
+export const INTERVALO_COM_CANAL_ASSINADO_MS = 5 * 60_000;
 
 /**
  * ⚠️ NÃO É "só um refetch periódico com outro nome". A diferença é o
@@ -70,6 +92,8 @@ export function useRefetchDeSeguranca<T>({
   assinatura,
   ultimaEntrega,
   intervaloMs = 45_000,
+  statusDoCanal,
+  intervaloComCanalAssinadoMs = INTERVALO_COM_CANAL_ASSINADO_MS,
   enabled = true,
 }: Opts<T>): RefetchDeSeguranca {
   const qc = useQueryClient();
@@ -136,9 +160,16 @@ export function useRefetchDeSeguranca<T>({
     // sem recriar o callback nem reiniciar o intervalo.
   }, [qc, ultimaEntrega]);
 
+  const intervalo = statusDoCanal === "subscribed" ? intervaloComCanalAssinadoMs : intervaloMs;
+
   useEffect(() => {
     if (!enabled) return;
-    const timer = setInterval(() => void verificar(), intervaloMs);
+    // Aba de fundo não confere: ninguém está olhando, e cada aba esquecida
+    // aberta era uma leitura periódica a mais no servidor. Quem cobre a volta
+    // é o `aoVoltar` abaixo, que confere na hora em que a aba reaparece.
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void verificar();
+    }, intervalo);
 
     // AO VOLTAR PARA A ABA, imediatamente: é o momento em que o usuário mais
     // acredita no que vê, e é justamente quando a tela pode estar mais velha —
@@ -151,7 +182,7 @@ export function useRefetchDeSeguranca<T>({
       clearInterval(timer);
       document.removeEventListener("visibilitychange", aoVoltar);
     };
-  }, [enabled, intervaloMs, verificar]);
+  }, [enabled, intervalo, verificar]);
 
   return estado;
 }

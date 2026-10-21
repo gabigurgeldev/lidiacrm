@@ -26,6 +26,18 @@ export const dynamic = "force-dynamic";
 
 const SIGNED_URL_TTL_S = 3600;
 
+/**
+ * Quanto o browser guarda o próprio redirect — a mesma razão do avatar
+ * (`app/api/v1/contacts/[id]/avatar/route.ts`): sem isto, cada <img>/<audio>
+ * do hilo refazia sessão + organização + SELECT + `createSignedUrl` a cada
+ * render, e o hilo é relido a cada mensagem que chega.
+ *
+ * `private` porque a autorização é da sessão; MENOR que SIGNED_URL_TTL_S
+ * porque um redirect guardado além da assinatura aponta para URL vencida. A
+ * folga de 10 min cobre o redirect seguido no fim da janela.
+ */
+const BROWSER_CACHE_S = 3000;
+
 interface RouteCtx {
   params: Promise<{ id: string }>;
 }
@@ -79,6 +91,7 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
     if (!signErr && signed?.signedUrl) {
       const response = NextResponse.redirect(signed.signedUrl, 302);
       response.headers.set("X-Request-Id", requestId);
+      response.headers.set("Cache-Control", `private, max-age=${BROWSER_CACHE_S}`);
       return response;
     }
     if (signErr) {
