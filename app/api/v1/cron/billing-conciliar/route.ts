@@ -10,6 +10,13 @@
  * dias. Grava as cobranças e recalcula `pago_ate` — o mesmo caminho do webhook,
  * idempotente. Reprocessa também eventos cujo processamento falhou.
  *
+ * Também é a rede do aviso de cobrança pelo Back Office: cada cobrança
+ * conferida aqui passa por `gravarCobranca`, que enfileira o `invoice.updated`
+ * (fatura em aberto chega ao Back Office mesmo se o webhook se perdeu), e
+ * `conciliarTestesNoBackoffice` põe na fila o `subscription.updated` de todo
+ * teste grátis em andamento que ainda não foi — inclusive os que começaram
+ * antes de o aviso existir. Os dois são idempotentes pelo `event_id`.
+ *
  * Audita só quando mudou algo (doutrina: rodada vazia de cron não é mutação).
  */
 import { randomUUID } from "node:crypto";
@@ -17,6 +24,7 @@ import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { conciliarTestesNoBackoffice } from "@/lib/backoffice/saida";
 import { cobrancaLigada, cobrancasDaAssinatura } from "@/lib/billing/asaas";
 import { gravarCobranca, recalcularAssinatura } from "@/lib/billing/servico";
 import { env } from "@/lib/env";
@@ -75,8 +83,11 @@ async function handle(req: NextRequest): Promise<Response> {
     }
   }
 
-  const resumo = { conferidas: linhas.length, mudaram, falharam };
-  if (mudaram > 0 || falharam > 0) {
+  // Nunca lança; sem Back Office configurado devolve 0 sem consultar nada.
+  const testesAvisados = await conciliarTestesNoBackoffice(admin);
+
+  const resumo = { conferidas: linhas.length, mudaram, falharam, testes_avisados: testesAvisados };
+  if (mudaram > 0 || falharam > 0 || testesAvisados > 0) {
     void audit({ action: "billing.conciliacao_run", bypassedRls: true, requestId, metadata: resumo });
   }
   return ok(resumo, { requestId });

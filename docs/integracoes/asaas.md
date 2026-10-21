@@ -112,6 +112,14 @@ O cron `billing-conciliar` (de hora em hora, no `scheduler`) consulta no Asaas a
 assinaturas em teste, inadimplentes ou perto do vencimento e aplica pagamentos
 que o webhook tenha perdido.
 
+## Quem avisa o cliente da cobrança
+
+Sem o Back Office de afiliados, o próprio Asaas, pelas notificações configuradas
+no painel dele (o CRM não mexe nelas). Com `BACKOFFICE_URL` + `BACKOFFICE_API_KEY` preenchidos, o **Back
+Office**, pelo WhatsApp — e o cliente do Asaas é criado/atualizado com
+`notificationDisabled: true`, para o aviso não chegar duas vezes. Detalhes e o
+script que cala os clientes antigos: [`backoffice.md`](backoffice.md), item 4.
+
 ## Onde ver
 
 - Cliente: **Configurações › Assinatura** (situação, faturas, trocar cartão,

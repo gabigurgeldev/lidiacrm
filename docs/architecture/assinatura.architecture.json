@@ -40,10 +40,11 @@
     { "id": "asaas", "lane": "dados", "col": 4, "type": "service", "label": "Asaas API v3", "sublabel": "cliente · assinatura MONTHLY · pixQrCode · payWithCreditCard" },
     { "id": "audit", "lane": "retorno", "col": 2, "type": "table", "label": "api_audit_log billing.*", "sublabel": "sem dado de cartão — só 4 últimos dígitos" },
     { "id": "recusa", "lane": "retorno", "col": 3, "type": "component", "label": "402 payment_declined → tela", "sublabel": "mensagem do Asaas + oferta de PIX" },
-    { "id": "saida_bo", "lane": "regra", "col": 4, "type": "module", "label": "lib/backoffice/saida.ts", "sublabel": "código de indicação · desconto · eventos para o Back Office" },
+    { "id": "saida_bo", "lane": "regra", "col": 4, "type": "module", "label": "lib/backoffice/saida.ts", "sublabel": "código de indicação · desconto · eventos · fatura e teste para o aviso de cobrança" },
     { "id": "fila_bo", "lane": "dados", "col": 5, "type": "table", "label": "backoffice_saida + backoffice_indicacoes", "sublabel": "event_id UNIQUE · invisível ao cliente" },
     { "id": "cron_bo", "lane": "borda", "col": 5, "type": "route", "label": "cron backoffice-saida (5 min)", "sublabel": "reenvia com espera crescente, 7 dias" },
-    { "id": "backoffice", "lane": "retorno", "col": 4, "type": "service", "label": "Back Office de afiliados", "sublabel": "receita · comissão · aviso ao afiliado" }
+    { "id": "backoffice", "lane": "retorno", "col": 4, "type": "service", "label": "Back Office de afiliados", "sublabel": "receita · comissão · aviso ao afiliado · aviso de cobrança ao cliente (WhatsApp)" },
+    { "id": "script_notif", "lane": "borda", "col": 6, "type": "module", "label": "scripts/asaas-desligar-notificacoes.ts", "sublabel": "uma vez: cala o Asaas nos clientes antigos (simulação por padrão, --aplicar)" }
   ],
   "edges": [
     { "id": "e1", "from": "signup", "to": "provision", "label": "confirmação do e-mail" },
@@ -77,10 +78,18 @@
     { "id": "e29", "from": "servico", "to": "admin_tela", "label": "estado" },
     { "id": "e30", "from": "signup", "to": "saida_bo", "label": "?ref= → valida código" },
     { "id": "e31", "from": "provision", "to": "saida_bo", "label": "indicação + desconto na mensalidade" },
-    { "id": "e32", "from": "cobrancas", "to": "saida_bo", "label": "paga/estornada/chargeback" },
+    { "id": "e32", "from": "cobrancas", "to": "saida_bo", "label": "paga/estornada/chargeback · invoice.updated (pendente/vencida/paga/cancelada)" },
     { "id": "e33", "from": "saida_bo", "to": "fila_bo", "label": "enfileira" },
     { "id": "e34", "from": "fila_bo", "to": "backoffice", "label": "POST /api/v1/events" },
     { "id": "e35", "from": "cron_bo", "to": "fila_bo", "label": "reenvia pendentes" },
-    { "id": "e36", "from": "cron_bo", "to": "audit", "label": "backoffice.saida_run" }
+    { "id": "e36", "from": "cron_bo", "to": "audit", "label": "backoffice.saida_run" },
+    { "id": "e37", "from": "servico", "to": "saida_bo", "label": "assinatura aberta / status mudou → subscription.updated (fim do teste)" },
+    { "id": "e38", "from": "admin_tela", "to": "saida_bo", "label": "teste estendido → subscription.updated com a data nova" },
+    { "id": "e39", "from": "cron", "to": "saida_bo", "label": "testes em andamento que ainda não foram (testes_avisados)" },
+    { "id": "e40", "from": "backoffice", "to": "checkout_tela", "label": "aviso no WhatsApp → link da fatura / de assinar" },
+    { "id": "e41", "from": "rota_checkout", "to": "asaas", "label": "cliente com notificationDisabled quando o Back Office está ligado" },
+    { "id": "e42", "from": "assinaturas", "to": "script_notif", "label": "asaas_customer_id" },
+    { "id": "e43", "from": "script_notif", "to": "asaas", "label": "notificationDisabled: true" },
+    { "id": "e44", "from": "script_notif", "to": "audit", "label": "billing.notificacoes_asaas_desligadas" }
   ]
 }

@@ -14,6 +14,9 @@
  * `aviso_asaas` e a tela diz isso em voz alta: estender o teste e deixar o
  * cartão ser cobrado antes do fim dele, calado, seria a pior combinação.
  *
+ * O Back Office acompanha: a data nova sai como `subscription.updated`
+ * (`lib/backoffice/saida.ts`), e o aviso de fim do teste vai pela data nova.
+ *
  * Org SEMPRE do path (o gate de platform admin autoriza qualquer uma).
  */
 import { randomUUID } from "node:crypto";
@@ -23,6 +26,7 @@ import { z } from "zod";
 import { exigirPlatformAdmin, lerCorpo } from "@/lib/admin/rota-da-plataforma";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { emitirAssinatura } from "@/lib/backoffice/saida";
 import {
   MAX_DIAS_DE_EXTENSAO,
   novaDataDoTeste,
@@ -81,6 +85,9 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     .eq("organization_id", id);
   if (error) return fail("internal_error", error.message, 500, { requestId });
   invalidarAcesso(id);
+  // Fim do teste novo = aviso novo: o Back Office manda o "teste terminando"
+  // pela data que receber. Nunca lança (a fila engole a falha).
+  await emitirAssinatura(admin, id, { ...a, trial_termina_em: para, status });
 
   void audit({
     action: "billing.trial_estendido",

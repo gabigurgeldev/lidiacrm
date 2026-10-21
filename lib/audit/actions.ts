@@ -564,6 +564,11 @@ export const AUDIT_ACTIONS = [
   // ── Assinatura do atendente (nome em cima da mensagem do inbox) ──
   // Metadata: `{ ativa, nome }`. É preferência da pessoa, gravada em user_metadata.
   "profile.signature_changed",
+  // ── Aviso de cobrança pelo Back Office ──
+  // `scripts/asaas-desligar-notificacoes.ts --aplicar`: o Asaas deixa de avisar
+  // os clientes que já existiam (quem avisa é o Back Office). Metadata: só
+  // contagens, ambiente e ids do Asaas — nenhum dado do titular.
+  "billing.notificacoes_asaas_desligadas",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

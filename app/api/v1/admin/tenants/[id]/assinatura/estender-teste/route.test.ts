@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit";
+import { emitirAssinatura } from "@/lib/backoffice/saida";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { invalidarAcesso, lerAssinatura } from "@/lib/billing/servico";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -17,12 +18,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
  *  - EFEITO: grava maior(agora, fim) + dias, invalida o cache de acesso e
  *    audita `billing.trial_estendido` com de/para.
  *  - ASAAS: com assinatura no Asaas, a resposta avisa que a cobrança não mudou.
+ *  - BACK OFFICE: a data nova sai como `subscription.updated` (é por ela que o
+ *    aviso de fim do teste vai ao cliente); recusa não emite nada.
  */
 
 vi.mock("@/lib/auth/requirePlatformAdmin", () => ({ requirePlatformAdmin: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/billing/servico", () => ({ lerAssinatura: vi.fn(), invalidarAcesso: vi.fn() }));
+vi.mock("@/lib/backoffice/saida", () => ({ emitirAssinatura: vi.fn(async () => 1) }));
 
 const ADMIN_ID = "11111111-1111-4111-8111-111111111111";
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
@@ -80,6 +84,7 @@ beforeEach(() => {
   updates.length = 0;
   vi.mocked(audit).mockClear();
   vi.mocked(invalidarAcesso).mockClear();
+  vi.mocked(emitirAssinatura).mockClear();
   vi.mocked(lerAssinatura).mockReset();
   vi.mocked(requirePlatformAdmin).mockResolvedValue({ user: { id: ADMIN_ID } } as never);
   vi.mocked(createAdminClient).mockReturnValue(adminFalso() as never);
@@ -113,6 +118,7 @@ describe("estender teste grátis", () => {
     expect(corpo.error.details.motivo).toBe(motivo);
     expect(updates).toHaveLength(0);
     expect(audit).not.toHaveBeenCalled();
+    expect(emitirAssinatura).not.toHaveBeenCalled();
   });
 
   it("teste valendo: soma ao fim atual, invalida o cache e audita de/para", async () => {
@@ -132,6 +138,11 @@ describe("estender teste grátis", () => {
       },
     ]);
     expect(invalidarAcesso).toHaveBeenCalledWith(ORG_ID);
+    expect(emitirAssinatura).toHaveBeenCalledWith(
+      expect.anything(),
+      ORG_ID,
+      expect.objectContaining({ trial_termina_em: "2026-10-19T12:00:00.000Z", status: "trial" }),
+    );
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "billing.trial_estendido",
