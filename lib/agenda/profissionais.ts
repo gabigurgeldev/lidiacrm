@@ -365,7 +365,128 @@ export async function carregarAgendasDosProfissionais(
 }
 
 /**
- * As profissionais ATIVAS habilitadas no tipo, na ordem de exibição.
+ * QUEM SAIU DA EQUIPE NÃO ATENDE — os `user_id` cujo vínculo com a organização
+ * está REVOGADO (`user_organizations.revoked_at is not null`).
+ *
+ * A rota de revogar já desativa a profissional do membro
+ * (`desativarProfissionalDoMembro`), mas revogar é UM caminho: SQL de suporte,
+ * uma segunda rota amanhã ou uma falha no meio da revogação não passariam por
+ * lá — e a IA seguiria oferecendo horário de quem saiu. O filtro mora também no
+ * CONSUMO, como em `lib/agenda/google/membros.ts`.
+ *
+ * Só conta quem tem linha revogada: membro sem linha nenhuma não é "revogado" —
+ * é profissional cujo vínculo nunca existiu, e quem cria essas linhas
+ * (`garantirProfissionalDoMembro`, `exigeMembroLivre`) já recusa esse caso.
+ *
+ * Erro de consulta LANÇA: sem saber quem saiu, quem chama recusa a consulta em
+ * vez de oferecer horário de um ex-membro.
+ */
+export async function membrosRevogados(
+  supabase: SupabaseClient,
+  organizationId: string,
+  userIds: readonly (string | null | undefined)[],
+): Promise<Set<string>> {
+  const unicos = [...new Set(userIds.filter((u): u is string => Boolean(u)))];
+  if (unicos.length === 0) return new Set();
+  const { data, error } = await supabase
+    .from("user_organizations")
+    .select("user_id, revoked_at")
+    .eq("organization_id", organizationId)
+    .in("user_id", unicos);
+  if (error) throw new Error(error.message);
+  return new Set(
+    ((data ?? []) as { user_id: string; revoked_at: string | null }[])
+      .filter((v) => v.revoked_at !== null && v.revoked_at !== undefined)
+      .map((v) => String(v.user_id)),
+  );
+}
+
+/**
+ * A profissional do membro que SAIU da organização deixa de atender.
+ *
+ * Chamado no MESMO fluxo que grava `user_organizations.revoked_at` (rota de
+ * equipe e painel da plataforma). Filtra `organization_id` sempre — o client
+ * pode ser o admin.
+ *
+ * ⚠️ NUNCA LANÇA. A revogação já aconteceu quando isto roda; um erro aqui não
+ * pode devolver 500 para um acesso que JÁ foi tirado. A falha vira log, e o
+ * filtro de consumo (`membrosRevogados`) segura a oferta de horário enquanto
+ * isso.
+ */
+export async function desativarProfissionalDoMembro(
+  supabase: SupabaseClient,
+  organizationIds: readonly string[],
+  userId: string,
+): Promise<{ desativadas: number } | { erro: string }> {
+  const orgs = [...new Set(organizationIds)];
+  if (orgs.length === 0) return { desativadas: 0 };
+  try {
+    const { data, error } = await supabase
+      .from("calendar_professionals")
+      .update({ is_active: false })
+      .in("organization_id", orgs)
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .select("id");
+    if (error) return { erro: error.message };
+    return { desativadas: (data ?? []).length };
+  } catch (err) {
+    return { erro: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** As habilitações de um tipo: o conjunto CRU e as que atendem agora. */
+export interface HabilitacoesDoTipo {
+  /**
+   * Todo `professional_id` habilitado, ativo ou não. É o que diz se o tipo é
+   * FECHADO ("só quem faz este serviço") — a mesma régua do marcar, que lê a
+   * tabela crua. Usar só as ativas aqui faria o tipo cuja única habilitada saiu
+   * da equipe virar "qualquer uma serve" na consulta e não no marcar.
+   */
+  ids: Set<string>;
+  /** As ATIVAS e de membro não revogado, na ordem de exibição. */
+  ativas: ProfissionalResumo[];
+}
+
+export async function habilitacoesDoTipo(
+  supabase: SupabaseClient,
+  organizationId: string,
+  eventTypeId: string,
+): Promise<HabilitacoesDoTipo> {
+  const { data: hab, error: erroHab } = await supabase
+    .from("calendar_event_type_professionals")
+    .select("professional_id")
+    .eq("organization_id", organizationId)
+    .eq("event_type_id", eventTypeId);
+  if (erroHab) throw new Error(erroHab.message);
+
+  const ids = new Set((hab ?? []).map((l) => String(l.professional_id)));
+  if (ids.size === 0) return { ids, ativas: [] };
+
+  const { data, error } = await supabase
+    .from("calendar_professionals")
+    .select(COLUNAS_DO_PROFISSIONAL)
+    .eq("organization_id", organizationId)
+    .eq("is_active", true)
+    .in("id", [...ids]);
+  if (error) throw new Error(error.message);
+
+  const linhas = (data ?? []) as LinhaDeProfissional[];
+  const revogados = await membrosRevogados(
+    supabase,
+    organizationId,
+    linhas.map((l) => l.user_id),
+  );
+  const ativas = linhas
+    .filter((l) => !(l.user_id && revogados.has(String(l.user_id))))
+    .sort(ordemDeExibicao)
+    .map(resumoDe);
+  return { ids, ativas };
+}
+
+/**
+ * As profissionais ATIVAS habilitadas no tipo, na ordem de exibição — sem quem
+ * saiu da equipe (`membrosRevogados`), mesmo que a linha ainda esteja ativa.
  *
  * Vazio quer dizer "o tipo não tem habilitação ativa" — quem chama cai para o
  * dono padrão do tipo (a regra de `horariosLivresDaOrg`), em vez de concluir
@@ -376,25 +497,7 @@ export async function profissionaisHabilitados(
   organizationId: string,
   eventTypeId: string,
 ): Promise<ProfissionalResumo[]> {
-  const { data: hab, error: erroHab } = await supabase
-    .from("calendar_event_type_professionals")
-    .select("professional_id")
-    .eq("organization_id", organizationId)
-    .eq("event_type_id", eventTypeId);
-  if (erroHab) throw new Error(erroHab.message);
-
-  const ids = [...new Set((hab ?? []).map((l) => String(l.professional_id)))];
-  if (ids.length === 0) return [];
-
-  const { data, error } = await supabase
-    .from("calendar_professionals")
-    .select(COLUNAS_DO_PROFISSIONAL)
-    .eq("organization_id", organizationId)
-    .eq("is_active", true)
-    .in("id", ids);
-  if (error) throw new Error(error.message);
-
-  return ((data ?? []) as LinhaDeProfissional[]).sort(ordemDeExibicao).map(resumoDe);
+  return (await habilitacoesDoTipo(supabase, organizationId, eventTypeId)).ativas;
 }
 
 /** O membro não é (ou deixou de ser) desta organização. */

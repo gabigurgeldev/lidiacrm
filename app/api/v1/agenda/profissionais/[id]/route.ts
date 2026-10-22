@@ -33,6 +33,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import {
   exigeMembroLivre,
+  exigeServicosNaoFicamSemProfissional,
   exigeTiposDaOrg,
   gravarJornadaDoMembro,
   gravarTiposDaProfissional,
@@ -96,7 +97,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx): Promise<Response> {
       mudanca.schedule = null;
     }
 
-    if (entrada.tipos) await exigeTiposDaOrg(admin, org, entrada.tipos);
+    if (entrada.tipos) {
+      await exigeTiposDaOrg(admin, org, entrada.tipos);
+      // Antes de qualquer escrita: a recusa não pode chegar depois de nome e
+      // jornada já gravados ("alterei" sobre metade do pedido).
+      await exigeServicosNaoFicamSemProfissional(admin, org, atual.id, entrada.tipos);
+    }
 
     if (entrada.jornada !== undefined && !userId) mudanca.schedule = entrada.jornada;
 
@@ -171,7 +177,7 @@ export async function DELETE(_req: NextRequest, ctx: Ctx): Promise<Response> {
     actorUserId: authz.user.id,
     organizationId: org,
     resourceType: "calendar_professional",
-    resourceId: id.data,
+    resourceId: data.id,
     requestId,
     metadata: {},
   });

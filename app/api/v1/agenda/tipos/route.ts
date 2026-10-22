@@ -29,6 +29,7 @@
  *   GET    → os tipos, cada um com `professional_ids: uuid[]`
  *   POST   campos + `professional_ids?` → 201 `{ id, slug }`
  *   PATCH  `{ id, ...campos?, is_active?, professional_ids? }` → `{ id }`
+ *          (`professional_ids: []` num tipo que tem habilitada → 422: vazio é "aberto")
  *   DELETE `{ id }` → `{ id }` (desativa)
  */
 import { type NextRequest } from "next/server";
@@ -222,6 +223,13 @@ export async function PATCH(req: NextRequest): Promise<Response> {
   const recusa = await exigeProfissionaisDaOrg(admin, org, habilitadas);
   if (recusa) return fail(recusa.codigo, recusa.motivo, recusa.status, { requestId });
 
+  // ANTES de gravar as colunas: a recusa não pode chegar com metade do pedido salva.
+  const esvazia = await recusaDeEsvaziarHabilitacao(admin, org, id, {
+    substituir: habilitadas,
+    donoPadrao: campos.default_owner_user_id ?? null,
+  });
+  if (esvazia) return fail(esvazia.codigo, esvazia.motivo, esvazia.status, { requestId });
+
   // Sem coluna para mudar (só a habilitação), não há UPDATE — mas o tipo tem de
   // existir NESTA organização, senão 404 como antes.
   const { data, error } =
@@ -316,6 +324,45 @@ async function exigeProfissionaisDaOrg(
     status: 422,
     codigo: "agenda_profissional_invalido",
     motivo: "Alguma das profissionais informadas não existe nesta organização.",
+  };
+}
+
+/**
+ * `professional_ids: []` num tipo que TEM habilitada é recusado (422).
+ *
+ * Tipo sem habilitação nenhuma é "aberto" — qualquer profissional ativa serve,
+ * que é a regra de instalação antiga no marcar e na consulta. Esvaziar o
+ * conjunto não deixa o serviço "sem ninguém": deixa com TODO MUNDO, e a IA passa
+ * a oferecer horário de quem nunca fez aquilo. Com dono padrão na mesma escrita
+ * o conjunto não fica vazio, e passa.
+ */
+async function recusaDeEsvaziarHabilitacao(
+  admin: Admin,
+  org: string,
+  eventTypeId: string,
+  args: { substituir: string[] | undefined; donoPadrao: string | null },
+): Promise<Recusa | null> {
+  if (args.substituir === undefined || args.substituir.length > 0 || args.donoPadrao) return null;
+  const { data, error } = await admin
+    .from("calendar_event_type_professionals")
+    .select("professional_id")
+    .eq("organization_id", org)
+    .eq("event_type_id", eventTypeId)
+    .limit(1);
+  if (error) return { status: 500, codigo: "internal_error", motivo: error.message };
+  if ((data ?? []).length === 0) return null;
+
+  const { data: tipo } = await admin
+    .from("calendar_event_types")
+    .select("name")
+    .eq("organization_id", org)
+    .eq("id", eventTypeId)
+    .maybeSingle();
+  const nome = (tipo as { name: string } | null)?.name;
+  return {
+    status: 422,
+    codigo: "validation_failed",
+    motivo: `${nome ? `O serviço "${nome}"` : "Este serviço"} ficaria sem nenhuma profissional — habilite outra antes de tirar as atuais.`,
   };
 }
 

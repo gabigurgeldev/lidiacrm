@@ -32,8 +32,8 @@ vi.mock("@/lib/leads/escopo-de-funil", async (original) => {
 });
 
 const { pickToolsFromMcp } = await import("@/lib/ai/runtime/tools");
-const { crmBookAppointment, crmFindFreeSlots } = await import("@/lib/mcp/tools/agendamento");
-const { aplicarTurno, shapeVisivel, CAMPOS_DO_TURNO } = await import("@/lib/mcp/turno");
+const { crmBookAppointment, crmFindFreeSlots, crmListAppointments } = await import("@/lib/mcp/tools/agendamento");
+const { aplicarTurno, shapeVisivel, CAMPOS_DO_TURNO, CAMPOS_FECHADOS_NO_TURNO } = await import("@/lib/mcp/turno");
 import type { McpAuthResult } from "@/lib/mcp/auth";
 import type { McpContext } from "@/lib/mcp/types";
 
@@ -63,7 +63,7 @@ function montar(turno: McpContext["turno"]) {
     supabase: ctx.supabase,
     ctx,
     auth,
-    toolIds: ["crm_book_appointment", "crm_find_free_slots"],
+    toolIds: ["crm_book_appointment", "crm_find_free_slots", "crm_list_appointments"],
     handoffToolEnabled: false,
     handoffSignal: { triggered: false },
     pipelineIds: ["funil-1"],
@@ -122,6 +122,28 @@ describe("com contexto de turno", () => {
     expect(doBook?.argumentos.contact_id).toBe(CONTATO_DA_CONVERSA);
   });
 
+  it("listar: o modelo NÃO vê contato nem recorte de equipe — só `situacao` e `limite`", () => {
+    const tools = montar({ conversationId: CONVERSA, contactId: CONTATO_DA_CONVERSA });
+    expect(camposDoSchema(tools.crm_list_appointments).sort()).toEqual(["limite", "situacao"]);
+  });
+
+  it("⚠️ listar no turno é SEMPRE desta pessoa: contato injetado, recortes de equipe descartados", async () => {
+    // O vazamento: `dia`/`professional_id`/`owner_user_id`/`lead_id` alcançavam a agenda
+    // da equipe, e o modelo recebia os compromissos (e o contato_id) de OUTROS clientes.
+    const espiao = vi.spyOn(crmListAppointments, "handler").mockResolvedValue({ compromissos: [] });
+    const tools = montar({ conversationId: CONVERSA, contactId: CONTATO_DA_CONVERSA });
+    await executar(tools.crm_list_appointments, {
+      contact_id: CONTATO_INVENTADO,
+      dia: "2026-09-01",
+      professional_id: "44444444-4444-4444-8444-444444444444",
+      owner_user_id: "55555555-5555-4555-8555-555555555555",
+      lead_id: "66666666-6666-4666-8666-666666666666",
+      situacao: "confirmed",
+    });
+    const recebido = espiao.mock.calls[0]![0] as Record<string, unknown>;
+    expect(recebido).toEqual({ contact_id: CONTATO_DA_CONVERSA, situacao: "confirmed" });
+  });
+
   it("ferramenta SEM campos de turno não muda nada", async () => {
     const tools = montar({ conversationId: CONVERSA, contactId: CONTATO_DA_CONVERSA });
     expect(camposDoSchema(tools.crm_find_free_slots)).toEqual(Object.keys(crmFindFreeSlots.inputSchema));
@@ -143,6 +165,16 @@ describe("SEM contexto de turno (servidor MCP externo, Operador)", () => {
     expect(crmBookAppointment.inputSchema.contact_id.isOptional()).toBe(false);
   });
 
+  it("listar fora do turno: todos os recortes seguem lá (o dia da equipe é pergunta legítima)", async () => {
+    const tools = montar(undefined);
+    expect(camposDoSchema(tools.crm_list_appointments).sort()).toEqual(
+      Object.keys(crmListAppointments.inputSchema).sort(),
+    );
+    const espiao = vi.spyOn(crmListAppointments, "handler").mockResolvedValue({ compromissos: [] });
+    await executar(tools.crm_list_appointments, { dia: "2026-09-01" });
+    expect(espiao.mock.calls[0]![0]).toEqual({ dia: "2026-09-01" });
+  });
+
   it("o handler recebe exatamente o que veio", async () => {
     const espiao = vi.spyOn(crmBookAppointment, "handler").mockResolvedValue({ marcado: true });
     const tools = montar(undefined);
@@ -157,8 +189,20 @@ describe("SEM contexto de turno (servidor MCP externo, Operador)", () => {
 });
 
 describe("as funções puras", () => {
-  it("a lista de campos do turno é a da marcação, e só ela", () => {
-    expect(CAMPOS_DO_TURNO).toEqual({ crm_book_appointment: ["contact_id", "conversation_id"] });
+  it("a lista de campos do turno: a marcação e a listagem, e só elas", () => {
+    expect(CAMPOS_DO_TURNO).toEqual({
+      crm_book_appointment: ["contact_id", "conversation_id"],
+      crm_list_appointments: ["contact_id"],
+    });
+    expect(CAMPOS_FECHADOS_NO_TURNO).toEqual({
+      crm_list_appointments: ["lead_id", "dia", "owner_user_id", "professional_id"],
+    });
+  });
+
+  it("todo campo fechado existe no schema da ferramenta — nome errado não esconderia nada", () => {
+    for (const campo of CAMPOS_FECHADOS_NO_TURNO.crm_list_appointments!) {
+      expect(Object.keys(crmListAppointments.inputSchema)).toContain(campo);
+    }
   });
 
   it("sem turno, o shape é a MESMA referência", () => {
@@ -169,7 +213,7 @@ describe("as funções puras", () => {
   it("aplicarTurno não toca ferramenta alheia", () => {
     const args = { contact_id: CONTATO_INVENTADO };
     expect(
-      aplicarTurno("crm_list_appointments", args, { conversationId: CONVERSA, contactId: CONTATO_DA_CONVERSA }),
+      aplicarTurno("crm_find_free_slots", args, { conversationId: CONVERSA, contactId: CONTATO_DA_CONVERSA }),
     ).toBe(args);
   });
 });

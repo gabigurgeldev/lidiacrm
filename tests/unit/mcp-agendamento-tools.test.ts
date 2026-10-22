@@ -553,3 +553,83 @@ describe("marcar com profissionais e conversa", () => {
     });
   });
 });
+
+// ─── no turno, só o compromisso de quem está na conversa ────────────────────
+//
+// `appointment_id` vem do modelo, e ele pode tê-lo de qualquer lugar. Sem a
+// checagem, o cliente A pedindo "desmarca minha consulta" desmarcava a do B.
+describe("remarcar e cancelar dentro do turno", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const CONTATO_DA_CONVERSA = "c-da-conversa";
+
+  /** Client que responde o `contact_id` do agendamento e registra os filtros. */
+  function ctxDoTurno(contatoDoAgendamento: string | null, erro: string | null = null) {
+    const filtros: Record<string, unknown> = {};
+    const b: Record<string, unknown> = {};
+    b.select = () => b;
+    b.eq = (c: string, v: unknown) => ((filtros[c] = v), b);
+    b.maybeSingle = async () =>
+      erro
+        ? { data: null, error: { message: erro } }
+        : { data: contatoDoAgendamento === null ? null : { contact_id: contatoDoAgendamento }, error: null };
+    const supabase = { from: () => b } as unknown as SupabaseClient;
+    return {
+      filtros,
+      ctx: { ...ctx, supabase, turno: { conversationId: "conv-1", contactId: CONTATO_DA_CONVERSA } } as McpContext,
+    };
+  }
+
+  const ID = "77777777-7777-4777-8777-777777777777";
+
+  it.each([
+    ["remarcar", () => crmRescheduleAppointment, { appointment_id: ID, new_starts_at: "2026-09-02T10:00:00Z" }, "remarcado"],
+    ["cancelar", () => crmCancelAppointment, { appointment_id: ID, reason: "cliente pediu" }, "cancelado"],
+  ] as const)("%s compromisso de OUTRO cliente: `not_found`, e o handler nem é chamado", async (_n, def, args, chave) => {
+    const { ctx: c, filtros } = ctxDoTurno("c-outro-cliente");
+    const r = (await def().handler(args as never, c)) as Record<string, unknown>;
+    expect(r[chave]).toBe(false);
+    // `not_found` e não "é de outra pessoa": não confirma que o id existe.
+    expect(r.motivo).toBe("not_found");
+    expect(handlers.alterarAgendamentoHandler).not.toHaveBeenCalled();
+    expect(handlers.cancelarAgendamentoHandler).not.toHaveBeenCalled();
+    // A organização vem do contexto, nunca do argumento.
+    expect(filtros).toMatchObject({ organization_id: "org-1", id: ID });
+  });
+
+  it("compromisso que não existe: o mesmo `not_found`", async () => {
+    const { ctx: c } = ctxDoTurno(null);
+    const r = (await crmCancelAppointment.handler({ appointment_id: ID, reason: "cliente pediu" }, c)) as {
+      motivo: string;
+    };
+    expect(r.motivo).toBe("not_found");
+    expect(handlers.cancelarAgendamentoHandler).not.toHaveBeenCalled();
+  });
+
+  it("CONTROLE: compromisso do cliente da conversa passa", async () => {
+    vi.mocked(handlers.alterarAgendamentoHandler).mockResolvedValue({ id: ID });
+    const { ctx: c } = ctxDoTurno(CONTATO_DA_CONVERSA);
+    const r = (await crmRescheduleAppointment.handler(
+      { appointment_id: ID, new_starts_at: "2026-09-02T10:00:00Z" },
+      c,
+    )) as { remarcado: boolean };
+    expect(r.remarcado).toBe(true);
+    expect(handlers.alterarAgendamentoHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it("erro de banco na checagem SOBE — não vira 'não encontrado'", async () => {
+    const { ctx: c } = ctxDoTurno(null, "conexão caiu");
+    await expect(
+      crmCancelAppointment.handler({ appointment_id: ID, reason: "cliente pediu" }, c),
+    ).rejects.toThrow("conexão caiu");
+  });
+
+  it("FORA do turno (servidor MCP externo) não há checagem: nada muda", async () => {
+    vi.mocked(handlers.cancelarAgendamentoHandler).mockResolvedValue({ id: ID });
+    // `ctx` sem turno e com client vazio: se a checagem rodasse, estouraria.
+    const r = (await crmCancelAppointment.handler({ appointment_id: ID, reason: "cliente pediu" }, ctx)) as {
+      cancelado: boolean;
+    };
+    expect(r.cancelado).toBe(true);
+  });
+});

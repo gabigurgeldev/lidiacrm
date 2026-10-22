@@ -17,7 +17,15 @@ import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/arch
 import { estadoDaJanela } from "@/lib/channels/janela";
 import { logger } from "@/lib/logger";
 
-import type { AgendamentoParaLembrete, PortasDoLembrete, ResolucaoDoCanal } from "./motor";
+import {
+  MINUTOS_ATE_PRESO,
+  type AgendamentoParaLembrete,
+  type PortasDoLembrete,
+  type ResolucaoDoCanal,
+} from "./motor";
+
+/** O motivo do varredor — tipado pelo vocabulário, nunca string solta. */
+const MOTIVO_INTERROMPIDO: MotivoDeLembretePulado = "enfileiramento_interrompido";
 
 /** O maior `reminder_minutes_before` que o CHECK do tipo aceita (30 dias). */
 const HORIZONTE_MAXIMO_MS = 43_200 * 60_000;
@@ -35,7 +43,7 @@ interface LinhaDoCandidato {
   id: string;
   organization_id: string;
   starts_at: string;
-  created_at: string;
+  booked_at: string;
   status: string;
   time_zone: string;
   contact_id: string | null;
@@ -62,7 +70,7 @@ export function portasDoLembrete(admin: SupabaseClient): PortasDoLembrete {
       const { data, error } = await admin
         .from(TABELA)
         .select(
-          "id, organization_id, starts_at, created_at, status, time_zone, contact_id, conversation_id, " +
+          "id, organization_id, starts_at, booked_at, status, time_zone, contact_id, conversation_id, " +
             "reminder_sent_at, reminder_skipped_reason, " +
             "tipo:calendar_event_types!calendar_appointments_event_type_id_fkey!inner(name, reminder_enabled, reminder_minutes_before)",
         )
@@ -84,7 +92,7 @@ export function portasDoLembrete(admin: SupabaseClient): PortasDoLembrete {
           id: l.id,
           organization_id: l.organization_id,
           starts_at: l.starts_at,
-          created_at: l.created_at,
+          booked_at: l.booked_at,
           status: l.status,
           time_zone: l.time_zone,
           contact_id: l.contact_id,
@@ -100,6 +108,44 @@ export function portasDoLembrete(admin: SupabaseClient): PortasDoLembrete {
             : null,
         };
       });
+    },
+
+    async presos(agora, limite) {
+      const corte = new Date(agora.getTime() - MINUTOS_ATE_PRESO * 60_000).toISOString();
+      const { data, error } = await admin
+        .from(TABELA)
+        .select("id, organization_id")
+        .not("reminder_sent_at", "is", null)
+        .lt("reminder_sent_at", corte)
+        .is("reminder_scheduled_message_id", null)
+        .is("reminder_skipped_reason", null)
+        .eq("status", "confirmed")
+        .gt("starts_at", agora.toISOString())
+        .order("reminder_sent_at", { ascending: true })
+        .limit(limite);
+      // Sobe: o motor conta como falha (a rodada audita) e segue com o resto.
+      if (error) throw new Error(`agenda-lembretes: varredor de presas falhou — ${error.message}`);
+      return ((data ?? []) as { id: string; organization_id: string }[]).map((l) => ({
+        id: String(l.id),
+        organization_id: String(l.organization_id),
+      }));
+    },
+
+    async marcarPreso(ag) {
+      const { data, error } = await admin
+        .from(TABELA)
+        .update({ reminder_skipped_reason: MOTIVO_INTERROMPIDO })
+        .eq("id", ag.id)
+        .eq("organization_id", ag.organization_id)
+        .not("reminder_sent_at", "is", null)
+        .is("reminder_scheduled_message_id", null)
+        .is("reminder_skipped_reason", null)
+        .select("id");
+      if (error) {
+        logger.warn("agenda-lembretes: não consegui marcar a presa", { erro: error.message, id: ag.id });
+        return false;
+      }
+      return (data ?? []).length > 0;
     },
 
     async marcarPulado(ag, motivo) {
@@ -275,20 +321,52 @@ export function portasDoLembrete(admin: SupabaseClient): PortasDoLembrete {
     },
 
     async confirmar(ag, mensagemAgendadaId) {
-      const { error } = await admin
+      // O ponteiro só é gravado se o agendamento é AINDA o que foi reivindicado:
+      // confirmado, no mesmo horário, com a reivindicação de pé. Remarcar ou
+      // cancelar no meio zera as marcas (`cancelarLembretePendente`) e muda
+      // `starts_at`/`status` — qualquer um dos três derruba o UPDATE.
+      const { data, error } = await admin
         .from(TABELA)
         .update({ reminder_scheduled_message_id: mensagemAgendadaId })
         .eq("id", ag.id)
-        .eq("organization_id", ag.organization_id);
+        .eq("organization_id", ag.organization_id)
+        .eq("status", "confirmed")
+        .eq("starts_at", ag.starts_at)
+        .not("reminder_sent_at", "is", null)
+        .is("reminder_scheduled_message_id", null)
+        .select("id");
       if (error) {
         // A mensagem JÁ está na fila: o lembrete sai. O que se perde é só o
-        // ponteiro que deixa remarcar/cancelar retirá-la.
+        // ponteiro que deixa remarcar/cancelar retirá-la — e o varredor de
+        // presas abre aviso para alguém conferir.
         logger.error("agenda-lembretes: lembrete enfileirado sem ponteiro no agendamento", {
           erro: error.message,
           id: ag.id,
           mensagem_agendada_id: mensagemAgendadaId,
         });
+        return true;
       }
+      if ((data ?? []).length > 0) return true;
+
+      // O agendamento mudou no meio: a mensagem fala de um horário que não
+      // existe mais. Cancela enquanto ainda está `scheduled` — `queued`/
+      // `sending`/`sent` têm dono ou já saíram (mesma regra de
+      // `cancelarLembretePendente`).
+      const { data: cancelada, error: erroFila } = await admin
+        .from("conversation_scheduled_messages")
+        .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
+        .eq("organization_id", ag.organization_id)
+        .eq("id", mensagemAgendadaId)
+        .eq("status", "scheduled")
+        .select("id");
+      if (erroFila || (cancelada ?? []).length === 0) {
+        logger.error("agenda-lembretes: o agendamento mudou e não consegui retirar o lembrete da fila", {
+          erro: erroFila?.message ?? "a mensagem já tinha saído de 'scheduled'",
+          id: ag.id,
+          mensagem_agendada_id: mensagemAgendadaId,
+        });
+      }
+      return false;
     },
 
     async devolver(ag, motivo: MotivoDeLembretePulado | null) {

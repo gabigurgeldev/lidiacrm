@@ -217,7 +217,9 @@ function cliente(): SupabaseClient {
     rpc: async (fn: string, args: Linha) => {
       banco.rpc.push({ fn, args });
       // Marcar grava pela `fn_agenda_marcar` (migration 0245): o agendamento
-      // chega ao banco como `p_compromisso`, e a função devolve o id.
+      // chega ao banco como `p_compromisso`, e a função devolve o id. `status`
+      // e a autoria com sessão NÃO vêm no jsonb — a função os decide; o que a
+      // rota usa depois é o que ela lê de volta (`banco.criado`).
       if (fn === "fn_agenda_marcar") {
         (banco.inserido["calendar_appointments"] ??= []).push(args.p_compromisso as Linha);
         return { data: AGENDAMENTO, error: null };

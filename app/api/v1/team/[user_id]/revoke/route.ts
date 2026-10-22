@@ -5,13 +5,18 @@
  *  - Caller must be admin of the active org.
  *  - Cannot revoke self.
  *  - Cannot revoke the last admin.
+ *
+ * Efeito na agenda: a profissional do membro (`calendar_professionals`) é
+ * desativada NESTA organização — quem saiu não recebe mais horário oferecido.
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
+import { desativarProfissionalDoMembro } from "@/lib/agenda/profissionais";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
+import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -69,6 +74,19 @@ export async function POST(
     .eq("id", target.id);
   if (updErr) return fail("internal_error", updErr.message, 500, { requestId });
 
+  // Quem saiu deixa de atender: sem isto a profissional dele seguia ativa e a IA
+  // continuava oferecendo horário de quem não está mais na equipe. Não derruba
+  // a revogação se falhar — o filtro de consumo (`membrosRevogados`) segura.
+  const agenda = await desativarProfissionalDoMembro(supabase, [activeOrg.orgId], targetUserId);
+  if ("erro" in agenda) {
+    logger.error("team.revoke: não consegui desativar a profissional do membro", {
+      erro: agenda.erro,
+      organization_id: activeOrg.orgId,
+      target_user_id: targetUserId,
+      requestId,
+    });
+  }
+
   await audit({
     action: "member.revoked",
     actorUserId: authUser.id,
@@ -76,7 +94,11 @@ export async function POST(
     resourceType: "membership",
     resourceId: target.id,
     requestId,
-    metadata: { target_user_id: targetUserId, revoked_role: target.role },
+    metadata: {
+      target_user_id: targetUserId,
+      revoked_role: target.role,
+      profissionais_desativadas: "erro" in agenda ? null : agenda.desativadas,
+    },
   });
 
   return ok({ user_id: targetUserId, revoked_at: nowIso }, { requestId });

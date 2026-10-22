@@ -2,7 +2,8 @@
  * O vínculo de UMA pessoa com UMA organização, pelo painel da plataforma.
  *
  *   PATCH  — troca o papel na organização;
- *   DELETE — remove a pessoa da organização (`revoked_at`), sem tocar na conta.
+ *   DELETE — remove a pessoa da organização (`revoked_at`), sem tocar na conta,
+ *            e desativa a profissional dela na agenda DESTA organização.
  *
  * Mesmas travas da tela de equipe do tenant (`app/api/v1/team/[user_id]/_shared.ts`
  * e `/revoke`): o último admin não é rebaixado nem removido, e vínculo já
@@ -17,8 +18,10 @@ import { z } from "zod";
 import { adminsAtivosDaOrg } from "@/lib/admin/consultas-gestao";
 import { recusaDeMudancaNoVinculo } from "@/lib/admin/gestao-usuarios";
 import { exigirPlatformAdmin, lerCorpo } from "@/lib/admin/rota-da-plataforma";
+import { desativarProfissionalDoMembro } from "@/lib/agenda/profissionais";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { logger } from "@/lib/logger";
 import { changeRoleSchema } from "@/lib/schemas";
 import type { Role } from "@/lib/schemas/team";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -126,6 +129,17 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
     .eq("id", c.vinculo.id);
   if (error) return fail("internal_error", error.message, 500, { requestId });
 
+  // Fora da organização, fora da agenda dela — mesma regra da tela de equipe.
+  const agenda = await desativarProfissionalDoMembro(c.admin, [c.orgId], c.id);
+  if ("erro" in agenda) {
+    logger.error("admin.memberships: não consegui desativar a profissional do membro", {
+      erro: agenda.erro,
+      organization_id: c.orgId,
+      target_user_id: c.id,
+      requestId,
+    });
+  }
+
   void audit({
     action: "platform_admin.user_removed_from_org",
     actorUserId: gate.ctx.user.id,
@@ -135,7 +149,11 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
     resourceType: "membership",
     resourceId: c.vinculo.id,
     requestId,
-    metadata: { target_user_id: c.id, revoked_role: c.vinculo.role },
+    metadata: {
+      target_user_id: c.id,
+      revoked_role: c.vinculo.role,
+      profissionais_desativadas: "erro" in agenda ? null : agenda.desativadas,
+    },
   });
 
   return ok({ user_id: c.id, organization_id: c.orgId, revoked_at: agoraIso }, { requestId });

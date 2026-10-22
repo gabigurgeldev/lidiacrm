@@ -824,3 +824,80 @@ describe("listaAgendamentos e detalheDoAgendamento — os campos da 0245", () =>
     expect(semFiltroDeOrganizacao()).toEqual([]);
   });
 });
+
+// ─── quem saiu da equipe não atende ─────────────────────────────────────────
+//
+// A revogação desativa a profissional do membro, mas revogar é UM caminho (SQL
+// de suporte, falha no meio, uma segunda rota amanhã). O filtro de consumo é a
+// defesa em profundidade: profissional ATIVA cujo membro está revogado nesta
+// organização não é candidata em degrau nenhum.
+describe("membro revogado: fora da oferta mesmo com a linha ativa", () => {
+  beforeEach(() => {
+    banco.linhas("calendar_event_types").push(tipo());
+    banco
+      .linhas("calendar_professionals")
+      .push(
+        profissional("p-ana", { name: "Ana", schedule: JORNADA_SP, position: 1 }),
+        profissional("p-ex", { name: "Ex", user_id: "u-ex", position: 2 }),
+      );
+    banco.linhas("attendant_availability").push({ organization_id: ORG, user_id: "u-ex", schedule: JORNADA_SP });
+    banco
+      .linhas("user_organizations")
+      .push({ organization_id: ORG, user_id: "u-ex", revoked_at: "2026-03-01T00:00:00Z" });
+    // Na OUTRA organização o mesmo usuário segue ativo — e isso não o devolve aqui.
+    banco.linhas("user_organizations").push({ organization_id: OUTRA, user_id: "u-ex", revoked_at: null });
+  });
+
+  const consultar = (extra: Partial<Parameters<typeof horariosLivresDaOrg>[2]> = {}) =>
+    horariosLivresDaOrg(sb, ORG, { eventTypeId: "tipo-1", de: DE, ate: ATE, agora: AGORA, ...extra });
+
+  it("habilitada com membro revogado some de `profissionaisHabilitados`", async () => {
+    habilitar("p-ana", "p-ex");
+    const r = await profissionaisHabilitados(sb, ORG, "tipo-1");
+    expect(r.map((p) => p.id)).toEqual(["p-ana"]);
+    expect(semFiltroDeOrganizacao()).toEqual([]);
+  });
+
+  it("habilitada com membro revogado não é candidata na consulta", async () => {
+    habilitar("p-ana", "p-ex");
+    const r = await consultar();
+    if (!r.ok) throw new Error(r.motivoParaOperador);
+    expect(r.profissionais.map((p) => p.id)).toEqual(["p-ana"]);
+  });
+
+  it("CONTROLE: o mesmo membro ATIVO é candidata — o filtro é pela revogação", async () => {
+    banco.linhas("user_organizations").find((v) => v.organization_id === ORG)!.revoked_at = null;
+    habilitar("p-ana", "p-ex");
+    const r = await consultar();
+    if (!r.ok) throw new Error(r.motivoParaOperador);
+    expect(r.profissionais.map((p) => p.id)).toEqual(["p-ana", "p-ex"]);
+  });
+
+  it("pedida por id, com membro revogado: `profissional_invalido`", async () => {
+    habilitar("p-ana", "p-ex");
+    const r = await consultar({ profissionalIds: ["p-ex"] });
+    expect(r.ok === false && r.codigo).toBe("profissional_invalido");
+    expect(r.ok === false && r.motivoParaOperador).toMatch(/não faz mais parte da equipe/);
+  });
+
+  it("pedida pelo legado `ownerUserId` revogado: `profissional_invalido`", async () => {
+    const r = await consultar({ ownerUserId: "u-ex" });
+    expect(r.ok === false && r.codigo).toBe("profissional_invalido");
+  });
+
+  it("dono padrão revogado não responde pelo tipo: `sem_responsavel`", async () => {
+    banco.tabelas.set("calendar_event_types", [tipo({ default_owner_user_id: "u-ex" })]);
+    const r = await consultar();
+    expect(r.ok === false && r.codigo).toBe("sem_responsavel");
+  });
+
+  it("tipo cuja única habilitada saiu NÃO vira 'qualquer uma serve' para a pedida", async () => {
+    // A régua de "faz este serviço" é o conjunto CRU — a mesma do marcar. Só
+    // com as ativas, a Ana (nunca habilitada) passaria a ser aceita aqui e
+    // recusada na hora de marcar.
+    banco.linhas("calendar_professionals").find((p) => p.id === "p-ex")!.is_active = false;
+    habilitar("p-ex");
+    const r = await consultar({ profissionalIds: ["p-ana"] });
+    expect(r.ok === false && r.codigo).toBe("profissional_invalido");
+  });
+});

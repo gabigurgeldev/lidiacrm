@@ -12,7 +12,11 @@
  *
  * Auth: Bearer INTERNAL_CRON_SECRET|INTERNAL_SECRET, fail-closed.
  *
- * Auditoria: só a rodada que enfileirou, pulou ou falhou alguma coisa.
+ * Toda rodada começa pelo varredor de presas (reivindicadas há mais de 15 min
+ * sem chegar à fila): marca `enfileiramento_interrompido` e avisa na Central.
+ *
+ * Auditoria: só a rodada que enfileirou, pulou, falhou, achou presa ou
+ * descartou alguma coisa (`houveEfeito`).
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";

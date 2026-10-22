@@ -45,8 +45,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { combinacoesLivres, type PessoaDaBusca } from "./horarios-livres";
 import {
   carregarAgendasDosProfissionais,
-  profissionaisHabilitados,
+  habilitacoesDoTipo,
+  membrosRevogados,
   type AgendaDoProfissional,
+  type HabilitacoesDoTipo,
 } from "./profissionais";
 import {
   AUTORES_DO_AGENDAMENTO,
@@ -62,7 +64,6 @@ import type {
   AgendamentoListado,
   CodigoDeRecusaDaConsulta,
   ParametrosDaConsulta,
-  ProfissionalResumo,
   ResultadoDaConsulta,
 } from "./contrato";
 
@@ -128,6 +129,9 @@ interface Candidatas {
  * 4. Senão, `sem_responsavel`: lista vazia aqui faria a tela dizer "nenhum
  *    horário disponível" para uma configuração incompleta, e o erro nomeado é o
  *    que leva alguém a corrigir.
+ *
+ * Em todos os degraus, quem SAIU da equipe (vínculo revogado) não é candidata —
+ * nem pedida por nome, nem habilitada, nem dona padrão (`membrosRevogados`).
  */
 async function candidatasDaConsulta(
   supabase: SupabaseClient,
@@ -136,9 +140,9 @@ async function candidatasDaConsulta(
   params: ParametrosDaConsulta,
   necessarios: 1 | 2,
 ): Promise<Candidatas | Recusa> {
-  const habilitadas = async (): Promise<ProfissionalResumo[] | Recusa> => {
+  const habilitadas = async (): Promise<HabilitacoesDoTipo | Recusa> => {
     try {
-      return await profissionaisHabilitados(supabase, organizationId, tipo.id);
+      return await habilitacoesDoTipo(supabase, organizationId, tipo.id);
     } catch (e) {
       return erroInterno(e instanceof Error ? e.message : String(e));
     }
@@ -182,15 +186,29 @@ async function candidatasDaConsulta(
     // oferecer um horário com quem o marcar depois recusa é prometer em vão.
     const { data: linhas, error } = await supabase
       .from("calendar_professionals")
-      .select("id, name, is_active")
+      .select("id, name, is_active, user_id")
       .eq("organization_id", organizationId)
       .in("id", pedidas);
     if (error) return erroInterno(error.message);
     const achadas = new Map((linhas ?? []).map((l) => [String(l.id), l]));
 
+    let revogados: Set<string>;
+    try {
+      revogados = await membrosRevogados(
+        supabase,
+        organizationId,
+        (linhas ?? []).map((l) => (l.user_id ? String(l.user_id) : null)),
+      );
+    } catch (e) {
+      return erroInterno(e instanceof Error ? e.message : String(e));
+    }
+
     const hab = await habilitadas();
-    if (!Array.isArray(hab)) return hab;
-    const idsHabilitados = new Set(hab.map((p) => p.id));
+    if ("ok" in hab) return hab;
+    // A régua de "faz este serviço" é o conjunto CRU de habilitações — a mesma
+    // que o marcar lê. Só com as ativas, um tipo cuja única habilitada saiu da
+    // equipe viraria "qualquer uma serve" aqui e não lá.
+    const idsHabilitados = hab.ids;
 
     for (const id of pedidas) {
       const linha = achadas.get(id);
@@ -202,6 +220,9 @@ async function candidatasDaConsulta(
       });
       if (!linha) return recusa(`Profissional ${id} não existe nesta organização.`);
       if (!linha.is_active) return recusa(`${String(linha.name)} está desativada.`);
+      if (linha.user_id && revogados.has(String(linha.user_id))) {
+        return recusa(`${String(linha.name)} não faz mais parte da equipe.`);
+      }
       if (idsHabilitados.size > 0 && !idsHabilitados.has(id)) {
         return recusa(`${String(linha.name)} não está habilitada em "${tipo.name}".`);
       }
@@ -213,14 +234,15 @@ async function candidatasDaConsulta(
     }
     // Duas necessárias e uma pedida: ela é a principal, e a apoio vem das
     // habilitadas (ou, sem habilitação, do dono padrão).
-    const apoios = hab.length > 0 ? hab.map((p) => p.id) : await idDoDonoPadrao(supabase, organizationId, tipo);
+    const apoios =
+      hab.ativas.length > 0 ? hab.ativas.map((p) => p.id) : await idDoDonoPadrao(supabase, organizationId, tipo);
     if (!Array.isArray(apoios)) return apoios;
     return { ids: [...new Set([...pedidas, ...apoios])], fixos: { principalId } };
   }
 
   const hab = await habilitadas();
-  if (!Array.isArray(hab)) return hab;
-  if (hab.length > 0) return { ids: hab.map((p) => p.id), fixos: {} };
+  if ("ok" in hab) return hab;
+  if (hab.ativas.length > 0) return { ids: hab.ativas.map((p) => p.id), fixos: {} };
 
   const doDono = await idDoDonoPadrao(supabase, organizationId, tipo);
   if (!Array.isArray(doDono)) return doDono;
@@ -234,7 +256,11 @@ async function candidatasDaConsulta(
   };
 }
 
-/** O profissional ATIVO do dono padrão do tipo, como lista (vazia se não há). */
+/**
+ * O profissional ATIVO do dono padrão do tipo, como lista (vazia se não há).
+ * Dono padrão que saiu da equipe não responde por nada: vazio, e a consulta cai
+ * em `sem_responsavel` — que é o que leva alguém a escolher outro.
+ */
 async function idDoDonoPadrao(
   supabase: SupabaseClient,
   organizationId: string,
@@ -249,7 +275,14 @@ async function idDoDonoPadrao(
     .eq("is_active", true)
     .maybeSingle();
   if (error) return erroInterno(error.message);
-  return data ? [String(data.id)] : [];
+  if (!data) return [];
+  try {
+    const revogados = await membrosRevogados(supabase, organizationId, [tipo.default_owner_user_id]);
+    if (revogados.has(tipo.default_owner_user_id)) return [];
+  } catch (e) {
+    return erroInterno(e instanceof Error ? e.message : String(e));
+  }
+  return [String(data.id)];
 }
 
 export async function horariosLivresDaOrg(

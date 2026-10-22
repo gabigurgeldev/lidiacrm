@@ -29,7 +29,15 @@
  * unicidades de horário (`calendar_appointments` por dono, e por profissional em
  * `cap_sem_duplicata_idx`) são a última palavra: duas marcações simultâneas no
  * mesmo horário passam ambas pela consulta, e a segunda morre com 23505, que vira
- * 409 `agenda_horario_ocupado` — nunca 500.
+ * 409 `agenda_horario_ocupado` — nunca 500. Sobreposição PARCIAL também: a
+ * função trava as profissionais e reconfere antes de gravar
+ * (`fn_agenda_conferir_livre`), e o trigger do espelho faz o mesmo ao remarcar.
+ *
+ * A função NÃO confia nesta rota: ela é executável por `authenticated` e
+ * alcançável direto pelo PostgREST, então confere de novo tipo, contato,
+ * conversa, profissionais e autoria contra a organização, e decide sozinha
+ * `status`, `owner_user_id` e — com sessão — `created_by_user_id`. A recusa
+ * volta com um hint `agenda:<motivo>`, traduzido em `erroDeEscrita`.
  */
 import { avisarMarcacaoDaIa } from "@/lib/agenda/aviso-da-marcacao";
 import { horariosLivresDaOrg } from "@/lib/agenda/consulta";
@@ -42,7 +50,11 @@ import {
   type Transicao,
 } from "@/lib/agenda/laco";
 import { cancelarLembretePendente } from "@/lib/agenda/lembrete-pendente";
-import { garantirProfissionalDoMembro, MembroForaDaOrganizacaoError } from "@/lib/agenda/profissionais";
+import {
+  garantirProfissionalDoMembro,
+  MembroForaDaOrganizacaoError,
+  membrosRevogados,
+} from "@/lib/agenda/profissionais";
 import { ALVO_DE_VINCULO_DO_AGENDAMENTO, VINCULO_DE_AGENDAMENTO } from "@/lib/agenda/tipos";
 import { ApiError } from "@/lib/api/types";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
@@ -212,17 +224,21 @@ export async function marcarAgendamentoHandler(
     // O fuso do compromisso é campo de primeira classe: é o da JORNADA, onde
     // o horário foi decidido, e ele viaja até o lembrete (ACHADO 09).
     time_zone: consulta.fusoDaRegra,
-    status: tipo.requires_confirmation ? "pending" : "confirmed",
     // = o `user_id` da principal (NULL quando ela não tem login): o Google e o
-    // índice de duplicata antigo continuam lendo daqui.
+    // índice de duplicata antigo continuam lendo daqui. A função DERIVA o dono
+    // da principal e recusa se este divergir — mandar é conferir, não escolher.
     owner_user_id: donoId,
     contact_id: contatoId,
     conversation_id: conversaId,
     location_kind: tipo.location_kind,
     location_details: tipo.location_details,
     notes: input.notes ?? null,
+    // ⚠️ SEM `status` e SEM `created_by_user_id`: quem decide é a função. O
+    // status sai de `requires_confirmation` do tipo; com sessão, a autoria é
+    // `auth.uid()` e o que viesse daqui seria ignorado. Sem sessão (MCP, service
+    // role) não há usuário a gravar — e o `actor.id` de um token MCP de usuário
+    // é o id do TOKEN, que morreria na FK para `auth.users`.
     created_by_kind: autorParaCriacao(ctx.actor),
-    created_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
     // `agent_id` (linha de `ai_agents`), NUNCA `id` (que é o run): a coluna tem FK.
     created_by_agent_id: ctx.actor.type === "ai_agent" ? (ctx.actor.agent_id ?? null) : null,
     source: ctx.actor.type === "user" ? "ui" : "mcp",
@@ -588,7 +604,7 @@ async function resolverPedidoDeProfissionais(
     const [{ data: linhas, error: erroProf }, { data: habilitacoes, error: erroHab }] = await Promise.all([
       supabase
         .from("calendar_professionals")
-        .select("id, name, is_active")
+        .select("id, name, is_active, user_id")
         .eq("organization_id", ctx.organization_id)
         .in("id", pedidas),
       supabase
@@ -600,8 +616,29 @@ async function resolverPedidoDeProfissionais(
     if (erroProf || erroHab) {
       throw new ApiError(500, "internal_error", undefined, ctx.requestId, (erroProf ?? erroHab)?.message);
     }
-    const porId = new Map(((linhas ?? []) as { id: string; name: string; is_active: boolean }[]).map((l) => [l.id, l]));
+    const porId = new Map(
+      ((linhas ?? []) as { id: string; name: string; is_active: boolean; user_id: string | null }[]).map((l) => [
+        l.id,
+        l,
+      ]),
+    );
     const habilitadas = new Set(((habilitacoes ?? []) as { professional_id: string }[]).map((h) => h.professional_id));
+
+    // Quem SAIU da equipe não atende, mesmo que a linha de profissional ainda
+    // esteja ativa (a desativação na revogação é best-effort). Mesmo client da
+    // coleta: pela sessão de um agent a RLS de `user_organizations` só mostra a
+    // própria linha, e aí quem segura é a `fn_agenda_marcar`, que exige membro
+    // ATIVO e volta com o mesmo código (`agenda:profissional_invalido` → 422).
+    let revogados: Set<string>;
+    try {
+      revogados = await membrosRevogados(
+        supabase,
+        ctx.organization_id,
+        [...porId.values()].map((l) => l.user_id),
+      );
+    } catch (err) {
+      throw new ApiError(500, "internal_error", undefined, ctx.requestId, (err as Error).message);
+    }
 
     for (const id of pedidas) {
       const p = porId.get(id);
@@ -615,6 +652,15 @@ async function resolverPedidoDeProfissionais(
           undefined,
           ctx.requestId,
           `${p.name} está desativada e não recebe agendamentos.`,
+        );
+      }
+      if (p.user_id && revogados.has(p.user_id)) {
+        throw new ApiError(
+          422,
+          "agenda_profissional_invalido",
+          undefined,
+          ctx.requestId,
+          `${p.name} não faz mais parte da equipe e não recebe agendamentos.`,
         );
       }
       // Tipo SEM habilitação nenhuma aceita qualquer ativa (instalação antiga);
@@ -759,7 +805,10 @@ async function userIdDaPrincipal(
  * mesmo horário entre a consulta e a gravação, e a unicidade do banco segurou.
  * É 409 com ensino, não 500: quem chamou pode consultar de novo e escolher outro.
  */
-function erroDeEscrita(error: { code?: string; message: string }, ctx: HandlerCtx): ApiError {
+function erroDeEscrita(
+  error: { code?: string; message: string; hint?: string | null; details?: string | null },
+  ctx: HandlerCtx,
+): ApiError {
   if (error.code === "23505") {
     return new ApiError(
       409,
@@ -769,13 +818,70 @@ function erroDeEscrita(error: { code?: string; message: string }, ctx: HandlerCt
       "Este horário acabou de ser ocupado. Consulte os horários livres de novo e escolha outro.",
     );
   }
-  // 22023 = argumento recusado pela `fn_agenda_marcar`; 23503 = profissional de
-  // outra organização (FK composta). Os dois são "essa profissional não serve".
-  if (error.code === "22023" || error.code === "23503") {
+
+  // A recusa NOMEADA da `fn_agenda_marcar`: o hint diz o motivo (contrato no
+  // comentário da migration 0245). A função confere sozinha o que esta rota
+  // confere, porque ela também é chamada direto pelo PostgREST — e quando a
+  // conferência daqui e a de lá discordam (corrida: o tipo foi desativado entre
+  // a leitura e a gravação), a de lá é a que vale.
+  const recusa = error.hint ? RECUSA_DA_MARCACAO[error.hint] : undefined;
+  if (recusa) {
+    return new ApiError(recusa.status, recusa.code, undefined, ctx.requestId, recusa.mensagem ?? error.message);
+  }
+
+  // 23503 cru (FK do banco, sem passar pela conferência): o NOME da constraint
+  // diz que referência faltou. Contato e conversa ausentes são "não encontrado",
+  // como na conferência acima; profissional é "essa profissional não serve".
+  if (error.code === "23503") {
+    const texto = `${error.message} ${error.details ?? ""}`;
+    if (/cap_profissional_fk|calendar_professionals/.test(texto)) {
+      return new ApiError(422, "agenda_profissional_invalido", undefined, ctx.requestId, error.message);
+    }
+    if (/contact_id/.test(texto)) {
+      return new ApiError(404, "not_found", undefined, ctx.requestId, "Contato não encontrado.");
+    }
+    if (/conversation_id/.test(texto)) {
+      return new ApiError(404, "not_found", undefined, ctx.requestId, "Conversa não encontrada para este contato.");
+    }
+    return new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
+  }
+
+  // 22023 sem hint conhecido = a lista de profissionais veio malformada (o
+  // único argumento que esta rota monta a partir do pedido).
+  if (error.code === "22023") {
     return new ApiError(422, "agenda_profissional_invalido", undefined, ctx.requestId, error.message);
   }
   return new ApiError(500, "internal_error", undefined, ctx.requestId, error.message);
 }
+
+/**
+ * hint da `fn_agenda_marcar` → código de API. Um mapa, não `if` espalhado — a
+ * mesma escolha de `CODIGO_DA_RECUSA`.
+ *
+ * `agente_inexistente`, `autor_invalido` e `argumento` são 500 de propósito: os
+ * três campos são montados por ESTE arquivo, nunca pelo pedido. Se a função os
+ * recusa, o defeito é nosso, e 422 mandaria quem chamou corrigir o que não é dele.
+ */
+const RECUSA_DA_MARCACAO: Record<string, { status: number; code: string; mensagem?: string }> = {
+  "agenda:tipo_inexistente": { status: 404, code: "not_found", mensagem: "Tipo de agendamento não encontrado." },
+  "agenda:tipo_desativado": { status: 422, code: "agenda_tipo_desativado" },
+  "agenda:profissionais_insuficientes": { status: 422, code: "agenda_profissionais_insuficientes" },
+  "agenda:profissional_invalido": { status: 422, code: "agenda_profissional_invalido" },
+  "agenda:contato_inexistente": { status: 404, code: "not_found", mensagem: "Contato não encontrado." },
+  "agenda:conversa_inexistente": {
+    status: 404,
+    code: "not_found",
+    mensagem: "Conversa não encontrada para este contato.",
+  },
+  "agenda:conversa_de_outro_contato": {
+    status: 404,
+    code: "not_found",
+    mensagem: "Conversa não encontrada para este contato.",
+  },
+  "agenda:agente_inexistente": { status: 500, code: "internal_error" },
+  "agenda:autor_invalido": { status: 500, code: "internal_error" },
+  "agenda:argumento": { status: 500, code: "internal_error" },
+};
 
 /** Quem agiu, para o audit: o usuário, ou o token do agente quando há. */
 function autoriaDoAudit(actor: Actor): { actorUserId: string | null; actorApiTokenId?: string | null } {

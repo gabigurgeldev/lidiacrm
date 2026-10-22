@@ -25,6 +25,12 @@
  * funil (`funil_vem_do_contato`, `lib/leads/escopo-de-funil.ts`) lê. Só a VISÃO
  * do modelo dentro do turno perde o campo; o handler sempre o recebe.
  *
+ * ─── Não é só quem é atendido: é também de quem se LÊ ────────────────────────
+ *
+ * `crm_list_appointments` também recebe o contato do turno, e os recortes que
+ * alcançam a agenda da equipe somem (`CAMPOS_FECHADOS_NO_TURNO`) — senão a
+ * conversa com um cliente listava os compromissos de outros.
+ *
  * ─── Ordem na ponte (`lib/ai/runtime/tools.ts`) ──────────────────────────────
  *
  * `aplicarTurno` roda ANTES do gate de escopo de funil: o gate decide pelo
@@ -40,6 +46,29 @@ export type CampoDoTurno = "contact_id" | "conversation_id";
 
 export const CAMPOS_DO_TURNO: Readonly<Record<string, readonly CampoDoTurno[]>> = {
   crm_book_appointment: ["contact_id", "conversation_id"],
+  // Listar no turno é "os horários DESTA pessoa": o contato vem da conversa.
+  crm_list_appointments: ["contact_id"],
+};
+
+/**
+ * Campos que, DENTRO do turno, somem do schema e são DESCARTADOS do que o
+ * modelo mandou — sem valor do turno para pôr no lugar.
+ *
+ * ─── O vazamento que isto fecha ──────────────────────────────────────────────
+ *
+ * `crm_list_appointments` aceita recortes que alcançam a agenda da EQUIPE: um
+ * dia inteiro, uma profissional, um responsável, um negócio. Num turno, o
+ * modelo conversa com UM cliente, e esses recortes lhe entregavam os
+ * compromissos (e o `contato_id`) de outros — que ele pode repetir na conversa.
+ * Com `contact_id` injetado a listagem já fica restrita a esta pessoa (os
+ * filtros são E), mas esconder os demais tira do modelo até a ideia de pedir:
+ * o que não está no schema não é tentado.
+ *
+ * Fora do turno (servidor MCP externo, Operador) nada muda — lá a pergunta
+ * "como está o dia da equipe?" é legítima.
+ */
+export const CAMPOS_FECHADOS_NO_TURNO: Readonly<Record<string, readonly string[]>> = {
+  crm_list_appointments: ["lead_id", "dia", "owner_user_id", "professional_id"],
 };
 
 type Turno = NonNullable<McpContext["turno"]>;
@@ -57,14 +86,19 @@ export function shapeVisivel<S extends z.ZodRawShape>(
   shape: S,
   turno: McpContext["turno"],
 ): z.ZodRawShape {
-  const campos = CAMPOS_DO_TURNO[nome];
-  if (!turno || !campos || campos.length === 0) return shape;
+  const fora = camposForaDoModelo(nome);
+  if (!turno || fora.length === 0) return shape;
   const visivel: Record<string, unknown> = {};
   for (const [chave, tipo] of Object.entries(shape)) {
-    if ((campos as readonly string[]).includes(chave)) continue;
+    if (fora.includes(chave)) continue;
     visivel[chave] = tipo;
   }
   return visivel as z.ZodRawShape;
+}
+
+/** Tudo o que, no turno, o modelo não vê: os preenchidos e os fechados. */
+function camposForaDoModelo(nome: string): readonly string[] {
+  return [...(CAMPOS_DO_TURNO[nome] ?? []), ...(CAMPOS_FECHADOS_NO_TURNO[nome] ?? [])];
 }
 
 /**
@@ -77,9 +111,11 @@ export function aplicarTurno(
   args: Record<string, unknown>,
   turno: McpContext["turno"],
 ): Record<string, unknown> {
-  const campos = CAMPOS_DO_TURNO[nome];
-  if (!turno || !campos || campos.length === 0) return args;
+  if (!turno || camposForaDoModelo(nome).length === 0) return args;
   const preenchidos: Record<string, unknown> = { ...args };
-  for (const campo of campos) preenchidos[campo] = valorDoTurno(campo, turno);
+  // Fechados SAEM, mesmo que o modelo os tenha mandado (ele não os vê, mas
+  // pode tê-los copiado de um retorno anterior).
+  for (const campo of CAMPOS_FECHADOS_NO_TURNO[nome] ?? []) delete preenchidos[campo];
+  for (const campo of CAMPOS_DO_TURNO[nome] ?? []) preenchidos[campo] = valorDoTurno(campo, turno);
   return preenchidos;
 }

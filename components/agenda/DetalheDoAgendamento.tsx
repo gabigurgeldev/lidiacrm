@@ -54,6 +54,8 @@ const MOTIVO_DO_LEMBRETE: Record<MotivoDeLembretePulado, string> = {
   sem_conversa: "Sem lembrete — o cliente não tem conversa por onde receber.",
   canal_exige_template: "Sem lembrete — o canal exige modelo aprovado fora da janela de 24 horas.",
   contato_bloqueado: "Sem lembrete — o cliente pediu para não receber mensagens.",
+  enfileiramento_interrompido:
+    "Lembrete incerto — o envio foi interrompido no meio. Confira na conversa se o cliente foi lembrado.",
 };
 
 function situacaoDe(valor: string): SituacaoDoAgendamento {

@@ -84,7 +84,10 @@ let tabelas: Record<string, Linha[]>;
 let inseridos: Record<string, Linha[]>;
 let alterados: Array<{ tabela: string; patch: Linha; filtros: Filtro[] }>;
 let rpcs: Array<{ fn: string; args: Linha }>;
-let respostaDoMarcar: { data: unknown; error: { code: string; message: string } | null };
+let respostaDoMarcar: {
+  data: unknown;
+  error: { code: string; message: string; hint?: string | null; details?: string | null } | null;
+};
 let erroNoUpdate: Record<string, { code: string; message: string }>;
 
 /** O que a coleta oferece, por instante. */
@@ -275,6 +278,103 @@ describe("a corrida perdida", () => {
     const erro = await erroDe(marcarAgendamentoHandler(cliente(), humano, { event_type_id: TIPO, starts_at: HORARIO }));
     expect(erro).toMatchObject({ status: 500, code: "internal_error" });
   });
+
+  it("sobreposição PARCIAL recusada pela trava da função (23505 + hint) também é 409", async () => {
+    respostaDoMarcar = {
+      data: null,
+      error: { code: "23505", message: "agenda: horário ocupado — Ana já atende", hint: "agenda:horario_ocupado" },
+    };
+    const erro = await erroDe(marcarAgendamentoHandler(cliente(), humano, { event_type_id: TIPO, starts_at: HORARIO }));
+    expect(erro).toMatchObject({ status: 409, code: "agenda_horario_ocupado" });
+  });
+});
+
+/**
+ * A `fn_agenda_marcar` confere de novo, sozinha, o que esta rota confere — ela é
+ * alcançável direto pelo PostgREST. Quando ela recusa (corrida entre a leitura
+ * da rota e a gravação), o HINT diz o motivo, e cada motivo tem o seu código de
+ * API. Sem o mapa, toda recusa nomeada voltava como 500 "erro interno".
+ */
+describe("a recusa da função vira o código de API certo", () => {
+  it.each([
+    ["agenda:tipo_inexistente", "P0001", 404, "not_found"],
+    ["agenda:tipo_desativado", "P0001", 422, "agenda_tipo_desativado"],
+    ["agenda:profissionais_insuficientes", "P0001", 422, "agenda_profissionais_insuficientes"],
+    ["agenda:profissional_invalido", "P0001", 422, "agenda_profissional_invalido"],
+    ["agenda:profissional_invalido", "22023", 422, "agenda_profissional_invalido"],
+    ["agenda:contato_inexistente", "P0001", 404, "not_found"],
+    ["agenda:conversa_inexistente", "P0001", 404, "not_found"],
+    ["agenda:conversa_de_outro_contato", "P0001", 404, "not_found"],
+    // Campos que ESTE arquivo monta — recusa deles é defeito nosso, não do pedido.
+    ["agenda:agente_inexistente", "P0001", 500, "internal_error"],
+    ["agenda:autor_invalido", "P0001", 500, "internal_error"],
+    ["agenda:argumento", "22023", 500, "internal_error"],
+  ])("hint %s (%s) → %i %s", async (hint, code, status, codigo) => {
+    respostaDoMarcar = { data: null, error: { code, message: `recusado: ${hint}`, hint } };
+    const erro = await erroDe(marcarAgendamentoHandler(cliente(), humano, { event_type_id: TIPO, starts_at: HORARIO }));
+    expect(erro).toMatchObject({ status, code: codigo });
+  });
+
+  it.each([
+    [
+      'insert or update on table "calendar_appointment_professionals" violates foreign key constraint "cap_profissional_fk"',
+      422,
+      "agenda_profissional_invalido",
+    ],
+    [
+      'insert or update on table "calendar_appointments" violates foreign key constraint "calendar_appointments_contact_id_fkey"',
+      404,
+      "not_found",
+    ],
+    [
+      'insert or update on table "calendar_appointments" violates foreign key constraint "calendar_appointments_conversation_id_fkey"',
+      404,
+      "not_found",
+    ],
+    [
+      'insert or update on table "calendar_appointments" violates foreign key constraint "calendar_appointments_created_by_agent_id_fkey"',
+      500,
+      "internal_error",
+    ],
+  ])("23503 cru é lido pela constraint: %s", async (message, status, codigo) => {
+    respostaDoMarcar = { data: null, error: { code: "23503", message } };
+    const erro = await erroDe(marcarAgendamentoHandler(cliente(), humano, { event_type_id: TIPO, starts_at: HORARIO }));
+    expect(erro).toMatchObject({ status, code: codigo });
+  });
+
+  it("o contato inexistente diz CONTATO, não 'profissional inválida'", async () => {
+    respostaDoMarcar = {
+      data: null,
+      error: { code: "P0001", message: "contato x não existe", hint: "agenda:contato_inexistente" },
+    };
+    const erro = await erroDe(marcarAgendamentoHandler(cliente(), humano, { event_type_id: TIPO, starts_at: HORARIO }));
+    expect((erro as { message?: string } | null)?.message).toBe("Contato não encontrado.");
+  });
+});
+
+describe("o que a função decide — e por isso a rota NÃO manda", () => {
+  it("humano pela tela: sem `status` e sem `created_by_user_id` no jsonb", async () => {
+    await marcarAgendamentoHandler(cliente(), humano, { event_type_id: TIPO, starts_at: HORARIO });
+    const c = ultimoMarcar().p_compromisso;
+    expect(c, "status no jsonb: quem chama escolheria confirmar o que o tipo manda deixar pendente").not.toHaveProperty(
+      "status",
+    );
+    expect(c, "a autoria com sessão é auth.uid(), decidida pela função").not.toHaveProperty("created_by_user_id");
+    expect(c.created_by_kind).toBe("user");
+  });
+
+  it("IA (service role): também sem `created_by_user_id` — o id do ator não é usuário", async () => {
+    await marcarAgendamentoHandler(cliente(), ia, { event_type_id: TIPO, starts_at: HORARIO });
+    const c = ultimoMarcar().p_compromisso;
+    expect(c).not.toHaveProperty("created_by_user_id");
+    expect(c).not.toHaveProperty("status");
+  });
+
+  it("CONTROLE: o status devolvido é o que o BANCO gravou, lido de volta", async () => {
+    tabelas.calendar_appointments![0]!.status = "pending";
+    const r = await marcarAgendamentoHandler(cliente(), humano, { event_type_id: TIPO, starts_at: HORARIO });
+    expect(r.status).toBe("pending");
+  });
 });
 
 describe("quantas profissionais e quais", () => {
@@ -316,6 +416,24 @@ describe("quantas profissionais e quais", () => {
     )) as { code?: string; message?: string } | null;
     expect(erro).toMatchObject({ code: "agenda_profissional_invalido" });
     expect(erro?.message).toContain("Cau");
+  });
+
+  it("profissional ATIVA cujo membro foi revogado é recusada pelo nome — e nada chega ao banco", async () => {
+    // A desativação na revogação é best-effort: a linha de profissional pode
+    // continuar `is_active` depois que a pessoa saiu da equipe.
+    tabelas.user_organizations = [{ organization_id: ORG, user_id: USUARIO, revoked_at: "2026-08-01T00:00:00Z" }];
+    const erro = (await erroDe(
+      marcarAgendamentoHandler(cliente(), humano, { event_type_id: TIPO, starts_at: HORARIO, professional_ids: [ANA] }),
+    )) as { status?: number; code?: string; message?: string } | null;
+    expect(erro).toMatchObject({ status: 422, code: "agenda_profissional_invalido" });
+    expect(erro?.message).toContain("Ana");
+    expect(rpcs, "recusou mas gravou mesmo assim").toHaveLength(0);
+  });
+
+  it("CONTROLE: o mesmo membro com vínculo ATIVO marca normalmente", async () => {
+    tabelas.user_organizations = [{ organization_id: ORG, user_id: USUARIO, revoked_at: null }];
+    await marcarAgendamentoHandler(cliente(), humano, { event_type_id: TIPO, starts_at: HORARIO, professional_ids: [ANA] });
+    expect(ultimoMarcar().p_profissionais).toEqual([ANA]);
   });
 
   it("profissional que não faz o serviço é recusada quando o tipo tem habilitação", async () => {

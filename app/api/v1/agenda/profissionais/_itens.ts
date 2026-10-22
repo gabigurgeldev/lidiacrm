@@ -184,13 +184,74 @@ export async function exigeTiposDaOrg(
   }
 }
 
-/** Substitui o conjunto de serviços que a profissional atende. */
+/**
+ * TIRAR A ÚLTIMA HABILITAÇÃO DE UM SERVIÇO É RECUSADO.
+ *
+ * Tipo sem habilitação nenhuma é "aberto": qualquer profissional ativa serve
+ * (a regra de instalação antiga, no marcar e na consulta). Então desmarcar a
+ * única profissional de um serviço não o deixa "sem ninguém" — o deixa com
+ * TODO MUNDO, e a IA passa a oferecer horário de quem nunca fez aquilo. Quem
+ * opera não tem como adivinhar isso pela tela; a recusa diz o que fazer.
+ *
+ * Mede pelo conjunto CRU (ativas ou não): é a mesma régua que decide se o tipo
+ * é fechado. Lança `RecusaDaProfissional` 422 — chame ANTES de qualquer escrita,
+ * para a recusa não chegar depois de metade do pedido gravada.
+ */
+export async function exigeServicosNaoFicamSemProfissional(
+  admin: SupabaseClient,
+  organizationId: string,
+  professionalId: string,
+  tipos: string[],
+): Promise<void> {
+  const ficam = new Set(tipos);
+  const { data: atuais, error: erroAtuais } = await admin
+    .from("calendar_event_type_professionals")
+    .select("event_type_id")
+    .eq("organization_id", organizationId)
+    .eq("professional_id", professionalId);
+  if (erroAtuais) throw new Error(erroAtuais.message);
+  const saindo = [
+    ...new Set(((atuais ?? []) as { event_type_id: string }[]).map((l) => String(l.event_type_id))),
+  ].filter((t) => !ficam.has(t));
+  if (saindo.length === 0) return;
+
+  const { data: outras, error: erroOutras } = await admin
+    .from("calendar_event_type_professionals")
+    .select("event_type_id")
+    .eq("organization_id", organizationId)
+    .in("event_type_id", saindo)
+    .neq("professional_id", professionalId);
+  if (erroOutras) throw new Error(erroOutras.message);
+  const comOutra = new Set(((outras ?? []) as { event_type_id: string }[]).map((l) => String(l.event_type_id)));
+  const orfaos = saindo.filter((t) => !comOutra.has(t));
+  if (orfaos.length === 0) return;
+
+  const { data: nomes } = await admin
+    .from("calendar_event_types")
+    .select("id, name")
+    .eq("organization_id", organizationId)
+    .in("id", orfaos);
+  const nome = ((nomes ?? []) as { id: string; name: string }[]).find((n) => n.id === orfaos[0])?.name;
+  const servico = nome ? `O serviço "${nome}"` : "Um dos serviços";
+  throw new RecusaDaProfissional(
+    422,
+    "validation_failed",
+    `${servico} ficaria sem nenhuma profissional — habilite outra antes de tirar esta.`,
+  );
+}
+
+/**
+ * Substitui o conjunto de serviços que a profissional atende. Recusa (422)
+ * quando isso deixaria algum serviço sem profissional nenhuma — ver
+ * `exigeServicosNaoFicamSemProfissional`.
+ */
 export async function gravarTiposDaProfissional(
   admin: SupabaseClient,
   organizationId: string,
   professionalId: string,
   tipos: string[],
 ): Promise<void> {
+  await exigeServicosNaoFicamSemProfissional(admin, organizationId, professionalId, tipos);
   const unicos = [...new Set(tipos)];
   // Acrescenta antes de tirar: entre as duas escritas, a profissional tem o
   // conjunto novo MAIS o velho — nunca nenhum (que tiraria horários da oferta).

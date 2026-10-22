@@ -31,6 +31,35 @@
 -- a cópia é o trigger `trg_agenda_participantes_acompanham`, e por isso
 -- remarcar em cima da apoio falha com 23505 no MESMO UPDATE que remarca.
 --
+-- O espelho NÃO é editável por quem usa o sistema: `authenticated` não tem
+-- UPDATE nem DELETE nesta tabela, só INSERT (agent+, que é o que a
+-- `fn_agenda_marcar` — security invoker — precisa). A função do espelho é
+-- `security definer` justamente para mover a cópia SEM que o papel de quem
+-- remarca precise de UPDATE. Com UPDATE para agent+, um agente pelo PostgREST
+-- tirava a profissional da guarda de duplicata editando só a cópia.
+--
+-- ─── Sobreposição: travada no caminho de marcar e de remarcar ─────────────
+-- O índice `cap_sem_duplicata_idx` só enxerga o MESMO instante. 10:00–11:00 e
+-- 10:30–11:30 da mesma profissional passavam por ele, e duas marcações
+-- simultâneas que a consulta aprovou podiam gravar as duas.
+-- `fn_agenda_conferir_livre` fecha isso: trava cada profissional
+-- (`pg_advisory_xact_lock`, em ordem FIXA — ids ordenados — para duas
+-- transações nunca se travarem cruzado) e SÓ ENTÃO reconfere sobreposição
+-- contra os participantes vivos e contra o legado por `owner_user_id` (linha
+-- anterior à 0245 que não ganhou participante). Colidiu: 23505, que a rota já
+-- traduz em 409. Quem chama: `fn_agenda_marcar` (antes do INSERT) e o espelho
+-- (ao remarcar ou reabrir). O encaixe da 0182 continua valendo NA TABELA —
+-- INSERT cru em `calendar_appointments` (sync, legado) segue livre, e
+-- `tests/invariants/agenda-sem-duplicata.test.ts` continua sendo a régua —;
+-- o que muda é que o caminho do produto não grava o que a consulta não ofereceria.
+--
+-- ─── `booked_at`: quando o horário foi FIXADO ─────────────────────────────
+-- O lembrete precisa saber "quanto tempo antes da consulta a pessoa ficou
+-- sabendo do horário". `created_at` responde errado depois de remarcar: a
+-- consulta marcada há um mês e remarcada para daqui a 2 h parece antiga. Nasce
+-- `now()`, e o trigger `trg_agenda_horario_fixado` a carimba de novo sempre que
+-- `starts_at` muda. As linhas existentes recebem `created_at` — ver a seção 8.
+--
 -- `status` aqui NÃO tem CHECK: é espelho, e um CHECK nele seria a segunda lista
 -- do mesmo vocabulário (a primeira é `calendar_appointments_status_check`).
 --
@@ -53,8 +82,9 @@
 -- Mesma divisão da 0177, e nenhuma policy `for all` só-tenancy (a catraca de
 -- `rbac-config-ia-canais` está certa): profissionais e serviços por
 -- profissional são CONFIGURAÇÃO — lê membro, escreve manager+; quem atende cada
--- agendamento é OPERAÇÃO — lê membro, escreve agent+, igual a
--- `calendar_appointments`.
+-- agendamento é OPERAÇÃO — lê membro, INSERE agent+ (só INSERT: o espelho é
+-- mantido pelo trigger, e nenhum código apaga participante — sai em cascata
+-- com o agendamento).
 --
 -- ─── Backfill genérico e auto-curativo ─────────────────────────────────────
 -- Toda pessoa que JÁ aparece na agenda vira profissional: dono padrão de tipo,
@@ -65,9 +95,12 @@
 -- `not exists`, para o `update.sh` poder re-aplicar sem duplicar e SEM DESFAZER
 -- escolha de operador (habilitação só entra em tipo que não tem nenhuma).
 --
--- Funções novas são `security invoker` — a RLS de quem chama vale dentro delas
--- — e revogam as duas origens de EXECUTE (public e anon), como manda a
--- doutrina de migrations.
+-- `fn_agenda_marcar` e `fn_agenda_conferir_livre` são `security invoker` — a
+-- RLS de quem chama vale dentro delas. As três de trigger
+-- (`fn_agenda_participantes_acompanham`, `fn_agenda_horario_fixado` e a
+-- `fn_adotar_tipos_de_agendamento_sem_dono` da 0195) não são executáveis por
+-- ninguém de fora. Toda função revoga as duas origens de EXECUTE (public e
+-- anon), como manda a doutrina de migrations.
 -- ============================================================================
 
 -- ────────────────────────────────────────────────────────────────────────────
@@ -174,8 +207,9 @@ create unique index if not exists cap_um_principal_key
   on public.calendar_appointment_professionals (appointment_id)
   where role = 'principal';
 -- A guarda de duplicata POR PESSOA, seja ela principal ou apoio. Mesma régua da
--- 0182: coincidência exata de instante, nunca sobreposição (o encaixe continua
--- permitido), e só nas situações que ocupam.
+-- 0182: coincidência exata de instante, e só nas situações que ocupam. É a
+-- última palavra para QUALQUER escrita na tabela; a sobreposição parcial é
+-- conferida, sob trava, por `fn_agenda_conferir_livre` (seção 4).
 create unique index if not exists cap_sem_duplicata_idx
   on public.calendar_appointment_professionals (organization_id, professional_id, starts_at)
   where status in ('pending', 'confirmed');
@@ -186,17 +220,126 @@ comment on table public.calendar_appointment_professionals is
   'Quem atende cada agendamento: uma principal e, quando o tipo pede duas, uma apoio. starts_at/ends_at/status são ESPELHO de calendar_appointments (trigger trg_agenda_participantes_acompanham) e existem para o índice cap_sem_duplicata_idx impedir a mesma profissional em dois agendamentos vivos no mesmo instante.';
 
 -- ────────────────────────────────────────────────────────────────────────────
--- 4 · o espelho acompanha o agendamento
+-- 4 · ninguém ocupa duas vezes o mesmo pedaço de tempo — e o espelho acompanha
 -- ────────────────────────────────────────────────────────────────────────────
-create or replace function public.fn_agenda_participantes_acompanham()
-returns trigger
+-- (a) A reconferência sob trava. Ver "Sobreposição" no cabeçalho.
+--
+-- ⚠️ A TRAVA VEM ANTES DA LEITURA, e cada comando de uma função plpgsql volátil
+-- tira snapshot novo: quem esperou a trava enxerga o que a outra transação
+-- gravou e commitou. Ler antes de travar deixaria passar exatamente a corrida
+-- que este bloco existe para fechar.
+--
+-- `p_ignorar` = o próprio agendamento, ao remarcar: ele ocupa o horário antigo
+-- e não pode colidir consigo mesmo. NULL ao marcar.
+--
+-- security invoker: chamada pela `fn_agenda_marcar` com o papel da sessão (a
+-- RLS de leitura dela basta — a busca é só na própria organização) e pelo
+-- espelho, que é definer.
+create or replace function public.fn_agenda_conferir_livre(
+  p_organization_id uuid,
+  p_profissionais uuid[],
+  p_inicio timestamptz,
+  p_fim timestamptz,
+  p_ignorar uuid
+)
+returns void
 language plpgsql
 security invoker
 set search_path = public, pg_temp
 as $fn$
+declare
+  v_profissional uuid;
+  v_ocupada text;
 begin
-  -- Remarcar em cima de um horário em que a principal OU a apoio já está vira
-  -- 23505 (cap_sem_duplicata_idx) aqui dentro, e o UPDATE inteiro desfaz.
+  for v_profissional in
+    select distinct x from unnest(p_profissionais) as x where x is not null order by 1
+  loop
+    perform pg_advisory_xact_lock(
+      hashtextextended(p_organization_id::text || ':' || v_profissional::text, 0));
+  end loop;
+
+  select p.name
+    into v_ocupada
+    from public.calendar_professionals p
+   where p.organization_id = p_organization_id
+     and p.id = any (p_profissionais)
+     and (
+       exists (
+         select 1 from public.calendar_appointment_professionals c
+          where c.organization_id = p_organization_id
+            and c.professional_id = p.id
+            and c.appointment_id is distinct from p_ignorar
+            and c.status in ('pending', 'confirmed')
+            and c.starts_at < p_fim
+            and c.ends_at > p_inicio
+       )
+       -- O legado por dono: agendamento anterior à 0245 sem participante.
+       or (p.user_id is not null and exists (
+         select 1 from public.calendar_appointments a
+          where a.organization_id = p_organization_id
+            and a.owner_user_id = p.user_id
+            and a.id is distinct from p_ignorar
+            and a.status in ('pending', 'confirmed')
+            and a.starts_at < p_fim
+            and a.ends_at > p_inicio
+       ))
+     )
+   order by p.name
+   limit 1;
+
+  if found then
+    raise exception 'agenda: horário ocupado — % já atende neste intervalo', v_ocupada
+      using errcode = '23505', hint = 'agenda:horario_ocupado';
+  end if;
+end
+$fn$;
+
+revoke execute on function public.fn_agenda_conferir_livre(uuid, uuid[], timestamptz, timestamptz, uuid) from public, anon;
+grant  execute on function public.fn_agenda_conferir_livre(uuid, uuid[], timestamptz, timestamptz, uuid) to authenticated, service_role;
+
+comment on function public.fn_agenda_conferir_livre(uuid, uuid[], timestamptz, timestamptz, uuid) is
+  'Trava (pg_advisory_xact_lock, ids ordenados) cada profissional e reconfere sobreposição contra participantes vivos e contra o legado por owner_user_id. Colidiu: 23505, hint agenda:horario_ocupado. Chamada por fn_agenda_marcar e pelo espelho ao remarcar.';
+
+-- (b) O espelho. `security definer` porque `authenticated` não tem UPDATE na
+-- tabela de participantes (seção 9): quem remarca move a cópia por aqui, e só
+-- por aqui. O filtro é o par (organização, agendamento) da própria linha.
+create or replace function public.fn_agenda_participantes_acompanham()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $fn$
+declare
+  v_profissionais uuid[];
+begin
+  -- Remarcar (ou reabrir) para um horário que OCUPA: reconfere sob trava as
+  -- participantes e o profissional do dono legado. Só quando o pedaço de tempo
+  -- ocupado muda — confirmar um pendente no mesmo horário não reconfere, para
+  -- um encaixe legado não virar 23505 ao ser confirmado.
+  if new.status in ('pending', 'confirmed')
+     and (old.starts_at is distinct from new.starts_at
+          or old.ends_at is distinct from new.ends_at
+          or old.status not in ('pending', 'confirmed')) then
+    select coalesce(array_agg(distinct s.id), '{}'::uuid[])
+      into v_profissionais
+      from (
+        select c.professional_id as id
+          from public.calendar_appointment_professionals c
+         where c.organization_id = new.organization_id
+           and c.appointment_id = new.id
+        union
+        select p.id
+          from public.calendar_professionals p
+         where p.organization_id = new.organization_id
+           and p.user_id = new.owner_user_id
+      ) as s;
+    perform public.fn_agenda_conferir_livre(
+      new.organization_id, v_profissionais, new.starts_at, new.ends_at, new.id);
+  end if;
+
+  -- E o instante EXATO continua com a última palavra: remarcar em cima da
+  -- principal OU da apoio vira 23505 (cap_sem_duplicata_idx) aqui dentro, e o
+  -- UPDATE inteiro desfaz.
   update public.calendar_appointment_professionals
      set starts_at = new.starts_at,
          ends_at   = new.ends_at,
@@ -225,14 +368,51 @@ create trigger trg_agenda_participantes_acompanham
 -- ────────────────────────────────────────────────────────────────────────────
 -- Dois INSERTs separados pelo PostgREST deixariam uma janela em que o
 -- agendamento existe sem profissional — e o 23505 da apoio chegaria DEPOIS do
--- agendamento gravado. Aqui é uma transação: 23505 de qualquer das duas
--- tabelas desfaz tudo, e a rota devolve 409.
+-- agendamento gravado. Aqui é uma transação: qualquer recusa desfaz tudo.
 --
--- As colunas do agendamento vêm de uma LISTA FECHADA (`v_permitidas`): só as
--- chaves presentes em `p_compromisso` entram no INSERT, e as ausentes ficam com
--- o DEFAULT da tabela — sem repetir os defaults aqui. `organization_id` vem do
--- parâmetro, nunca do jsonb; google_*, reminder_* e id não são graváveis por
--- esta porta.
+-- ⚠️ ESTA FUNÇÃO É PORTA, NÃO SÓ ATALHO. `authenticated` tem EXECUTE nela, então
+-- qualquer sessão agent+ a chama direto pelo PostgREST, sem passar pela rota.
+-- Por isso ela mesma confere o que a rota confere — com `organization_id =
+-- p_organization_id` em toda busca —, e não confia em nada que a rota decide:
+--
+--   · o TIPO existe nesta organização e está ativo, e pede exatamente
+--     `cardinality(p_profissionais)` profissionais;
+--   · o CONTATO e a CONVERSA (se informados) são desta organização, e a
+--     conversa é DAQUELE contato — senão o lembrete sai para outra pessoa. A FK
+--     simples `contact_id → contacts(id)` não olha organização (e FK ignora
+--     RLS): sem esta conferência, a org A gravava o cliente da B;
+--   · cada PROFISSIONAL é desta organização, está ativa, é membro ativo quando
+--     tem login, e está habilitada no tipo quando o tipo tem habilitação;
+--   · `owner_user_id` NÃO é escolhido por quem chama: é o login da principal
+--     (NULL quando ela não tem). Se vier no jsonb, tem de bater;
+--   · `status` NÃO é escolhido por quem chama: `pending` se o tipo pede
+--     confirmação, `confirmed` se não;
+--   · a AUTORIA com sessão é a sessão: `created_by_user_id = auth.uid()`,
+--     `created_by_kind = 'user'`, `source = 'ui'`. Só sem sessão (service_role:
+--     a ferramenta MCP) ela vem do jsonb — e o agente tem de ser desta
+--     organização, o usuário membro ativo dela, e o `created_by_kind` coerente.
+--
+-- As colunas do agendamento vêm de uma LISTA FECHADA (`v_permitidas`): chave
+-- fora dela é ignorada; as ausentes ficam com o DEFAULT da tabela (inclusive
+-- `booked_at = now()`). `organization_id` vem SEMPRE do parâmetro; google_*,
+-- reminder_*, booked_at, rescheduled_from_id e id não são graváveis por aqui.
+--
+-- O CONTRATO DE ERRO — o SQLSTATE separa a classe, o HINT nomeia o motivo, e é
+-- pelo hint que a rota escolhe o código de API:
+--   22023  hint agenda:argumento             forma do pedido (jsonb, horário ausente)
+--   22023  hint agenda:profissional_invalido 0, 3+, repetida ou nula em p_profissionais
+--   P0001  hint agenda:tipo_inexistente      tipo ausente ou de outra organização
+--   P0001  hint agenda:tipo_desativado       tipo desativado
+--   P0001  hint agenda:profissionais_insuficientes  quantidade ≠ professionals_required
+--   P0001  hint agenda:contato_inexistente   contato de outra organização / inexistente
+--   P0001  hint agenda:conversa_inexistente  conversa de outra organização / inexistente
+--   P0001  hint agenda:conversa_de_outro_contato  a conversa é de outro contato
+--   P0001  hint agenda:profissional_invalido profissional alheia, inativa, ex-membro,
+--                                            não habilitada, ou owner_user_id divergente
+--   P0001  hint agenda:agente_inexistente    created_by_agent_id de outra organização
+--   P0001  hint agenda:autor_invalido        autoria incoerente (sem sessão)
+--   23505  hint agenda:horario_ocupado       sobreposição (fn_agenda_conferir_livre)
+--   23505  (sem hint)                        instante exato — índices únicos
 create or replace function public.fn_agenda_marcar(
   p_organization_id uuid,
   p_compromisso jsonb,
@@ -246,10 +426,17 @@ as $fn$
 declare
   v_permitidas constant text[] := array[
     'event_type_id', 'title', 'description', 'starts_at', 'ends_at', 'time_zone',
-    'status', 'owner_user_id', 'contact_id', 'conversation_id', 'location_kind',
-    'location_details', 'meeting_url', 'notes', 'rescheduled_from_id',
+    'owner_user_id', 'contact_id', 'conversation_id', 'location_kind',
+    'location_details', 'meeting_url', 'notes',
     'created_by_kind', 'created_by_user_id', 'created_by_agent_id', 'source'
   ];
+  v_sessao uuid := auth.uid();
+  v_dados jsonb;
+  v_pedido public.calendar_appointments;
+  v_tipo record;
+  v_contato_da_conversa uuid;
+  v_validas integer;
+  v_dono uuid;
   v_colunas text;
   v_id uuid;
 begin
@@ -258,28 +445,172 @@ begin
      or cardinality(p_profissionais) > 2 then
     raise exception 'fn_agenda_marcar: um agendamento tem 1 ou 2 profissionais (recebeu %)',
       coalesce(cardinality(p_profissionais), 0)
-      using errcode = '22023';
+      using errcode = '22023', hint = 'agenda:profissional_invalido';
   end if;
   -- Repetida ou nula cairia na PK como 23505, que a rota lê como "horário
   -- ocupado" — mentira. Recusa aqui, com o código de argumento inválido.
   if array_position(p_profissionais, null) is not null
      or (select count(distinct x) from unnest(p_profissionais) as x) <> cardinality(p_profissionais) then
     raise exception 'fn_agenda_marcar: profissional repetida ou nula em %', p_profissionais
-      using errcode = '22023';
+      using errcode = '22023', hint = 'agenda:profissional_invalido';
   end if;
   if p_compromisso is null or jsonb_typeof(p_compromisso) <> 'object' then
     raise exception 'fn_agenda_marcar: p_compromisso precisa ser um objeto jsonb'
-      using errcode = '22023';
+      using errcode = '22023', hint = 'agenda:argumento';
   end if;
 
-  select string_agg(format('%I', k.coluna), ', ' order by k.ordem)
-    into v_colunas
-    from unnest(v_permitidas) with ordinality as k(coluna, ordem)
-   where p_compromisso ? k.coluna;
-  if v_colunas is null then
-    raise exception 'fn_agenda_marcar: p_compromisso sem nenhuma coluna conhecida'
-      using errcode = '22023';
+  select coalesce(jsonb_object_agg(e.key, e.value), '{}'::jsonb)
+    into v_dados
+    from jsonb_each(p_compromisso) as e
+   where e.key = any (v_permitidas);
+  v_pedido := jsonb_populate_record(null::public.calendar_appointments, v_dados);
+
+  if v_pedido.starts_at is null or v_pedido.ends_at is null then
+    raise exception 'fn_agenda_marcar: starts_at e ends_at são obrigatórios'
+      using errcode = '22023', hint = 'agenda:argumento';
   end if;
+
+  -- O tipo.
+  select t.id, t.name, t.is_active, t.requires_confirmation, t.professionals_required
+    into v_tipo
+    from public.calendar_event_types t
+   where t.organization_id = p_organization_id
+     and t.id = v_pedido.event_type_id;
+  if not found then
+    raise exception 'fn_agenda_marcar: tipo de agendamento % não existe nesta organização',
+      v_pedido.event_type_id
+      using errcode = 'P0001', hint = 'agenda:tipo_inexistente';
+  end if;
+  if not v_tipo.is_active then
+    raise exception 'fn_agenda_marcar: "%" está desativado', v_tipo.name
+      using errcode = 'P0001', hint = 'agenda:tipo_desativado';
+  end if;
+  if cardinality(p_profissionais) <> v_tipo.professionals_required then
+    raise exception 'fn_agenda_marcar: "%" pede % profissional(is), e vieram %',
+      v_tipo.name, v_tipo.professionals_required, cardinality(p_profissionais)
+      using errcode = 'P0001', hint = 'agenda:profissionais_insuficientes';
+  end if;
+
+  -- O contato.
+  if v_pedido.contact_id is not null and not exists (
+    select 1 from public.contacts c
+     where c.organization_id = p_organization_id and c.id = v_pedido.contact_id
+  ) then
+    raise exception 'fn_agenda_marcar: contato % não existe nesta organização', v_pedido.contact_id
+      using errcode = 'P0001', hint = 'agenda:contato_inexistente';
+  end if;
+
+  -- A conversa: desta organização E daquele contato. Sem contato no pedido, é
+  -- ela que define quem é atendido.
+  if v_pedido.conversation_id is not null then
+    select cv.contact_id
+      into v_contato_da_conversa
+      from public.conversations cv
+     where cv.organization_id = p_organization_id and cv.id = v_pedido.conversation_id;
+    if not found then
+      raise exception 'fn_agenda_marcar: conversa % não existe nesta organização', v_pedido.conversation_id
+        using errcode = 'P0001', hint = 'agenda:conversa_inexistente';
+    end if;
+    if v_pedido.contact_id is null then
+      v_dados := v_dados || jsonb_build_object('contact_id', v_contato_da_conversa);
+    elsif v_contato_da_conversa is distinct from v_pedido.contact_id then
+      raise exception 'fn_agenda_marcar: a conversa % é de outro contato', v_pedido.conversation_id
+        using errcode = 'P0001', hint = 'agenda:conversa_de_outro_contato';
+    end if;
+  end if;
+
+  -- As profissionais. "Membro ativo" por duas portas: `fn_member_role_in_org`
+  -- responde a quem é membro da org (o agent, que pela RLS só lê a própria
+  -- linha de `user_organizations`), e a leitura direta cobre o platform admin.
+  select count(*)
+    into v_validas
+    from public.calendar_professionals p
+   where p.organization_id = p_organization_id
+     and p.id = any (p_profissionais)
+     and p.is_active
+     and (
+       p.user_id is null
+       or public.fn_member_role_in_org(p.user_id, p_organization_id) is not null
+       or exists (
+         select 1 from public.user_organizations uo
+          where uo.organization_id = p_organization_id
+            and uo.user_id = p.user_id
+            and uo.revoked_at is null
+       )
+     )
+     and (
+       not exists (
+         select 1 from public.calendar_event_type_professionals h
+          where h.organization_id = p_organization_id and h.event_type_id = v_tipo.id
+       )
+       or exists (
+         select 1 from public.calendar_event_type_professionals h
+          where h.organization_id = p_organization_id
+            and h.event_type_id = v_tipo.id
+            and h.professional_id = p.id
+       )
+     );
+  if v_validas <> cardinality(p_profissionais) then
+    raise exception 'fn_agenda_marcar: profissional inexistente, desativada, fora da equipe ou não habilitada em "%"',
+      v_tipo.name
+      using errcode = 'P0001', hint = 'agenda:profissional_invalido';
+  end if;
+
+  -- O dono é o login da principal.
+  select p.user_id
+    into v_dono
+    from public.calendar_professionals p
+   where p.organization_id = p_organization_id and p.id = p_profissionais[1];
+  if v_dados ? 'owner_user_id' and v_pedido.owner_user_id is distinct from v_dono then
+    raise exception 'fn_agenda_marcar: owner_user_id não é o login da principal'
+      using errcode = 'P0001', hint = 'agenda:profissional_invalido';
+  end if;
+
+  -- A autoria.
+  if v_sessao is not null then
+    v_dados := v_dados || jsonb_build_object(
+      'created_by_kind', 'user',
+      'created_by_user_id', v_sessao,
+      'created_by_agent_id', null,
+      'source', 'ui');
+  else
+    if v_pedido.created_by_agent_id is not null then
+      if not exists (
+        select 1 from public.ai_agents ag
+         where ag.organization_id = p_organization_id and ag.id = v_pedido.created_by_agent_id
+      ) then
+        raise exception 'fn_agenda_marcar: agente % não é desta organização', v_pedido.created_by_agent_id
+          using errcode = 'P0001', hint = 'agenda:agente_inexistente';
+      end if;
+      if v_pedido.created_by_kind is distinct from 'ai' then
+        raise exception 'fn_agenda_marcar: created_by_agent_id exige created_by_kind = ai'
+          using errcode = 'P0001', hint = 'agenda:autor_invalido';
+      end if;
+    end if;
+    if v_pedido.created_by_user_id is not null then
+      if public.fn_member_role_in_org(v_pedido.created_by_user_id, p_organization_id) is null then
+        raise exception 'fn_agenda_marcar: created_by_user_id não é membro ativo desta organização'
+          using errcode = 'P0001', hint = 'agenda:autor_invalido';
+      end if;
+      if coalesce(v_pedido.created_by_kind, 'user') <> 'user' then
+        raise exception 'fn_agenda_marcar: created_by_user_id exige created_by_kind = user'
+          using errcode = 'P0001', hint = 'agenda:autor_invalido';
+      end if;
+    end if;
+  end if;
+
+  -- O que o servidor decide.
+  v_dados := v_dados || jsonb_build_object(
+    'status', case when v_tipo.requires_confirmation then 'pending' else 'confirmed' end,
+    'owner_user_id', v_dono);
+
+  -- Trava as profissionais e reconfere sobreposição ANTES de gravar.
+  perform public.fn_agenda_conferir_livre(
+    p_organization_id, p_profissionais, v_pedido.starts_at, v_pedido.ends_at, null);
+
+  select string_agg(format('%I', k), ', ' order by k)
+    into v_colunas
+    from jsonb_object_keys(v_dados) as k;
 
   execute format(
     'insert into public.calendar_appointments (organization_id, %1$s)
@@ -287,10 +618,9 @@ begin
      returning id',
     v_colunas)
     into v_id
-    using p_organization_id, p_compromisso;
+    using p_organization_id, v_dados;
 
-  -- 1ª da lista = principal; a 2ª, se houver, apoio. A FK composta recusa
-  -- profissional de outra organização (23503).
+  -- 1ª da lista = principal; a 2ª, se houver, apoio.
   insert into public.calendar_appointment_professionals
     (organization_id, appointment_id, professional_id, role, starts_at, ends_at, status)
   select a.organization_id, a.id, p.professional_id,
@@ -309,7 +639,7 @@ revoke execute on function public.fn_agenda_marcar(uuid, jsonb, uuid[]) from pub
 grant  execute on function public.fn_agenda_marcar(uuid, jsonb, uuid[]) to authenticated, service_role;
 
 comment on function public.fn_agenda_marcar(uuid, jsonb, uuid[]) is
-  'Marca um agendamento e grava quem atende, atomicamente. p_profissionais: 1 ou 2, a primeira é a principal. security invoker: a RLS de quem chama vale aqui dentro. 23505 (de calendar_appointments ou de calendar_appointment_professionals) = horário ocupado; 23503 = profissional de outra organização; 22023 = argumento inválido.';
+  'Marca um agendamento e grava quem atende, atomicamente. p_profissionais: 1 ou 2, a primeira é a principal. security invoker: a RLS de quem chama vale aqui dentro, e a função confere sozinha tipo, contato, conversa, profissionais e autoria contra p_organization_id. status e owner_user_id são decididos aqui; com sessão, a autoria é auth.uid(). Erros: 22023 = argumento; P0001 + hint agenda:<motivo> = recusa nomeada; 23505 = horário ocupado. O contrato completo está no comentário da migration 0245.';
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- 6 · exceções por data passam a ser de PROFISSIONAL
@@ -378,6 +708,81 @@ comment on column public.calendar_appointments.reminder_scheduled_message_id is
 comment on column public.calendar_appointments.reminder_skipped_reason is
   'Por que o lembrete NÃO foi entregue à fila (vocabulário em MOTIVOS_DE_LEMBRETE_PULADO, lib/agenda/tipos.ts). NULL = não pulou.';
 
+-- `booked_at` — quando o horário ATUAL foi fixado. Ver o cabeçalho.
+--
+-- A ordem é a da auto-cura: coluna nula, DEFAULT, backfill, NOT NULL. Re-aplicar
+-- não acha linha nula e não faz nada; um clone em que o backfill falhou acha, e
+-- termina o serviço no `update.sh` seguinte. O DEFAULT entra ANTES do backfill
+-- para uma marcação que chegue no meio do `update.sh` não nascer nula.
+--
+-- ⚠️ O BACKFILL DESLIGA `trg_calendar_appointments_updated_at` — só ele, e só
+-- dentro do `do $$`. Sem isso o UPDATE carimbaria `updated_at = now()` em TODO
+-- agendamento do histórico, e `needs_google_push` (= updated_at >
+-- google_synced_at) mandaria a agenda inteira de volta ao Google no próximo
+-- cron. A objeção da 0140 a `disable trigger` ("um update.sh que morra entre o
+-- disable e o enable deixa a instalação sem o trigger") não se aplica: o `do $$`
+-- é UM comando, e o desligar, o UPDATE e o religar são desfeitos juntos se
+-- qualquer um falhar. O `alter table` segura a trava da tabela até o fim do
+-- comando, então nenhuma escrita concorrente passa com o trigger desligado.
+alter table public.calendar_appointments
+  add column if not exists booked_at timestamptz;
+alter table public.calendar_appointments
+  alter column booked_at set default now();
+
+do $backfill$
+declare
+  v_tem_trigger boolean;
+begin
+  if not exists (select 1 from public.calendar_appointments where booked_at is null) then
+    return;
+  end if;
+  select exists (
+    select 1 from pg_trigger
+     where tgrelid = 'public.calendar_appointments'::regclass
+       and tgname = 'trg_calendar_appointments_updated_at'
+       and not tgisinternal
+  ) into v_tem_trigger;
+
+  if v_tem_trigger then
+    alter table public.calendar_appointments disable trigger trg_calendar_appointments_updated_at;
+  end if;
+  update public.calendar_appointments
+     set booked_at = created_at
+   where booked_at is null;
+  if v_tem_trigger then
+    alter table public.calendar_appointments enable trigger trg_calendar_appointments_updated_at;
+  end if;
+end
+$backfill$;
+
+alter table public.calendar_appointments
+  alter column booked_at set not null;
+
+comment on column public.calendar_appointments.booked_at is
+  'Quando o horário ATUAL foi fixado: now() ao marcar, de novo a cada mudança de starts_at (trigger trg_agenda_horario_fixado). Linhas anteriores à 0245 = created_at. É o que o lembrete compara com starts_at — created_at mente depois de remarcar.';
+
+create or replace function public.fn_agenda_horario_fixado()
+returns trigger
+language plpgsql
+security invoker
+set search_path = public, pg_temp
+as $fn$
+begin
+  new.booked_at := now();
+  return new;
+end
+$fn$;
+
+revoke execute on function public.fn_agenda_horario_fixado() from public, anon, authenticated;
+grant  execute on function public.fn_agenda_horario_fixado() to service_role;
+
+drop trigger if exists trg_agenda_horario_fixado on public.calendar_appointments;
+create trigger trg_agenda_horario_fixado
+  before update of starts_at on public.calendar_appointments
+  for each row
+  when (old.starts_at is distinct from new.starts_at)
+  execute function public.fn_agenda_horario_fixado();
+
 -- ────────────────────────────────────────────────────────────────────────────
 -- 9 · RLS — configuração escreve manager+, operação escreve agent+
 -- ────────────────────────────────────────────────────────────────────────────
@@ -430,19 +835,23 @@ create policy calendar_appointment_professionals_select on public.calendar_appoi
   for select using (
     (organization_id in (select public.fn_user_org_ids())) or public.fn_is_platform_admin()
   );
+-- SÓ INSERT para agent+ (é o que a `fn_agenda_marcar`, invoker, precisa). Sem
+-- UPDATE: a cópia de horário/situação é do trigger do espelho (definer) — com
+-- UPDATE, um agente pelo PostgREST movia a cópia e tirava a profissional da
+-- guarda de duplicata sem mexer no agendamento. Sem DELETE: nenhum código apaga
+-- participante; ele sai em cascata com o agendamento (a ação de FK roda como
+-- dona da tabela, não como a sessão). O `revoke` fecha também o caminho de quem
+-- ganhasse uma policy permissiva por engano depois.
 drop policy if exists calendar_appointment_professionals_write on public.calendar_appointment_professionals;
-create policy calendar_appointment_professionals_write on public.calendar_appointment_professionals
-  using (
-    public.fn_is_platform_admin()
-    or ((organization_id in (select public.fn_user_org_ids()))
-        and public.fn_role_at_least(organization_id, 'agent'))
-  )
-  with check (
+drop policy if exists calendar_appointment_professionals_insert on public.calendar_appointment_professionals;
+create policy calendar_appointment_professionals_insert on public.calendar_appointment_professionals
+  for insert with check (
     public.fn_is_platform_admin()
     or ((organization_id in (select public.fn_user_org_ids()))
         and public.fn_role_at_least(organization_id, 'agent'))
   );
 revoke all on public.calendar_appointment_professionals from anon;
+revoke update, delete on public.calendar_appointment_professionals from authenticated;
 
 drop trigger if exists trg_calendar_professionals_updated_at on public.calendar_professionals;
 create trigger trg_calendar_professionals_updated_at
@@ -489,6 +898,30 @@ select q.organization_id,
   left join public.user_organizations uo
     on uo.organization_id = q.organization_id and uo.user_id = q.user_id
 on conflict (organization_id, user_id) where user_id is not null do nothing;
+
+-- (a2) quem SAIU da equipe não atende. O `insert` acima já nasce inativo para ex-
+-- membro, mas `on conflict do nothing` não toca na linha que JÁ existia — e a
+-- desativação no momento da revogação (lib/agenda/profissionais.ts) é
+-- best-effort. Este passo cura as duas sobras a cada `update.sh`. Só desliga,
+-- nunca religa: reativar é decisão de operador. Idempotente: a segunda rodada
+-- não acha linha ativa de ex-membro. A `fn_agenda_marcar` recusa ex-membro de
+-- qualquer jeito; isto é o que tira a pessoa da OFERTA de horário.
+update public.calendar_professionals p
+   set is_active = false
+ where p.is_active
+   and p.user_id is not null
+   and exists (
+     select 1 from public.user_organizations uo
+      where uo.organization_id = p.organization_id
+        and uo.user_id = p.user_id
+        and uo.revoked_at is not null
+   )
+   and not exists (
+     select 1 from public.user_organizations uo
+      where uo.organization_id = p.organization_id
+        and uo.user_id = p.user_id
+        and uo.revoked_at is null
+   );
 
 -- (b) cada tipo habilita o seu dono padrão — SÓ em tipo que não tem habilitação
 -- nenhuma. Re-aplicar não pode desfazer o conjunto que o operador escolheu.

@@ -22,10 +22,23 @@ import { beforeAll, describe, expect, it } from "vitest";
  *    agendamento e apoio no outro, no mesmo instante, é 23505 — e cancelar libera.
  * 4. O ESPELHO: remarcar e cancelar o agendamento move os participantes; remarcar
  *    em cima da apoio falha no MESMO UPDATE.
- * 5. `fn_agenda_marcar`: atômica, recusa profissional de outra org (23503) e
- *    argumento inválido (22023), roda com a RLS de quem chama, e anon não executa.
+ * 5. `fn_agenda_marcar`: atômica, recusa argumento inválido (22023), roda com a
+ *    RLS de quem chama, e anon não executa.
  * 6. RLS/RBAC: viewer e agent não escrevem profissionais nem serviços; viewer não
  *    marca; a org B não enxerga os profissionais da A.
+ * 7. A FUNÇÃO É PORTA: chamada DIRETO (sessão de agent, como o PostgREST faria,
+ *    sem a rota), ela mesma recusa tipo/contato/conversa/profissional/agente de
+ *    outra organização, conversa de outro contato, tipo desativado, quantidade
+ *    errada e profissional não habilitada — cada uma com o seu hint. E decide
+ *    sozinha `status`, `owner_user_id` e a autoria com sessão.
+ * 8. SOBREPOSIÇÃO PARCIAL (10:00–11:00 × 10:30–11:30) da mesma profissional é
+ *    23505 — como principal, como apoio, contra o legado por dono, e ao remarcar.
+ * 9. O ESPELHO É SÓ DO TRIGGER: o agent não dá UPDATE nem DELETE na tabela de
+ *    participantes; remarcar pelo agendamento continua movendo a cópia.
+ * 10. `booked_at` nasce, é recarimbado ao mudar `starts_at`, e o backfill grava
+ *     `created_at` SEM mexer em `updated_at` (senão a agenda inteira voltaria
+ *     ao Google).
+ * 11. Re-aplicar o bloco da 0194 do baseline NÃO desliga um lembrete ligado.
  *
  * Cada negativo tem o seu controle positivo — um arquivo só de "barra" fica
  * verde se a tabela sumir ou se a policy negar todo mundo.
@@ -80,6 +93,23 @@ function codigoDoErro(script: string): string | null {
   }
 }
 
+/**
+ * Como `codigoDoErro`, e também o HINT — é por ele que a rota escolhe o código
+ * de API (`agenda:<motivo>`, contrato no comentário da migration 0245).
+ */
+function erroDe(script: string): { codigo: string; dica: string | null } | null {
+  try {
+    sql(`\\set VERBOSITY verbose\n${script}`);
+    return null;
+  } catch (e) {
+    const saida = String((e as { stderr?: unknown }).stderr ?? e);
+    const m = /ERROR:\s+([0-9A-Z]{5}):/.exec(saida);
+    if (!m) throw new Error(`falhou sem SQLSTATE legível: ${saida}`);
+    const h = /HINT:\s+(\S+)/.exec(saida);
+    return { codigo: m[1] as string, dica: h ? (h[1] as string) : null };
+  }
+}
+
 function comoUsuario(userId: string, comando: string): string {
   return `
     set role authenticated;
@@ -111,14 +141,62 @@ const LEGADO_2 = "a9e00245-1111-4000-8000-000000000007";
 /** Profissionais SEM login da org A. */
 const BIA = "a9e00245-2222-4000-8000-000000000001";
 const CARLA = "a9e00245-2222-4000-8000-000000000002";
+/** Desativada — recusada pela função mesmo sendo da org. */
+const DORA = "a9e00245-2222-4000-8000-000000000003";
 
-function compromisso(titulo: string, inicio: string, fim: string): string {
-  return `'${JSON.stringify({ title: titulo, starts_at: inicio, ends_at: fim })}'::jsonb`;
+/**
+ * Tipos PRÓPRIOS deste arquivo na org A, criados DEPOIS do primeiro membro — senão
+ * a adoção da 0195/0245 os habilitaria para o dono e Bia/Carla não serviriam.
+ * Sem habilitação = qualquer profissional ativa.
+ */
+const TIPO_UM = "a9e00245-3333-4000-8000-000000000001";
+const TIPO_DOIS = "a9e00245-3333-4000-8000-000000000002";
+const TIPO_INATIVO = "a9e00245-3333-4000-8000-000000000003";
+const TIPO_CONFIRMA = "a9e00245-3333-4000-8000-000000000004";
+/** Com habilitação: só a Carla faz. */
+const TIPO_SO_CARLA = "a9e00245-3333-4000-8000-000000000005";
+const TIPO_B = "a9e00245-3333-4000-8000-00000000000b";
+const TIPOS_DESTE_ARQUIVO = [TIPO_UM, TIPO_DOIS, TIPO_INATIVO, TIPO_CONFIRMA, TIPO_SO_CARLA];
+
+const SESSAO_A = "a9e00245-4444-4000-8000-00000000000a";
+const SESSAO_B = "a9e00245-4444-4000-8000-00000000000b";
+const CONTATO_A = "a9e00245-5555-4000-8000-000000000001";
+const CONTATO_A2 = "a9e00245-5555-4000-8000-000000000002";
+const CONTATO_B = "a9e00245-5555-4000-8000-00000000000b";
+const CONVERSA_A = "a9e00245-6666-4000-8000-000000000001";
+const CONVERSA_A2 = "a9e00245-6666-4000-8000-000000000002";
+const CONVERSA_B = "a9e00245-6666-4000-8000-00000000000b";
+const AGENTE_IA_A = "a9e00245-7777-4000-8000-00000000000a";
+const AGENTE_IA_B = "a9e00245-7777-4000-8000-00000000000b";
+
+/** O tipo pela quantidade: 2 profissionais → o que pede duas; o resto → o de uma. */
+function tipoPara(profissionais: string[]): string {
+  return profissionais.length === 2 ? TIPO_DOIS : TIPO_UM;
 }
 
-function marcar(titulo: string, inicio: string, fim: string, profissionais: string[], org = ORG_A): string {
+function compromisso(titulo: string, inicio: string, fim: string, extra: Record<string, unknown> = {}): string {
+  return `'${JSON.stringify({ title: titulo, starts_at: inicio, ends_at: fim, ...extra })}'::jsonb`;
+}
+
+function marcar(
+  titulo: string,
+  inicio: string,
+  fim: string,
+  profissionais: string[],
+  org = ORG_A,
+  extra: Record<string, unknown> = {},
+): string {
   const lista = profissionais.map((p) => `'${p}'`).join(", ");
-  return `select public.fn_agenda_marcar('${org}', ${compromisso(titulo, inicio, fim)}, array[${lista}]::uuid[]);`;
+  const campos = { event_type_id: tipoPara(profissionais), ...extra };
+  return `select public.fn_agenda_marcar('${org}', ${compromisso(titulo, inicio, fim, campos)}, array[${lista}]::uuid[]);`;
+}
+
+/** Uma linha do agendamento gravado, por título, como texto `a|b|c`. */
+function gravado(titulo: string, colunas: string): string {
+  return ultimaLinha(
+    sql(`select concat_ws('|', ${colunas}) from public.calendar_appointments
+          where organization_id = '${ORG_A}' and title = '${titulo}';`),
+  );
 }
 
 function idDoProfissional(org: string, userId: string): string {
@@ -178,6 +256,45 @@ beforeAll(() => {
       ('${BIA}',   '${ORG_A}', 'Bia'),
       ('${CARLA}', '${ORG_A}', 'Carla')
       on conflict (id) do nothing;
+    insert into public.calendar_professionals (id, organization_id, name, is_active)
+      values ('${DORA}', '${ORG_A}', 'Dora', false)
+      on conflict (id) do nothing;
+
+    -- Os tipos deste arquivo — DEPOIS do primeiro membro (ver TIPO_UM).
+    insert into public.calendar_event_types
+      (id, organization_id, name, slug, category, duration_minutes, professionals_required,
+       is_active, requires_confirmation)
+    values
+      ('${TIPO_UM}',       '${ORG_A}', 'Uma',        'inv0245-uma',        'consulta', 30, 1, true,  false),
+      ('${TIPO_DOIS}',     '${ORG_A}', 'Duas',       'inv0245-duas',       'consulta', 30, 2, true,  false),
+      ('${TIPO_INATIVO}',  '${ORG_A}', 'Inativo',    'inv0245-inativo',    'consulta', 30, 1, false, false),
+      ('${TIPO_CONFIRMA}', '${ORG_A}', 'Confirma',   'inv0245-confirma',   'consulta', 30, 1, true,  true),
+      ('${TIPO_SO_CARLA}', '${ORG_A}', 'So a Carla', 'inv0245-so-carla',   'consulta', 30, 1, true,  false),
+      ('${TIPO_B}',        '${ORG_B}', 'Da B',       'inv0245-da-b',       'consulta', 30, 1, true,  false)
+      on conflict (id) do nothing;
+    insert into public.calendar_event_type_professionals (organization_id, event_type_id, professional_id)
+      values ('${ORG_A}', '${TIPO_SO_CARLA}', '${CARLA}')
+      on conflict do nothing;
+
+    -- Contatos e conversas dos dois lados: é o que o lembrete usa para sair.
+    insert into public.channel_sessions (id, organization_id, waha_session_name, webhook_secret_encrypted) values
+      ('${SESSAO_A}', '${ORG_A}', 'inv0245-a', '\\x00'::bytea),
+      ('${SESSAO_B}', '${ORG_B}', 'inv0245-b', '\\x00'::bytea)
+      on conflict (id) do nothing;
+    insert into public.contacts (id, organization_id, name) values
+      ('${CONTATO_A}',  '${ORG_A}', 'Cliente A'),
+      ('${CONTATO_A2}', '${ORG_A}', 'Outra cliente A'),
+      ('${CONTATO_B}',  '${ORG_B}', 'Cliente B')
+      on conflict (id) do nothing;
+    insert into public.conversations (id, organization_id, contact_id, channel_session_id, status) values
+      ('${CONVERSA_A}',  '${ORG_A}', '${CONTATO_A}',  '${SESSAO_A}', 'open'),
+      ('${CONVERSA_A2}', '${ORG_A}', '${CONTATO_A2}', '${SESSAO_A}', 'open'),
+      ('${CONVERSA_B}',  '${ORG_B}', '${CONTATO_B}',  '${SESSAO_B}', 'open')
+      on conflict (id) do nothing;
+    insert into public.ai_agents (id, organization_id, name, system_prompt) values
+      ('${AGENTE_IA_A}', '${ORG_A}', 'Agente A', 'prompt'),
+      ('${AGENTE_IA_B}', '${ORG_B}', 'Agente B', 'prompt')
+      on conflict (id) do nothing;
   `);
 });
 
@@ -191,11 +308,16 @@ describe("instalação fresca — o primeiro membro já nasce agendável", () =>
   });
 
   it("todo tipo semeado da org fica habilitado para ele", () => {
-    const tipos = numero(`select count(*) from public.calendar_event_types where organization_id = '${ORG_A}';`);
+    // Os tipos que este arquivo cria DEPOIS da adoção ficam de fora: o que se
+    // mede aqui é o que a org tinha quando o primeiro membro chegou.
+    const fora = TIPOS_DESTE_ARQUIVO.map((t) => `'${t}'`).join(", ");
+    const tipos = numero(`select count(*) from public.calendar_event_types
+                           where organization_id = '${ORG_A}' and id not in (${fora});`);
     const habilitados = numero(`
       select count(*) from public.calendar_event_type_professionals h
         join public.calendar_professionals p on p.id = h.professional_id
-       where h.organization_id = '${ORG_A}' and p.user_id = '${DONO_A}';`);
+       where h.organization_id = '${ORG_A}' and p.user_id = '${DONO_A}'
+         and h.event_type_id not in (${fora});`);
     expect(tipos, "CONTROLE: a org nova não recebeu tipo nenhum — o seed quebrou").toBeGreaterThan(0);
     expect(habilitados).toBe(tipos);
   });
@@ -375,11 +497,14 @@ describe("o espelho acompanha o agendamento", () => {
 });
 
 describe("fn_agenda_marcar — a porta atômica", () => {
-  it("profissional de OUTRA organização bate na FK composta (23503) e nada fica gravado", () => {
+  it("profissional de OUTRA organização é recusada pela própria função, com o hint — e nada fica gravado", () => {
+    // Antes da conferência, quem barrava era a FK composta (23503) — DEPOIS de o
+    // agendamento já ter sido inserido. Agora a recusa vem antes, e nomeada.
     const daOrgB = idDoProfissional(ORG_B, AGENT_B);
-    expect(codigoDoErro(marcar("Cruzado", "2027-03-13T13:00:00Z", "2027-03-13T13:30:00Z", [daOrgB]))).toBe(
-      "23503",
-    );
+    expect(erroDe(marcar("Cruzado", "2027-03-13T13:00:00Z", "2027-03-13T13:30:00Z", [daOrgB]))).toEqual({
+      codigo: "P0001",
+      dica: "agenda:profissional_invalido",
+    });
     expect(
       numero(`select count(*) from public.calendar_appointments where title = 'Cruzado';`),
     ).toBe(0);
@@ -416,6 +541,428 @@ describe("fn_agenda_marcar — a porta atômica", () => {
                   has_function_privilege('authenticated', 'public.fn_agenda_participantes_acompanham()', 'EXECUTE')::text;`),
     );
     expect(linha).toBe("false|false");
+  });
+
+  it("o espelho é DEFINER (move a cópia sem UPDATE de quem remarca); o carimbo de booked_at é fechado", () => {
+    const linha = ultimaLinha(
+      sql(`select (select prosecdef from pg_proc where oid = 'public.fn_agenda_participantes_acompanham()'::regprocedure)::text
+                  || '|' ||
+                  has_function_privilege('anon', 'public.fn_agenda_horario_fixado()', 'EXECUTE')::text
+                  || '|' ||
+                  has_function_privilege('authenticated', 'public.fn_agenda_horario_fixado()', 'EXECUTE')::text;`),
+    );
+    expect(linha).toBe("true|false|false");
+  });
+
+  it("a reconferência sob trava: anon NÃO executa; authenticated executa (a fn_agenda_marcar é invoker)", () => {
+    const assinatura = "public.fn_agenda_conferir_livre(uuid, uuid[], timestamptz, timestamptz, uuid)";
+    const linha = ultimaLinha(
+      sql(`select has_function_privilege('anon', '${assinatura}', 'EXECUTE')::text
+                  || '|' ||
+                  has_function_privilege('authenticated', '${assinatura}', 'EXECUTE')::text;`),
+    );
+    expect(linha).toBe("false|true");
+  });
+});
+
+/**
+ * A FUNÇÃO É PORTA, NÃO SÓ ATALHO.
+ *
+ * `authenticated` tem EXECUTE na `fn_agenda_marcar`: uma sessão de agent a chama
+ * pelo PostgREST sem passar pela rota. Cada caso abaixo é a chamada DIRETA, com a
+ * sessão do agent da org A — e a FK simples de `contact_id`/`conversation_id`
+ * não olha organização (e FK ignora RLS), então sem a conferência da própria
+ * função o cliente da B seria gravado na agenda da A.
+ */
+describe("fn_agenda_marcar chamada direto — a função confere sozinha", () => {
+  const T = "2027-06-01T13:00:00Z";
+  const T_FIM = "2027-06-01T13:30:00Z";
+  const pelaSessao = (script: string) => comoUsuario(AGENT_A, script);
+
+  it.each([
+    ["contato de OUTRA organização", [BIA], { contact_id: CONTATO_B }, "agenda:contato_inexistente"],
+    ["conversa de OUTRA organização", [BIA], { conversation_id: CONVERSA_B }, "agenda:conversa_inexistente"],
+    [
+      "conversa da org, mas de OUTRO contato",
+      [BIA],
+      { contact_id: CONTATO_A, conversation_id: CONVERSA_A2 },
+      "agenda:conversa_de_outro_contato",
+    ],
+    ["tipo de OUTRA organização", [BIA], { event_type_id: TIPO_B }, "agenda:tipo_inexistente"],
+    ["tipo desativado", [BIA], { event_type_id: TIPO_INATIVO }, "agenda:tipo_desativado"],
+    ["tipo que pede DUAS com uma só", [BIA], { event_type_id: TIPO_DOIS }, "agenda:profissionais_insuficientes"],
+    ["tipo que pede UMA com duas", [BIA, CARLA], { event_type_id: TIPO_UM }, "agenda:profissionais_insuficientes"],
+    ["profissional desativada", [DORA], {}, "agenda:profissional_invalido"],
+    ["profissional não habilitada num tipo COM habilitação", [BIA], { event_type_id: TIPO_SO_CARLA }, "agenda:profissional_invalido"],
+    ["owner_user_id que não é o login da principal", [BIA], { owner_user_id: MANAGER_A }, "agenda:profissional_invalido"],
+  ] as const)("%s → P0001 com o hint certo, e nada gravado", (titulo, profissionais, extra, dica) => {
+    expect(erroDe(pelaSessao(marcar(titulo, T, T_FIM, [...profissionais], ORG_A, { ...extra })))).toEqual({
+      codigo: "P0001",
+      dica,
+    });
+    expect(numero(`select count(*) from public.calendar_appointments where title = '${titulo}';`)).toBe(0);
+  });
+
+  it("profissional de OUTRA organização, pela sessão do agent: recusada antes do INSERT", () => {
+    const daOrgB = idDoProfissional(ORG_B, AGENT_B);
+    expect(erroDe(pelaSessao(marcar("Cruzado pela sessão", T, T_FIM, [daOrgB])))).toEqual({
+      codigo: "P0001",
+      dica: "agenda:profissional_invalido",
+    });
+  });
+
+  it("CONTROLE: contato e conversa da casa, pela sessão do agent, passam e ficam gravados", () => {
+    expect(
+      erroDe(pelaSessao(marcar("Da casa", T, T_FIM, [BIA], ORG_A, { contact_id: CONTATO_A, conversation_id: CONVERSA_A }))),
+    ).toBeNull();
+    expect(gravado("Da casa", "contact_id, conversation_id")).toBe(`${CONTATO_A}|${CONVERSA_A}`);
+  });
+
+  it("sem contato no pedido, a conversa define quem é atendido", () => {
+    expect(
+      erroDe(marcar("Pela conversa", "2027-06-01T15:00:00Z", "2027-06-01T15:30:00Z", [CARLA], ORG_A, {
+        conversation_id: CONVERSA_A2,
+      })),
+    ).toBeNull();
+    expect(gravado("Pela conversa", "contact_id")).toBe(CONTATO_A2);
+  });
+
+  it("o status é do TIPO, não de quem chama: pedir `confirmed` num tipo que exige confirmação grava `pending`", () => {
+    sql(marcar("Quer confirmar", "2027-06-02T13:00:00Z", "2027-06-02T13:30:00Z", [BIA], ORG_A, {
+      event_type_id: TIPO_CONFIRMA,
+      status: "confirmed",
+    }));
+    sql(marcar("Quer pendente", "2027-06-02T14:00:00Z", "2027-06-02T14:30:00Z", [BIA], ORG_A, {
+      status: "pending",
+    }));
+    expect(gravado("Quer confirmar", "status")).toBe("pending");
+    expect(gravado("Quer pendente", "status")).toBe("confirmed");
+  });
+
+  it("COM sessão, a autoria é a sessão — o jsonb não escolhe usuário, agente nem origem", () => {
+    sql(
+      pelaSessao(
+        marcar("Autoria forjada", "2027-06-03T13:00:00Z", "2027-06-03T13:30:00Z", [BIA], ORG_A, {
+          created_by_user_id: MANAGER_A,
+          created_by_kind: "ai",
+          created_by_agent_id: AGENTE_IA_A,
+          source: "mcp",
+        }),
+      ),
+    );
+    expect(
+      gravado(
+        "Autoria forjada",
+        "coalesce(created_by_user_id::text, '-'), created_by_kind, coalesce(created_by_agent_id::text, '-'), source",
+      ),
+    ).toBe(`${AGENT_A}|user|-|ui`);
+  });
+
+  it("SEM sessão (service_role), o agente de OUTRA organização é recusado — e o da casa grava", () => {
+    expect(
+      erroDe(marcar("Agente alheio", "2027-06-03T15:00:00Z", "2027-06-03T15:30:00Z", [BIA], ORG_A, {
+        created_by_kind: "ai",
+        created_by_agent_id: AGENTE_IA_B,
+        source: "mcp",
+      })),
+    ).toEqual({ codigo: "P0001", dica: "agenda:agente_inexistente" });
+    expect(
+      erroDe(marcar("Agente da casa", "2027-06-03T16:00:00Z", "2027-06-03T16:30:00Z", [BIA], ORG_A, {
+        created_by_kind: "ai",
+        created_by_agent_id: AGENTE_IA_A,
+        source: "mcp",
+      })),
+    ).toBeNull();
+    expect(gravado("Agente da casa", "created_by_kind, created_by_agent_id, source")).toBe(`ai|${AGENTE_IA_A}|mcp`);
+  });
+
+  it("o dono é DERIVADO da principal: sem owner_user_id no pedido, grava o login dela", () => {
+    const doDono = idDoProfissional(ORG_A, DONO_A);
+    sql(marcar("Dono derivado", "2027-06-04T13:00:00Z", "2027-06-04T13:30:00Z", [doDono]));
+    sql(marcar("Sem login, sem dono", "2027-06-04T14:00:00Z", "2027-06-04T14:30:00Z", [BIA]));
+    expect(gravado("Dono derivado", "owner_user_id")).toBe(DONO_A);
+    expect(gravado("Sem login, sem dono", "coalesce(owner_user_id::text, '-')")).toBe("-");
+  });
+});
+
+/**
+ * Quem SAIU da equipe não atende — nem pela porta da função, nem na oferta.
+ * A linha de profissional pode sobrar ATIVA (a desativação na revogação é
+ * best-effort); a função exige membro ativo, e o backfill do baseline a desliga.
+ */
+describe("ex-membro (vínculo revogado) não atende", () => {
+  const EX = "a9e00245-1111-4000-8000-000000000009";
+  const EX_PROF = "a9e00245-2222-4000-8000-000000000009";
+
+  beforeAll(() => {
+    // Criado AQUI, e não no beforeAll do topo: o bloco do baseline já rodou antes
+    // (describe do backfill) e o teria desligado antes de o caso medir a função.
+    sql(`
+      insert into auth.users (id, email) values ('${EX}', 'prof-ex-a@invariant.test') on conflict (id) do nothing;
+      insert into public.user_organizations (user_id, organization_id, role, accepted_at, revoked_at)
+        values ('${EX}', '${ORG_A}', 'agent', now(), now()) on conflict do nothing;
+      insert into public.calendar_professionals (id, organization_id, user_id, name, is_active)
+        values ('${EX_PROF}', '${ORG_A}', '${EX}', 'Ex da equipe', true) on conflict (id) do nothing;
+    `);
+  });
+
+  it("a função recusa a profissional ATIVA de quem foi revogado", () => {
+    expect(erroDe(marcar("Com ex-membro", "2027-06-05T13:00:00Z", "2027-06-05T13:30:00Z", [EX_PROF]))).toEqual({
+      codigo: "P0001",
+      dica: "agenda:profissional_invalido",
+    });
+    expect(numero(`select count(*) from public.calendar_appointments where title = 'Com ex-membro';`)).toBe(0);
+  });
+
+  it("re-aplicar o bloco do baseline desliga a linha — e a segunda rodada não muda nada", () => {
+    const ativa = () =>
+      ultimaLinha(sql(`select is_active::text from public.calendar_professionals where id = '${EX_PROF}';`));
+    expect(ativa(), "CONTROLE: a linha precisa partir ativa, senão o caso não mede o backfill").toBe("true");
+    sql(blocoDa0245NoBaseline());
+    expect(ativa()).toBe("false");
+    // Controle: a profissional de quem continua na equipe NÃO foi desligada.
+    expect(
+      ultimaLinha(
+        sql(`select is_active::text from public.calendar_professionals
+              where organization_id = '${ORG_A}' and user_id = '${DONO_A}';`),
+      ),
+    ).toBe("true");
+    sql(blocoDa0245NoBaseline());
+    expect(ativa()).toBe("false");
+  });
+});
+
+/**
+ * O índice `cap_sem_duplicata_idx` só enxerga o MESMO instante. Estes casos são o
+ * que ele deixava passar — e que a trava + reconferência fecha.
+ */
+describe("sobreposição parcial da mesma profissional é 23505", () => {
+  const ocupado = { codigo: "23505", dica: "agenda:horario_ocupado" };
+
+  it("CONTROLE: Bia das 10h às 11h entra", () => {
+    expect(erroDe(marcar("Bia 10h", "2027-06-10T13:00:00Z", "2027-06-10T14:00:00Z", [BIA]))).toBeNull();
+  });
+
+  it("Bia das 10h30 às 11h30 como PRINCIPAL é recusada", () => {
+    expect(erroDe(marcar("Bia 10h30", "2027-06-10T13:30:00Z", "2027-06-10T14:30:00Z", [BIA]))).toEqual(ocupado);
+    expect(numero(`select count(*) from public.calendar_appointments where title = 'Bia 10h30';`)).toBe(0);
+  });
+
+  it("...e como APOIO também — e o agendamento da principal não sobra sem participante", () => {
+    expect(
+      erroDe(marcar("Carla com Bia 10h30", "2027-06-10T13:30:00Z", "2027-06-10T14:30:00Z", [CARLA, BIA])),
+    ).toEqual(ocupado);
+    expect(numero(`select count(*) from public.calendar_appointments where title = 'Carla com Bia 10h30';`)).toBe(0);
+  });
+
+  it("CONTROLE: encostado (11h às 12h) não é sobreposição", () => {
+    expect(erroDe(marcar("Bia 11h", "2027-06-10T14:00:00Z", "2027-06-10T15:00:00Z", [BIA]))).toBeNull();
+  });
+
+  it("o legado por DONO, sem participante, também ocupa", () => {
+    // Agendamento anterior à 0245 que não ganhou participante: só `owner_user_id`.
+    sql(`insert into public.calendar_appointments (organization_id, title, starts_at, ends_at, owner_user_id, status)
+         values ('${ORG_A}', 'Legado do dono', '2027-06-11T13:00:00Z', '2027-06-11T14:00:00Z', '${DONO_A}', 'confirmed');`);
+    const doDono = idDoProfissional(ORG_A, DONO_A);
+    expect(erroDe(marcar("Em cima do legado", "2027-06-11T13:30:00Z", "2027-06-11T14:30:00Z", [doDono]))).toEqual(
+      ocupado,
+    );
+  });
+
+  it("REMARCAR para um horário que sobrepõe a principal falha, e o agendamento fica onde estava", () => {
+    sql(marcar("Carla 15h", "2027-06-12T15:00:00Z", "2027-06-12T16:00:00Z", [CARLA]));
+    const id = ultimaLinha(sql(marcar("Carla 17h", "2027-06-12T17:00:00Z", "2027-06-12T18:00:00Z", [CARLA])));
+    expect(
+      erroDe(`update public.calendar_appointments
+                 set starts_at = '2027-06-12T15:30:00Z', ends_at = '2027-06-12T16:30:00Z'
+               where id = '${id}';`),
+    ).toEqual(ocupado);
+    expect(gravado("Carla 17h", "(starts_at = '2027-06-12T17:00:00Z')::text")).toBe("true");
+
+    // Controle: encostado entra.
+    expect(
+      erroDe(`update public.calendar_appointments
+                 set starts_at = '2027-06-12T16:00:00Z', ends_at = '2027-06-12T17:00:00Z'
+               where id = '${id}';`),
+    ).toBeNull();
+  });
+
+  it("REMARCAR para cima de onde ela é APOIO também falha", () => {
+    sql(marcar("Bia e Carla 19h", "2027-06-12T19:00:00Z", "2027-06-12T20:00:00Z", [BIA, CARLA]));
+    const id = ultimaLinha(sql(marcar("Carla 21h", "2027-06-12T21:00:00Z", "2027-06-12T22:00:00Z", [CARLA])));
+    expect(
+      erroDe(`update public.calendar_appointments
+                 set starts_at = '2027-06-12T19:30:00Z', ends_at = '2027-06-12T20:30:00Z'
+               where id = '${id}';`),
+    ).toEqual(ocupado);
+  });
+
+  it("CONTROLE: confirmar um pendente no MESMO horário não reconfere (encaixe legado não vira 23505)", () => {
+    const id = ultimaLinha(
+      sql(marcar("Pendente 8h", "2027-06-13T11:00:00Z", "2027-06-13T11:30:00Z", [BIA], ORG_A, {
+        event_type_id: TIPO_CONFIRMA,
+      })),
+    );
+    expect(erroDe(`update public.calendar_appointments set status = 'confirmed' where id = '${id}';`)).toBeNull();
+  });
+});
+
+describe("o espelho é só do trigger — ninguém edita a cópia pelo PostgREST", () => {
+  let id = "";
+  beforeAll(() => {
+    id = ultimaLinha(sql(marcar("Espelho travado", "2027-06-20T13:00:00Z", "2027-06-20T13:30:00Z", [BIA])));
+  });
+
+  it("o agent NÃO dá UPDATE na cópia (tiraria a profissional da guarda sem mexer no agendamento)", () => {
+    expect(
+      escreveComo(
+        AGENT_A,
+        `update public.calendar_appointment_professionals set starts_at = '2027-06-20T18:00:00Z'
+          where appointment_id = '${id}';`,
+      ),
+    ).toBe(false);
+  });
+
+  it("nem o manager — o privilégio não existe para `authenticated`", () => {
+    expect(
+      escreveComo(
+        MANAGER_A,
+        `update public.calendar_appointment_professionals set status = 'cancelled' where appointment_id = '${id}';`,
+      ),
+    ).toBe(false);
+  });
+
+  it("o agent NÃO apaga participante", () => {
+    expect(
+      escreveComo(AGENT_A, `delete from public.calendar_appointment_professionals where appointment_id = '${id}';`),
+    ).toBe(false);
+    expect(numero(`select count(*) from public.calendar_appointment_professionals where appointment_id = '${id}';`)).toBe(1);
+  });
+
+  it("CONTROLE: o agent remarca PELO AGENDAMENTO, e a cópia acompanha (o espelho é definer)", () => {
+    expect(
+      escreveComo(
+        AGENT_A,
+        `update public.calendar_appointments
+            set starts_at = '2027-06-20T15:00:00Z', ends_at = '2027-06-20T15:30:00Z'
+          where id = '${id}';`,
+      ),
+    ).toBe(true);
+    expect(
+      numero(`select count(*) from public.calendar_appointment_professionals
+               where appointment_id = '${id}' and starts_at = '2027-06-20T15:00:00Z';`),
+    ).toBe(1);
+  });
+
+  it("no catálogo: authenticated tem INSERT e não tem UPDATE nem DELETE", () => {
+    const linha = ultimaLinha(
+      sql(`select has_table_privilege('authenticated', 'public.calendar_appointment_professionals', 'INSERT')::text
+                  || '|' || has_table_privilege('authenticated', 'public.calendar_appointment_professionals', 'UPDATE')::text
+                  || '|' || has_table_privilege('authenticated', 'public.calendar_appointment_professionals', 'DELETE')::text;`),
+    );
+    expect(linha).toBe("true|false|false");
+  });
+});
+
+describe("booked_at — quando o horário atual foi fixado", () => {
+  it("nasce preenchido; mexer na observação não o move; remarcar o recarimba", () => {
+    const id = ultimaLinha(sql(marcar("Carimbo", "2027-06-25T13:00:00Z", "2027-06-25T13:30:00Z", [CARLA])));
+    expect(gravado("Carimbo", "(booked_at is not null)::text")).toBe("true");
+
+    sql(`update public.calendar_appointments set booked_at = '2000-01-01T00:00:00Z' where id = '${id}';`);
+    sql(`update public.calendar_appointments set notes = 'só a observação' where id = '${id}';`);
+    expect(gravado("Carimbo", "(booked_at = '2000-01-01T00:00:00Z')::text"), "observação moveu o carimbo").toBe("true");
+
+    sql(`update public.calendar_appointments
+            set starts_at = '2027-06-26T13:00:00Z', ends_at = '2027-06-26T13:30:00Z'
+          where id = '${id}';`);
+    expect(gravado("Carimbo", "(booked_at > '2000-01-01T00:00:00Z')::text"), "remarcar não recarimbou").toBe("true");
+  });
+
+  it("o backfill do baseline grava created_at SEM tocar em updated_at — a agenda não volta inteira ao Google", () => {
+    // Sem `returning`: a etiqueta `INSERT 0 1` viria DEPOIS do id e `ultimaLinha`
+    // a pegaria no lugar dele.
+    sql(`insert into public.calendar_appointments
+           (organization_id, title, starts_at, ends_at, owner_user_id, status, created_at)
+         values ('${ORG_LEGADO}', 'Sem carimbo', '2027-07-01T13:00:00Z', '2027-07-01T13:30:00Z',
+                 '${LEGADO_1}', 'confirmed', '2026-01-15T12:00:00Z');`);
+    const id = ultimaLinha(
+      sql(`select id from public.calendar_appointments
+            where organization_id = '${ORG_LEGADO}' and title = 'Sem carimbo';`),
+    );
+    // Simula o clone antes da 0245: coluna nula. `google_synced_at` mexido no MESMO
+    // UPDATE faz o carimbo do Google igualar `updated_at` — a linha parte "em dia".
+    sql(`alter table public.calendar_appointments alter column booked_at drop not null;
+         update public.calendar_appointments
+            set booked_at = null, google_synced_at = '2030-01-01T00:00:00Z'
+          where id = '${id}';`);
+    const antes = ultimaLinha(
+      sql(`select updated_at::text || '|' || needs_google_push::text from public.calendar_appointments where id = '${id}';`),
+    );
+    expect(antes.endsWith("|false"), "CONTROLE: a linha já partiu pendente de ida ao Google").toBe(true);
+
+    sql(blocoDa0245NoBaseline());
+
+    expect(
+      ultimaLinha(sql(`select (booked_at = created_at)::text from public.calendar_appointments where id = '${id}';`)),
+    ).toBe("true");
+    expect(
+      ultimaLinha(
+        sql(`select updated_at::text || '|' || needs_google_push::text from public.calendar_appointments where id = '${id}';`),
+      ),
+      "o backfill moveu updated_at: needs_google_push mandaria o histórico inteiro de volta ao Google",
+    ).toBe(antes);
+    // E o trigger de updated_at voltou ligado, e a coluna voltou NOT NULL.
+    expect(
+      ultimaLinha(
+        sql(`select t.tgenabled::text || '|' || a.attnotnull::text
+               from pg_trigger t, pg_attribute a
+              where t.tgrelid = 'public.calendar_appointments'::regclass
+                and t.tgname = 'trg_calendar_appointments_updated_at'
+                and a.attrelid = 'public.calendar_appointments'::regclass
+                and a.attname = 'booked_at';`),
+      ),
+    ).toBe("O|true");
+  });
+});
+
+/**
+ * O apêndice da 0194 desligava `reminder_enabled` de TODO tipo, em TODO
+ * `update.sh`. Com o cron de lembrete lendo a coluna (0245), isso apagava a
+ * escolha do operador a cada atualização.
+ */
+describe("re-aplicar o baseline não desliga o lembrete que o operador ligou", () => {
+  function blocoDa0194NoBaseline(): string {
+    const baseline = readFileSync(join(process.cwd(), "supabase", "baseline.sql"), "utf8");
+    const rotulo = "-- ---- lembrete nasce desligado (migration 0194) ----";
+    const inicio = baseline.indexOf(rotulo);
+    const fim = baseline.indexOf("\n-- ---- ", inicio + rotulo.length);
+    if (inicio < 0 || fim < 0) throw new Error("INSTRUMENTO: não achei o bloco da 0194 no baseline.sql");
+    return baseline.slice(inicio, fim);
+  }
+
+  it("CONTROLE: o bloco existe e ainda põe o DEFAULT em false", () => {
+    expect(blocoDa0194NoBaseline()).toMatch(/alter column reminder_enabled set default false/);
+  });
+
+  it("um tipo com lembrete LIGADO continua ligado depois do bloco", () => {
+    sql(`update public.calendar_event_types set reminder_enabled = true where id = '${TIPO_UM}';`);
+    sql(blocoDa0194NoBaseline());
+    expect(
+      ultimaLinha(sql(`select reminder_enabled::text from public.calendar_event_types where id = '${TIPO_UM}';`)),
+    ).toBe("true");
+  });
+
+  it("CONTROLE: tipo novo continua nascendo desligado (o DEFAULT é o que ficou)", () => {
+    sql(`insert into public.calendar_event_types (organization_id, name, slug, category, duration_minutes)
+         values ('${ORG_A}', 'Nasce desligado', 'inv0245-nasce-desligado', 'consulta', 30)
+         on conflict do nothing;`);
+    expect(
+      ultimaLinha(
+        sql(`select reminder_enabled::text from public.calendar_event_types
+              where organization_id = '${ORG_A}' and slug = 'inv0245-nasce-desligado';`),
+      ),
+    ).toBe("false");
   });
 });
 

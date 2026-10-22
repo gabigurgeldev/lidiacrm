@@ -189,6 +189,13 @@ export const MOTIVOS_DE_LEMBRETE_PULADO = [
   "sem_conversa",
   "canal_exige_template",
   "contato_bloqueado",
+  /**
+   * A rodada reivindicou o lembrete (`reminder_sent_at`) e morreu antes de ele
+   * entrar na fila — o varredor de `rodarLembretes` acha a linha presa, avisa na
+   * Central e grava este motivo para não avisar de novo. NÃO quer dizer que a
+   * mensagem não saiu: quer dizer que ninguém consegue afirmar que saiu.
+   */
+  "enfileiramento_interrompido",
 ] as const;
 export type MotivoDeLembretePulado = (typeof MOTIVOS_DE_LEMBRETE_PULADO)[number];
 

@@ -28,8 +28,8 @@ function ag(parcial: Partial<AgendamentoParaLembrete> = {}): AgendamentoParaLemb
     organization_id: "org-1",
     // Daqui a 20h, lembrete de 24h: já é hora.
     starts_at: new Date(AGORA.getTime() + 20 * H).toISOString(),
-    // Marcado há 3 dias: bem antes do momento do lembrete.
-    created_at: new Date(AGORA.getTime() - 72 * H).toISOString(),
+    // Horário fixado há 3 dias: bem antes do momento do lembrete.
+    booked_at: new Date(AGORA.getTime() - 72 * H).toISOString(),
     status: "confirmed",
     time_zone: "America/Sao_Paulo",
     contact_id: "contato-1",
@@ -52,6 +52,8 @@ function portas(lista: AgendamentoParaLembrete[]) {
   const fila: { ag: string; texto: string }[] = [];
   const p = {
     candidatos: vi.fn<PortasDoLembrete["candidatos"]>(async () => lista),
+    presos: vi.fn<PortasDoLembrete["presos"]>(async () => []),
+    marcarPreso: vi.fn<PortasDoLembrete["marcarPreso"]>(async () => true),
     marcarPulado: vi.fn<PortasDoLembrete["marcarPulado"]>(async () => true),
     reivindicar: vi.fn<PortasDoLembrete["reivindicar"]>(async (a) => {
       if (reivindicados.has(a.id)) return false;
@@ -64,7 +66,7 @@ function portas(lista: AgendamentoParaLembrete[]) {
       fila.push({ ag: a.id, texto });
       return `msg-${fila.length}`;
     }),
-    confirmar: vi.fn<PortasDoLembrete["confirmar"]>(async () => undefined),
+    confirmar: vi.fn<PortasDoLembrete["confirmar"]>(async () => true),
     devolver: vi.fn<PortasDoLembrete["devolver"]>(async () => undefined),
     avisar: vi.fn<PortasDoLembrete["avisar"]>(async () => undefined),
   };
@@ -83,8 +85,18 @@ describe("decidirLembrete — a regra pura", () => {
   });
 
   it("marcado DEPOIS do momento do lembrete: pular com motivo", () => {
-    const d = decidirLembrete(ag({ created_at: new Date(AGORA.getTime() - 1 * H).toISOString() }), AGORA);
+    const d = decidirLembrete(ag({ booked_at: new Date(AGORA.getTime() - 1 * H).toISOString() }), AGORA);
     expect(d).toEqual({ tipo: "pular", motivo: "marcado_em_cima_da_hora" });
+  });
+
+  it("⚠️ REMARCADO em cima da hora pula, mesmo criado há semanas — a régua é `booked_at`", () => {
+    // O defeito: com `created_at`, remarcar para amanhã um agendamento antigo
+    // disparava o lembrete minutos depois de a cliente combinar o horário novo.
+    const remarcado = {
+      ...ag({ booked_at: new Date(AGORA.getTime() - 1 * H).toISOString() }),
+      created_at: new Date(AGORA.getTime() - 30 * 24 * H).toISOString(),
+    } as AgendamentoParaLembrete;
+    expect(decidirLembrete(remarcado, AGORA)).toEqual({ tipo: "pular", motivo: "marcado_em_cima_da_hora" });
   });
 
   it.each([
@@ -129,7 +141,7 @@ describe("rodarLembretes", () => {
   });
 
   it("marcado em cima da hora: grava o pulo e NÃO reivindica", async () => {
-    const { p } = portas([ag({ created_at: new Date(AGORA.getTime() - H).toISOString() })]);
+    const { p } = portas([ag({ booked_at: new Date(AGORA.getTime() - H).toISOString() })]);
     const r = await rodarLembretes(p, AGORA);
     expect(p.marcarPulado).toHaveBeenCalledWith(expect.anything(), "marcado_em_cima_da_hora");
     expect(p.reivindicar).not.toHaveBeenCalled();
@@ -137,7 +149,7 @@ describe("rodarLembretes", () => {
   });
 
   it("pulo que outra rodada já gravou não conta duas vezes", async () => {
-    const { p } = portas([ag({ created_at: new Date(AGORA.getTime() - H).toISOString() })]);
+    const { p } = portas([ag({ booked_at: new Date(AGORA.getTime() - H).toISOString() })]);
     p.marcarPulado.mockResolvedValue(false);
     const r = await rodarLembretes(p, AGORA);
     expect(r.pulados).toBe(0);
@@ -208,8 +220,78 @@ describe("rodarLembretes", () => {
       const r = await rodarLembretes(p, AGORA);
       Object.keys(r.por_motivo).forEach((m) => emitidos.add(m));
     }
-    const { p } = portas([ag({ created_at: new Date(AGORA.getTime() - H).toISOString() })]);
+    const { p } = portas([ag({ booked_at: new Date(AGORA.getTime() - H).toISOString() })]);
     Object.keys((await rodarLembretes(p, AGORA)).por_motivo).forEach((m) => emitidos.add(m));
+    const { p: comPresa } = portas([]);
+    comPresa.presos.mockResolvedValue([{ id: "ag-preso", organization_id: "org-1" }]);
+    Object.keys((await rodarLembretes(comPresa, AGORA)).por_motivo).forEach((m) => emitidos.add(m));
     expect([...emitidos].sort()).toEqual([...MOTIVOS_DE_LEMBRETE_PULADO].sort());
+  });
+});
+
+describe("o agendamento mudou entre reivindicar e confirmar", () => {
+  it("confirmar recusou: não conta como enviado, conta como descartado (e audita)", async () => {
+    const { p, fila } = portas([ag()]);
+    p.confirmar.mockResolvedValue(false);
+    const r = await rodarLembretes(p, AGORA);
+    expect(fila).toHaveLength(1); // entrou — e a porta já a cancelou.
+    expect(r).toMatchObject({ enfileirados: 0, descartados: 1 });
+    // E NÃO devolve: devolver reabriria a linha para um lembrete do horário velho.
+    expect(p.devolver).not.toHaveBeenCalled();
+    expect(houveEfeito(r)).toBe(true);
+  });
+});
+
+describe("o varredor de presas — lembrete perdido não pode ser silencioso", () => {
+  const PRESA = { id: "ag-preso", organization_id: "org-1" };
+
+  it("presa: marca o motivo, abre UM aviso na Central e conta", async () => {
+    const { p } = portas([]);
+    p.presos.mockResolvedValue([PRESA]);
+    const r = await rodarLembretes(p, AGORA);
+    expect(p.marcarPreso).toHaveBeenCalledWith(PRESA);
+    expect(p.avisar).toHaveBeenCalledTimes(1);
+    expect(p.avisar.mock.calls[0]![0]).toEqual(PRESA);
+    expect(r.interrompidos).toBe(1);
+    expect(r.por_motivo).toEqual({ enfileiramento_interrompido: 1 });
+    expect(houveEfeito(r)).toBe(true);
+  });
+
+  it("marca ANTES de avisar — e não reenvia nada", async () => {
+    const ordem: string[] = [];
+    const { p, fila } = portas([]);
+    p.presos.mockResolvedValue([PRESA]);
+    p.marcarPreso.mockImplementation(async () => (ordem.push("marcar"), true));
+    p.avisar.mockImplementation(async () => void ordem.push("avisar"));
+    await rodarLembretes(p, AGORA);
+    expect(ordem).toEqual(["marcar", "avisar"]);
+    expect(fila).toHaveLength(0);
+    expect(p.reivindicar).not.toHaveBeenCalled();
+  });
+
+  it("outra rodada já marcou: sem aviso em dobro, sem contar", async () => {
+    const { p } = portas([]);
+    p.presos.mockResolvedValue([PRESA]);
+    p.marcarPreso.mockResolvedValue(false);
+    const r = await rodarLembretes(p, AGORA);
+    expect(p.avisar).not.toHaveBeenCalled();
+    expect(r.interrompidos).toBe(0);
+    expect(houveEfeito(r)).toBe(false);
+  });
+
+  it("varredor que falha conta falha e NÃO trava o lembrete dos outros", async () => {
+    const { p, fila } = portas([ag()]);
+    p.presos.mockRejectedValue(new Error("caiu"));
+    const r = await rodarLembretes(p, AGORA);
+    expect(fila).toHaveLength(1);
+    expect(r).toMatchObject({ enfileirados: 1, falhas: 1 });
+  });
+
+  it("o aviso da presa não nomeia provedor de canal", async () => {
+    const { p } = portas([]);
+    p.presos.mockResolvedValue([PRESA]);
+    await rodarLembretes(p, AGORA);
+    const [, titulo, corpo] = p.avisar.mock.calls[0]! as unknown as [unknown, string, string];
+    expect(`${titulo} ${corpo}`).not.toMatch(/waha|meta|zernio|stevo|cloud api/i);
   });
 });

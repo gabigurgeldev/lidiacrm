@@ -33,6 +33,12 @@
  * obrigatório —, porque fora de turno (servidor MCP externo) quem chama TEM de
  * dizer de quem é a consulta, e porque o escopo de funil
  * (`funil_vem_do_contato`) decide por esse campo.
+ *
+ * O mesmo vale para LER e MEXER: no turno, `crm_list_appointments` lista só os
+ * compromissos do contato da conversa (os recortes de equipe somem do schema —
+ * `CAMPOS_FECHADOS_NO_TURNO`), e remarcar/cancelar recusam compromisso de outro
+ * cliente (`recusaSeForDeOutroCliente`). Sem isso, o modelo via e mexia na agenda
+ * de outras pessoas a partir da conversa de uma.
  */
 import { z } from "zod";
 
@@ -55,7 +61,7 @@ import {
 } from "@/app/api/v1/agenda/agendamentos/_handler";
 import { ApiError } from "@/lib/api/types";
 import { SITUACOES_DO_AGENDAMENTO } from "@/lib/agenda/tipos";
-import type { McpToolDefinition } from "@/lib/mcp/types";
+import type { McpContext, McpToolDefinition } from "@/lib/mcp/types";
 
 /** Teto do horizonte pedido — espelha o da rota, e o excesso é erro de chamada. */
 const DIAS_PADRAO = 14;
@@ -350,6 +356,7 @@ export const crmListAppointments: McpToolDefinition<typeof listarShape> = {
     "situação de cada um e quem atende. Informe pelo menos um recorte: contact_id, lead_id, dia, " +
     "owner_user_id ou professional_id — sem recorte a chamada é recusada, porque varrer a agenda " +
     "inteira não responde pergunta nenhuma. " +
+    "DENTRO DE UMA CONVERSA, a lista é sempre a do cliente com quem você fala — chame sem recorte. " +
     "NÃO CONFUNDA COM `crm_list_followups`, que lista os RETORNOS — as vezes em que nós " +
     "decidimos voltar a falar, sem nada combinado com o cliente. Aqui é o que foi combinado " +
     "COM ele e ocupa o tempo de alguém da equipe. O mesmo cliente pode ter os dois. " +
@@ -525,6 +532,40 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
     ),
 };
 
+/**
+ * DENTRO DE UM TURNO, SÓ SE MEXE NO COMPROMISSO DE QUEM ESTÁ NA CONVERSA.
+ *
+ * Remarcar e cancelar recebem `appointment_id`, e o modelo pode tê-lo de
+ * qualquer lugar — de uma listagem antiga, de outro retorno, inventado. Sem
+ * esta checagem, o cliente A pedindo "desmarca minha consulta" podia desmarcar
+ * a do cliente B. O contato vem de `ctx.turno` (a conversa, fonte confiável),
+ * nunca de argumento.
+ *
+ * A recusa é `not_found`, igual a "não existe": dizer "existe, mas é de outra
+ * pessoa" confirmaria ao modelo — e ao cliente — que o id é de alguém.
+ *
+ * Fora do turno (servidor MCP externo) não há conversa, e nada muda.
+ */
+async function recusaSeForDeOutroCliente(
+  chave: "remarcado" | "cancelado",
+  appointmentId: string,
+  ctx: McpContext,
+): Promise<{ [k: string]: unknown; motivo: string; mensagem: string } | null> {
+  if (!ctx.turno) return null;
+  const { data, error } = await ctx.supabase
+    .from("calendar_appointments")
+    .select("contact_id")
+    .eq("organization_id", ctx.organizationId)
+    .eq("id", appointmentId)
+    .maybeSingle();
+  // Infra sobe — a mesma régua de `semDerrubarOTurno`: falha de banco não é
+  // limite de negócio, e engolir faria o worker achar que funcionou.
+  if (error) throw new Error(error.message);
+  const contato = (data as { contact_id: string | null } | null)?.contact_id ?? null;
+  if (contato === ctx.turno.contactId) return null;
+  return { [chave]: false, motivo: "not_found", mensagem: ENSINO_POR_CODIGO.not_found! };
+}
+
 const remarcarShape = {
   appointment_id: z.string().uuid(),
   new_starts_at: z.string().datetime({ offset: true }).describe("o novo início, vindo de `crm_find_free_slots`"),
@@ -547,6 +588,8 @@ export const crmRescheduleAppointment: McpToolDefinition<typeof remarcarShape> =
   requiresScope: "mcp:write",
   handler: async (input, ctx) =>
     semDerrubarOTurno("remarcado", async () => {
+      const alheio = await recusaSeForDeOutroCliente("remarcado", input.appointment_id, ctx);
+      if (alheio) return alheio;
       const r = await alterarAgendamentoHandler(
         ctx.supabase,
         { organization_id: ctx.organizationId, actor: ctx.actor, requestId: ctx.requestId },
@@ -586,6 +629,8 @@ export const crmCancelAppointment: McpToolDefinition<typeof cancelarShape> = {
   requiresScope: "mcp:write",
   handler: async (input, ctx) =>
     semDerrubarOTurno("cancelado", async () => {
+      const alheio = await recusaSeForDeOutroCliente("cancelado", input.appointment_id, ctx);
+      if (alheio) return alheio;
       const r = await cancelarAgendamentoHandler(
         ctx.supabase,
         { organization_id: ctx.organizationId, actor: ctx.actor, requestId: ctx.requestId },

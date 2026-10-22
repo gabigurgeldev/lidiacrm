@@ -1788,6 +1788,7 @@ export type Database = {
       }
       calendar_appointments: {
         Row: {
+          booked_at: string
           cancellation_reason: string | null
           cancelled_at: string | null
           contact_id: string | null
@@ -1826,6 +1827,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          booked_at?: string
           cancellation_reason?: string | null
           cancelled_at?: string | null
           contact_id?: string | null
@@ -1864,6 +1866,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          booked_at?: string
           cancellation_reason?: string | null
           cancelled_at?: string | null
           contact_id?: string | null
@@ -6979,6 +6982,16 @@ export type Database = {
           p_payload?: Json
         }
         Returns: string
+      }
+      fn_agenda_conferir_livre: {
+        Args: {
+          p_fim: string
+          p_ignorar: string
+          p_inicio: string
+          p_organization_id: string
+          p_profissionais: string[]
+        }
+        Returns: undefined
       }
       fn_agenda_marcar: {
         Args: {
