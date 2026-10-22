@@ -21,7 +21,7 @@
 /** 5 MB — o teto de imagem do WhatsApp, o mesmo do disparo em massa. */
 export const TAMANHO_MAXIMO_DA_FOTO = 5 * 1024 * 1024;
 
-/** Formatos que todo canal entrega como foto (WAHA, Meta, Zernio, Stevo). */
+/** Formatos que todo canal de mensagem entrega como foto. */
 export const FORMATOS_DE_FOTO = {
   "image/jpeg": "jpg",
   "image/png": "png",
