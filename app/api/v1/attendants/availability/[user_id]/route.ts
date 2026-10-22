@@ -10,6 +10,13 @@
  * ping de vida (o useHeartbeat/60s do inbox chama este PATCH). O cron
  * attendant-heartbeat marca offline quem não pinga há 15min.
  *
+ * `always_available` (migration 0244) tira a pessoa dessa varredura: ela fica
+ * disponível no horário mesmo com o CRM fechado. É decisão de quem gerencia a
+ * equipe, então só manager+ muda — o atendente que pudesse ligá-la em si mesmo
+ * receberia leads de madrugada sem ninguém ter decidido isso. Ligar a opção
+ * também liga a pessoa (is_available=true): quem marca "sempre disponível"
+ * espera vê-la recebendo agora, não depois do próximo login dela.
+ *
  * org_id de fonte confiável (activeOrg do cookie), NUNCA do body. Upsert por
  * unique(organization_id, user_id).
  */
@@ -27,7 +34,7 @@ import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 const SELECT_COLS =
-  "user_id, is_available, capacity, schedule, notification_phone, last_heartbeat_at, updated_at";
+  "user_id, is_available, always_available, capacity, schedule, notification_phone, last_heartbeat_at, updated_at";
 
 export async function PATCH(
   req: NextRequest,
@@ -64,6 +71,15 @@ export async function PATCH(
     throw err;
   }
 
+  if (input.always_available !== undefined && !isManager) {
+    return fail(
+      "forbidden_role",
+      "Só um manager pode deixar um atendente sempre disponível.",
+      403,
+      { requestId },
+    );
+  }
+
   const supabase = await createClient();
 
   // Manager alterando outro: alvo tem que ser membro da org (evita linha órfã;
@@ -90,8 +106,14 @@ export async function PATCH(
   if (input.capacity !== undefined) patch.capacity = input.capacity;
   if (input.schedule !== undefined) patch.schedule = input.schedule;
   if (input.notification_phone !== undefined) patch.notification_phone = input.notification_phone;
+  if (input.always_available !== undefined) patch.always_available = input.always_available;
+  // Ligar "sempre disponível" liga a pessoa agora — salvo se o mesmo corpo
+  // pediu explicitamente para deixá-la offline.
+  if (input.always_available === true && input.is_available === undefined) {
+    patch.is_available = true;
+  }
   // "online" = ping de vida (heartbeat AT-08).
-  if (input.is_available === true) patch.last_heartbeat_at = now;
+  if (patch.is_available === true) patch.last_heartbeat_at = now;
 
   const { data: row, error } = await supabase
     .from("attendant_availability")
@@ -112,7 +134,8 @@ export async function PATCH(
       target_user_id: targetUserId,
       changed_by_self: isSelf,
       fields_changed: Object.keys(input),
-      is_available: input.is_available ?? null,
+      is_available: (patch.is_available as boolean | undefined) ?? null,
+      always_available: input.always_available ?? null,
     },
   });
 

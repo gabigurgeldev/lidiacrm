@@ -5558,6 +5558,11 @@ export const DICIONARIO: Traducoes = {
   "Capacidade": { es: "Capacidad" },
   "Horário": { es: "Horario" },
   "Disponível": { es: "Disponible" },
+  "Sempre disponível": { es: "Siempre disponible" },
+  "Disponível no horário": { es: "Disponible en su horario" },
+  "Fica disponível no horário mesmo com o CRM fechado": {
+    es: "Queda disponible en su horario aunque el CRM esté cerrado",
+  },
   "Capacidade de": { es: "Capacidad de" },
   "Editar horário de": { es: "Editar horario de" },
   "Disponibilidade de": { es: "Disponibilidad de" },

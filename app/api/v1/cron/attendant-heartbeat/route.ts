@@ -10,6 +10,11 @@
  * O cutoff (now − timeout) e o predicado de "velho" são lógica pura em
  * lib/routing/eligibility.ts (isHeartbeatStale), testada com clock mockado — a
  * regra dos 15min é constante NOMEADA única, não número mágico espalhado.
+ *
+ * Quem tem `always_available` (migration 0244) fica de fora: a equipe que
+ * atende pelo celular não mantém o CRM aberto, e derrubá-la aqui deixava o
+ * rodízio sem ninguém elegível. O horário e a capacidade continuam valendo
+ * para ela — quem decide isso é `isAttendantEligible`, não este cron.
  */
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
@@ -41,6 +46,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     .from("attendant_availability")
     .update({ is_available: false, updated_at: new Date().toISOString() })
     .eq("is_available", true)
+    .eq("always_available", false)
     .or(`last_heartbeat_at.is.null,last_heartbeat_at.lt.${cutoff}`)
     .select("user_id");
 

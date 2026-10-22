@@ -13,6 +13,8 @@ export interface AttendantAvailability {
   name: string | null;
   email: string | null;
   is_available: boolean;
+  /** Fica disponível no horário mesmo com o CRM fechado (o cron não a desliga). */
+  always_available: boolean;
   /** null = atendente ainda sem linha de availability (nunca configurado). */
   capacity: number | null;
   schedule: AvailabilitySchedule;
@@ -42,6 +44,8 @@ export interface AvailabilityUpdate {
   capacity?: number;
   schedule?: AvailabilitySchedule;
   notification_phone?: string | null;
+  /** Só manager+ — a API recusa o próprio atendente. */
+  always_available?: boolean;
 }
 
 /** PATCH disponibilidade de um atendente (próprio OU manager+; a API enforça). */

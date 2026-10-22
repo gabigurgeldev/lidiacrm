@@ -19,12 +19,14 @@ import { isAttendantEligible, OPEN_LOAD_STATUSES } from "@/lib/routing/eligibili
 import { availabilityScheduleSchema } from "@/lib/schemas/routing";
 
 const COLUNAS_DISPONIBILIDADE =
-  "user_id, is_available, capacity, schedule, last_heartbeat_at, updated_at";
+  "user_id, is_available, always_available, capacity, schedule, last_heartbeat_at, updated_at";
 
 export interface AtendenteDoRoster {
   userId: string;
   papel: Role;
   disponivel: boolean;
+  /** Fica disponível no horário mesmo sem sinal de vida (o cron não a desliga). */
+  sempreDisponivel: boolean;
   /** null quando a pessoa nunca configurou disponibilidade. */
   capacidade: number | null;
   agenda: unknown;
@@ -68,6 +70,7 @@ export async function carregarRosterDeAtendimento(
   type LinhaDisponibilidade = {
     user_id: string;
     is_available: boolean;
+    always_available: boolean;
     capacity: number;
     schedule: unknown;
     last_heartbeat_at: string | null;
@@ -100,6 +103,7 @@ export async function carregarRosterDeAtendimento(
       userId: m.user_id,
       papel: m.role,
       disponivel: a?.is_available ?? false,
+      sempreDisponivel: a?.always_available ?? false,
       capacidade: a?.capacity ?? null,
       agenda: a?.schedule ?? { timezone: "America/Sao_Paulo", windows: [] },
       ultimoSinalDeVida: a?.last_heartbeat_at ?? null,

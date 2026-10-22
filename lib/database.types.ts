@@ -1513,6 +1513,7 @@ export type Database = {
       }
       attendant_availability: {
         Row: {
+          always_available: boolean
           capacity: number
           id: string
           is_available: boolean
@@ -1523,6 +1524,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          always_available?: boolean
           capacity?: number
           id?: string
           is_available?: boolean
@@ -1533,6 +1535,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          always_available?: boolean
           capacity?: number
           id?: string
           is_available?: boolean

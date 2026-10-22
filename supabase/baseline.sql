@@ -24088,6 +24088,15 @@ create trigger trg_ai_agent_versions_content_immutable
   before update on public.ai_agent_versions
   for each row execute function fn_ai_agent_version_content_immutable();
 
+-- ---- atendente sempre disponível no horário (migration 0244) ----
+-- Ver o cabeçalho de supabase/migrations/20261022120000_0244_atendente_sempre_disponivel.sql.
+-- Coluna nova com default: nenhuma linha existente muda de comportamento. Idempotente.
+alter table public.attendant_availability
+  add column if not exists always_available boolean not null default false;
+
+comment on column public.attendant_availability.always_available is
+  'true = o cron attendant-heartbeat não desliga esta pessoa por falta de sinal de vida; ela fica disponível durante o horário (schedule) mesmo com o CRM fechado. Ligado por manager+.';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

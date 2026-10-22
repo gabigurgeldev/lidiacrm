@@ -122,6 +122,7 @@ describe("GET /api/v1/attendants/availability", () => {
     // campo a menos aqui é uma coluna vazia na tela, sem erro nenhum.
     expect(Object.keys(body.data[0] ?? {}).sort()).toEqual(
       [
+        "always_available",
         "capacity",
         "current_load",
         "email",

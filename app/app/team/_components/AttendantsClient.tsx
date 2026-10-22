@@ -91,7 +91,14 @@ function summarizeSchedule(windows: ScheduleWindow[], t: (texto: string) => stri
 }
 
 function StatusBadge({ attendant, now }: { attendant: Attendant; now: Date }) {
+  const t = useT();
   const a = attendant.availability;
+  // Quem é "sempre disponível" não manda sinal de vida — e não precisa: o cron
+  // não a derruba. Medir o sinal aqui a mostraria offline enquanto o rodízio a
+  // escolhe.
+  if (a?.is_available && a.always_available) {
+    return <Badge variant="default">{t("Disponível no horário")}</Badge>;
+  }
   const online = !!a?.is_available && !isHeartbeatStale(a.last_heartbeat_at, now);
   return online ? (
     <Badge variant="default">Online</Badge>
@@ -441,6 +448,14 @@ export function AttendantsClient({ canManage }: Props) {
                 <TableHead>Capacidade</TableHead>
                 <TableHead>{t("Horário")}</TableHead>
                 {canManage ? <TableHead className="w-[120px]">{t("Disponível")}</TableHead> : null}
+                {canManage ? (
+                  <TableHead
+                    className="w-[140px]"
+                    title={t("Fica disponível no horário mesmo com o CRM fechado")}
+                  >
+                    {t("Sempre disponível")}
+                  </TableHead>
+                ) : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -507,6 +522,18 @@ export function AttendantsClient({ canManage }: Props) {
                           aria-label={`Disponibilidade de ${a.name}`}
                           onCheckedChange={(v) =>
                             patch.mutate({ userId: a.userId, patch: { is_available: v } })
+                          }
+                        />
+                      </TableCell>
+                    ) : null}
+                    {canManage ? (
+                      <TableCell>
+                        <Switch
+                          checked={!!a.availability?.always_available}
+                          aria-label={`${t("Sempre disponível")}: ${a.name}`}
+                          data-testid="atendente-sempre-disponivel"
+                          onCheckedChange={(v) =>
+                            patch.mutate({ userId: a.userId, patch: { always_available: v } })
                           }
                         />
                       </TableCell>
