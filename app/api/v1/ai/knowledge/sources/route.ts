@@ -129,7 +129,20 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (tipo === null) {
     return fail(
       "validation_failed",
-      `Tipo de material desconhecido: "${input.source_type}". Use faq, documento, conversas ou catalogo.`,
+      `Tipo de material desconhecido: "${input.source_type}". Use faq, documento, conversas ou catalogo (foto entra pelo envio de foto).`,
+      422,
+      { requestId },
+    );
+  }
+
+  // Foto não nasce por JSON: sem arquivo, o material seria uma foto que não
+  // existe — e, sem esta recusa, cairia no `criarMaterialDeTexto` abaixo como
+  // FAQ vazia. O arquivo, a conferência de formato e a pasta da organização
+  // moram na rota de envio de foto.
+  if (tipo === "imagem") {
+    return fail(
+      "unprocessable_entity",
+      "Foto entra pelo envio de foto (/api/v1/ai/knowledge/sources/imagem), com o arquivo e a descrição.",
       422,
       { requestId },
     );

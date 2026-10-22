@@ -23,6 +23,13 @@ import {
 import { motivoDeVozNaoEnviavel } from "@/lib/channels/voz";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
 import { conferirDefinicao } from "@/lib/channels/conferir-definicao";
+import {
+  caminhoDaOrigemValido,
+  CHAVES_DE_MIDIA_COMPARTILHADA,
+  ORIGENS_DE_MIDIA_COMPARTILHADA,
+  type OrigemDeMidiaCompartilhada,
+} from "@/lib/messaging/media/midia-compartilhada";
+import { caminhoDeMaterialValido } from "@/lib/ai/rag/imagem";
 import { isMediaPathOwnedBy } from "@/lib/messaging/media/upload-validation";
 import { videoJaPronto } from "@/lib/messaging/media/video-whatsapp";
 import {
@@ -279,13 +286,18 @@ function extendBotSilence(current: string | null, now: string): string | undefin
  */
 export interface OpcoesDeEnvio {
   /**
-   * O arquivo do DISPARO EM MASSA: um só, em `<org>/disparos/…`, compartilhado
-   * por todas as mensagens da campanha. Não entra em `media_storage_path` — a
-   * anonimização LGPD apaga todo `media_storage_path` das mensagens do contato,
-   * e apagaria o arquivo da campanha inteira por causa de um destinatário. Fica
-   * em `metadata.midia_do_disparo`, que é de onde a tela o assina para mostrar.
+   * Um arquivo da ORGANIZAÇÃO, não da conversa: a mídia do DISPARO EM MASSA
+   * (`<org>/disparos/…`, compartilhada por toda a campanha) ou a FOTO DO ACERVO
+   * que o agente envia (`<org>/materiais/…`, compartilhada por todo cliente).
+   * Não entra em `media_storage_path` — a anonimização LGPD apaga todo
+   * `media_storage_path` das mensagens do contato, e apagaria o arquivo de todos
+   * por causa de um. Fica numa chave de metadata por origem
+   * (`lib/messaging/media/midia-compartilhada.ts`), que é de onde a tela o assina.
+   *
+   * `origem` ausente = `disparo`: o disparo em massa chama sem ela, e continua
+   * exatamente como era.
    */
-  midiaCompartilhada?: { path: string; mime: string };
+  midiaCompartilhada?: { path: string; mime: string; origem?: OrigemDeMidiaCompartilhada };
   /**
    * Nome da ASSINATURA do atendente (`lib/assinatura-do-atendente`). Só a rota
    * do inbox passa, e com o nome do JWT validado — nunca do body. Agendada,
@@ -293,6 +305,22 @@ export interface OpcoesDeEnvio {
    * isso saem sem assinatura.
    */
   assinarComo?: string | null;
+}
+
+/**
+ * A metadata que o CHAMADOR mandou, sem as chaves de mídia compartilhada.
+ *
+ * Essas chaves são o caminho de um arquivo que a tela assina com a service role
+ * (`app/api/v1/messages/[id]/media`). Se a API pública pudesse escrevê-las, um
+ * `midia_do_material` forjado faria a bolha mostrar um arquivo que esta
+ * mensagem nunca enviou. Só `opcoes.midiaCompartilhada` — que o Zod não alcança
+ * — as escreve, e só depois de conferir a pasta.
+ */
+function semChavesDoServidor(metadata: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!metadata) return {};
+  const limpa: Record<string, unknown> = { ...metadata };
+  for (const chave of CHAVES_DE_MIDIA_COMPARTILHADA) delete limpa[chave];
+  return limpa;
 }
 
 /** Tipos cujo corpo é texto que o cliente LÊ: a mensagem ou a legenda da mídia. */
@@ -371,16 +399,29 @@ export async function sendMessageHandler(
     );
   }
 
-  // Mídia compartilhada só da PRÓPRIA organização, e só da pasta de disparos:
-  // o envio assina a URL com a service role, que não passa pela RLS do Storage.
+  // Mídia compartilhada só da PRÓPRIA organização, e só da pasta DA ORIGEM
+  // declarada: o envio assina a URL com a service role, que não passa pela RLS
+  // do Storage. A pasta é por origem para que um material não sirva de porta
+  // para mandar o arquivo de uma campanha, e vice-versa.
   const midiaCompartilhada = opcoes.midiaCompartilhada ?? null;
-  if (midiaCompartilhada && !midiaCompartilhada.path.startsWith(`${c.organization_id}/disparos/`)) {
+  const origemDaMidia: OrigemDeMidiaCompartilhada = midiaCompartilhada?.origem ?? "disparo";
+  // Foto do acervo confere a forma INTEIRA (`{org}/materiais/{uuid}.{ext}`), não só a
+  // pasta: hoje só o resolvedor do agente preenche este campo, e a conferência aqui
+  // é a segunda trava antes da assinatura com a service role.
+  if (
+    midiaCompartilhada &&
+    (!caminhoDaOrigemValido(midiaCompartilhada.path, c.organization_id, origemDaMidia) ||
+      (origemDaMidia === "material" &&
+        !caminhoDeMaterialValido(midiaCompartilhada.path, c.organization_id)))
+  ) {
     throw new ApiError(
       422,
       "invalid_media_path",
       undefined,
       ctx.requestId,
-      "Arquivo do disparo fora da organização.",
+      origemDaMidia === "material"
+        ? "Foto do acervo fora da organização."
+        : "Arquivo do disparo fora da organização.",
     );
   }
   const caminhoDaMidia = input.media_storage_path ?? midiaCompartilhada?.path ?? null;
@@ -589,9 +630,11 @@ export async function sendMessageHandler(
     sent_by_user_id: ctx.actor.type === "user" ? ctx.actor.id : null,
     sent_at: now,
     metadata: {
-      ...(input.metadata ?? {}),
+      ...semChavesDoServidor(input.metadata),
       ...(ctx.actor.type === "ai_agent" ? { ai_actor_id: ctx.actor.id } : {}),
-      ...(midiaCompartilhada ? { midia_do_disparo: midiaCompartilhada.path } : {}),
+      ...(midiaCompartilhada
+        ? { [ORIGENS_DE_MIDIA_COMPARTILHADA[origemDaMidia].chave]: midiaCompartilhada.path }
+        : {}),
       ...metadataDasOpcoes,
       ...metadataDaAssinatura,
     },

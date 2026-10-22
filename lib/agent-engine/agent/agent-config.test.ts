@@ -76,3 +76,23 @@ describe('loadPublishedAgentConfigById', () => {
     expect(cfg?.ragSimilarityThreshold).toBe(0.8);
   });
 });
+
+describe('temFotosNoAcervo — o gate do send_image', () => {
+  it('true só quando a subquery acha foto ativa; ausente/nulo = sem foto', async () => {
+    expect((await loadPublishedAgentConfig(poolWith({ ...baseRow, tem_fotos_no_acervo: true }), 'org1', 'cs1'))?.temFotosNoAcervo).toBe(true);
+    expect((await loadPublishedAgentConfig(poolWith({ ...baseRow, tem_fotos_no_acervo: false }), 'org1', 'cs1'))?.temFotosNoAcervo).toBe(false);
+    expect((await loadPublishedAgentConfig(poolWith(baseRow), 'org1', 'cs1'))?.temFotosNoAcervo).toBe(false);
+  });
+
+  it('a subquery usa o MESMO filtro de quem envia (fotos-do-material.ts) e a org do agente', async () => {
+    const pool = poolWith(baseRow);
+    await loadPublishedAgentConfig(pool, 'org1', 'cs1');
+    const [sql] = (pool.query as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    const sub = sql.slice(sql.indexOf('from ai_knowledge_sources s'), sql.indexOf('as tem_fotos_no_acervo'));
+    expect(sub).toMatch(/s\.organization_id = a\.organization_id/);
+    expect(sub).toMatch(/s\.id = any\(coalesce\(v\.knowledge_source_ids/);
+    expect(sub).toMatch(/s\.source_type = 'imagem'/);
+    expect(sub).toMatch(/s\.is_active/);
+    expect(sub).toMatch(/s\.status <> 'archived'/);
+  });
+});
