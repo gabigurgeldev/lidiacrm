@@ -93,6 +93,21 @@ export interface SendMessageInput {
    * avaliaram, e o que sai se a conexão não desenhar enquete nem lista.
    */
   opcoes?: OpcoesDoEnvio;
+  /**
+   * Presente = sai uma FOTO DO ACERVO com o `body` como legenda (`send_image`).
+   * O `path` já foi conferido contra `{org}/materiais/` por quem resolveu a foto,
+   * e o handler confere de novo antes de assinar a URL. Nunca vira voz: uma foto
+   * não se fala.
+   */
+  imagem?: ImagemDoEnvio;
+}
+
+/** A foto do acervo que o agente pediu, já resolvida (`fotos-do-material.ts`). */
+export interface ImagemDoEnvio {
+  materialId: string;
+  path: string;
+  mime: string;
+  nome: string;
 }
 
 /** Pedido de opções tocáveis do agente — `tipo` é o formato PEDIDO, não o que sai. */
@@ -115,7 +130,7 @@ export async function sendTurnMessage(
   cfg: CrmEdgeConfig,
   input: SendMessageInput,
 ): Promise<SendOutcome> {
-  const bodyHash = createHash('sha256').update(input.body).digest('hex');
+  const bodyHash = hashDaIntencao(input);
   const ledger = await claimLedgerRow(db, input, bodyHash);
   if (ledger.shortCircuit) {
     return ledger.shortCircuit;
@@ -138,8 +153,9 @@ export async function sendTurnMessage(
   }
 
   // Voz (migration 0222): sintetiza DEPOIS do claim e do replay — o retry de
-  // uma mensagem que já saiu não paga outra síntese.
-  const voz = input.voice ? await prepararNotaDeVoz(db, cfg, input, idempotencyKey) : null;
+  // uma mensagem que já saiu não paga outra síntese. Foto nunca vira voz: a
+  // legenda é o rótulo da imagem, e um áudio no lugar dela perderia a foto.
+  const voz = input.voice && !input.imagem ? await prepararNotaDeVoz(db, cfg, input, idempotencyKey) : null;
 
   let message: Message;
   try {
@@ -165,6 +181,14 @@ export async function sendTurnMessage(
                 type: input.opcoes.tipo,
                 opcoes: { pergunta: input.opcoes.pergunta, opcoes: input.opcoes.opcoes },
               }
+          : input.imagem
+            ? {
+                // SEM `media_storage_path` de propósito: o caminho vai pela opção
+                // interna abaixo, e é isso que tira a foto do alcance do redact
+                // da LGPD — que apaga todo `media_storage_path` do contato, e
+                // apagaria a foto que a empresa manda a todos os clientes.
+                type: 'image' as const,
+              }
           : voz?.kind === 'audio'
             ? {
                 type: 'audio' as const,
@@ -175,8 +199,17 @@ export async function sendTurnMessage(
         // Em áudio, o `body` vira a transcrição da nota de voz — é o que a
         // conversa mostra e o que o próximo turno lê como histórico.
         body: input.body,
-        metadata: { idempotency_key: idempotencyKey, ...(voz ? { voz: voz.registro } : {}) },
+        metadata: {
+          idempotency_key: idempotencyKey,
+          ...(voz ? { voz: voz.registro } : {}),
+          // Qual material saiu, em nome legível — a timeline e o diagnóstico
+          // respondem "que foto o agente mandou?" sem abrir o Storage.
+          ...(input.imagem ? { material: { id: input.imagem.materialId, nome: input.imagem.nome } } : {}),
+        },
       },
+      input.imagem
+        ? { midiaCompartilhada: { path: input.imagem.path, mime: input.imagem.mime, origem: 'material' } }
+        : {},
     );
   } catch (err) {
     if (err instanceof ApiError && err.status === 403) {
@@ -195,6 +228,20 @@ export async function sendTurnMessage(
   }
 
   return reconcile(db, idempotencyKey, message.id, message.status);
+}
+
+/**
+ * O hash gravado no ledger: o que identifica a INTENÇÃO deste envio.
+ *
+ * Com foto, o material entra junto da legenda. Sem isso, duas fotos diferentes
+ * com a mesma legenda ("Olha essa!") teriam o mesmo hash, e quem audita o ledger
+ * não distinguiria uma da outra. O separador NUL não aparece em texto de
+ * WhatsApp, então legenda nenhuma imita o sufixo.
+ */
+function hashDaIntencao(input: SendMessageInput): string {
+  const h = createHash('sha256').update(input.body);
+  if (input.imagem) h.update(`\u0000material:${input.imagem.materialId}`);
+  return h.digest('hex');
 }
 
 type NotaDeVoz =

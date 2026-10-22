@@ -24088,6 +24088,14 @@ create trigger trg_ai_agent_versions_content_immutable
   before update on public.ai_agent_versions
   for each row execute function fn_ai_agent_version_content_immutable();
 
+-- ---- material do tipo foto no acervo do agente (migration 0244) ----
+-- Ver o cabeçalho de supabase/migrations/20261022120000_0244_material_do_tipo_foto.sql.
+-- Sem DDL: `source_type` é vocabulário aberto desde a 0181. Só o comentário da
+-- coluna deixa de listar os tipos e aponta para lib/ai/rag/tipos-de-fonte.ts.
+-- Idempotente.
+comment on column public.ai_knowledge_sources.source_type is
+  'Vocabulário ABERTO (sem CHECK, precedente da 0127). Os tipos aceitos, o que a tela oferece e como cada um é ingerido vivem em lib/ai/rag/tipos-de-fonte.ts — é lá que se confere, não aqui. Valor sem caminho de ingestão falha no indexador com motivo escrito na própria fonte.';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

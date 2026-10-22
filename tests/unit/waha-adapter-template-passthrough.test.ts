@@ -92,3 +92,16 @@ describe("WahaChannelAdapter — o template não pode cair no caminho", () => {
     expect(recebido.template).toBeUndefined();
   });
 });
+
+describe("WahaChannelAdapter — a foto do acervo também atravessa inteira", () => {
+  // Mesma armadilha do template: `imagem` é opcional dos dois lados, então um
+  // refactor que destrinche o `input` derruba a foto e compila — e o cliente
+  // recebe só a legenda.
+  it("repassa a foto ao sink com material, caminho, formato e nome", async () => {
+    const imagem = { materialId: "mat-1", path: "org-1/materiais/x.jpg", mime: "image/jpeg", nome: "Areia" };
+    await adapter().send(envio({ imagem }));
+
+    const recebido = sendTurnMessage.mock.calls[0]?.[2] as { imagem?: unknown };
+    expect(recebido.imagem).toEqual(imagem);
+  });
+});

@@ -269,6 +269,7 @@ jobs:
         automacao-diz-a-verdade.spec.ts
         inbox-quem-manda.spec.ts
         acervo-de-conhecimento.spec.ts
+        acervo-foto.spec.ts
         agenda-kit-visual.spec.ts
         agenda-conectar-google.spec.ts
         flow-blocos-do-paralelo.spec.ts

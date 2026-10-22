@@ -15,12 +15,20 @@ import { useT } from "@/hooks/i18n/useT";
  * o que o agente aprendeu, editar (quando é texto colado), preparar de novo, e
  * arquivar. O que o cartão NÃO oferece é o que aquele tipo de material não
  * aceita — controle que não controla nada gasta a confiança de quem clicou.
+ *
+ * FOTO (`imagem`): o cartão mostra a miniatura e a DESCRIÇÃO, porque é a
+ * descrição que o agente busca — uma foto com a descrição errada é uma foto que
+ * nunca sai. A miniatura vem de `GET …/sources/{id}/imagem`, que redireciona
+ * para uma URL assinada; o `<img>` cru (e não `next/image`) é porque o destino
+ * é o Storage da instalação, cujo domínio muda a cada self-host.
  */
 import { useState } from "react";
 import {
   BookOpen,
   FileText,
   HelpCircle,
+  ImageIcon,
+  ImageOff,
   MessageSquare,
   Package,
   RefreshCw,
@@ -32,16 +40,19 @@ import { Button } from "@/components/ui/button";
 import { SourceStatusBadge, deriveBadgeStatus } from "@/components/ai/SourceStatusBadge";
 import { TrechosDoMaterialDialog } from "@/components/ai/TrechosDoMaterialDialog";
 import { EditarFaqDialog } from "@/components/ai/EditarFaqDialog";
+import { EditarDescricaoDaFotoDialog } from "@/components/ai/EditarDescricaoDaFotoDialog";
 import {
   TIPO_DE_FONTE_POR_ID,
   canonizarTipoDeFonte,
   aceitaTextoColado,
+  eImagem,
 } from "@/lib/ai/rag/tipos-de-fonte";
-import type { SourceRow } from "@/hooks/ai/useKnowledgeSources";
+import { descricaoDaFoto, type SourceRow } from "@/hooks/ai/useKnowledgeSources";
 
 const ICONE_POR_TIPO: Record<string, typeof HelpCircle> = {
   faq: HelpCircle,
   documento: FileText,
+  imagem: ImageIcon,
   conversas: MessageSquare,
   catalogo: Package,
 };
@@ -86,6 +97,8 @@ export function KnowledgeSourceCard({
   const tagDoIdioma = useTagDeIdioma();
   const [vendoTrechos, setVendoTrechos] = useState(false);
   const [editando, setEditando] = useState(false);
+  const [editandoDescricao, setEditandoDescricao] = useState(false);
+  const [fotoQuebrou, setFotoQuebrou] = useState(false);
 
   const tipo = canonizarTipoDeFonte(source.source_type) ?? "faq";
   const meta = TIPO_DE_FONTE_POR_ID.get(tipo);
@@ -96,6 +109,8 @@ export function KnowledgeSourceCard({
   const mostraErro =
     (derived === "failed" || derived === "sem_credencial") && source.last_index_error;
   const temTrechos = (source.chunks_count ?? 0) > 0;
+  const foto = eImagem(tipo);
+  const descricao = foto ? descricaoDaFoto(source) : "";
 
   return (
     <Card className="flex h-full flex-col" data-testid={`material-${source.id}`}>
@@ -113,6 +128,47 @@ export function KnowledgeSourceCard({
       </CardHeader>
 
       <CardContent className="flex-1 space-y-2 text-sm">
+        {foto ? (
+          <div className="space-y-2" data-testid={`material-foto-${source.id}`}>
+            {/* Proporção fixa: com a altura da foto, os cartões da grade ficariam
+                cada um de um tamanho e a linha de ações dançaria. */}
+            <div className="aspect-[4/3] overflow-hidden rounded-md border border-border bg-surface">
+              {fotoQuebrou ? (
+                <div
+                  className="flex h-full flex-col items-center justify-center gap-1 text-xs text-text-muted"
+                  data-testid={`material-foto-indisponivel-${source.id}`}
+                >
+                  <ImageOff className="h-5 w-5" aria-hidden />
+                  {t("Não consegui carregar a foto.")}
+                </div>
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element -- a URL é um 302 para o Storage da instalação, de domínio variável; ver o cabeçalho
+                <img
+                  src={`/api/v1/ai/knowledge/sources/${source.id}/imagem`}
+                  alt={source.name}
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                  data-testid={`material-miniatura-${source.id}`}
+                  onError={() => setFotoQuebrou(true)}
+                />
+              )}
+            </div>
+            {descricao ? (
+              <p
+                className="line-clamp-3 whitespace-pre-wrap break-words text-text-muted"
+                title={descricao}
+                data-testid={`material-descricao-${source.id}`}
+              >
+                {descricao}
+              </p>
+            ) : (
+              <p className="text-warning-fg" data-testid={`material-sem-descricao-${source.id}`}>
+                {t("Sem descrição — o agente não tem como encontrar esta foto.")}
+              </p>
+            )}
+          </div>
+        ) : null}
+
         <div className="flex items-baseline justify-between">
           <span className="text-text-muted">{t("Preparado")}</span>
           <span>{formatRelative(source.last_indexed_at, tagDoIdioma, t)}</span>
@@ -200,6 +256,31 @@ export function KnowledgeSourceCard({
                 nome={source.name}
                 aberto
                 onFechar={() => setEditando(false)}
+                onSalvo={onMudou}
+              />
+            ) : null}
+          </>
+        ) : null}
+
+        {foto && !arquivado ? (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setEditandoDescricao(true)}
+              data-testid={`material-editar-descricao-${source.id}`}
+            >
+              {t("Editar descrição")}
+            </Button>
+            {/* Montado só quando aberto, como o de FAQ: assim o campo nasce com a
+                descrição ATUAL, e não com a que estava na tela no primeiro render. */}
+            {editandoDescricao ? (
+              <EditarDescricaoDaFotoDialog
+                sourceId={source.id}
+                nome={source.name}
+                descricaoAtual={descricao}
+                aberto
+                onFechar={() => setEditandoDescricao(false)}
                 onSalvo={onMudou}
               />
             ) : null}

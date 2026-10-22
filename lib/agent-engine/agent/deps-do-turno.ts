@@ -41,6 +41,7 @@ export function montarDepsDoTurno(env: Env, log: Logger): FollowupTurnDeps {
       notesIndexMaxTokens: env.LEAD_NOTES_INDEX_MAX_TOKENS,
       maxSteps: env.AGENT_MAX_STEPS,
       maxSendsPerTurn: env.MAX_SENDS_PER_TURN,
+      maxImagesPerTurn: env.MAX_IMAGES_PER_TURN,
       queuedRetryDelayMs: env.SEND_QUEUED_RETRY_MS,
       breaker: {
         exactFailureWarn: env.TOOL_BREAKER_EXACT_WARN,

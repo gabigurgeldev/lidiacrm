@@ -22,11 +22,22 @@ import { useT } from "@/hooks/i18n/useT";
  *  3. **Mostra o material que ainda não foi preparado.** Marcar um material que
  *     não virou trecho nenhum é uma promessa que não se cumpre — ele aparece na
  *     lista e o agente não acha nada nele.
+ *
+ * Foto (`imagem`) leva um selo: é o único material que o agente não só LÊ
+ * como também ENVIA ao cliente. Marcar uma foto aqui é autorizar o envio dela,
+ * e isso precisa estar escrito no lugar em que se marca.
  */
 import * as React from "react";
 import Link from "next/link";
 
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { canonizarTipoDeFonte, eImagem } from "@/lib/ai/rag/tipos-de-fonte";
+
+/** Canoniza antes: um clone pode ter a linha com o nome velho (`image`, `foto`). */
+function eFoto(sourceType: string): boolean {
+  return eImagem(canonizarTipoDeFonte(sourceType) ?? "");
+}
 
 export interface MaterialDoAcervo {
   id: string;
@@ -58,6 +69,7 @@ export function BasesDoAgente({ materiais, value, onChange, disabled = false }: 
     (m) => marcados.has(m.id) && (m.chunks_count ?? 0) === 0,
   );
   const acervoTodoDeFora = materiais.length > 0 && value.length === 0;
+  const temFoto = materiais.some((m) => eFoto(m.source_type));
 
   return (
     <div className="ios-grupo space-y-3 p-4">
@@ -101,6 +113,15 @@ export function BasesDoAgente({ materiais, value, onChange, disabled = false }: 
               />
               <Label htmlFor={`base-${m.id}`} className="text-sm font-normal">
                 {m.name}
+                {eFoto(m.source_type) ? (
+                  <Badge
+                    variant="secondary"
+                    className="ml-2 align-middle text-[10px]"
+                    data-testid={`base-foto-${m.id}`}
+                  >
+                    {t("foto")}
+                  </Badge>
+                ) : null}
                 {/* Singular e plural viram CHAVES separadas em vez de um sufixo
                     concatenado: em português o plural de "trecho" é +s, em
                     espanhol "fragmento"/"fragmentos" muda a palavra inteira, e
@@ -115,6 +136,14 @@ export function BasesDoAgente({ materiais, value, onChange, disabled = false }: 
           ))}
         </div>
       )}
+
+      {temFoto ? (
+        <p data-testid="agente-bases-dica-foto" className="text-xs text-muted-foreground">
+          {t(
+            "Fotos marcadas podem ser enviadas por ele ao cliente no WhatsApp, quando a conversa pedir — ele escolhe pela descrição.",
+          )}
+        </p>
+      ) : null}
 
       {value.length === 0 && materiais.length > 0 ? (
         <p data-testid="agente-sem-base-marcada" className="text-xs text-muted-foreground">

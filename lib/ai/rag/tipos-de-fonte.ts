@@ -35,6 +35,14 @@ export type ComoSePreenche =
    * pessoa que cola a política de troca não quer saber a diferença.
    */
   | "arquivo_ou_texto"
+  /**
+   * A pessoa envia UMA foto e escreve o que ela mostra.
+   *
+   * A descrição é obrigatória e é ela que o agente busca: o modelo não vê a
+   * foto ao procurar no acervo, só o texto. Sem descrição, a foto seria
+   * inalcançável — por isso o indexador recusa a fonte em vez de indexar vazio.
+   */
+  | "imagem_com_descricao"
   /** Uma rotina do sistema alimenta sozinha; não há o que colar. */
   | "automatico";
 
@@ -67,6 +75,13 @@ export const TIPOS_DE_FONTE = [
     oQueE:
       "Um texto do seu negócio — política de troca, tabela de preços, manual, contrato. Envie o arquivo (PDF, Markdown ou texto) ou cole o conteúdo.",
     comoSePreenche: "arquivo_ou_texto",
+  },
+  {
+    id: "imagem",
+    rotulo: "Foto",
+    oQueE:
+      "Uma foto do seu negócio — produto, modelo, cartela de cores — com a descrição do que ela mostra. O agente encontra a foto pela descrição e pode enviá-la ao cliente no WhatsApp.",
+    comoSePreenche: "imagem_com_descricao",
   },
   {
     id: "conversas",
@@ -118,6 +133,10 @@ export function canonizarTipoDeFonte(bruto: string): TipoDeFonteId | null {
     case "documento":
     case "policy":
       return "documento";
+    case "imagem":
+    case "image":
+    case "foto":
+      return "imagem";
     case "conversas":
     case "conversations":
     case "conversation":
@@ -150,6 +169,11 @@ export function ePerguntaEResposta(id: string): boolean {
 /** O tipo aceita arquivo enviado pela pessoa? */
 export function aceitaArquivo(id: string): boolean {
   return TIPO_DE_FONTE_POR_ID.get(id)?.comoSePreenche === "arquivo_ou_texto";
+}
+
+/** O material é uma foto que o agente pode enviar ao cliente? */
+export function eImagem(id: string): boolean {
+  return TIPO_DE_FONTE_POR_ID.get(id)?.comoSePreenche === "imagem_com_descricao";
 }
 
 /** A pessoa alimenta este material, ou uma rotina alimenta sozinha? */

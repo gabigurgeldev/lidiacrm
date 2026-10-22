@@ -74,6 +74,16 @@ export interface PublishedAgentConfig {
    */
   knowledgeSourceIds: string[];
   /**
+   * Entre os materiais deste agente há FOTO ativa (`source_type = 'imagem'`)?
+   *
+   * É o gate da ferramenta `send_image`: ferramenta que só sabe responder "não
+   * tenho foto" não é neutra — gasta contexto e convida o modelo a inventar o
+   * apelido. Calculado no mesmo SELECT do config (subquery), sem ida extra ao
+   * banco por turno. Opcional porque quem monta config à mão (testes, ensaio
+   * antigo) não precisa saber dele: ausente = sem fotos = sem a ferramenta.
+   */
+  temFotosNoAcervo?: boolean;
+  /**
    * Endpoints de Integrações via API (`ai_agent_versions.api_endpoint_ids`,
    * migration 0223). Vazio = o agente não consulta sistema externo nenhum.
    */
@@ -169,6 +179,7 @@ interface Row {
   knowledge_source_ids: string[] | null;
   api_endpoint_ids: string[] | null;
   skill_names: string[] | null;
+  tem_fotos_no_acervo: boolean | null;
   trigger_config: unknown;
   version_created_by: string | null;
   agent_created_by: string | null;
@@ -208,6 +219,18 @@ const SELECT_AGENT_CONFIG_COLUMNS = `a.id as agent_id,
             v.knowledge_source_ids,
             v.api_endpoint_ids,
             v.skill_names,
+            -- Mesmo filtro de fotos-do-material.ts (quem ENVIA): o gate e o envio
+            -- têm de concordar sobre o que é "foto disponível", senão o modelo vê a
+            -- ferramenta e toda chamada volta foto_desconhecida. A org entra
+            -- explícita — knowledge_source_ids é array solto, sem FK.
+            exists (
+              select 1 from ai_knowledge_sources s
+               where s.organization_id = a.organization_id
+                 and s.id = any(coalesce(v.knowledge_source_ids, '{}'::uuid[]))
+                 and s.source_type = 'imagem'
+                 and s.is_active
+                 and s.status <> 'archived'
+            ) as tem_fotos_no_acervo,
             v.trigger_config,
             v.created_by as version_created_by,
             a.created_by as agent_created_by`;
@@ -259,6 +282,7 @@ function mapAgentConfigRow(r: Row): PublishedAgentConfig {
     knowledgeSourceIds: r.knowledge_source_ids ?? [],
     apiEndpointIds: r.api_endpoint_ids ?? [],
     skillNames: r.skill_names ?? null,
+    temFotosNoAcervo: r.tem_fotos_no_acervo === true,
     activeKbVersionId: r.active_kb_version_id,
     ragTopK,
     ragSimilarityThreshold,
