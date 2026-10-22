@@ -35,6 +35,27 @@ export interface SourceRow {
   updated_at: string;
 }
 
+/**
+ * O que a rota de foto grava em `source_metadata` (tipo `imagem`).
+ *
+ * Tudo opcional de propósito: `source_metadata` é jsonb que um manager também
+ * escreve pela REST, e a tela não pode quebrar porque um campo veio faltando —
+ * ela mostra o cartão sem a descrição e o erro de indexação diz o resto.
+ */
+export interface MetadadosDaFoto {
+  blob_path?: string;
+  mime_type?: string;
+  size_bytes?: number;
+  filename?: string;
+  descricao?: string;
+}
+
+/** A descrição da foto, ou "" quando o material não tem uma (ou não é foto). */
+export function descricaoDaFoto(source: Pick<SourceRow, "source_metadata">): string {
+  const d = (source.source_metadata as MetadadosDaFoto | null | undefined)?.descricao;
+  return typeof d === "string" ? d : "";
+}
+
 interface ListResponse {
   data: SourceRow[];
 }
@@ -130,6 +151,33 @@ export function useArquivarSource() {
     },
     onSuccess: () => {
       toast.success(t("Material arquivado. O agente para de consultá-lo."));
+    },
+    onError: (err) => showApiError(err),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: sourcesQueryKey() });
+    },
+  });
+}
+
+/**
+ * Troca a descrição de uma foto do acervo.
+ *
+ * A descrição é o que o agente BUSCA — ele não vê a foto ao procurar, só o
+ * texto —, então salvar dispara uma nova preparação do material na rota.
+ */
+export function useEditarDescricaoDaFoto() {
+  const t = useT();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: ["ai", "knowledge", "sources", "descricao-da-foto"],
+    mutationFn: async (vars: { id: string; descricao: string }) => {
+      await apiClient.patch(`/api/v1/ai/knowledge/sources/${vars.id}`, {
+        descricao: vars.descricao,
+      });
+      return vars.id;
+    },
+    onSuccess: () => {
+      toast.success(t("Descrição salva. Estou preparando de novo — leva alguns instantes."));
     },
     onError: (err) => showApiError(err),
     onSettled: () => {

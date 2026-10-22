@@ -6722,6 +6722,38 @@ export const DICIONARIO: Traducoes = {
   "arquivado": { es: "archivado" },
   "arquivados": { es: "archivados" },
 
+  // ─── Acervo: fotos que o agente envia ao cliente ───
+  //
+  // NovoMaterialDialog, KnowledgeSourceCard, EditarDescricaoDaFotoDialog e o
+  // selo em BasesDoAgente. "Jumbo cor 1B" e o exemplo de descrição são AMOSTRAS:
+  // traduzidos para o espanhol porque um placeholder em português ensina a
+  // escrever a descrição em português — e é na língua do cliente que o agente
+  // vai procurar.
+  "Uma foto do seu negócio — produto, modelo, cartela de cores — com a descrição do que ela mostra. O agente encontra a foto pela descrição e pode enviá-la ao cliente no WhatsApp.": { es: "Una foto de tu negocio — producto, modelo, carta de colores — con la descripción de lo que muestra. El agente encuentra la foto por la descripción y puede enviársela al cliente por WhatsApp." },
+  Foto: { es: "Foto" },
+  foto: { es: "foto" },
+  "Essa foto não está em JPG, PNG ou WebP. Salve-a num desses formatos e tente de novo.": { es: "Esa foto no está en JPG, PNG o WebP. Guárdala en uno de esos formatos e inténtalo de nuevo." },
+  "A foto passou de 5 MB, o limite do WhatsApp. Envie uma versão menor.": { es: "La foto pasa de 5 MB, el límite de WhatsApp. Envía una versión más liviana." },
+  "Escolha a foto que o agente vai poder enviar.": { es: "Elige la foto que el agente podrá enviar." },
+  "Descreva o que a foto mostra — é por esse texto que o agente a encontra.": { es: "Describe lo que muestra la foto — es por ese texto que el agente la encuentra." },
+  "A descrição passou do limite de 2.000 caracteres.": { es: "La descripción pasa del límite de 2.000 caracteres." },
+  "Não consegui guardar a foto.": { es: "No pude guardar la foto." },
+  "Jumbo cor 1B": { es: "Jumbo color 1B" },
+  "JPG, PNG ou WebP, até 5 MB — o limite do WhatsApp.": { es: "JPG, PNG o WebP, hasta 5 MB — el límite de WhatsApp." },
+  "Prévia da foto escolhida": { es: "Vista previa de la foto elegida" },
+  "O que a foto mostra": { es: "Lo que muestra la foto" },
+  "Jumbo cor 1B, 400 g, pacote. Temos também nas cores 27, 30 e 613.": { es: "Jumbo color 1B, 400 g, paquete. También lo tenemos en los colores 27, 30 y 613." },
+  "Obrigatória. O agente não vê a foto ao procurar — ele acha pela descrição. Escreva o que o cliente perguntaria: produto, cor, tamanho, modelo.": { es: "Obligatoria. El agente no ve la foto al buscar — la encuentra por la descripción. Escribe lo que el cliente preguntaría: producto, color, tamaño, modelo." },
+  "Não consegui carregar a foto.": { es: "No pude cargar la foto." },
+  "Sem descrição — o agente não tem como encontrar esta foto.": { es: "Sin descripción — el agente no tiene cómo encontrar esta foto." },
+  "Editar descrição": { es: "Editar descripción" },
+  "Descrição de": { es: "Descripción de" },
+  "O agente não vê a foto ao procurar — ele lê esta descrição. Escreva o que um cliente perguntaria: produto, cor, tamanho, modelo.": { es: "El agente no ve la foto al buscar — lee esta descripción. Escribe lo que un cliente preguntaría: producto, color, tamaño, modelo." },
+  "Descrição da foto": { es: "Descripción de la foto" },
+  "Salvar descrição": { es: "Guardar descripción" },
+  "Descrição salva. Estou preparando de novo — leva alguns instantes.": { es: "Descripción guardada. La estoy preparando de nuevo — toma unos instantes." },
+  "Fotos marcadas podem ser enviadas por ele ao cliente no WhatsApp, quando a conversa pedir — ele escolhe pela descrição.": { es: "Las fotos marcadas pueden ser enviadas por él al cliente por WhatsApp cuando la conversación lo pida — las elige por la descripción." },
+
   // ═══ A Agenda, do PR #379 ═══
   //
   // Contribuição de @JowaniOrantes: as 71 entradas do módulo de Agenda —

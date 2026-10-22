@@ -196,9 +196,14 @@ const envSchema = z.object({
   FOLLOWUP_AI_MODEL: z.string().min(1).optional(),
   // Loop do agente — teto de steps de tool-calls por run.
   AGENT_MAX_STEPS: z.coerce.number().int().positive().default(8),
-  // Teto de mensagens FÍSICAS enviadas ao lead por turno (send_message + send_template
-  // somados, bolhas incluídas) — nenhum gate de before-send limita CONTAGEM, só ritmo.
+  // Teto de mensagens FÍSICAS de TEXTO enviadas ao lead por turno (send_message +
+  // send_template somados, bolhas incluídas) — nenhum gate de before-send limita
+  // CONTAGEM, só ritmo. Fotos (send_image) têm teto próprio logo abaixo; o total
+  // físico por turno é a SOMA dos dois (padrão 3 + 4 = 7).
   MAX_SENDS_PER_TURN: z.coerce.number().int().positive().default(3),
+  // Teto de FOTOS do acervo (send_image) por turno — contado À PARTE do de cima, para
+  // "me mostra as cores" não calar a resposta em texto que vem depois das fotos.
+  MAX_IMAGES_PER_TURN: z.coerce.number().int().positive().default(4),
   // Circuit breaker de tools por run.
   TOOL_BREAKER_EXACT_WARN: z.coerce.number().int().positive().default(2),
   TOOL_BREAKER_EXACT_BLOCK: z.coerce.number().int().positive().default(5),

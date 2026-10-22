@@ -2521,6 +2521,35 @@ Spec: `tests/e2e/inbox-fechar-e-reabrir.spec.ts`. Evidência:
 aqui (sem CLI do Supabase no Windows). A prova pela tela é a do CI. J37.5 não
 tem e2e: depende de automático configurado na org de teste.
 
+## J38 — Ensinar uma foto ao agente e deixá-lo enviá-la `[P1]` (2026-10-22)
+
+Em Conhecimento, "Adicionar material" › **Foto**: a pessoa envia a imagem (JPG,
+PNG ou WebP, até 5 MB) e escreve o que ela mostra. A descrição é obrigatória
+porque o agente acha a foto pelo TEXTO — ele não vê a imagem ao procurar. No
+editor do agente, a foto aparece com o selo "foto" e a dica de que ele pode
+enviá-la; marcada, a ferramenta `send_image` manda a foto ao cliente.
+
+Spec: `tests/e2e/acervo-foto.spec.ts` (PNG gerado em memória, sem fixture em
+disco). Rotas: `app/api/v1/ai/knowledge/sources/imagem` e
+`…/sources/[id]/imagem`. Mapa: `docs/architecture/acervo-de-conhecimento.architecture.json`
+(peças `uploadFoto`, `verFoto`, `pastaMateriais`, `sendImage`).
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J38.1 | Escolher "Foto" no diálogo | campo de foto (só jpg/png/webp), prévia, descrição obrigatória | e2e (CI) |
+| J38.2 | Foto acima de 5 MB ou em outro formato | recusada no navegador, antes do upload, com o motivo | NÃO MEDIDO pela tela (regra pura em `lib/ai/rag/imagem.ts`) |
+| J38.3 | Adicionar ao acervo | cartão com miniatura (`GET …/imagem`, 302) e a descrição | e2e (CI) |
+| J38.4 | Editar a descrição no cartão | PATCH `{ descricao }`, o material é preparado de novo | e2e (CI) |
+| J38.5 | Editor do agente | a foto tem selo "foto" e a dica do envio | NÃO MEDIDO pela tela |
+| J38.6 | Testar o agente pedindo a foto | o teste mostra o envio da foto | NÃO MEDIDO |
+| J38.7 | Envio real ao WhatsApp | a foto chega; a bolha do inbox diz de qual material saiu; falha fica marcada | NÃO MEDIDO |
+
+**NÃO MEDIDO, declarado:** o e2e local não sobe nesta máquina (sem CLI do
+Supabase no Windows); a prova pela tela é a do CI. J38.6/J38.7 dependem de
+chave de modelo e de número pareado, que o CI não tem. A miniatura no CI depende
+do Storage local servir a URL assinada — se o `<img>` falhar, o cartão mostra
+"Não consegui carregar a foto." em vez de um quadro vazio.
+
 ## J39 — Agenda com profissionais: quem atende, com quem, e quem marcou `[P0]` (2026-10-22)
 
 Migration 0245. A recepção cadastra a profissional **sem login** (agenda, cor,

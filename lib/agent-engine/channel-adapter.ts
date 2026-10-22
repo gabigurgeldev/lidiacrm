@@ -59,6 +59,21 @@ export interface ChannelSendInput {
     pergunta: string;
     opcoes: { id: string; label: string }[];
   };
+  /**
+   * Presente = sai uma FOTO DO ACERVO da organização, com o `body` como legenda
+   * (`send_image`). Opcional pelo mesmo motivo de `template`: adapter que ignore
+   * o campo envia só a legenda em texto — o cliente perde a foto, mas não fica
+   * sem resposta. O `body` continua sendo o que os gates de conteúdo avaliaram.
+   */
+  imagem?: {
+    /** id do material (`ai_knowledge_sources.id`) — entra na identidade da intenção. */
+    materialId: string;
+    /** caminho no bucket, já conferido contra a pasta de materiais da org. */
+    path: string;
+    mime: string;
+    /** nome legível do material, para a tela (e o ensaio) dizerem qual foto saiu. */
+    nome: string;
+  };
 }
 
 /**

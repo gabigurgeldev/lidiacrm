@@ -69,11 +69,13 @@ describe('texto e opções dividem a fila do turno', () => {
     expect(saida).toEqual(['Perfeito, anotado!', 'enquete']);
   });
 
-  it('send_message e send_options usam a fila do turno', () => {
+  it('send_message, send_options e send_image usam a fila do turno', () => {
     const fonte = readFileSync(join(__dirname, 'inbound-turn.ts'), 'utf-8');
     const usos = fonte.split('}, filaDeEnvioDoTurno),').length - 1;
-    expect(usos).toBe(2);
+    expect(usos).toBe(3);
     const i = fonte.indexOf('    send_options: tool({');
     expect(fonte.slice(i, i + 300)).toMatch(/execute: emOrdem\(/);
+    const j = fonte.indexOf('    send_image: tool({');
+    expect(fonte.slice(j, j + 400)).toMatch(/execute: emOrdem\(/);
   });
 });

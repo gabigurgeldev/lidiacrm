@@ -154,6 +154,19 @@ describe("mapas de arquitetura — coerência interna", () => {
       expect(grau(peca), `${peca} com menos de 2 arestas — é ilha pelo invariante 1`).toBeGreaterThanOrEqual(2);
     }
   });
+
+  it("as fotos do acervo estão no mapa: a subida, a miniatura, a pasta e o envio ao cliente", () => {
+    // DoD 13 para o tipo `imagem`. Sem nomear as peças, o mapa do acervo
+    // continuaria verde com a foto inteira ausente dele.
+    const m = JSON.parse(
+      fs.readFileSync(path.join(DIR, "acervo-de-conhecimento.architecture.json"), "utf8"),
+    ) as Mapa;
+    const grau = (id: string) =>
+      (m.edges ?? []).filter((e) => e.from === id || e.to === id).length;
+    for (const peca of ["uploadFoto", "verFoto", "pastaMateriais", "sendImage"]) {
+      expect(grau(peca), `${peca} com menos de 2 arestas — é ilha pelo invariante 1`).toBeGreaterThanOrEqual(2);
+    }
+  });
 });
 
 /**

@@ -2,37 +2,28 @@
  * PATCH  /api/v1/ai/knowledge/sources/[id]  — update knowledge source
  * DELETE /api/v1/ai/knowledge/sources/[id]  — soft-delete (status='archived')
  *
+ * Para foto (`imagem`), o PATCH aceita `descricao` e recusa `source_metadata`:
+ * o arquivo de uma foto não se troca por aqui (ver `./atualizacao.ts`). Mudar a
+ * descrição dispara a mesma reindexação dos outros materiais.
+ *
  * Auth: cookie session. Role >= manager required.
  * organization_id is ALWAYS resolved from the authenticated session — never from body/path.
  */
 
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
-import { z } from "zod";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { aceitaTextoColado, canonizarTipoDeFonte } from "@/lib/ai/rag/tipos-de-fonte";
+import { montarAtualizacao, patchSourceSchema } from "./atualizacao";
 
 export const dynamic = "force-dynamic";
 
-// ---------------------------------------------------------------------------
-// Zod schema for PATCH
-// ---------------------------------------------------------------------------
-
-const faqItemSchema = z.object({
-  question: z.string().min(1),
-  answer: z.string().min(1),
-  tags: z.array(z.string()).optional().default([]),
-  locale: z.string().optional().default("pt-BR"),
-});
-
-const patchSourceSchema = z.object({
-  name: z.string().min(2).max(120).optional(),
-  items: z.array(faqItemSchema).optional(),
-  source_metadata: z.record(z.string(), z.unknown()).optional(),
-});
+// O schema do PATCH e a regra de quais campos ele grava moram em
+// `./atualizacao.ts` — em especial a trava que impede trocar o arquivo de uma
+// foto por este PATCH.
 
 // ---------------------------------------------------------------------------
 // Shared: resolve auth + role gate
@@ -130,7 +121,7 @@ export async function PATCH(
   const supabase = await createClient();
   const { data: existing, error: fetchErr } = await supabase
     .from("ai_knowledge_sources")
-    .select("id, source_type, agent_id")
+    .select("id, source_type, agent_id, source_metadata")
     .eq("id", sourceId)
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
@@ -143,13 +134,21 @@ export async function PATCH(
     return fail("not_found", "Fonte de conhecimento não encontrada.", 404, { requestId });
   }
 
-  const ksRow = existing as { id: string; source_type: string; agent_id: string | null };
+  const ksRow = existing as {
+    id: string;
+    source_type: string;
+    agent_id: string | null;
+    source_metadata: Record<string, unknown> | null;
+  };
   const tipo = canonizarTipoDeFonte(ksRow.source_type);
 
-  // Build update payload (only provided fields).
-  const updatePayload: Record<string, unknown> = {};
-  if (input.name !== undefined) updatePayload.name = input.name;
-  if (input.source_metadata !== undefined) updatePayload.source_metadata = input.source_metadata;
+  // Build update payload (only provided fields). Para foto, a descrição é
+  // mesclada sobre o metadata do BANCO e o metadata do corpo é recusado.
+  const montado = montarAtualizacao(input, { tipo, source_metadata: ksRow.source_metadata });
+  if (!montado.ok) {
+    return fail("unprocessable_entity", montado.mensagem, 422, { requestId });
+  }
+  const updatePayload = montado.campos;
 
   const admin = createAdminClient();
 

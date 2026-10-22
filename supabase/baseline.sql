@@ -24090,8 +24090,16 @@ create trigger trg_ai_agent_versions_content_immutable
   before update on public.ai_agent_versions
   for each row execute function fn_ai_agent_version_content_immutable();
 
+-- ---- material do tipo foto no acervo do agente (migration 0244) ----
+-- Ver o cabeçalho de supabase/migrations/20261022120000_0244_material_do_tipo_foto.sql.
+-- Sem DDL: `source_type` é vocabulário aberto desde a 0181. Só o comentário da
+-- coluna deixa de listar os tipos e aponta para lib/ai/rag/tipos-de-fonte.ts.
+-- Idempotente.
+comment on column public.ai_knowledge_sources.source_type is
+  'Vocabulário ABERTO (sem CHECK, precedente da 0127). Os tipos aceitos, o que a tela oferece e como cada um é ingerido vivem em lib/ai/rag/tipos-de-fonte.ts — é lá que se confere, não aqui. Valor sem caminho de ingestão falha no indexador com motivo escrito na própria fonte.';
+
 -- ---- agenda: profissionais, apoio, serviços e lembrete (migration 0245) ----
--- Ver o cabeçalho de supabase/migrations/20261022120000_0245_agenda_profissionais.sql.
+-- Ver o cabeçalho de supabase/migrations/20261022130000_0245_agenda_profissionais.sql.
 -- ANTES da VARREDURA anon (este bloco cria função) e DEPOIS da 0195, cuja
 -- fn_adotar_tipos_de_agendamento_sem_dono ele estende. Idempotente: tabelas e índices
 -- `if not exists`, constraints drop+add, backfill com `on conflict do nothing` ou `not exists`.

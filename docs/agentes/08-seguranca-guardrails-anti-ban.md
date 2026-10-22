@@ -83,7 +83,8 @@ Enquanto o aquecimento libera menos que o teto diário, **é ele que limita** (a
 | Limite | Padrão | Onde |
 |---|---|---|
 | Ações (ferramentas) por turno | 10 (tela; servidor 8 sem agente) | "Ações por atendimento" / `AGENT_MAX_STEPS` |
-| Mensagens físicas por turno | 3 | `MAX_SENDS_PER_TURN` |
+| Mensagens físicas de texto por turno | 3 | `MAX_SENDS_PER_TURN` |
+| Fotos do acervo por turno (`send_image`), à parte do texto | 4 | `MAX_IMAGES_PER_TURN` |
 | Disjuntor: mesma chamada idêntica | aviso em 2, bloqueio em 5 | `TOOL_BREAKER_EXACT_*` |
 | Disjuntor: mesma ferramenta | aviso em 3, parada em 8 | `TOOL_BREAKER_SAME_TOOL_*` |
 | Disjuntor: sem progresso | aviso em 3, bloqueio em 5 | `TOOL_BREAKER_NO_PROGRESS_*` |

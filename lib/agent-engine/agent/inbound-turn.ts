@@ -59,6 +59,7 @@ import { enqueueJob, rescheduleJob, type JobRow, type Queryable } from '../queue
 import { applyLeadStateUpdate, getLeadState, type LeadStage, type LeadStateRow } from './lead-state';
 import { applySaveLeadNote, buildNotesIndexBlock, getLeadNoteBody } from './lead-notes';
 import { emOrdem, novaFilaDeEnvio } from './em-ordem';
+import { resolverFotoDoAgente } from './fotos-do-material';
 import { applyScheduleFollowup, type FollowupWindowKnobs } from './schedule-followup';
 import {
   avisarLeadDaEscalacao,
@@ -229,6 +230,20 @@ export const AGENT_TOOL_DEFS = {
         .describe('enquete (padrão) ou lista; o canal pode trocar pelo formato que ele desenha'),
     }).passthrough(),
   },
+  send_image: {
+    description:
+      'Envia ao lead UMA FOTO do acervo da empresa (produto, modelo, cartela de cores), com legenda. ' +
+      'A "foto" é o valor do campo "foto" que veio nos resultados do search_knowledge — copie exatamente; ' +
+      'NUNCA invente nem adivinhe esse valor, e sem ele não há foto para mandar. Uma foto por chamada; ' +
+      'para mostrar várias, chame de novo. A legenda é obrigatória e é mensagem para o lead: frase natural, ' +
+      'em pt-br, dizendo o que ele está vendo.',
+    // Schema LARGO para o SDK, como as vizinhas; quem decide se a foto existe e
+    // pode sair é `resolverFotoDoAgente` no execute — erro vira ENSINO ao modelo.
+    inputSchema: z.object({
+      foto: z.string().min(1).describe('o valor do campo "foto" de um resultado do search_knowledge'),
+      legenda: z.string().min(1).max(1024).describe('a legenda da foto, em pt-br, pronta para o lead ler'),
+    }).passthrough(),
+  },
   update_lead_state: {
     description:
       'Marca um avanço REAL no funil deste lead: stage (new → contacted → qualifying → qualified → ' +
@@ -387,6 +402,17 @@ export const MAX_VETOS_DE_VOCABULARIO_INTERNO = 2;
  * Medido em produção: um lead recebeu 8 mensagens seguidas do mesmo turno.
  */
 export const DEFAULT_MAX_SENDS_PER_TURN = 3;
+
+/**
+ * Teto de FOTOS do acervo (`send_image`) por turno quando `knobs.maxImagesPerTurn`
+ * está ausente (testes) — produção recebe o knob do env (MAX_IMAGES_PER_TURN).
+ *
+ * SEPARADO do teto de textos de propósito: "me mostra as cores" pede várias fotos
+ * de uma vez, e somá-las ao teto de 3 faria a terceira foto calar a resposta em
+ * texto que vem depois. Separado não é ilimitado: cada foto é uma mensagem física
+ * para o anti-ban, e o pacing da cadeia continua valendo entre elas.
+ */
+export const DEFAULT_MAX_IMAGES_PER_TURN = 4;
 
 /**
  * O canal que o turno usa quando ninguém injeta outro. Exportado para o ensaio
@@ -669,6 +695,11 @@ export interface InboundTurnKnobs {
    * testes que não exercitam o teto o omitem sem custo.
    */
   maxSendsPerTurn?: number;
+  /**
+   * Teto de FOTOS do acervo (`send_image`) por turno (MAX_IMAGES_PER_TURN), contado
+   * à parte do de textos. Ausente = `DEFAULT_MAX_IMAGES_PER_TURN`.
+   */
+  maxImagesPerTurn?: number;
   /** atraso do reagendamento em veto/queued herdado da F2-06 (SEND_QUEUED_RETRY_MS) */
   queuedRetryDelayMs: number;
   /** circuit breaker de tools por run (F2-15) — env TOOL_BREAKER_* */
@@ -2082,6 +2113,12 @@ async function executarTurnoDoAgente(
   // incluídas), nunca em veto de gate. Checar `seq` antes de tentar o próximo envio
   // barra o modelo sem gastar uma chamada de before-send à toa.
   const maxSendsPerTurn = deps.knobs.maxSendsPerTurn ?? DEFAULT_MAX_SENDS_PER_TURN;
+  // Fotos do acervo têm teto PRÓPRIO (ver DEFAULT_MAX_IMAGES_PER_TURN). O `seq`
+  // continua ÚNICO — é a identidade (job_id, seq) do ledger —, então os textos
+  // contam `seq - imagensNoTurno` e as fotos contam `imagensNoTurno`.
+  const maxImagesPerTurn = deps.knobs.maxImagesPerTurn ?? DEFAULT_MAX_IMAGES_PER_TURN;
+  let imagensNoTurno = 0;
+  const textosNoTurno = (): number => seq - imagensNoTurno;
   // F3-11: estágio que o MODELO confirmou via update_lead_state neste turno (a máquina
   // F2-10 é a única porta). Comparado com a sugestão do classificador no fim → divergência.
   let confirmedStage: LeadStage | null = null;
@@ -2249,13 +2286,13 @@ async function executarTurnoDoAgente(
     send_template: tool({
       ...AGENT_TOOL_DEFS.send_template,
       execute: async ({ template_name, language, values }) => {
-        if (seq >= maxSendsPerTurn) {
+        if (textosNoTurno() >= maxSendsPerTurn) {
           return {
             ok: false,
             error: {
               code: 'max_sends_per_turn',
               message:
-                `você já enviou ${seq} mensagens neste turno (teto: ${maxSendsPerTurn}). ` +
+                `você já enviou ${textosNoTurno()} mensagens neste turno (teto: ${maxSendsPerTurn}). ` +
                 'NÃO envie mais nada agora — encerre o turno e espere a resposta do lead.',
             },
           };
@@ -2400,17 +2437,153 @@ async function executarTurnoDoAgente(
         return turnoProjeta(mcpToolIdsDoTurno) ? projetarRetornoDeTool(out) : out;
       },
     }),
+    send_image: tool({
+      ...AGENT_TOOL_DEFS.send_image,
+      // Na MESMA fila do send_message e do send_options: "olha essa aqui" e a
+      // foto saem na ordem em que o modelo as escreveu (ver `em-ordem.ts`).
+      execute: emOrdem(async ({ foto, legenda }: { foto: string; legenda: string }) => {
+        if (imagensNoTurno >= maxImagesPerTurn) {
+          return {
+            ok: false,
+            error: {
+              code: 'max_images_per_turn',
+              message:
+                `você já enviou ${imagensNoTurno} fotos neste turno (teto: ${maxImagesPerTurn}). ` +
+                'NÃO envie mais fotos agora — se precisar, responda em texto e espere o lead.',
+            },
+          };
+        }
+        try {
+          // O apelido volta a ser material AQUI, pelo código, e só entre as fotos
+          // DESTE agente — o modelo nunca vê id nem caminho (ver fotos-do-material.ts).
+          const resolvida = await resolverFotoDoAgente(pool, {
+            tenantId,
+            knowledgeSourceIds: agentConfig?.knowledgeSourceIds ?? [],
+            foto,
+          });
+          if (!resolvida.ok) {
+            return { ok: false, error: { code: resolvida.code, message: resolvida.message } };
+          }
+          const imagem = resolvida.foto;
+          // F4-04, como no send_message: a legenda é texto do modelo e pode prometer.
+          if (promiseTable !== null && !decidePromise({ candidate: legenda, table: promiseTable }).allow) {
+            outOfTablePromiseAttempted = true;
+          }
+          // A LEGENDA passa pela cadeia como corpo, com OS MESMOS argumentos do
+          // send_message: stop/opt-out, LGPD, janela, pacing, casos, coordenação,
+          // disclosure e vocabulário interno. Sem isso, "mandar foto" seria a
+          // forma de falar com o lead por fora dos guardrails — e é uma mensagem
+          // física como qualquer outra para o anti-ban.
+          const chain = await runBeforeSend({
+            pool,
+            log: runLog,
+            tenantId,
+            leadId,
+            jobId: job.id,
+            channelSessionId: input.channelSessionId,
+            body: legenda,
+            optedOutThisTurn,
+            crmDailyLimit: null,
+            now: clock(),
+            sleep: deps.sleep,
+            lgpd,
+            casesEnabled: agentConfig?.casesEnabled ?? false,
+            hasOpenCase:
+              agentConfig?.casesEnabled === true
+                ? await hasOpenCaseForContact(pool, tenantId, input.conversationId)
+                : false,
+            openedCaseThisTurn,
+            enforceInternalVocabulary: true,
+            ...(concessaoDoEnvio !== null ? { coordenacao: concessaoDoEnvio } : {}),
+            ...(deps.knobs.disclosureMode !== undefined ? { disclosureMode: deps.knobs.disclosureMode } : {}),
+            ...(semanticClassifier !== undefined ? { classifyPromiseSemantic: semanticClassifier } : {}),
+            // `finalBody`: a legenda depois da cadeia (o disclosure pode prefixá-la).
+            // Nunca em bolhas nem em voz — a legenda é o rótulo da foto.
+            send: (finalBody: string) => {
+              seq += 1;
+              imagensNoTurno += 1;
+              return channel.send({
+                tenantId,
+                leadId,
+                jobId: job.id,
+                seq,
+                conversationId: input.conversationId,
+                body: finalBody,
+                imagem,
+              });
+            },
+          });
+
+          if (chain.status === 'vetoed') {
+            const teto = vetoDeTetoDoNumero(chain);
+            if (teto !== null) {
+              tetoVetado ??= teto;
+              vetosDoTurno.push(chain.code);
+              return { ok: false, error: { code: chain.code, message: MENSAGEM_DO_TETO } };
+            }
+            vetosDoTurno.push(chain.code);
+            return { ok: false, error: { code: chain.code, message: chain.message } };
+          }
+          const outcome = chain.outcome;
+          outcomes.push(outcome);
+          switch (outcome.kind) {
+            case 'sent':
+            case 'already_sent':
+              return { ok: true, status: 'enviada', message_id: outcome.messageId, message: 'foto enviada.' };
+            case 'queued':
+              return {
+                ok: true,
+                status: 'aceita_aguardando_canal',
+                message: 'o canal aceitou a foto e vai enviá-la quando a sessão voltar — não reenvie.',
+              };
+            case 'blocked':
+              return {
+                ok: false,
+                error: {
+                  code: 'contato_bloqueado',
+                  message:
+                    'o contato optou por não receber mensagens (bloqueio irrevogável) — não envie mais nada e encerre o turno.',
+                },
+              };
+            case 'failed':
+              return {
+                ok: false,
+                error: {
+                  code: 'envio_falhou',
+                  message: 'o canal falhou ao enviar a foto — não tente de novo neste turno; responda em texto.',
+                },
+              };
+            case 'unavailable':
+              noteRunError(new Error(`canal indisponível no envio (${outcome.reason}) — job re-tentado pela fila`));
+              return {
+                ok: false,
+                error: {
+                  code: 'envio_indisponivel',
+                  message: 'não consegui enviar agora (canal indisponível) — encerre o turno; o sistema re-tentará.',
+                },
+              };
+          }
+        } catch (err) {
+          // bug de programação: ensina o modelo a encerrar E derruba o job.
+          noteRunError(err instanceof Error ? err : new Error(String(err)));
+          return {
+            ok: false,
+            error: { code: 'internal_error', message: 'erro interno no envio — encerre o turno agora.' },
+          };
+        }
+      }, filaDeEnvioDoTurno),
+    }),
     send_options: tool({
       ...AGENT_TOOL_DEFS.send_options,
       // Na mesma fila do send_message (ver `FilaDeEnvio` em `em-ordem.ts`).
       execute: emOrdem(async ({ pergunta, opcoes, formato }: { pergunta: string; opcoes: string[]; formato?: 'enquete' | 'lista' }) => {
-        if (seq >= maxSendsPerTurn) {
+        if (textosNoTurno() >= maxSendsPerTurn) {
           return {
             ok: false,
             error: {
               code: 'max_sends_per_turn',
               message:
-                `você já enviou ${seq} mensagens neste turno (teto: ${maxSendsPerTurn}). ` +
+                `você já enviou ${textosNoTurno()} mensagens neste turno (teto: ${maxSendsPerTurn}). ` +
                 'NÃO envie mais nada agora — encerre o turno e espere a resposta do lead.',
             },
           };
@@ -2510,13 +2683,13 @@ async function executarTurnoDoAgente(
       ...AGENT_TOOL_DEFS.send_message,
       // Um envio por vez, na ordem que o modelo escreveu (ver `em-ordem.ts`).
       execute: emOrdem(async ({ body }: { body: string }) => {
-        if (seq >= maxSendsPerTurn) {
+        if (textosNoTurno() >= maxSendsPerTurn) {
           return {
             ok: false,
             error: {
               code: 'max_sends_per_turn',
               message:
-                `você já enviou ${seq} mensagens neste turno (teto: ${maxSendsPerTurn}). ` +
+                `você já enviou ${textosNoTurno()} mensagens neste turno (teto: ${maxSendsPerTurn}). ` +
                 'NÃO envie mais nada agora — encerre o turno e espere a resposta do lead.',
             },
           };
@@ -3092,6 +3265,13 @@ async function executarTurnoDoAgente(
   // numerada, que ainda é melhor que o modelo improvisar a numeração no texto.
   if (agentConfig?.interactiveOptionsEnabled !== true) {
     delete rawTools.send_options;
+  }
+
+  // Foto do acervo só entra quando há FOTO ativa entre os materiais do agente
+  // (`temFotosNoAcervo`, calculado no SELECT do config). Sem foto, a ferramenta só
+  // saberia responder "não existe" — e convidaria o modelo a inventar o apelido.
+  if (agentConfig?.temFotosNoAcervo !== true) {
+    delete rawTools.send_image;
   }
 
   // A ferramenta de template só entra em canal que EXIGE template fora da janela.

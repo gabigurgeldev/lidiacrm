@@ -75,6 +75,22 @@
       "sublabel": "PDF, Markdown ou texto — a rota existia e nenhuma tela a chamava"
     },
     {
+      "id": "uploadFoto",
+      "lane": "borda",
+      "col": 2,
+      "type": "api",
+      "label": "POST …/sources/imagem",
+      "sublabel": "JPG/PNG/WebP até 5 MB, bytes conferidos com o formato; descrição obrigatória"
+    },
+    {
+      "id": "verFoto",
+      "lane": "borda",
+      "col": 3,
+      "type": "api",
+      "label": "GET …/sources/{id}/imagem",
+      "sublabel": "302 para URL assinada — a miniatura do cartão"
+    },
+    {
       "id": "publicar",
       "lane": "borda",
       "col": 3,
@@ -123,6 +139,14 @@
       "sublabel": "o arquivo é a fonte da verdade; o texto é recalculado ao indexar"
     },
     {
+      "id": "pastaMateriais",
+      "lane": "dados",
+      "col": 4,
+      "type": "storage",
+      "label": "whatsapp-media/{org}/materiais/",
+      "sublabel": "ativo da EMPRESA, fora da pasta da conversa — o redact da LGPD não apaga a foto"
+    },
+    {
       "id": "chunks",
       "lane": "dados",
       "col": 5,
@@ -153,6 +177,14 @@
       "type": "worker",
       "label": "search_knowledge no turno",
       "sublabel": "a ferramenta some do turno quando o assistente não lê nada"
+    },
+    {
+      "id": "sendImage",
+      "lane": "turno",
+      "col": 8,
+      "type": "worker",
+      "label": "send_image no turno",
+      "sublabel": "manda a foto do acervo pelo canal da conversa; messages.metadata.material diz de onde veio"
     },
     {
       "id": "telemetria",
@@ -205,7 +237,16 @@
     { "id": "e23", "from": "busca", "to": "resposta", "label": "os trechos entram no turno" },
     { "id": "e24", "from": "resposta", "to": "telemetria", "label": "registra acertos e melhor nota" },
     { "id": "e25", "from": "chunks", "to": "trechos", "label": "a pessoa audita o que ele leu" },
-    { "id": "e26", "from": "fonte", "to": "escolha", "label": "o acervo alimenta o seletor" }
+    { "id": "e26", "from": "fonte", "to": "escolha", "label": "o acervo alimenta o seletor" },
+    { "id": "e27", "from": "acervo", "to": "uploadFoto", "label": "…ou envia uma foto com a descrição" },
+    { "id": "e28", "from": "uploadFoto", "to": "pastaMateriais", "label": "guarda a foto" },
+    { "id": "e29", "from": "uploadFoto", "to": "fonte", "label": "cadastra; a descrição vai em source_metadata" },
+    { "id": "e30", "from": "uploadFoto", "to": "evento", "label": "emite knowledge_source.updated — a DESCRIÇÃO vira trecho" },
+    { "id": "e31", "from": "acervo", "to": "verFoto", "label": "miniatura no cartão" },
+    { "id": "e32", "from": "verFoto", "to": "pastaMateriais", "label": "assina a URL e redireciona" },
+    { "id": "e33", "from": "resposta", "to": "sendImage", "label": "a busca achou a foto pela descrição" },
+    { "id": "e34", "from": "sendImage", "to": "pastaMateriais", "label": "assina só {org}/materiais/ — nunca o caminho cru do banco" },
+    { "id": "e35", "from": "sendImage", "to": "fonte", "label": "a foto tem de estar entre as que o assistente lê" }
   ],
   "cards": [
     {
@@ -236,6 +277,16 @@
         "o worker de FAQ fazia o inverso: quem indexasse por último apagava o acervo do outro, em silêncio",
         "com um ponteiro por fonte a competição some por construção, não por disciplina",
         "as versões legadas (multi-fonte) continuam válidas: a busca casa (kb_version_id, knowledge_source_id) e devolve para cada fonte só o que é dela"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "A foto é achada pelo TEXTO e enviada como ARQUIVO",
+      "items": [
+        "o modelo não vê a imagem ao procurar: o que vira trecho é a descrição, por isso ela é obrigatória na tela e na rota",
+        "a foto mora em whatsapp-media/{org}/materiais/ e não em ai-policy: o envio só assina URL do bucket do WhatsApp",
+        "o caminho em source_metadata é conferido no ENVIO (caminhoDeMaterialValido): o jsonb é escrito pela REST, quem assina é a service role",
+        "laço de retorno: foto sem descrição ou que não indexou aparece no cartão (last_index_error); envio que falha fica marcado na bolha do inbox"
       ]
     }
   ]
