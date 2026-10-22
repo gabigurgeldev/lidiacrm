@@ -114,7 +114,7 @@ export const availabilityPatchSchema = z
     // o bloco manda mensagem quando este atendente é o dono do lead. `null`
     // limpa o campo; string vazia não é aceita (usa `null` pra "sem telefone").
     notification_phone: z.string().regex(E164, "telefone precisa estar em E.164 (+DDI...)").nullable(),
-    // Fica disponível no horário mesmo com o CRM fechado (migration 0244). Só
+    // Fica disponível no horário mesmo com o CRM fechado (migration 0246). Só
     // manager+ muda — a rota recusa o próprio atendente.
     always_available: z.boolean(),
   })

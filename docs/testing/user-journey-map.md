@@ -2520,3 +2520,71 @@ Spec: `tests/e2e/inbox-fechar-e-reabrir.spec.ts`. Evidência:
 **NÃO MEDIDO, declarado:** a tela não rodou nesta máquina — o e2e local não sobe
 aqui (sem CLI do Supabase no Windows). A prova pela tela é a do CI. J37.5 não
 tem e2e: depende de automático configurado na org de teste.
+
+## J38 — Ensinar uma foto ao agente e deixá-lo enviá-la `[P1]` (2026-10-22)
+
+Em Conhecimento, "Adicionar material" › **Foto**: a pessoa envia a imagem (JPG,
+PNG ou WebP, até 5 MB) e escreve o que ela mostra. A descrição é obrigatória
+porque o agente acha a foto pelo TEXTO — ele não vê a imagem ao procurar. No
+editor do agente, a foto aparece com o selo "foto" e a dica de que ele pode
+enviá-la; marcada, a ferramenta `send_image` manda a foto ao cliente.
+
+Spec: `tests/e2e/acervo-foto.spec.ts` (PNG gerado em memória, sem fixture em
+disco). Rotas: `app/api/v1/ai/knowledge/sources/imagem` e
+`…/sources/[id]/imagem`. Mapa: `docs/architecture/acervo-de-conhecimento.architecture.json`
+(peças `uploadFoto`, `verFoto`, `pastaMateriais`, `sendImage`).
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J38.1 | Escolher "Foto" no diálogo | campo de foto (só jpg/png/webp), prévia, descrição obrigatória | e2e (CI) |
+| J38.2 | Foto acima de 5 MB ou em outro formato | recusada no navegador, antes do upload, com o motivo | NÃO MEDIDO pela tela (regra pura em `lib/ai/rag/imagem.ts`) |
+| J38.3 | Adicionar ao acervo | cartão com miniatura (`GET …/imagem`, 302) e a descrição | e2e (CI) |
+| J38.4 | Editar a descrição no cartão | PATCH `{ descricao }`, o material é preparado de novo | e2e (CI) |
+| J38.5 | Editor do agente | a foto tem selo "foto" e a dica do envio | NÃO MEDIDO pela tela |
+| J38.6 | Testar o agente pedindo a foto | o teste mostra o envio da foto | NÃO MEDIDO |
+| J38.7 | Envio real ao WhatsApp | a foto chega; a bolha do inbox diz de qual material saiu; falha fica marcada | NÃO MEDIDO |
+
+**NÃO MEDIDO, declarado:** o e2e local não sobe nesta máquina (sem CLI do
+Supabase no Windows); a prova pela tela é a do CI. J38.6/J38.7 dependem de
+chave de modelo e de número pareado, que o CI não tem. A miniatura no CI depende
+do Storage local servir a URL assinada — se o `<img>` falhar, o cartão mostra
+"Não consegui carregar a foto." em vez de um quadro vazio.
+
+## J39 — Agenda com profissionais: quem atende, com quem, e quem marcou `[P0]` (2026-10-22)
+
+Migration 0245. A recepção cadastra a profissional **sem login** (agenda, cor,
+jornada, folgas e serviços próprios), marca escolhendo o **cliente** e vê
+**quem atende** em cada horário; o card da grade — que tinha cursor de
+mãozinha e clique mudo — abre o **detalhe** com o selo de origem (IA / Tela /
+Google), cliente, profissionais (principal e apoio), links para a conversa e o
+negócio, e as ações. A visão **Profissionais** põe o dia lado a lado, uma coluna
+por pessoa, com a apoio tracejada na coluna dela. A Central de avisos linka o
+agendamento (`ref_kind = calendar_appointment` → `/app/agenda?agendamento=<id>`),
+e a grade se atualiza sozinha quando a IA marca (Realtime em `calendar_appointments`).
+
+Spec: `tests/e2e/agenda-profissionais.spec.ts` (em `SPECS_PARTE_2`). Telas:
+`app/app/settings/tenant/agenda/profissionais/` (nova, porta em
+`lib/navigation/registry.ts`), `components/agenda/{DetalheDoAgendamento,GradePorProfissional,SeletorDeCliente,SeletorDeProfissionais,EditorDeJornada}.tsx`.
+Lógica pura em `components/agenda/profissionais-na-tela.ts`, provada por
+`tests/unit/agenda-profissionais-na-tela.test.ts`.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J39.1 | Cadastrar profissional sem login pela tela | aparece na lista com "sem login" | e2e escrito (CI) |
+| J39.2 | Jornada salva pela tela de Profissionais | o resumo da lista mostra a janela salva | e2e escrito (CI) |
+| J39.3 | Serviço habilitado e folga lançada | o tipo aparece em "Serviços"; a folga entra na lista | e2e escrito (CI) |
+| J39.4 | Visão "Profissionais" na Agenda | uma coluna por profissional, inclusive a sem login | e2e escrito (CI) |
+| J39.5 | Marcar escolhendo o cliente | o horário diz quem atende (`data-quem`); o POST volta 201 com `professional_ids` | e2e escrito (CI) |
+| J39.6 | Clicar no card abre o detalhe | selo de origem `ui`, cliente, 1 principal, ação de cancelar; a URL ganha `?agendamento=` | e2e escrito (CI) |
+| J39.7 | `?agendamento=<id>` abre o detalhe direto; fechar limpa a URL | o mesmo detalhe, sem clicar | e2e escrito (CI) |
+| J39.8 | Aviso da Central com `ref_kind` de agendamento | vira link, e o link abre o detalhe certo | e2e escrito (CI) |
+| J39.9 | Ocupação do Google e agendamento legado (chegam com `user_id`) | ficam na coluna e na cor da profissional do membro | PASS (unit) |
+| J39.10 | Escolha parcial ("a Ana, com qualquer apoio") | só os horários em que ela é a principal | PASS (unit) |
+| J39.11 | O horário mostra "Ana + Bia" e o POST marca exatamente essa dupla | o que se viu é o que se marca | PASS (unit) |
+
+**NÃO MEDIDO, declarado:** nada desta jornada rodou pela tela nesta máquina — o
+e2e local não sobe aqui (sem CLI do Supabase no Windows), e a spec foi escrita
+em paralelo às rotas da Frente B. A prova pela tela é a do CI. J39.8 insere o
+aviso direto no banco: o caminho real (a IA marca num turno) não sobe no job.
+Limites conhecidos da 0245: a apoio não recebe o evento no Google, não há "trocar
+profissional" num agendamento existente (remarcar mantém as mesmas pessoas).

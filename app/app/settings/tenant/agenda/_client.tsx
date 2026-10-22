@@ -3,6 +3,7 @@
 import { useT } from "@/hooks/i18n/useT";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -23,7 +24,41 @@ export interface TipoRow {
   default_owner_user_id: string | null;
   requires_confirmation: boolean;
   is_active: boolean;
+  /** Quantas pessoas o serviço ocupa ao mesmo tempo (0245): 1, ou principal + apoio. */
+  professionals_required: number;
+  /** De quanto em quanto tempo os horários são oferecidos; `null` = a própria duração. */
+  slot_interval_minutes: number | null;
+  reminder_enabled: boolean;
+  reminder_minutes_before: number;
+  /** As profissionais habilitadas — quem faz este serviço. */
+  professional_ids: string[];
 }
+
+/** Uma profissional, como o seletor de habilitação a mostra. */
+export interface ProfissionalDoTipo {
+  id: string;
+  nome: string;
+  ativo: boolean;
+}
+
+/**
+ * Os intervalos oferecidos. Vazio = "igual à duração", que é o padrão do banco
+ * (`slot_interval_minutes` nulo) e o que a maioria quer: consulta de 30 min a
+ * cada 30 min. Intervalo MENOR que a duração é o que permite oferecer 9h, 9h15,
+ * 9h30 para um procedimento de uma hora.
+ */
+const INTERVALOS = [10, 15, 20, 30, 45, 60, 90, 120] as const;
+
+/** A antecedência do lembrete, nas unidades em que a recepção pensa. */
+const ANTECEDENCIAS: ReadonlyArray<{ minutos: number; rotulo: string }> = [
+  { minutos: 60, rotulo: "1 hora antes" },
+  { minutos: 120, rotulo: "2 horas antes" },
+  { minutos: 180, rotulo: "3 horas antes" },
+  { minutos: 360, rotulo: "6 horas antes" },
+  { minutos: 720, rotulo: "12 horas antes" },
+  { minutos: 1440, rotulo: "1 dia antes" },
+  { minutos: 2880, rotulo: "2 dias antes" },
+];
 
 /**
  * As dez do CHECK da tabela, com o nome que o dono do negócio usa.
@@ -60,6 +95,8 @@ interface Rascunho {
   duration_minutes: number;
   location_kind: string;
   default_owner_user_id: string;
+  professionals_required: 1 | 2;
+  professional_ids: string[];
 }
 
 const VAZIO: Rascunho = {
@@ -68,16 +105,87 @@ const VAZIO: Rascunho = {
   duration_minutes: 30,
   location_kind: "in_person",
   default_owner_user_id: "",
+  professionals_required: 1,
+  professional_ids: [],
 };
+
+/**
+ * QUEM FAZ ESTE SERVIÇO — uma caixa por profissional ativa.
+ *
+ * É a habilitação da 0245: o horário livre do tipo é a união da agenda das
+ * habilitadas, e marcar com quem não está aqui é recusado com 422. Nenhuma
+ * marcada = o tipo segue o responsável padrão, como antes da 0245.
+ *
+ * `name` repetido para o `FormData.getAll` do formulário de edição; o de criação
+ * é controlado e usa `onChange`. As duas formas do mesmo campo porque os dois
+ * formulários já eram assim — não é hora de trocar o de edição.
+ */
+function CaixasDeProfissionais({
+  profissionais,
+  marcadas,
+  onChange,
+  testid,
+}: {
+  profissionais: ProfissionalDoTipo[];
+  marcadas: string[];
+  onChange?: (ids: string[]) => void;
+  testid: string;
+}) {
+  const t = useT();
+  const ativas = profissionais.filter((p) => p.ativo || marcadas.includes(p.id));
+  return (
+    <fieldset className="flex flex-col gap-1.5" data-testid={testid}>
+      <legend className="mb-1 text-xs font-medium text-text-muted">{t("Profissionais que fazem este serviço")}</legend>
+      {ativas.length === 0 ? (
+        <p className="text-xs text-text-subtle">
+          {t("Nenhuma profissional cadastrada.")}{" "}
+          <Link
+            href="/app/settings/tenant/agenda/profissionais"
+            className="font-medium text-accent underline underline-offset-2"
+          >
+            {t("Cadastrar profissionais")}
+          </Link>
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+          {ativas.map((p) => (
+            <label key={p.id} className="flex items-center gap-1.5 text-sm text-text">
+              <input
+                type="checkbox"
+                name="professional_ids"
+                value={p.id}
+                data-testid={`${testid}-${p.id}`}
+                {...(onChange
+                  ? {
+                      checked: marcadas.includes(p.id),
+                      onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+                        onChange(
+                          e.target.checked ? [...marcadas, p.id] : marcadas.filter((x) => x !== p.id),
+                        ),
+                    }
+                  : { defaultChecked: marcadas.includes(p.id) })}
+                className="h-4 w-4 accent-[var(--color-accent)]"
+              />
+              {p.nome}
+              {!p.ativo ? <span className="text-[11px] text-text-subtle">({t("desativada")})</span> : null}
+            </label>
+          ))}
+        </div>
+      )}
+    </fieldset>
+  );
+}
 
 export function TiposDeAgendamentoClient({
   tiposIniciais,
   pessoas,
+  profissionais,
   podeEditar,
   usuarioAtualId,
 }: {
   tiposIniciais: TipoRow[];
   pessoas: Array<{ id: string; papel: string; nome: string }>;
+  profissionais: ProfissionalDoTipo[];
   podeEditar: boolean;
   usuarioAtualId: string;
 }) {
@@ -145,12 +253,18 @@ export function TiposDeAgendamentoClient({
                       ...(rascunho.default_owner_user_id
                         ? { default_owner_user_id: rascunho.default_owner_user_id }
                         : {}),
+                      professionals_required: rascunho.professionals_required,
+                      // Só quando escolhido: omitir deixa a rota habilitar o
+                      // responsável padrão, que é o comportamento de antes.
+                      ...(rascunho.professional_ids.length > 0
+                        ? { professional_ids: rascunho.professional_ids }
+                        : {}),
                     }),
                   t("Tipo de agendamento criado."),
                 );
                 if (feito) {
                   setCriando(false);
-                  setRascunho(VAZIO);
+                  setRascunho({ ...VAZIO, default_owner_user_id: usuarioAtualId });
                 }
               }}
             >
@@ -232,9 +346,31 @@ export function TiposDeAgendamentoClient({
                   ))}
                 </select>
               </label>
+              <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+                {t("Pessoas por atendimento")}
+                <select
+                  data-testid="novo-tipo-necessarias"
+                  value={rascunho.professionals_required}
+                  onChange={(e) =>
+                    setRascunho((r) => ({ ...r, professionals_required: e.target.value === "2" ? 2 : 1 }))
+                  }
+                  className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text outline-none focus:border-border-strong"
+                >
+                  <option value="1">{t("Uma profissional")}</option>
+                  <option value="2">{t("Duas — principal e apoio")}</option>
+                </select>
+              </label>
+              <div className="sm:col-span-2">
+                <CaixasDeProfissionais
+                  profissionais={profissionais}
+                  marcadas={rascunho.professional_ids}
+                  onChange={(ids) => setRascunho((r) => ({ ...r, professional_ids: ids }))}
+                  testid="novo-tipo-profissionais"
+                />
+              </div>
               <div className="flex justify-end gap-2 sm:col-span-2">
                 <Button type="button" variant="ghost" size="sm" onClick={() => setCriando(false)}>
-                  Cancelar
+                  {t("Cancelar")}
                 </Button>
                 <Button type="submit" size="sm" data-testid="salvar-novo-tipo" disabled={salvando}>
                   {salvando ? t("Criando…") : t("Criar tipo")}
@@ -243,7 +379,7 @@ export function TiposDeAgendamentoClient({
             </form>
           ) : (
             <Button size="sm" data-testid="abrir-novo-tipo" onClick={() => setCriando(true)}>
-              Novo tipo de agendamento
+              {t("Novo tipo de agendamento")}
             </Button>
           )}
         </div>
@@ -268,7 +404,35 @@ export function TiposDeAgendamentoClient({
               </span>
               <span className="text-xs tabular-nums text-text-muted">{tipo.duration_minutes} min</span>
               <span className="text-xs text-text-muted">{rotuloDe(LOCAIS, tipo.location_kind)}</span>
-              {!tipo.default_owner_user_id ? (
+              {tipo.professionals_required === 2 ? (
+                <span
+                  data-testid={`duas-pessoas-${tipo.id}`}
+                  className="rounded-full border border-border px-2 py-0.5 text-[11px] text-text-muted"
+                >
+                  {t("principal + apoio")}
+                </span>
+              ) : null}
+              {tipo.professional_ids.length > 0 ? (
+                <span className="text-xs text-text-muted" data-testid={`habilitadas-${tipo.id}`}>
+                  {t("com")}{" "}
+                  {tipo.professional_ids
+                    .map((id) => profissionais.find((p) => p.id === id)?.nome)
+                    .filter(Boolean)
+                    .join(", ")}
+                </span>
+              ) : null}
+              {tipo.reminder_enabled ? (
+                <span className="text-xs text-text-subtle" data-testid={`lembrete-${tipo.id}`}>
+                  {t("lembrete")}{" "}
+                  {t(
+                    ANTECEDENCIAS.find((a) => a.minutos === tipo.reminder_minutes_before)?.rotulo ??
+                      "antes do horário",
+                  )}
+                </span>
+              ) : null}
+              {/* SEM QUEM ATENDA = sem dono E sem habilitada. Com habilitada, o
+                  motor da 0245 já tem de quem ler a jornada. */}
+              {!tipo.default_owner_user_id && tipo.professional_ids.length === 0 ? (
                 // O aviso existe porque o sintoma é MUDO: sem dono, a tela de
                 // marcar simplesmente não mostra horário, sem dizer por quê.
                 //
@@ -316,11 +480,11 @@ export function TiposDeAgendamentoClient({
                       onClick={() =>
                         void comErro(
                           () => apiClient.delete("/api/v1/agenda/tipos", { id: tipo.id }),
-                          "Tipo desativado.",
+                          t("Tipo desativado."),
                         )
                       }
                     >
-                      Desativar
+                      {t("Desativar")}
                     </Button>
                   ) : (
                     <Button
@@ -331,11 +495,11 @@ export function TiposDeAgendamentoClient({
                       onClick={() =>
                         void comErro(
                           () => apiClient.patch("/api/v1/agenda/tipos", { id: tipo.id, is_active: true } as never),
-                          "Tipo reativado.",
+                          t("Tipo reativado."),
                         )
                       }
                     >
-                      Reativar
+                      {t("Reativar")}
                     </Button>
                   )}
                 </span>
@@ -369,16 +533,38 @@ export function TiposDeAgendamentoClient({
                         // contrato, não contorno. O efeito de limpar é a agenda
                         // daquele tipo parar de oferecer horário e o aviso amarelo
                         // voltar — que é o laço de retorno correto.
-                        default_owner_user_id:
-                          String(dados.get("default_owner_user_id") ?? "") || null,
+                        //
+                        // ⚠️ E SÓ QUANDO MUDOU (0245). A rota trata "gravar o
+                        // responsável" como "habilitar a profissional dele" — e,
+                        // reenviado a cada salvar, o dono voltava marcado em
+                        // "Profissionais que fazem este serviço" toda vez que
+                        // alguém o desmarcava. Mandar só a mudança mantém as duas
+                        // escolhas independentes; limpar continua chegando como nulo.
+                        ...((String(dados.get("default_owner_user_id") ?? "") || null) !==
+                        tipo.default_owner_user_id
+                          ? { default_owner_user_id: String(dados.get("default_owner_user_id") ?? "") || null }
+                          : {}),
+                        professionals_required: dados.get("professionals_required") === "2" ? 2 : 1,
+                        // Vazio = "igual à duração" — e o nulo é contrato, não
+                        // ausência: omitir faria a escolha não chegar ao banco,
+                        // o mesmo defeito do responsável logo acima.
+                        slot_interval_minutes: Number(dados.get("slot_interval_minutes") ?? "") || null,
+                        // O CONJUNTO inteiro, sempre: a rota substitui. Mandar só
+                        // quando mudou exigiria comparar, e desmarcar a última
+                        // caixa precisa chegar como lista vazia.
+                        professional_ids: dados.getAll("professional_ids").map(String),
+                        reminder_enabled: dados.get("reminder_enabled") === "on",
+                        reminder_minutes_before: Number(
+                          dados.get("reminder_minutes_before") ?? tipo.reminder_minutes_before,
+                        ),
                       }),
-                    "Tipo alterado.",
+                    t("Tipo alterado."),
                   );
                   if (feito) setEditandoId(null);
                 }}
               >
                 <label className="flex flex-col gap-1 text-xs text-text-muted">
-                  Nome
+                  {t("Nome")}
                   <input
                     name="name"
                     defaultValue={tipo.name}
@@ -414,6 +600,76 @@ export function TiposDeAgendamentoClient({
                     ))}
                   </select>
                 </label>
+                <label className="flex flex-col gap-1 text-xs text-text-muted">
+                  {t("Pessoas por atendimento")}
+                  <select
+                    name="professionals_required"
+                    defaultValue={String(tipo.professionals_required)}
+                    data-testid={`editar-necessarias-${tipo.id}`}
+                    className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+                  >
+                    <option value="1">{t("Uma profissional")}</option>
+                    <option value="2">{t("Duas — principal e apoio")}</option>
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-text-muted">
+                  {t("Horários oferecidos a cada")}
+                  <select
+                    name="slot_interval_minutes"
+                    defaultValue={tipo.slot_interval_minutes ? String(tipo.slot_interval_minutes) : ""}
+                    data-testid={`editar-intervalo-${tipo.id}`}
+                    className="rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+                  >
+                    <option value="">{t("Igual à duração")}</option>
+                    {/* O valor gravado sempre aparece, mesmo fora da lista — senão
+                        abrir e salvar trocaria um intervalo que ninguém tocou. */}
+                    {[...new Set([...INTERVALOS, ...(tipo.slot_interval_minutes ? [tipo.slot_interval_minutes] : [])])]
+                      .sort((a, b) => a - b)
+                      .map((m) => (
+                        <option key={m} value={m}>
+                          {m} min
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <div className="flex flex-col gap-1 text-xs text-text-muted">
+                  <span>{t("Lembrete no WhatsApp")}</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="reminder_enabled"
+                      defaultChecked={tipo.reminder_enabled}
+                      data-testid={`editar-lembrete-${tipo.id}`}
+                      aria-label={t("Enviar lembrete ao cliente")}
+                      className="h-4 w-4 accent-[var(--color-accent)]"
+                    />
+                    <select
+                      name="reminder_minutes_before"
+                      defaultValue={String(tipo.reminder_minutes_before)}
+                      data-testid={`editar-antecedencia-${tipo.id}`}
+                      aria-label={t("Antecedência do lembrete")}
+                      className="min-w-0 flex-1 rounded-md border border-border bg-surface-elevated p-2 text-sm text-text"
+                    >
+                      {ANTECEDENCIAS.some((a) => a.minutos === tipo.reminder_minutes_before) ? null : (
+                        <option value={tipo.reminder_minutes_before}>
+                          {tipo.reminder_minutes_before} {t("min antes")}
+                        </option>
+                      )}
+                      {ANTECEDENCIAS.map((a) => (
+                        <option key={a.minutos} value={a.minutos}>
+                          {t(a.rotulo)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="sm:col-span-3">
+                  <CaixasDeProfissionais
+                    profissionais={profissionais}
+                    marcadas={tipo.professional_ids}
+                    testid={`editar-profissionais-${tipo.id}`}
+                  />
+                </div>
                 <div className="flex justify-end sm:col-span-3">
                   <Button type="submit" size="sm" data-testid={`salvar-${tipo.id}`} disabled={salvando}>
                     {salvando ? t("Salvando…") : t("Salvar")}

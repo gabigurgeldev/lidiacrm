@@ -22,6 +22,7 @@ import {
   Gauge,
   Gear,
   Headset,
+  IdentificationCard,
   Inbox,
   Kanban,
   Key,
@@ -313,6 +314,20 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     // tem hub, e se chega às telas dele por "Configurações". Eu tinha posto
     // `sidebar: true` e a cerca reprovou dizendo "a tela existe e não tem porta
     // na navegação" — a porta existia, era outra.
+  },
+  {
+    // QUEM ATENDE (migration 0245): profissionais com e sem login, a jornada de
+    // cada uma, as folgas e os serviços que ela faz. Vizinha dos tipos e não
+    // dentro de Equipe: Equipe é sobre CONTAS, e a profissional sem login — o
+    // caso que motivou a tela — não é conta nenhuma.
+    href: "/app/settings/tenant/agenda/profissionais",
+    label: "Profissionais da agenda",
+    description: "Quem atende, a jornada de cada uma, folgas e os serviços que faz.",
+    icon: IdentificationCard,
+    group: "organizacao",
+    // Mesma seção e mesma ausência de `sidebar` dos tipos, pelo mesmo motivo:
+    // o grupo tem hub, e é por "Configurações" que se chega aqui.
+    section: "Sua empresa",
   },
   {
     // Estava enterrado em Configurações e ninguém sabia que existia — o achado

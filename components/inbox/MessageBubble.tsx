@@ -15,6 +15,7 @@ import { ContactCard } from "@/components/inbox/media/ContactCard";
 import { OpcoesCard, SeloDeEscolha } from "@/components/inbox/media/OpcoesCard";
 import { extractCitations, isAiGeneratedMessage } from "@/lib/ai/citations/types";
 import { separarAssinatura } from "@/lib/assinatura-do-atendente";
+import { temMidiaCompartilhada } from "@/lib/messaging/media/midia-compartilhada";
 
 interface Props {
   message: Message;
@@ -90,12 +91,11 @@ export function MessageBubble({
   const isOutbound = message.direction === "outbound";
   const time = format(new Date(message.sent_at), "HH:mm", { locale: localeDaData });
   const isFailed = message.status === "failed";
-  // `midia_do_disparo`: imagem/vídeo de disparo em massa, um arquivo por
-  // campanha apontado pela metadata (ver `OpcoesDeEnvio` no handler de envio).
+  // Mídia compartilhada: a do disparo em massa ou a foto do acervo que o agente
+  // enviou — um arquivo da organização apontado pela metadata (ver
+  // `OpcoesDeEnvio` no handler de envio). A org é conferida na rota que assina.
   const hasMedia = Boolean(
-    message.media_url ||
-      message.media_storage_path ||
-      typeof (message.metadata as Record<string, unknown> | null)?.midia_do_disparo === "string",
+    message.media_url || message.media_storage_path || temMidiaCompartilhada(message.metadata),
   );
   const isContact = message.type === "contact";
   // Enquete/lista que NÓS mandamos (migration 0236): desenhada como cartão de

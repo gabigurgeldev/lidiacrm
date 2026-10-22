@@ -147,6 +147,15 @@ function canalDeCaptura(real: ChannelAdapter, capturadas: ChannelSendInput[]): C
   };
 }
 
+/**
+ * O que a tela do ensaio mostra de cada envio capturado. A foto do acervo entra
+ * como `[foto: nome]` antes da legenda: o dono do negócio precisa conferir QUAL
+ * foto o agente escolheu, e a legenda sozinha não diz.
+ */
+export function textoDoEnvio(c: ChannelSendInput): string {
+  return c.imagem ? `[foto: ${c.imagem.nome}] ${c.body}` : c.body;
+}
+
 /** Grava o formulário como rascunho dentro da transação. As chaves do schema SÃO as colunas. */
 async function gravarVersaoDoFormulario(
   db: pg.Pool,
@@ -427,7 +436,7 @@ export async function ensaiarTurno(
     return {
       id,
       desfecho,
-      mensagens: capturadas.map((c) => ({ texto: c.body, template: c.template !== undefined })),
+      mensagens: capturadas.map((c) => ({ texto: textoDoEnvio(c), template: c.template !== undefined })),
       ferramentas,
       conferencias: traces.map((t) => ({ trace: t.trace, barradaPor: t.vetoed_gate, codigo: t.vetoed_code })),
       estado: {

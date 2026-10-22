@@ -2,11 +2,12 @@ import { addDays, startOfWeek } from "date-fns";
 import { redirect } from "next/navigation";
 
 import { enderecoDeRetorno, faltaParaConectarOGoogle, googleEstaConfigurado } from "@/lib/agenda/google/config";
-import { PROVEDOR_GOOGLE } from "@/lib/agenda/tipos";
+import { ORIGENS_DO_AGENDAMENTO, PROVEDOR_GOOGLE, type OrigemDoAgendamento } from "@/lib/agenda/tipos";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 
 import type { Agendamento as AgendamentoDaTela } from "@/components/agenda/tipos";
+import type { ProfissionalDaApi } from "@/hooks/agenda/useProfissionais";
 
 import { AgendaClient } from "./_client";
 
@@ -39,7 +40,20 @@ function nomeDoContato(
   return alvo?.name ?? alvo?.display_name ?? undefined;
 }
 
-export default async function AgendaPage() {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** `source` do banco no vocabulário da tela; valor desconhecido cai em `ui`, como sempre caiu. */
+function origemDe(source: string | null): OrigemDoAgendamento {
+  return (ORIGENS_DO_AGENDAMENTO as readonly string[]).includes(source ?? "")
+    ? (source as OrigemDoAgendamento)
+    : "ui";
+}
+
+export default async function AgendaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ agendamento?: string | string[] }>;
+}) {
   const user = await requireAuth();
   const activeOrg = await resolveActiveOrg(user);
   if (!activeOrg) redirect("/app");
@@ -88,23 +102,69 @@ export default async function AgendaPage() {
   // organizações via seis tipos onde há três — e clicar no da outra org dava
   // "Tipo de agendamento não encontrado", porque a rota que marca ESCAPA a org
   // certa e não achava o tipo que esta tela ofereceu.
-  const [{ data: tipos }, { data: linhas }] = await Promise.all([
+  const [{ data: tipos }, { data: linhas }, { data: profissionais }, { data: habilitacoes }] = await Promise.all([
     supabase
       .from("calendar_event_types")
-      .select("id, name, duration_minutes, location_kind, location_details, is_active, default_owner_user_id")
+      .select(
+        "id, name, duration_minutes, location_kind, location_details, is_active, default_owner_user_id, professionals_required",
+      )
       .eq("organization_id", activeOrg.orgId)
       .eq("is_active", true)
       .order("name"),
     supabase
       .from("calendar_appointments")
       .select(
-        "id, title, starts_at, ends_at, status, owner_user_id, contact_id, event_type_id, location_kind, contacts(name, display_name)",
+        "id, title, starts_at, ends_at, status, owner_user_id, contact_id, event_type_id, location_kind, source, conversation_id, contacts(name, display_name)",
       )
       .eq("organization_id", activeOrg.orgId)
       .gte("starts_at", inicio.toISOString())
       .lt("starts_at", fim.toISOString())
       .order("starts_at"),
+    // AS PROFISSIONAIS (0245) — a barra de pessoas e as colunas da visão por
+    // profissional. Lidas aqui para a primeira pintura; o `usePessoasDaAgenda`
+    // assume dali, pela rota. Mesma forma do item da rota, para a mesma chave
+    // de cache servir as duas.
+    supabase
+      .from("calendar_professionals")
+      .select("id, name, trilha, is_active, user_id")
+      .eq("organization_id", activeOrg.orgId)
+      .order("position")
+      .order("name"),
+    // Quem cada tipo habilita — é o que o seletor de profissional oferece.
+    supabase
+      .from("calendar_event_type_professionals")
+      .select("event_type_id, professional_id")
+      .eq("organization_id", activeOrg.orgId),
   ]);
+
+  // QUEM ATENDE cada agendamento da primeira pintura (principal e apoio). Uma
+  // ida a mais, em lote, em vez de embed: a FK é composta (organização + id) e
+  // o embed dependeria de o gerador de tipos declarar a relação.
+  const idsDaSemana = (linhas ?? []).map((a) => a.id);
+  const { data: participantes } = idsDaSemana.length
+    ? await supabase
+        .from("calendar_appointment_professionals")
+        .select("appointment_id, professional_id, role")
+        .eq("organization_id", activeOrg.orgId)
+        .in("appointment_id", idsDaSemana)
+    : { data: [] as Array<{ appointment_id: string; professional_id: string; role: string }> };
+  const papeis = new Map<string, { principal?: string; apoio?: string }>();
+  for (const p of participantes ?? []) {
+    const atual = papeis.get(p.appointment_id) ?? {};
+    if (p.role === "apoio") atual.apoio = p.professional_id;
+    else atual.principal = p.professional_id;
+    papeis.set(p.appointment_id, atual);
+  }
+
+  const habilitadasPorTipo = new Map<string, string[]>();
+  for (const h of habilitacoes ?? []) {
+    habilitadasPorTipo.set(h.event_type_id, [...(habilitadasPorTipo.get(h.event_type_id) ?? []), h.professional_id]);
+  }
+
+  // `?agendamento=<id>` abre o detalhe — é a porta do aviso da Central. Só um
+  // UUID passa: o resto é ignorado em vez de virar uma busca que dá 422.
+  const pedido = (await searchParams).agendamento;
+  const agendamentoInicial = typeof pedido === "string" && UUID.test(pedido) ? pedido : null;
 
   /**
    * A OCUPAÇÃO QUE VEM DO GOOGLE — o que o dono cria lá e não via aqui.
@@ -196,6 +256,22 @@ export default async function AgendaPage() {
 
   return (
     <AgendaClient
+      organizationId={activeOrg.orgId}
+      agendamentoInicial={agendamentoInicial}
+      profissionaisIniciais={(profissionais ?? []).map(
+        (p): ProfissionalDaApi => ({
+          id: p.id,
+          nome: p.name,
+          trilha: p.trilha,
+          ativo: p.is_active,
+          user_id: p.user_id,
+          // A jornada e os serviços não entram na primeira pintura da Agenda —
+          // nada aqui os desenha, e a rota os traz na primeira atualização.
+          jornada: null,
+          jornada_fonte: p.user_id ? "membro" : "propria",
+          tipos: [],
+        }),
+      )}
       fusoDeApresentacao={fusoDeApresentacao}
       googleConfigurado={googleConfigurado}
       contaConectada={conexao?.account_email ?? null}
@@ -219,14 +295,23 @@ export default async function AgendaPage() {
         // "Presencial · Sala 2" numa tela real.
         localKind: t.location_kind ?? null,
         localDetalhes: t.location_details ?? null,
+        profissionaisNecessarios: t.professionals_required === 2 ? 2 : 1,
+        habilitadas: habilitadasPorTipo.get(t.id) ?? [],
       }))}
       agendamentosIniciais={((linhas ?? []).map((a) => ({
         id: a.id,
         titulo: a.title ?? "Agendamento",
-        responsavelId: a.owner_user_id ?? "",
+        // A PRINCIPAL quando há participante; senão o dono, que a tela traduz
+        // para a profissional dele (`responsavelDaGrade`).
+        responsavelId: papeis.get(a.id)?.principal ?? a.owner_user_id ?? "",
+        ...(papeis.get(a.id)?.apoio ? { apoioId: papeis.get(a.id)?.apoio } : {}),
+        ...(a.event_type_id ? { eventTypeId: a.event_type_id } : {}),
+        ...(a.conversation_id ? { conversaId: a.conversation_id } : {}),
         comeca: a.starts_at,
         termina: a.ends_at,
-        origem: "ui" as const,
+        // A origem DE VERDADE — era `"ui"` fixo, e o selo "marcado pela IA" não
+        // tinha como existir na primeira pintura.
+        origem: origemDe(a.source),
         situacao: a.status as "confirmed",
         // "com quem" é a promessa do subtítulo desta tela, e era a única parte
         // dela que o servidor não entregava: `contact_id` vinha no select e

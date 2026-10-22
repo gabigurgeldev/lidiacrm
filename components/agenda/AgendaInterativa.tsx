@@ -14,6 +14,7 @@ import type { MotivoDaGradeTravada } from "@/lib/agenda/grade-interativa";
 import { cn } from "@/lib/utils";
 
 import { GradeDaAgenda } from "./GradeDaAgenda";
+import { GradePorProfissional } from "./GradePorProfissional";
 import type { Agendamento, Pessoa, VisaoDaAgenda } from "./tipos";
 
 /**
@@ -96,8 +97,11 @@ export function AgendaInterativa({
 }) {
   const localeDaData = useLocaleDeData();
   const t = useT();
+  // A visão por profissional é só leitura: não pede disponibilidade, porque não
+  // tem blocos vazios para tornar clicáveis.
+  const porProfissional = visao === "profissionais";
   const { data: horarios, isError: horariosFalharam } = useHorariosLivres(
-    tipo ? { event_type_id: tipo.id, de: recorte.de, ate: recorte.ate } : null,
+    tipo && !porProfissional ? { event_type_id: tipo.id, de: recorte.de, ate: recorte.ate } : null,
   );
 
   const horariosPorDia = React.useMemo(() => {
@@ -120,7 +124,9 @@ export function AgendaInterativa({
    * aviso nenhum. Por isso o erro é testado ANTES, e a ausência de resposta não
    * vira afirmação.
    */
-  const motivo: MotivoDaGradeTravada | null = horariosFalharam
+  const motivo: MotivoDaGradeTravada | null = porProfissional
+    ? null
+    : horariosFalharam
     ? "erro"
     : horarios && !horarios.publicou_horarios
       ? "sem-jornada"
@@ -208,7 +214,7 @@ export function AgendaInterativa({
 
   return (
     <div className={cn("flex min-h-0 flex-col gap-2", className)}>
-      {tipos.length > 1 && (
+      {tipos.length > 1 && !porProfissional && (
         <div
           data-testid="tipo-da-grade"
           className="flex flex-wrap items-center gap-1.5 text-xs text-text-muted"
@@ -312,37 +318,48 @@ export function AgendaInterativa({
         </div>
       )}
 
-      <GradeDaAgenda
-        visao={visao}
-        ancora={ancora}
-        agora={agora}
-        pessoas={pessoas}
-        agendamentos={desenhados}
-        onAbrirAgendamento={onAbrirAgendamento}
-        className="min-h-0 flex-1"
-        interacao={
-          tipo
-            ? {
-                horariosPorDia,
-                motivo,
-                duracaoMin: tipo.duracaoMin,
-                onMarcarEm,
-                onArrastarPara: ({ instante, razao, id }) => {
-                  if (!instante) {
-                    // RECUSA EXPLÍCITA, sem tocar no servidor: o destino não
-                    // está na disponibilidade publicada. Remarcar assim mesmo
-                    // criaria um compromisso que o motor não teria oferecido.
-                    setPendente(null);
-                    setRecusa(`Não dá para remarcar para esse horário — ${razao}.`);
-                    return;
-                  }
-                  setRecusa(null);
-                  setPendente({ id, instante });
-                },
-              }
-            : undefined
-        }
-      />
+      {porProfissional ? (
+        <GradePorProfissional
+          dia={ancora}
+          agora={agora}
+          pessoas={pessoas}
+          agendamentos={desenhados}
+          onAbrirAgendamento={onAbrirAgendamento}
+          className="min-h-0 flex-1"
+        />
+      ) : (
+        <GradeDaAgenda
+          visao={visao}
+          ancora={ancora}
+          agora={agora}
+          pessoas={pessoas}
+          agendamentos={desenhados}
+          onAbrirAgendamento={onAbrirAgendamento}
+          className="min-h-0 flex-1"
+          interacao={
+            tipo
+              ? {
+                  horariosPorDia,
+                  motivo,
+                  duracaoMin: tipo.duracaoMin,
+                  onMarcarEm,
+                  onArrastarPara: ({ instante, razao, id }) => {
+                    if (!instante) {
+                      // RECUSA EXPLÍCITA, sem tocar no servidor: o destino não
+                      // está na disponibilidade publicada. Remarcar assim mesmo
+                      // criaria um compromisso que o motor não teria oferecido.
+                      setPendente(null);
+                      setRecusa(`Não dá para remarcar para esse horário — ${razao}.`);
+                      return;
+                    }
+                    setRecusa(null);
+                    setPendente({ id, instante });
+                  },
+                }
+              : undefined
+          }
+        />
+      )}
     </div>
   );
 }

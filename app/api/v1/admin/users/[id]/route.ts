@@ -13,6 +13,8 @@ import {
   type SuspensaoRegistrada,
 } from "@/lib/admin/gestao-usuarios";
 import { exigirPlatformAdmin, lerCorpo } from "@/lib/admin/rota-da-plataforma";
+import { desativarProfissionalDoMembro } from "@/lib/agenda/profissionais";
+import { logger } from "@/lib/logger";
 
 // ---------------------------------------------------------------------------
 // GET /api/v1/admin/users/[id]
@@ -330,13 +332,26 @@ export async function DELETE(
   // Vínculos primeiro: se o Auth falhar depois, a pessoa só perdeu o acesso às
   // organizações (reversível pelo painel), e não ficou uma conta excluída ainda
   // listada como membro.
-  const { error: revErr } = await admin
+  const { data: revogados, error: revErr } = await admin
     .from("user_organizations")
     .update({ revoked_at: agoraIso, updated_at: agoraIso })
     .eq("user_id", id)
-    .is("revoked_at", null);
+    .is("revoked_at", null)
+    .select("organization_id");
   if (revErr) {
     return fail("internal_error", "Não consegui remover os vínculos agora.", 500, { requestId });
+  }
+
+  // Conta excluída não atende: a profissional dela sai da agenda de CADA
+  // organização de que acabou de sair (e só dessas — filtro por organização).
+  const orgsRevogadas = ((revogados ?? []) as { organization_id: string }[]).map((v) => v.organization_id);
+  const agenda = await desativarProfissionalDoMembro(admin, orgsRevogadas, id);
+  if ("erro" in agenda) {
+    logger.error("admin.users.delete: não consegui desativar as profissionais do membro", {
+      erro: agenda.erro,
+      target_user_id: id,
+      requestId,
+    });
   }
 
   if (plataforma.alvoEhPlatformAdmin) {

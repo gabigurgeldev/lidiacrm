@@ -10,7 +10,7 @@
  * ping de vida (o useHeartbeat/60s do inbox chama este PATCH). O cron
  * attendant-heartbeat marca offline quem não pinga há 15min.
  *
- * `always_available` (migration 0244) tira a pessoa dessa varredura: ela fica
+ * `always_available` (migration 0246) tira a pessoa dessa varredura: ela fica
  * disponível no horário mesmo com o CRM fechado. É decisão de quem gerencia a
  * equipe, então só manager+ muda — o atendente que pudesse ligá-la em si mesmo
  * receberia leads de madrugada sem ninguém ter decidido isso. Ligar a opção

@@ -45,7 +45,13 @@ export interface McpTurnTools {
 
 export async function buildMcpTurnTools(
   cfg: CrmEdgeConfig,
-  ids: { organizationId: string; jobId: string },
+  /**
+   * `conversationId` + `contactId` = a conversa em que o turno roda. Com os dois,
+   * `ctx.turno` é preenchido e os campos de `CAMPOS_DO_TURNO` (`lib/mcp/turno.ts`)
+   * saem do schema do modelo — quem é atendido vem da conversa, não dele.
+   * Ausentes (o Operador, que não fala com o cliente), nada muda.
+   */
+  ids: { organizationId: string; jobId: string; conversationId?: string; contactId?: string },
   agentConfig: PublishedAgentConfig,
   log: Logger,
 ): Promise<McpTurnTools | null> {
@@ -83,6 +89,9 @@ export async function buildMcpTurnTools(
     apiTokenId: ephemeral.id,
     requestId: ids.jobId,
     supabase: cfg.supabase,
+    ...(ids.conversationId && ids.contactId
+      ? { turno: { conversationId: ids.conversationId, contactId: ids.contactId } }
+      : {}),
   };
   const auth: McpAuthResult = {
     organizationId: ids.organizationId,

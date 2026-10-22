@@ -1,6 +1,7 @@
 "use client";
 
 import { useLocaleDeData } from "@/hooks/i18n/useLocaleDeData";
+import Link from "next/link";
 import { useState } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
 
@@ -10,7 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAgentInbox, useUpdateInboxItem, type AgentInboxItem } from "@/hooks/ai/useAgentInbox";
 import { kindLabel, SEVERITY_LABEL, type AgentInboxSeverity } from "@/lib/ai/agent-inbox-copy";
-import { Bell, Check } from "@/lib/ui/icons";
+import { REF_KIND_DO_AGENDAMENTO } from "@/lib/agenda/tipos";
+import { Bell, CalendarCheck, Check } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
 import { GATILHO_DA_ABA, SEGMENTADO_ABAS } from "@/components/ajustes";
 
@@ -19,6 +21,22 @@ const SEVERITY_VARIANT: Record<AgentInboxSeverity, "info" | "warning" | "error">
   warn: "warning",
   critical: "error",
 };
+
+/**
+ * Para onde o aviso LEVA, quando aponta para algo que tem tela.
+ *
+ * Aviso que conta "a IA marcou a consulta da Maria" e não deixa abrir a consulta
+ * obriga a pessoa a ir à Agenda e procurar o horário à mão — o aviso vira
+ * notícia, não porta. O `ref_kind` é vocabulário aberto (sem CHECK), por isso a
+ * constante: quem emite (`lib/agenda/aviso-da-marcacao.ts`) e quem roteia leem
+ * o mesmo símbolo.
+ */
+function destinoDoAviso(item: AgentInboxItem): string | null {
+  if (item.ref_kind === REF_KIND_DO_AGENDAMENTO && item.ref_id) {
+    return `/app/agenda?agendamento=${item.ref_id}`;
+  }
+  return null;
+}
 
 export function AgentInboxList({ canResolve }: { canResolve: boolean }) {
   const t = useT();
@@ -84,6 +102,7 @@ function InboxRow({
 }) {
   const localeDaData = useLocaleDeData();
   const t = useT();
+  const destino = destinoDoAviso(item);
   const when = formatDistanceToNowStrict(new Date(item.created_at), {
     addSuffix: true,
     locale: localeDaData,
@@ -99,6 +118,16 @@ function InboxRow({
           {kindLabel(item.kind, t)} · {when}
         </p>
         {item.body ? <p className="mt-1 text-xs text-muted-foreground">{item.body}</p> : null}
+        {destino ? (
+          <Link
+            href={destino}
+            data-testid="inbox-item-destino"
+            className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-accent underline-offset-2 hover:underline"
+          >
+            <CalendarCheck size={14} aria-hidden />
+            {t("Ver agendamento")}
+          </Link>
+        ) : null}
       </div>
       {canResolve ? (
         item.status === "resolved" ? (

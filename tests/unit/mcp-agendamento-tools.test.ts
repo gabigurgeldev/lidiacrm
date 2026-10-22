@@ -33,6 +33,10 @@ vi.mock("@/lib/agenda/consulta", async (original) => {
   return { ...real, horariosLivresDaOrg: vi.fn(), listaAgendamentos: vi.fn(), idDoTipoPorSlug: vi.fn() };
 });
 
+vi.mock("@/lib/agenda/bloco-do-agente", () => ({
+  slugsDosTiposAtivos: vi.fn(async () => ["consulta-inicial", "limpeza-de-pele"]),
+}));
+
 const { horariosLivresDaOrg, listaAgendamentos, idDoTipoPorSlug } = await import("@/lib/agenda/consulta");
 const {
   crmFindFreeSlots,
@@ -40,6 +44,7 @@ const {
   crmBookAppointment,
   crmRescheduleAppointment,
   crmCancelAppointment,
+  TETO_DE_HORARIOS,
 } = await import("@/lib/mcp/tools/agendamento");
 const handlers = await import("@/app/api/v1/agenda/agendamentos/_handler");
 const { ApiError } = await import("@/lib/api/types");
@@ -65,12 +70,17 @@ function respondeCom(r: ResultadoDaConsulta) {
 
 const SUCESSO: ResultadoDaConsulta = {
   ok: true,
-  slots: [{ inicio: new Date("2026-09-01T14:00:00Z"), fim: new Date("2026-09-01T14:30:00Z") }],
+  slots: [
+    { inicio: new Date("2026-09-01T14:00:00Z"), fim: new Date("2026-09-01T14:30:00Z"), opcoes: [] },
+  ],
+  profissionais: [],
+  profissionaisNecessarios: 1,
   fusoDaRegra: "America/Sao_Paulo",
   publicouHorarios: true,
   fusoSuposto: false,
   fontesDefasadas: [],
   agendaExternaNuncaLida: false,
+  profissionaisComProblema: [],
 };
 
 describe("crm_find_free_slots", () => {
@@ -319,5 +329,307 @@ describe("as escritas de agenda", () => {
       ctx,
     );
     expect(vi.mocked(handlers.cancelarAgendamentoHandler).mock.calls[0]![1].organization_id).toBe("org-1");
+  });
+});
+
+
+describe("quem atende cada horário (migration 0245)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const ANA = "aaaaaaaa-0000-4000-8000-000000000001";
+  const BIA = "aaaaaaaa-0000-4000-8000-000000000002";
+  const ANA_PAULA = "aaaaaaaa-0000-4000-8000-000000000003";
+
+  const profissional = (id: string, nome: string) => ({ id, nome, trilha: null, userId: null, ativo: true });
+  const OK = SUCESSO as Extract<ResultadoDaConsulta, { ok: true }>;
+
+  const DUAS: ResultadoDaConsulta = {
+    ...OK,
+    profissionais: [profissional(ANA, "Ana Souza"), profissional(BIA, "Bia Lima")],
+    slots: [
+      {
+        inicio: new Date("2026-09-01T14:00:00Z"),
+        fim: new Date("2026-09-01T14:30:00Z"),
+        opcoes: [
+          { principalId: ANA, apoioId: null },
+          { principalId: BIA, apoioId: null },
+        ],
+      },
+      {
+        inicio: new Date("2026-09-01T15:00:00Z"),
+        fim: new Date("2026-09-01T15:30:00Z"),
+        opcoes: [{ principalId: BIA, apoioId: null }],
+      },
+    ],
+  };
+
+  it("cada horário diz QUEM atende, com nome e id — e as alternativas por nome", async () => {
+    respondeCom(DUAS);
+    const r = (await crmFindFreeSlots.handler({ event_type_slug: "c" }, ctx)) as {
+      horarios: { profissionais: { id: string; nome: string; papel: string }[]; alternativas: string[] }[];
+    };
+    expect(r.horarios[0]!.profissionais).toEqual([{ id: ANA, nome: "Ana Souza", papel: "principal" }]);
+    expect(r.horarios[0]!.alternativas).toEqual(["Bia Lima"]);
+  });
+
+  it("tipo que pede DUAS mostra a apoio junto, com o papel", async () => {
+    respondeCom({
+      ...(DUAS as Extract<ResultadoDaConsulta, { ok: true }>),
+      profissionaisNecessarios: 2,
+      slots: [
+        {
+          inicio: new Date("2026-09-01T14:00:00Z"),
+          fim: new Date("2026-09-01T15:00:00Z"),
+          opcoes: [{ principalId: ANA, apoioId: BIA }],
+        },
+      ],
+    });
+    const r = (await crmFindFreeSlots.handler({ event_type_slug: "c" }, ctx)) as {
+      horarios: { profissionais: { nome: string; papel: string }[] }[];
+      profissionais_necessarios: number;
+    };
+    expect(r.profissionais_necessarios).toBe(2);
+    expect(r.horarios[0]!.profissionais.map((p) => `${p.nome}:${p.papel}`)).toEqual([
+      "Ana Souza:principal",
+      "Bia Lima:apoio",
+    ]);
+  });
+
+  it("pedido por NOME filtra os horários daquela pessoa — sem acento e sem caixa", async () => {
+    respondeCom(DUAS);
+    const r = (await crmFindFreeSlots.handler({ event_type_slug: "c", profissional: "bia" }, ctx)) as {
+      horarios: { inicio: string; profissionais: { id: string }[] }[];
+    };
+    expect(r.horarios).toHaveLength(2);
+    expect(r.horarios.every((h) => h.profissionais[0]!.id === BIA)).toBe(true);
+  });
+
+  it("nome AMBÍGUO vira pergunta, nunca escolha no escuro", async () => {
+    respondeCom({
+      ...(DUAS as Extract<ResultadoDaConsulta, { ok: true }>),
+      profissionais: [profissional(ANA, "Ana Souza"), profissional(ANA_PAULA, "Ana Paula")],
+    });
+    const r = (await crmFindFreeSlots.handler({ event_type_slug: "c", profissional: "Ana" }, ctx)) as {
+      horarios: unknown[];
+      motivo: string;
+      mensagem: string;
+    };
+    expect(r.horarios).toEqual([]);
+    expect(r.motivo).toBe("profissional_ambigua");
+    expect(r.mensagem).toMatch(/Ana Souza e Ana Paula/);
+    expect(r.mensagem).toMatch(/Pergunte/);
+  });
+
+  it("nome que não atende o serviço ensina quem atende — e não vaza id", async () => {
+    respondeCom(DUAS);
+    const r = (await crmFindFreeSlots.handler({ event_type_slug: "c", profissional: "Carla" }, ctx)) as {
+      motivo: string;
+      mensagem: string;
+    };
+    expect(r.motivo).toBe("profissional_nao_encontrada");
+    expect(r.mensagem).toMatch(/Ana Souza e Bia Lima/);
+    expect(r.mensagem).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/);
+  });
+
+  it("CONTROLE: o id também resolve (é o que o horário devolve ao modelo)", async () => {
+    respondeCom(DUAS);
+    const r = (await crmFindFreeSlots.handler({ event_type_slug: "c", profissional: ANA }, ctx)) as {
+      horarios: unknown[];
+    };
+    expect(r.horarios).toHaveLength(1);
+  });
+
+  it("a lista é cortada no teto e AVISA que há mais", async () => {
+    const muitos = Array.from({ length: TETO_DE_HORARIOS + 15 }, (_, i) => ({
+      inicio: new Date(Date.UTC(2026, 8, 1, 10, i)),
+      fim: new Date(Date.UTC(2026, 8, 1, 10, i + 30)),
+      opcoes: [{ principalId: ANA, apoioId: null }],
+    }));
+    respondeCom({ ...(DUAS as Extract<ResultadoDaConsulta, { ok: true }>), slots: muitos });
+    const r = (await crmFindFreeSlots.handler({ event_type_slug: "c" }, ctx)) as {
+      horarios: unknown[];
+      mais_horarios: boolean;
+    };
+    expect(r.horarios).toHaveLength(TETO_DE_HORARIOS);
+    expect(r.mais_horarios).toBe(true);
+  });
+
+  it("CONTROLE: lista curta NÃO diz que há mais", async () => {
+    respondeCom(DUAS);
+    const r = (await crmFindFreeSlots.handler({ event_type_slug: "c" }, ctx)) as { mais_horarios: boolean };
+    expect(r.mais_horarios).toBe(false);
+  });
+
+  it("tipo desconhecido ENSINA os que existem", async () => {
+    respondeCom({
+      ok: false,
+      codigo: "tipo_desconhecido",
+      motivoParaOperador: "slug x não existe",
+      motivoParaCliente: "Não encontrei esse atendimento.",
+    });
+    const r = (await crmFindFreeSlots.handler({ event_type_slug: "x" }, ctx)) as { mensagem: string };
+    expect(r.mensagem).toMatch(/`consulta-inicial`/);
+    expect(r.mensagem).toMatch(/`limpeza-de-pele`/);
+  });
+});
+
+
+describe("marcar com profissionais e conversa", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("professional_ids e conversation_id chegam ao handler", async () => {
+    vi.mocked(idDoTipoPorSlug).mockResolvedValue({ id: "t-1", nome: "Consulta" });
+    vi.mocked(handlers.marcarAgendamentoHandler).mockResolvedValue({ id: "a-1" });
+    await crmBookAppointment.handler(
+      {
+        event_type_slug: "consulta",
+        starts_at: "2026-09-01T14:00:00Z",
+        contact_id: "c-1",
+        conversation_id: "conv-1",
+        professional_ids: ["p-1", "p-2"],
+      },
+      ctx,
+    );
+    const corpo = vi.mocked(handlers.marcarAgendamentoHandler).mock.calls[0]![2];
+    expect(corpo).toMatchObject({
+      event_type_id: "t-1",
+      contact_id: "c-1",
+      conversation_id: "conv-1",
+      professional_ids: ["p-1", "p-2"],
+    });
+  });
+
+  it("sem professional_ids, o campo NÃO vai — o handler escolhe a 1ª opção do instante", async () => {
+    vi.mocked(idDoTipoPorSlug).mockResolvedValue({ id: "t-1", nome: "Consulta" });
+    vi.mocked(handlers.marcarAgendamentoHandler).mockResolvedValue({ id: "a-1" });
+    await crmBookAppointment.handler(
+      { event_type_slug: "consulta", starts_at: "2026-09-01T14:00:00Z", contact_id: "c-1" },
+      ctx,
+    );
+    expect(vi.mocked(handlers.marcarAgendamentoHandler).mock.calls[0]![2]).not.toHaveProperty("professional_ids");
+  });
+
+  it.each([
+    ["agenda_horario_ocupado", /crm_find_free_slots/],
+    ["agenda_profissional_invalido", /professional_ids/],
+    ["agenda_profissionais_insuficientes", /profissionais/],
+  ])("%s traz o ensino DELE", async (codigo, ensino) => {
+    vi.mocked(idDoTipoPorSlug).mockResolvedValue({ id: "t-1", nome: "Consulta" });
+    vi.mocked(handlers.marcarAgendamentoHandler).mockRejectedValue(new ApiError(409, codigo, undefined, "req-1"));
+    const r = (await crmBookAppointment.handler(
+      { event_type_slug: "consulta", starts_at: "2026-09-01T14:00:00Z", contact_id: "c-1" },
+      ctx,
+    )) as { marcado: boolean; motivo: string; mensagem: string };
+    expect(r.marcado).toBe(false);
+    expect(r.motivo).toBe(codigo);
+    expect(r.mensagem).toMatch(ensino);
+    expect(r.mensagem).not.toMatch(/não consegui completar agora/);
+  });
+
+  it("not_found na MARCAÇÃO fala de cliente/conversa, não de compromisso", async () => {
+    vi.mocked(idDoTipoPorSlug).mockResolvedValue({ id: "t-1", nome: "Consulta" });
+    vi.mocked(handlers.marcarAgendamentoHandler).mockRejectedValue(new ApiError(404, "not_found", undefined, "req-1"));
+    const r = (await crmBookAppointment.handler(
+      { event_type_slug: "consulta", starts_at: "2026-09-01T14:00:00Z", contact_id: "c-1" },
+      ctx,
+    )) as { mensagem: string };
+    expect(r.mensagem).toMatch(/cliente ou essa conversa/);
+  });
+
+  it("slug desconhecido na marcação lista os slugs ativos", async () => {
+    vi.mocked(idDoTipoPorSlug).mockResolvedValue(null);
+    const r = (await crmBookAppointment.handler(
+      { event_type_slug: "nao-existe", starts_at: "2026-09-01T14:00:00Z", contact_id: "c-1" },
+      ctx,
+    )) as { mensagem: string };
+    expect(r.mensagem).toMatch(/`consulta-inicial`/);
+  });
+
+  it("listar por profissional passa o recorte à regra", async () => {
+    vi.mocked(listaAgendamentos).mockResolvedValue({ ok: true, agendamentos: [] });
+    await crmListAppointments.handler({ professional_id: "33333333-3333-4333-8333-333333333333" }, ctx);
+    expect(vi.mocked(listaAgendamentos).mock.calls[0]![2]).toMatchObject({
+      professionalId: "33333333-3333-4333-8333-333333333333",
+    });
+  });
+});
+
+// ─── no turno, só o compromisso de quem está na conversa ────────────────────
+//
+// `appointment_id` vem do modelo, e ele pode tê-lo de qualquer lugar. Sem a
+// checagem, o cliente A pedindo "desmarca minha consulta" desmarcava a do B.
+describe("remarcar e cancelar dentro do turno", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const CONTATO_DA_CONVERSA = "c-da-conversa";
+
+  /** Client que responde o `contact_id` do agendamento e registra os filtros. */
+  function ctxDoTurno(contatoDoAgendamento: string | null, erro: string | null = null) {
+    const filtros: Record<string, unknown> = {};
+    const b: Record<string, unknown> = {};
+    b.select = () => b;
+    b.eq = (c: string, v: unknown) => ((filtros[c] = v), b);
+    b.maybeSingle = async () =>
+      erro
+        ? { data: null, error: { message: erro } }
+        : { data: contatoDoAgendamento === null ? null : { contact_id: contatoDoAgendamento }, error: null };
+    const supabase = { from: () => b } as unknown as SupabaseClient;
+    return {
+      filtros,
+      ctx: { ...ctx, supabase, turno: { conversationId: "conv-1", contactId: CONTATO_DA_CONVERSA } } as McpContext,
+    };
+  }
+
+  const ID = "77777777-7777-4777-8777-777777777777";
+
+  it.each([
+    ["remarcar", () => crmRescheduleAppointment, { appointment_id: ID, new_starts_at: "2026-09-02T10:00:00Z" }, "remarcado"],
+    ["cancelar", () => crmCancelAppointment, { appointment_id: ID, reason: "cliente pediu" }, "cancelado"],
+  ] as const)("%s compromisso de OUTRO cliente: `not_found`, e o handler nem é chamado", async (_n, def, args, chave) => {
+    const { ctx: c, filtros } = ctxDoTurno("c-outro-cliente");
+    const r = (await def().handler(args as never, c)) as Record<string, unknown>;
+    expect(r[chave]).toBe(false);
+    // `not_found` e não "é de outra pessoa": não confirma que o id existe.
+    expect(r.motivo).toBe("not_found");
+    expect(handlers.alterarAgendamentoHandler).not.toHaveBeenCalled();
+    expect(handlers.cancelarAgendamentoHandler).not.toHaveBeenCalled();
+    // A organização vem do contexto, nunca do argumento.
+    expect(filtros).toMatchObject({ organization_id: "org-1", id: ID });
+  });
+
+  it("compromisso que não existe: o mesmo `not_found`", async () => {
+    const { ctx: c } = ctxDoTurno(null);
+    const r = (await crmCancelAppointment.handler({ appointment_id: ID, reason: "cliente pediu" }, c)) as {
+      motivo: string;
+    };
+    expect(r.motivo).toBe("not_found");
+    expect(handlers.cancelarAgendamentoHandler).not.toHaveBeenCalled();
+  });
+
+  it("CONTROLE: compromisso do cliente da conversa passa", async () => {
+    vi.mocked(handlers.alterarAgendamentoHandler).mockResolvedValue({ id: ID });
+    const { ctx: c } = ctxDoTurno(CONTATO_DA_CONVERSA);
+    const r = (await crmRescheduleAppointment.handler(
+      { appointment_id: ID, new_starts_at: "2026-09-02T10:00:00Z" },
+      c,
+    )) as { remarcado: boolean };
+    expect(r.remarcado).toBe(true);
+    expect(handlers.alterarAgendamentoHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it("erro de banco na checagem SOBE — não vira 'não encontrado'", async () => {
+    const { ctx: c } = ctxDoTurno(null, "conexão caiu");
+    await expect(
+      crmCancelAppointment.handler({ appointment_id: ID, reason: "cliente pediu" }, c),
+    ).rejects.toThrow("conexão caiu");
+  });
+
+  it("FORA do turno (servidor MCP externo) não há checagem: nada muda", async () => {
+    vi.mocked(handlers.cancelarAgendamentoHandler).mockResolvedValue({ id: ID });
+    // `ctx` sem turno e com client vazio: se a checagem rodasse, estouraria.
+    const r = (await crmCancelAppointment.handler({ appointment_id: ID, reason: "cliente pediu" }, ctx)) as {
+      cancelado: boolean;
+    };
+    expect(r.cancelado).toBe(true);
   });
 });

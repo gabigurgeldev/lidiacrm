@@ -19,6 +19,7 @@ import {
   type ChannelProvider,
   type ChannelSessionRef,
 } from "@/lib/channels";
+import { midiaCompartilhadaDaMensagem } from "@/lib/messaging/media/midia-compartilhada";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -67,18 +68,18 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (error) {
     return fail("internal_error", "Erro ao buscar mensagem.", 500, { requestId });
   }
-  // O arquivo do DISPARO EM MASSA: um só por campanha, apontado pela metadata
-  // de cada mensagem (ver `OpcoesDeEnvio` no handler de envio). Só da pasta de
-  // disparos da PRÓPRIA organização — a assinatura usa a service role.
-  const bruto = (msg?.metadata as Record<string, unknown> | null)?.midia_do_disparo;
-  const midiaDoDisparo =
-    typeof bruto === "string" && bruto.startsWith(`${activeOrg.orgId}/disparos/`) ? bruto : null;
+  // Mídia COMPARTILHADA: o arquivo do disparo em massa ou a foto do acervo que
+  // o agente enviou — um arquivo da organização, apontado pela metadata de cada
+  // mensagem (ver `OpcoesDeEnvio` no handler de envio). O helper só devolve
+  // caminho da pasta da origem da PRÓPRIA organização — a assinatura usa a
+  // service role, que não passa pela RLS do Storage.
+  const midiaCompartilhada = midiaCompartilhadaDaMensagem(msg?.metadata, activeOrg.orgId)?.path ?? null;
 
-  if (!msg || (!msg.media_storage_path && !msg.media_url && !midiaDoDisparo)) {
+  if (!msg || (!msg.media_storage_path && !msg.media_url && !midiaCompartilhada)) {
     return fail("not_found", "Mensagem sem mídia.", 404, { requestId });
   }
 
-  const caminhoAssinavel = msg.media_storage_path ?? midiaDoDisparo;
+  const caminhoAssinavel = msg.media_storage_path ?? midiaCompartilhada;
   if (caminhoAssinavel) {
     const admin = createAdminClient();
     const { data: signed, error: signErr } = await admin.storage

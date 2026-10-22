@@ -205,6 +205,27 @@ describe("projeção — o que o Conversador pode ver", () => {
       expect(p.results[0]!.content).toBe(trecho);
     });
 
+    it("o apelido da FOTO do acervo sobrevive — é por ele que o send_image pede a foto", () => {
+      // O trecho de uma foto chega com `metadata.foto` ("foto-1a2b3c4d"). Se a
+      // projeção o cortasse, o modelo acharia a foto pela descrição e não teria
+      // como pedi-la — a ferramenta existiria e nunca funcionaria. O id do
+      // material, ao lado, continua saindo.
+      const p = projetarRetornoDeTool({
+        ok: true,
+        results: [
+          {
+            knowledge_source_id: "def-456",
+            content: "Vestido azul, tecido leve",
+            similarity: 0.8,
+            metadata: { source_type: "imagem", foto: "foto-1a2b3c4d" },
+          },
+        ],
+      }) as { results: Array<{ metadata: Record<string, unknown> }> };
+      expect(p.results[0]!.metadata.foto).toBe("foto-1a2b3c4d");
+      expect(p.results[0]!.metadata.source_type).toBe("imagem");
+      expect(JSON.stringify(p)).not.toContain("def-456");
+    });
+
     it("mas o campo de ERRO continua sendo traduzido — a restrição não desarmou a defesa", () => {
       const p = projetarRetornoDeTool({ execucoes: [{ erro: "unsafe_url:https_required" }] }) as {
         execucoes: Array<{ erro: string }>;

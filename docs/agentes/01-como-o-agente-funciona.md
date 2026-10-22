@@ -85,7 +85,7 @@ A ordem importa: **avisa e só então silencia**. Silenciar primeiro faria a pr�
 O modelo decide livremente quais ferramentas usar, até o limite de **"Ações por atendimento"** (`max_steps`, 1 a 25). Regras impostas pelo motor, não pelo prompt:
 
 - **Texto solto do modelo nunca vira mensagem.** Só sai para o cliente o que passar pela ferramenta `send_message` (ou `send_template`).
-- **No máximo 3 mensagens físicas por turno** (`MAX_SENDS_PER_TURN`). Medido em produção: sem esse teto um cliente recebeu 8 mensagens seguidas.
+- **No máximo 3 mensagens físicas de texto por turno** (`MAX_SENDS_PER_TURN`). Medido em produção: sem esse teto um cliente recebeu 8 mensagens seguidas. Fotos do acervo (`send_image`) contam à parte, até 4 por turno (`MAX_IMAGES_PER_TURN`), para "me mostra as cores" não calar o texto que vem depois.
 - **Disjuntor de ferramentas:** chamar a mesma ferramenta com os mesmos argumentos repetidamente, ou sem progresso, gera aviso e depois bloqueio.
 - **Cada envio passa pela cadeia de conferências** (ver [08](08-seguranca-guardrails-anti-ban.md)). Se uma conferência barra, o motivo volta ao modelo como instrução para reescrever — não é erro.
 - **Movimento de funil é marcado pelo modelo e validado pelo código.** A ferramenta `update_lead_state` só aceita o **próximo** estágio válido (`new → contacted → qualifying → qualified → negotiating → won | lost`); regressão é recusada. O avanço é espelhado no card do CRM conforme a tradução configurada no funil (ver [02 §4](02-criar-e-configurar-agente.md)).

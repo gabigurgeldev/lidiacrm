@@ -45,12 +45,27 @@ interface Estado {
 let estado: Estado;
 const updateUserById = vi.fn(async () => ({ data: {}, error: null }));
 const deleteUser = vi.fn(async () => ({ data: {}, error: null }));
-const updates: Array<{ tabela: string; valores: unknown }> = [];
+const updates: Array<{
+  tabela: string;
+  valores: unknown;
+  /** Os filtros da escrita — preenchidos DEPOIS do `.update()`, pela mesma referência. */
+  eqs: Record<string, unknown>;
+  ins: Record<string, unknown[]>;
+}> = [];
+/** O que o UPDATE de `user_organizations` devolve com `.select()` (as orgs revogadas). */
+let revogadasDevolvidas: Array<{ organization_id: string }> = [];
 
 /** Builder encadeável que resolve conforme a tabela e o formato da consulta. */
 function builder(tabela: string) {
-  const ctx: { head?: boolean; select?: string; eqs: Record<string, unknown>; update?: unknown } = {
+  const ctx: {
+    head?: boolean;
+    select?: string;
+    eqs: Record<string, unknown>;
+    ins: Record<string, unknown[]>;
+    update?: unknown;
+  } = {
     eqs: {},
+    ins: {},
   };
   const b: Record<string, unknown> = {};
   const self = () => b;
@@ -64,11 +79,16 @@ function builder(tabela: string) {
     return b;
   };
   b.is = self;
+  b.not = self;
+  b.in = (col: string, vals: unknown[]) => {
+    ctx.ins[col] = vals;
+    return b;
+  };
   b.order = self;
   b.range = self;
   b.update = (valores: unknown) => {
     ctx.update = valores;
-    updates.push({ tabela, valores });
+    updates.push({ tabela, valores, eqs: ctx.eqs, ins: ctx.ins });
     return b;
   };
   b.maybeSingle = async () => {
@@ -76,7 +96,11 @@ function builder(tabela: string) {
     return { data: null, error: null };
   };
   b.then = (res: (v: unknown) => unknown) => {
-    if (ctx.update !== undefined) return Promise.resolve({ error: null }).then(res);
+    if (ctx.update !== undefined) {
+      const data =
+        tabela === "user_organizations" && ctx.select ? revogadasDevolvidas : tabela === "calendar_professionals" ? [] : null;
+      return Promise.resolve({ data, error: null }).then(res);
+    }
     if (tabela === "platform_admins") {
       return Promise.resolve({
         data: estado.platformAdmins.map((user_id) => ({ user_id })),
@@ -126,6 +150,7 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 beforeEach(() => {
   vi.clearAllMocks();
   updates.length = 0;
+  revogadasDevolvidas = [];
   estado = {
     platformAdmins: [ATOR],
     alvo: {
@@ -286,6 +311,19 @@ describe("PATCH/DELETE /users/[id]", () => {
     expect(updates[0]?.tabela).toBe("user_organizations");
     expect(vi.mocked(audit).mock.calls.at(-1)?.[0].action).toBe("platform_admin.user_deleted");
   });
+
+  it("excluir tira a pessoa da agenda de CADA organização de que saiu — e só dessas", async () => {
+    // Sem isto a profissional dela seguia ativa e a IA oferecia horário de uma
+    // conta excluída.
+    revogadasDevolvidas = [{ organization_id: ORG }, { organization_id: "org-2" }];
+    const { DELETE } = await import("@/app/api/v1/admin/users/[id]/route");
+    const res = await DELETE(req("/x", "DELETE", { confirm_email: "alvo@exemplo.com" }), params({ id: ALVO }));
+    expect(res.status).toBe(200);
+    const agenda = updates.find((u) => u.tabela === "calendar_professionals");
+    expect(agenda?.valores).toEqual({ is_active: false });
+    expect(agenda?.eqs).toMatchObject({ user_id: ALVO });
+    expect(agenda?.ins.organization_id).toEqual([ORG, "org-2"]);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -311,6 +349,25 @@ describe("/users/[id]/memberships/[orgId]", () => {
       action: "platform_admin.user_removed_from_org",
       organizationId: ORG,
     });
+  });
+
+  it("remover da organização desativa a profissional dela NESSA organização", async () => {
+    const { DELETE } = await import("@/app/api/v1/admin/users/[id]/memberships/[orgId]/route");
+    const res = await DELETE(req("/x", "DELETE"), params({ id: ALVO, orgId: ORG }));
+    expect(res.status).toBe(200);
+    const agenda = updates.find((u) => u.tabela === "calendar_professionals");
+    expect(agenda?.valores).toEqual({ is_active: false });
+    expect(agenda?.eqs).toMatchObject({ user_id: ALVO, is_active: true });
+    expect(agenda?.ins.organization_id).toEqual([ORG]);
+  });
+
+  it("recusada (último admin), NÃO desativa ninguém na agenda", async () => {
+    estado.vinculo = { id: "v1", role: "admin", revoked_at: null };
+    estado.adminsNaOrg = 1;
+    const { DELETE } = await import("@/app/api/v1/admin/users/[id]/memberships/[orgId]/route");
+    const res = await DELETE(req("/x", "DELETE"), params({ id: ALVO, orgId: ORG }));
+    expect(res.status).toBe(409);
+    expect(updates.some((u) => u.tabela === "calendar_professionals")).toBe(false);
   });
 
   it("trocar papel audita de/para", async () => {

@@ -1,5 +1,5 @@
 -- ============================================================================
--- 0244 — ATENDENTE SEMPRE DISPONÍVEL NO HORÁRIO.
+-- 0246 — ATENDENTE SEMPRE DISPONÍVEL NO HORÁRIO.
 --
 -- Medido em produção (SEI Parauapebas, 2026-10-22): a dona da conta pediu que
 -- as atendentes ficassem "ligadas" para o fluxo de distribuição entregar leads

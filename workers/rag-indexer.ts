@@ -45,6 +45,7 @@ import { acquireDebounce } from "@/lib/ai/rag/debounce";
 import { chunkText, computeContentHash } from "@/lib/ai/rag/chunker";
 import { canonizarTipoDeFonte } from "@/lib/ai/rag/tipos-de-fonte";
 import { extrairTextoDoArquivo, ErroDeExtracao } from "@/lib/ai/rag/ingest/documento";
+import { pedacosDeImagem } from "@/lib/ai/rag/ingest/imagem";
 import { estimateTokens } from "@/lib/ai/runtime/history";
 import { formatProductForRag, type NuvemshopProduct } from "@/lib/ai/rag/format-product";
 import {
@@ -334,6 +335,11 @@ async function indexarFonte(
         break;
       case "documento":
         pedacos = await pedacosDeDocumento(fonte);
+        break;
+      case "imagem":
+        // Um trecho com nome + descrição; o arquivo não é lido aqui — o modelo
+        // busca por texto, e quem usa o arquivo é o envio (`send_image`).
+        pedacos = pedacosDeImagem(fonte);
         break;
       case "catalogo":
         pedacos = await pedacosDeCatalogo(fonte, extra.productId);

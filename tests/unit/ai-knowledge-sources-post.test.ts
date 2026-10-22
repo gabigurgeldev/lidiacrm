@@ -208,6 +208,22 @@ describe("POST /api/v1/ai/knowledge/sources — tipo pedido é o tipo gravado", 
     expect(escritas).toHaveLength(0);
   });
 
+  it.each(["imagem", "foto", "image"])(
+    "foto (%s) por JSON → 422 apontando o envio de foto, e NADA é gravado",
+    async (sourceType) => {
+      sessaoOk();
+      const { escritas } = dublarBanco();
+      const { POST } = await import("@/app/api/v1/ai/knowledge/sources/route");
+      const res = await POST(req({ source_type: sourceType, name: "Buquê de rosas" }));
+
+      expect(res.status).toBe(422);
+      const body = (await res.json()) as { error: { message: string } };
+      expect(body.error.message).toContain("/api/v1/ai/knowledge/sources/imagem");
+      // Sem a recusa, a foto sem arquivo caía no caminho de texto como FAQ vazia.
+      expect(escritas).toHaveLength(0);
+    },
+  );
+
   it("tipo sem ingestão de texto e SEM conteúdo continua podendo ser criado", async () => {
     sessaoOk();
     const { escritas } = dublarBanco();

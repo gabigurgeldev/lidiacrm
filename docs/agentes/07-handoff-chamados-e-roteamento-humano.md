@@ -137,7 +137,7 @@ Elegível = **disponível** ∧ **dentro do horário** da pessoa ∧ **abaixo da
 | Configuração por atendente | Detalhe |
 |---|---|
 | Disponível | Liga/desliga. Sem heartbeat por **15 minutos**, o atendente vira offline sozinho (cron `attendant-heartbeat`), exceto se estiver **sempre disponível**. |
-| Sempre disponível | Só manager+ liga. O cron não a desliga por falta de heartbeat, e ela fica elegível durante o horário mesmo com o CRM fechado. Ligar a opção também liga a pessoa (`attendant_availability.always_available`, migration 0244). |
+| Sempre disponível | Só manager+ liga. O cron não a desliga por falta de heartbeat, e ela fica elegível durante o horário mesmo com o CRM fechado. Ligar a opção também liga a pessoa (`attendant_availability.always_available`, migration 0246). |
 | Capacidade | 1 a 1.000 conversas abertas atribuídas simultâneas. |
 | Agenda | Fuso (validado; ex.: `America/Asuncion` — sem acento) + janelas por dia da semana (início < fim). **Sem janelas = 24/7.** |
 | Telefone de aviso | E.164 (`+5511…`). Usado pelo bloco "Avisar o vendedor no WhatsApp". |

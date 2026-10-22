@@ -107,6 +107,10 @@ export function precisaEmpurrarAoGoogle(de: SituacaoAnterior, para: Transicao): 
  */
 export function autorParaTimeline(autor: string): "user" | "ai" | "system" | "contact" {
   if (autor === "user" || autor === "ai" || autor === "contact") return autor;
+  // `ai_agent` é o `Actor.type` de quem chega pelo MCP (lib/api/handlers/types.ts),
+  // e o handler passa `ctx.actor.type` cru. Sem esta linha a IA caía no ramo de
+  // baixo e a timeline dizia "o sistema marcou" para o que o agente marcou.
+  if (autor === "ai_agent") return "ai";
   // `sync` e `system` caem aqui, e qualquer valor novo também: o desfecho
   // seguro é a atividade NASCER como do sistema, nunca ser rejeitada em runtime.
   return "system";

@@ -1,5 +1,5 @@
 /**
- * ATENDENTE SEMPRE DISPONÍVEL NO HORÁRIO (migration 0244).
+ * ATENDENTE SEMPRE DISPONÍVEL NO HORÁRIO (migration 0246).
  *
  * Medido em produção: a equipe que atende pelo celular nunca ficava elegível,
  * porque o cron `attendant-heartbeat` a desligava 15 minutos depois de fechar o

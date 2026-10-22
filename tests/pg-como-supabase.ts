@@ -127,10 +127,19 @@ class ConsultaPg<T> implements PromiseLike<RespostaFalsa<T[]>> {
     return this;
   }
 
-  /** Presentes para ESTOURAR: o código que os usar precisa de implementação real. */
-  in(): never {
-    return naoImplementado("in");
+  /**
+   * `in` — QUINTA vez que o `naoImplementado` se paga. Nasceu porque a coleta
+   * das agendas dos profissionais (`lib/agenda/profissionais.ts`) lê todas as
+   * candidatas num lote só, e o invariante de isolamento da marcação passa por
+   * ela. Vira `= any($n)` com o array inteiro como UM parâmetro: lista vazia não
+   * casa nada, que é o que o PostgREST faz.
+   */
+  in(coluna: string, valores: readonly unknown[]): this {
+    this.filtros.push(["in", coluna, [...valores]]);
+    return this;
   }
+
+  /** Presente para ESTOURAR: o código que o usar precisa de implementação real. */
   neq(): never {
     return naoImplementado("neq");
   }
@@ -139,7 +148,7 @@ class ConsultaPg<T> implements PromiseLike<RespostaFalsa<T[]>> {
     const valores: unknown[] = [];
     const onde = this.filtros.map(([op, c, v]) => {
       valores.push(v);
-      return `"${c}" ${op} $${valores.length}`;
+      return op === "in" ? `"${c}" = any($${valores.length})` : `"${c}" ${op} $${valores.length}`;
     });
     let texto = `select ${colunasSql(this.colunas)} from public."${this.tabela}"`;
     if (onde.length > 0) texto += ` where ${onde.join(" and ")}`;

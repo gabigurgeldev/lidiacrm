@@ -550,3 +550,122 @@ describe("mídia compartilhada do disparo em massa", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * FOTO DO ACERVO QUE O AGENTE ENVIA (`send_image`).
+ *
+ * Mesma porta da mídia do disparo — `midiaCompartilhada`, opção interna —, com
+ * outra ORIGEM: `material`, pasta `<org>/materiais/`. A pasta é conferida por
+ * origem para que uma não sirva de atalho para a outra, e a chave de metadata é
+ * por origem para a tela saber de onde a foto veio.
+ */
+describe("mídia compartilhada do acervo (origem material)", () => {
+  const FOTO = `${ORG}/materiais/0f0e0d0c-0b0a-4908-8706-050403020100.jpg`;
+
+  function prepararCanal() {
+    vi.stubEnv("ZERNIO_ACCOUNT_ID", CONTA);
+    vi.stubEnv("ZERNIO_API_KEY", "sk_env");
+    const fetchMock = respostaOk("wamid.FOTO");
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("⭐ aceita a pasta de materiais da org, grava `midia_do_material` e NUNCA `media_storage_path`", async () => {
+    const fetchMock = prepararCanal();
+    const { supabase, estado } = makeSupabase(conversaCompleta({ providerConversationId: THREAD }));
+    const msg = await sendMessageHandler(
+      supabase,
+      ctx,
+      texto({ type: "image", body: "Essa é a cor Areia" }),
+      { midiaCompartilhada: { path: FOTO, mime: "image/jpeg", origem: "material" } },
+    );
+
+    expect(msg.status).toBe("sent");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(estado.message?.media_storage_path).toBeNull();
+    const meta = estado.message?.metadata as Record<string, unknown>;
+    expect(meta.midia_do_material).toBe(FOTO);
+    expect(meta).not.toHaveProperty("midia_do_disparo");
+  });
+
+  it("⭐ recusa a pasta de DISPAROS quando a origem declarada é material", async () => {
+    const fetchMock = prepararCanal();
+    const { supabase } = makeSupabase(conversaCompleta({ providerConversationId: THREAD }));
+    const erro = await sendMessageHandler(
+      supabase,
+      ctx,
+      texto({ type: "image", body: "x" }),
+      { midiaCompartilhada: { path: `${ORG}/disparos/campanha.jpg`, mime: "image/jpeg", origem: "material" } },
+    ).catch((e) => e);
+
+    expect(erro.status).toBe(422);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("⭐ recusa a pasta de materiais de OUTRA organização", async () => {
+    const fetchMock = prepararCanal();
+    const { supabase } = makeSupabase(conversaCompleta({ providerConversationId: THREAD }));
+    const outraOrg = "99999999-9999-4999-8999-999999999999";
+    const erro = await sendMessageHandler(
+      supabase,
+      ctx,
+      texto({ type: "image", body: "x" }),
+      { midiaCompartilhada: { path: `${outraOrg}/materiais/a.jpg`, mime: "image/jpeg", origem: "material" } },
+    ).catch((e) => e);
+
+    expect(erro.status).toBe(422);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sem origem continua sendo DISPARO — a pasta de materiais não passa por ali", async () => {
+    const fetchMock = prepararCanal();
+    const { supabase } = makeSupabase(conversaCompleta({ providerConversationId: THREAD }));
+    const erro = await sendMessageHandler(
+      supabase,
+      ctx,
+      texto({ type: "image", body: "x" }),
+      { midiaCompartilhada: { path: FOTO, mime: "image/jpeg" } },
+    ).catch((e) => e);
+
+    expect(erro.status).toBe(422);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("⭐ chaves `midia_do_*` vindas do CHAMADOR são descartadas — só o servidor as escreve", async () => {
+    prepararCanal();
+    const { supabase, estado } = makeSupabase(conversaCompleta({ providerConversationId: THREAD }));
+    await sendMessageHandler(
+      supabase,
+      ctx,
+      texto({
+        body: "oi",
+        metadata: {
+          midia_do_material: `${ORG}/materiais/forjada.jpg`,
+          midia_do_disparo: `${ORG}/disparos/forjada.jpg`,
+          origem_da_tela: "composer",
+        },
+      }),
+    );
+
+    const meta = estado.message?.metadata as Record<string, unknown>;
+    expect(meta).not.toHaveProperty("midia_do_material");
+    expect(meta).not.toHaveProperty("midia_do_disparo");
+    // O resto da metadata do chamador segue intacto — o filtro é cirúrgico.
+    expect(meta.origem_da_tela).toBe("composer");
+  });
+
+  it("a chave forjada não sobrescreve a do servidor no envio legítimo", async () => {
+    prepararCanal();
+    const { supabase, estado } = makeSupabase(conversaCompleta({ providerConversationId: THREAD }));
+    await sendMessageHandler(
+      supabase,
+      ctx,
+      texto({ type: "image", body: "Promo", metadata: { midia_do_disparo: `${ORG}/disparos/outra.jpg` } }),
+      { midiaCompartilhada: { path: `${ORG}/disparos/campanha.jpg`, mime: "image/jpeg" } },
+    );
+
+    expect((estado.message?.metadata as Record<string, unknown>).midia_do_disparo).toBe(
+      `${ORG}/disparos/campanha.jpg`,
+    );
+  });
+});

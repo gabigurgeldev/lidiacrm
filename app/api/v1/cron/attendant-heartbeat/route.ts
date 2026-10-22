@@ -11,7 +11,7 @@
  * lib/routing/eligibility.ts (isHeartbeatStale), testada com clock mockado — a
  * regra dos 15min é constante NOMEADA única, não número mágico espalhado.
  *
- * Quem tem `always_available` (migration 0244) fica de fora: a equipe que
+ * Quem tem `always_available` (migration 0246) fica de fora: a equipe que
  * atende pelo celular não mantém o CRM aberto, e derrubá-la aqui deixava o
  * rodízio sem ninguém elegível. O horário e a capacidade continuam valendo
  * para ela — quem decide isso é `isAttendantEligible`, não este cron.

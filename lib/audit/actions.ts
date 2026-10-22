@@ -204,6 +204,10 @@ export const AUDIT_ACTIONS = [
   // porque muda o que o sistema confere antes de falar com o cliente — e porque
   // custa dinheiro por mensagem.
   "ai.guardrail_layer_changed",
+  // Uma foto entrou no acervo do agente (migration 0244). Auditável porque é
+  // arquivo que o AGENTE pode mandar a qualquer cliente no WhatsApp — "quem pôs
+  // essa foto ali?" é pergunta que alguém vai fazer.
+  "ai_knowledge.image_uploaded",
   "ai_agent.run_started",
   "ai_agent.run_completed",
   "ai_agent.run_failed",
@@ -471,6 +475,22 @@ export const AUDIT_ACTIONS = [
   "agenda.appointment_created",
   "agenda.appointment_rescheduled",
   "agenda.appointment_cancelled",
+  // ── Quem atende (migration 0245) ─────────────────────────────────────────
+  // Criar, alterar e desativar uma profissional muda os horários que a IA
+  // oferece ao cliente — é configuração com efeito na conversa, e audita.
+  // Não há `_removido`: o DELETE grava `is_active = false` (o histórico de quem
+  // atendeu cada agendamento aponta para ela).
+  "agenda.profissional_criado",
+  "agenda.profissional_alterado",
+  "agenda.profissional_desativado",
+  // Folga é a exceção por data de UMA profissional: fecha (ou abre) horário que
+  // a jornada semanal oferecia. Quem tirou a folga de alguém é pergunta que se
+  // faz ao painel.
+  "agenda.folga_criada",
+  "agenda.folga_removida",
+  // A rodada do LEMBRETE (cron `agenda-lembretes`). Só audita quando enfileirou,
+  // pulou ou falhou algo — rodada vazia não escreve, como todo cron desta base.
+  "agenda.lembrete_rodada",
   // Relógio HTTP (Hobby / sem contêiner scheduler): uma batida que alguém
   // de fora chama. Só audita quando alguma tarefa mexeu em dado.
   "relogio.tick_run",
