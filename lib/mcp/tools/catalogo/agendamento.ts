@@ -166,7 +166,7 @@ export const TOOLS_AGENDAMENTO = declararTools([
     category: "read",
     rotulo: "Ver horários livres na agenda",
     explicacao:
-      "Mostra os horários em que um atendente pode receber, já descontando as folgas dele, o que ele tem marcado e os compromissos da agenda pessoal.",
+      "Mostra os horários em que a equipe pode receber e quem atende cada um, já descontando folgas, o que já está marcado e os compromissos da agenda pessoal.",
     oQueToca: "Agenda da equipe",
     risco: "seguro",
     pacotes: ["vender"],
@@ -176,7 +176,7 @@ export const TOOLS_AGENDAMENTO = declararTools([
     category: "read",
     rotulo: "Ver os compromissos marcados",
     explicacao:
-      "Lista os compromissos com hora marcada de um cliente ou de um dia, com a situação de cada um: marcado, realizado ou desmarcado.",
+      "Lista os compromissos com hora marcada de um cliente, de um dia ou de uma profissional, com a situação de cada um: marcado, realizado ou desmarcado.",
     oQueToca: "Agenda da equipe",
     risco: "seguro",
     pacotes: ["vender"],
@@ -186,7 +186,7 @@ export const TOOLS_AGENDAMENTO = declararTools([
     category: "write",
     rotulo: "Marcar consulta ou sessão",
     explicacao:
-      "Reserva um horário do atendente para receber o cliente. A pessoa passa a contar com esse horário, então não é um registro interno.",
+      "Reserva um horário de quem atende para receber o cliente da conversa. A pessoa passa a contar com esse horário, então não é um registro interno.",
     oQueToca: "Agenda da equipe",
     // `atencao` e não `critico`: marcar errado se desfaz — remarca ou desmarca.
     risco: "atencao",

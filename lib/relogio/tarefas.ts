@@ -36,6 +36,11 @@ export const TAREFAS_DO_RELOGIO = [
     rotulo: "Enviar mensagens agendadas",
     porque: "Manda na hora marcada o que o atendente agendou pela conversa.",
   },
+  {
+    id: "agenda-lembretes",
+    rotulo: "Lembrar clientes da agenda",
+    porque: "Põe na fila o lembrete do atendimento marcado, na antecedência do serviço.",
+  },
 ] as const;
 
 export type IdDeTarefaDoRelogio = (typeof TAREFAS_DO_RELOGIO)[number]["id"];

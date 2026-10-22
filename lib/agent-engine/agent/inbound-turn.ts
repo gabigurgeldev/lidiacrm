@@ -130,6 +130,7 @@ import {
   provideCaseUpdateInputSchema,
 } from './human-cases';
 import { buildMcpTurnTools } from '../edge/crm/mcp-tools';
+import { blocoDaAgenda, turnoTemAgenda } from '@/lib/agenda/bloco-do-agente';
 import { capacidadesSimuladas } from '../ensaio/capacidades-simuladas';
 import type { PublishedAgentConfig } from './agent-config';
 import { cancelPendingCronsForLead } from '../cron/scheduler';
@@ -3372,12 +3373,21 @@ async function executarTurnoDoAgente(
       }
       // No ensaio: as MESMAS ferramentas, sem execução (e sem token efêmero, que
       // é escrita em `api_tokens` fora da transação).
+      //
+      // Conversa + contato vão à ponte: preenchem "quem é atendido" nas
+      // ferramentas de agenda, e o modelo não escolhe (`lib/mcp/turno.ts`).
+      // `leadId` aqui É o id do contato — a mesma identidade que `ctxInteg` usa.
       const mcp = deps.ensaio !== undefined
         ? (() => {
             const simuladas = capacidadesSimuladas(configDoTurno.toolIds);
             return { tools: simuladas, toolIds: Object.keys(simuladas), cleanup: async () => {} };
           })()
-        : await buildMcpTurnTools(deps.crmCfg, { organizationId: tenantId, jobId: job.id }, configDoTurno, runLog);
+        : await buildMcpTurnTools(deps.crmCfg, {
+            organizationId: tenantId,
+            jobId: job.id,
+            conversationId: input.conversationId,
+            contactId: leadId,
+          }, configDoTurno, runLog);
       if (mcp !== null) {
         mcpCleanup = mcp.cleanup;
         for (const [name, mcpTool] of Object.entries(mcp.tools)) {
@@ -3611,6 +3621,13 @@ async function executarTurnoDoAgente(
           .then((c) => (c !== null ? blocoDoRetorno(c) : ''))
           .catch(() => '')
       : '';
+  // A AGENDA (migration 0245): os atendimentos que dá para marcar, por slug e sem
+  // uuid. Só no turno que TEM ferramenta de agenda — agente sem agenda não ganha
+  // uma linha, e o prefixo cacheável não muda para ninguém (isto é sufixo).
+  // Falhar ao ler não derruba o turno: as ferramentas seguem respondendo.
+  const blocoAgenda = turnoTemAgenda(mcpToolIdsDoTurno)
+    ? await blocoDaAgenda(deps.crmCfg.supabase, tenantId).catch(() => '')
+    : '';
   const openingSuffixes = [
     // Volátil por natureza (muda a cada turno): mora no sufixo, nunca no
     // prefixo cacheável.
@@ -3623,6 +3640,7 @@ async function executarTurnoDoAgente(
     splitHint,
     caseAwaitingLeadBlock,
     sufixoDeIntegracao,
+    blocoAgenda,
   ].filter(
     (b) => b !== '',
   );

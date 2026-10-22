@@ -326,3 +326,29 @@ describe("o que NÃO está implementado estoura", () => {
     expect(() => db.from("crm_pipelines").select("id").neq("id", "x")).toThrow(/não está implementado/);
   });
 });
+
+describe("`.in()` — implementado quando a coleta das agendas passou a ler em lote", () => {
+  it("devolve só as linhas da lista, e lista vazia não casa nada", async () => {
+    const { rows } = await pool.query<{ id: string }>(
+      `insert into crm_pipelines (organization_id, name, slug, position)
+       values ($1, 'In A', 'in-a', 71), ($1, 'In B', 'in-b', 72), ($1, 'In C', 'in-c', 73)
+       returning id`,
+      [ORG],
+    );
+    const [a, , c] = rows.map((r) => r.id);
+
+    const { data, error } = await db
+      .from("crm_pipelines")
+      .select("id,name")
+      .in("id", [a!, c!])
+      .order("name");
+    expect(error).toBeNull();
+    // Sabotagem que este caso pega: um `in` que virasse "sem filtro" traria
+    // o B (e o resto da org) junto.
+    expect((data as { name: string }[]).map((r) => r.name)).toEqual(["In A", "In C"]);
+
+    const vazio = await db.from("crm_pipelines").select("id").in("id", []);
+    expect(vazio.error).toBeNull();
+    expect(vazio.data).toEqual([]);
+  });
+});

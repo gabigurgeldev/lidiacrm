@@ -3,56 +3,60 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { showApiError } from "@/components/feedback/ApiErrorToast";
-import { trilhasDaEquipe } from "@/lib/agenda/tipos";
+import { TRILHAS_DA_AGENDA, trilhasDaEquipe, type TrilhaDaAgenda } from "@/lib/agenda/tipos";
 import { apiClient } from "@/lib/api/client";
 
 import type { Pessoa } from "@/components/agenda/tipos";
 
-interface MembroDto {
-  user_id: string;
-  email: string | null;
-  full_name: string | null;
-  revoked_at?: string | null;
-}
+import { CHAVE_DOS_PROFISSIONAIS, type ProfissionalDaApi } from "./useProfissionais";
 
 /**
- * As pessoas da equipe, com a trilha de cor de cada uma.
+ * As PROFISSIONAIS ativas, na forma de `Pessoa` — quem a agenda desenha.
  *
- * A cor NÃO vem da API: vem de `trilhaPadraoDoMembro(user_id)`, que deriva do id de
- * forma estável. É por isso que a pessoa não troca de cor entre um carregamento
- * e outro, nem quando alguém novo entra na equipe — e é o motivo de este hook
- * não precisar de nenhuma coluna de cor no banco.
+ * ⚠️ ERA `/api/v1/team`, e a migration 0245 mudou a pergunta. Antes, quem
+ * atendia era sempre um membro com login; agora a recepcionista cadastra a
+ * esteticista que não usa o sistema, e ela tem agenda, cor e coluna sem ter
+ * conta. Ler a equipe deixaria essa pessoa fora da barra de filtro e da visão por
+ * profissional — exatamente quem a feature existe para pôr na tela.
  *
- * Quem foi revogado sai da lista: o filtro por pessoa é para quem atende hoje, e
- * uma agenda com ex-funcionário na barra confunde sem informar.
+ * A COR: a trilha escolhida (`calendar_professionals.trilha`) vence; sem ela,
+ * `trilhasDaEquipe` sobre `user_id ?? id` — a mesma derivação de antes para quem
+ * tem login (a pessoa não troca de cor nesta mudança) e uma estável para quem não
+ * tem. As trilhas saem do conjunto de uma vez, nunca pessoa a pessoa: é o único
+ * jeito de duas não caírem na mesma cor.
+ *
+ * Mesma chave de `useProfissionais`, com `select`: uma busca serve a barra da
+ * agenda e a tela de configuração, e salvar lá repinta aqui sem segunda ida.
  */
-export function usePessoasDaAgenda() {
+export function pessoasDe(lista: ProfissionalDaApi[]): Pessoa[] {
+  const ativas = lista.filter((p) => p.ativo);
+  const derivadas = trilhasDaEquipe(ativas.map((p) => p.user_id ?? p.id));
+  return ativas.map((p) => ({
+    id: p.id,
+    nome: p.nome,
+    trilha: trilhaValida(p.trilha) ?? derivadas.get(p.user_id ?? p.id) ?? 1,
+    userId: p.user_id,
+  }));
+}
+
+function trilhaValida(n: number | null): TrilhaDaAgenda | null {
+  return (TRILHAS_DA_AGENDA as readonly number[]).includes(n ?? -1) ? (n as TrilhaDaAgenda) : null;
+}
+
+export function usePessoasDaAgenda(inicial?: ProfissionalDaApi[]) {
   return useQuery({
-    queryKey: ["agenda", "pessoas"],
-    queryFn: async (): Promise<Pessoa[]> => {
+    queryKey: CHAVE_DOS_PROFISSIONAIS,
+    ...(inicial ? { initialData: inicial } : {}),
+    queryFn: async (): Promise<ProfissionalDaApi[]> => {
       try {
-        const r = await apiClient.get<{ data: MembroDto[] }>("/api/v1/team");
-        const lista = (r as unknown as { data?: MembroDto[] }).data ?? (r as unknown as MembroDto[]);
-        const ativos = (lista ?? []).filter((m) => !m.revoked_at);
-        // As trilhas saem da EQUIPE inteira de uma vez, não pessoa a pessoa: é a
-        // única forma de garantir que duas pessoas não caiam na mesma cor. O
-        // hash sozinho dá estabilidade e não dá distinção — medido, duas caíram
-        // na trilha 7 nesta organização.
-        const trilhas = trilhasDaEquipe(ativos.map((m) => m.user_id));
-        return ativos
-          .map((m) => ({
-            id: m.user_id,
-            // `full_name` pode vir null quando o service role não está
-            // configurado — a rota degrada assim de propósito. O e-mail antes do
-            // @ é melhor que "Sem nome": identifica a pessoa para quem trabalha
-            // com ela todo dia.
-            nome: m.full_name ?? m.email?.split("@")[0] ?? "Sem nome",
-            trilha: trilhas.get(m.user_id) ?? 1,
-          }));
+        const r = await apiClient.get<{ data: ProfissionalDaApi[] }>("/api/v1/agenda/profissionais");
+        return ((r as unknown as { data?: ProfissionalDaApi[] }).data ??
+          (r as unknown as ProfissionalDaApi[])) ?? [];
       } catch (err) {
         showApiError(err);
         throw err;
       }
     },
+    select: pessoasDe,
   });
 }

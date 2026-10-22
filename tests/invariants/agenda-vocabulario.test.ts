@@ -139,6 +139,8 @@ const PARES = [
   { tabela: "calendar_connections", coluna: "provider", simbolo: "PROVEDORES_DE_AGENDA" },
   { tabela: "calendar_external_events", coluna: "status", simbolo: "SITUACOES_EXTERNAS" },
   { tabela: "calendar_external_events", coluna: "transparency", simbolo: "TRANSPARENCIAS_EXTERNAS" },
+  // migration 0245 — principal e apoio.
+  { tabela: "calendar_appointment_professionals", coluna: "role", simbolo: "PAPEIS_DO_PROFISSIONAL" },
 ] as const;
 
 describe("agenda — o vocabulário do banco e o do TypeScript são o mesmo", () => {

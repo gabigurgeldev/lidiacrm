@@ -225,6 +225,20 @@ const PROVA_PROPRIA: readonly Excecao[] = [
     tabela: "calendar_external_events",
     razao: "tests/invariants/agenda-rls.test.ts — mesmo `it.each` de TABELAS_DA_AGENDA.",
   },
+  ...(
+    [
+      "calendar_professionals",
+      "calendar_event_type_professionals",
+      "calendar_appointment_professionals",
+    ] as const
+  ).map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/agenda-rls.test.ts — TABELAS_DA_AGENDA, com controle positivo e 0 " +
+      "linhas cross-org nos dois sentidos; tests/invariants/agenda-profissionais.test.ts " +
+      "prova ainda o gate de papel de escrita (viewer/agent não escrevem profissionais; " +
+      "viewer não escreve participantes) e a org B sem enxergar a A (migration 0245).",
+  })),
   {
     tabela: "followup_flow_versions",
     razao:

@@ -11,14 +11,25 @@ import { AvisoDaConexaoGoogle } from "./_components/AvisoDaConexaoGoogle";
 import { CartaoDaConexaoGoogle } from "./_components/CartaoDaConexaoGoogle";
 
 import { AgendaInterativa } from "@/components/agenda/AgendaInterativa";
+import { DetalheDoAgendamento } from "@/components/agenda/DetalheDoAgendamento";
 import { FiltroDePessoas } from "@/components/agenda/FiltroDePessoas";
 import { HistoricoDaAgenda } from "@/components/agenda/HistoricoDaAgenda";
-import type { Agendamento, HorarioLivre, VisaoDaAgenda } from "@/components/agenda/tipos";
+import {
+  filtrarPorEscolha,
+  horariosPorDiaComQuem,
+  idsParaMarcar,
+  responsavelDaGrade,
+  type EscolhaDeProfissionais,
+} from "@/components/agenda/profissionais-na-tela";
+import { SeletorDeCliente, type ClienteEscolhido } from "@/components/agenda/SeletorDeCliente";
+import { SeletorDeProfissionais } from "@/components/agenda/SeletorDeProfissionais";
+import type { Agendamento, HorarioLivre, Pessoa, VisaoDaAgenda } from "@/components/agenda/tipos";
 import { EmptyAgenda } from "@/components/empty";
 import { rotuloDoLocal } from "@/lib/agenda/locais";
 import { Button } from "@/components/ui/button";
 import { PainelDeMarcacao } from "@/components/agenda/PainelDeMarcacao";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useAgendaAoVivo } from "@/hooks/agenda/useAgendaAoVivo";
 import { useAgendamentos } from "@/hooks/agenda/useAgendamentos";
 import { useHorariosLivres } from "@/hooks/agenda/useHorariosLivres";
 import { useMarcarAgendamento } from "@/hooks/agenda/useMarcarAgendamento";
@@ -28,6 +39,7 @@ import {
   useRemarcarAgendamento,
 } from "@/hooks/agenda/useRemarcarAgendamento";
 import { usePessoasDaAgenda } from "@/hooks/agenda/usePessoasDaAgenda";
+import type { ProfissionalDaApi } from "@/hooks/agenda/useProfissionais";
 import { CalendarPlus, CaretLeft, CaretRight } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +47,36 @@ const VISOES: Array<{ id: VisaoDaAgenda; rotulo: string }> = [
   { id: "dia", rotulo: "Dia" },
   { id: "semana", rotulo: "Semana" },
   { id: "mes", rotulo: "Mês" },
+  // O DIA por pessoa, uma coluna por profissional (0245). Fica por último: é a
+  // visão de quem distribui o dia, não a de quem só consulta.
+  { id: "profissionais", rotulo: "Profissionais" },
 ];
+
+/** O dia de uma visão "de dia" — as duas desenham uma data só. */
+const EH_UM_DIA: Record<VisaoDaAgenda, boolean> = {
+  dia: true,
+  semana: false,
+  mes: false,
+  profissionais: true,
+};
+
+const SEM_ESCOLHA: EscolhaDeProfissionais = { principalId: null, apoioId: null };
+
+/**
+ * Põe ou tira `?agendamento=` da barra sem navegar.
+ *
+ * `history.replaceState` e não `router.replace`: o segundo refaria o RSC da
+ * página inteira (quatro consultas no servidor) para mudar um parâmetro que só
+ * o cliente lê. O App Router sincroniza `replaceState` com o roteador desde o
+ * Next 14.1, então o voltar do navegador e o `useSearchParams` seguem coerentes.
+ */
+function trocarParametroDoAgendamento(id: string | null) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  if (id) url.searchParams.set("agendamento", id);
+  else url.searchParams.delete("agendamento");
+  window.history.replaceState(window.history.state, "", url.toString());
+}
 
 /**
  * A tela da Agenda.
@@ -63,6 +104,9 @@ const VISOES: Array<{ id: VisaoDaAgenda; rotulo: string }> = [
  * imports sem querer.
  */
 export function AgendaClient({
+  organizationId,
+  profissionaisIniciais,
+  agendamentoInicial,
   fusoDeApresentacao,
   googleConfigurado,
   contaConectada,
@@ -72,6 +116,12 @@ export function AgendaClient({
   tiposIniciais,
   agendamentosIniciais,
 }: {
+  /** Escopo do canal de tempo real — ver `useAgendaAoVivo`. */
+  organizationId: string;
+  /** As profissionais, lidas no servidor para a primeira pintura (sem piscar a barra de pessoas). */
+  profissionaisIniciais?: ProfissionalDaApi[];
+  /** `?agendamento=<id>` — o link da Central e de quem compartilhou abre o detalhe direto. */
+  agendamentoInicial?: string | null;
   fusoDeApresentacao: string | null;
   googleConfigurado: boolean;
   contaConectada?: string | null;
@@ -87,6 +137,10 @@ export function AgendaClient({
     donoId: string | null;
     localKind: string | null;
     localDetalhes: string | null;
+    /** Quantas pessoas o serviço pede (`professionals_required`, 0245). */
+    profissionaisNecessarios: 1 | 2;
+    /** As profissionais habilitadas neste tipo. Vazio = o tipo ainda não usa habilitação. */
+    habilitadas: string[];
   }>;
   /** A semana corrente, resolvida no servidor: `GET /agendamentos` não existe. */
   agendamentosIniciais: Agendamento[];
@@ -102,9 +156,29 @@ export function AgendaClient({
   // coisas para manter em sincronia. Quando `remarcandoId` está preenchido, a
   // confirmação vira PATCH em vez de POST.
   const [remarcandoId, setRemarcandoId] = React.useState<string | null>(null);
+  // Quem atende o compromisso que se está remarcando. Remarcar não troca a
+  // profissional (limite declarado da 0245), então os horários oferecidos têm de
+  // ser os DELA — oferecer a agenda de qualquer habilitada daria um 409 depois
+  // do clique, porque a rota valida contra os participantes atuais.
+  const [remarcandoProfissionais, setRemarcandoProfissionais] = React.useState<string[] | null>(null);
+  // O QUE SE PERGUNTA ANTES DO HORÁRIO (0245): para quem, com quem, e uma nota.
+  const [escolha, setEscolha] = React.useState<EscolhaDeProfissionais>(SEM_ESCOLHA);
+  const [cliente, setCliente] = React.useState<ClienteEscolhido | null>(null);
+  const [notas, setNotas] = React.useState("");
+  // O DETALHE aberto. Nasce do `?agendamento=` — é por ele que o aviso da
+  // Central ("a IA marcou…") abre o compromisso certo.
+  const [abertoId, setAbertoId] = React.useState<string | null>(agendamentoInicial ?? null);
+  const abrirDetalhe = React.useCallback((id: string | null) => {
+    setAbertoId(id);
+    trocarParametroDoAgendamento(id);
+  }, []);
   // CANCELAR pede motivo, e o motivo é obrigatório na rota. Não é burocracia: é
   // o que a equipe lê ao ver o horário vago.
   const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
+  // O resumo do que se cancela quando o pedido vem do DETALHE: aberto por link,
+  // o compromisso pode ser de uma semana que a grade não carregou, e a frase
+  // "não está mais na lista" mentiria sobre ele.
+  const [resumoDoCancelamento, setResumoDoCancelamento] = React.useState<string | null>(null);
   const [motivo, setMotivo] = React.useState("");
   const marcar = useMarcarAgendamento();
   const remarcar = useRemarcarAgendamento();
@@ -127,7 +201,24 @@ export function AgendaClient({
   // produto — `FiltroDePessoas` devolve `null` com menos de duas pessoas, e a
   // lista estava vazia. Ele existia, estava provado na vitrine, e ninguém o via
   // aqui.
-  const { data: pessoas = [] } = usePessoasDaAgenda();
+  const { data: pessoas = [] } = usePessoasDaAgenda(profissionaisIniciais);
+
+  // AO VIVO: o que a IA marca numa conversa aparece aqui sem recarregar.
+  useAgendaAoVivo(organizationId);
+
+  /**
+   * Quem pode atender o tipo escolhido — o que o seletor oferece.
+   *
+   * As habilitadas, quando o tipo as tem; senão a profissional do dono padrão,
+   * que é exatamente o candidato que o motor usa nesse caso. Oferecer a equipe
+   * inteira para um tipo sem habilitação deixaria escolher quem o motor não
+   * consulta, e a lista de horários viria vazia sem explicação.
+   */
+  const habilitadas: Pessoa[] = React.useMemo(() => {
+    if (!tipo) return [];
+    if (tipo.habilitadas.length > 0) return pessoas.filter((p) => tipo.habilitadas.includes(p.id));
+    return pessoas.filter((p) => p.userId && p.userId === tipo.donoId);
+  }, [pessoas, tipo]);
 
   // A JANELA DE BUSCA PRECISA SER ESTÁVEL, e não era.
   //
@@ -157,19 +248,31 @@ export function AgendaClient({
   // "a consulta falhou" em "publicou, só não tem vaga" — dias travados e aviso
   // nenhum, que é exatamente o que uma instalação fresca produz (a rota devolve
   // 422 porque ninguém está em `attendant_availability`).
+  //
+  // A ESCOLHA DE PROFISSIONAL NÃO ENTRA NA CHAVE da consulta: a rota devolve
+  // todas as combinações de cada horário e o recorte é feito aqui
+  // (`filtrarPorEscolha`). Trocar "Ana" por "Bia" no seletor não refaz a busca —
+  // e a escolha parcial ("a Ana, com qualquer apoio") funciona sem a rota
+  // precisar entender meio pedido.
   const { data: horarios, isError: horariosFalharam } = useHorariosLivres(
-    marcando && tipo ? { event_type_id: tipo.id, de: janelaDeBusca.de, ate: janelaDeBusca.ate } : null,
+    marcando && tipo
+      ? {
+          event_type_id: tipo.id,
+          de: janelaDeBusca.de,
+          ate: janelaDeBusca.ate,
+          ...(remarcandoProfissionais ? { professional_ids: remarcandoProfissionais } : {}),
+        }
+      : null,
   );
 
   const horariosPorDia = React.useMemo(() => {
-    const mapa: Record<string, Array<{ instante: string; rotulo: string }>> = {};
-    for (const s of horarios?.slots ?? []) {
-      const d = new Date(s.inicio);
-      const chave = format(d, "yyyy-MM-dd");
-      (mapa[chave] ??= []).push({ instante: s.inicio, rotulo: format(d, "HH:mm") });
-    }
-    return mapa;
-  }, [horarios]);
+    const nomes = new Map<string, string>(pessoas.map((p) => [p.id, p.nome]));
+    for (const p of horarios?.profissionais ?? []) nomes.set(p.id, p.nome);
+    return horariosPorDiaComQuem(filtrarPorEscolha(horarios?.slots ?? [], escolha), nomes, {
+      dia: (d) => format(d, "yyyy-MM-dd"),
+      hora: (d) => format(d, "HH:mm"),
+    });
+  }, [horarios, escolha, pessoas]);
 
   // OS AGENDAMENTOS SÃO REAIS, e agora TAMBÉM se atualizam sem recarregar.
   //
@@ -190,11 +293,11 @@ export function AgendaClient({
     const inicio =
       visao === "mes"
         ? startOfMonth(ancora)
-        : visao === "semana"
-          ? startOfWeek(ancora, { weekStartsOn: 0 })
-          : startOfDay(ancora);
+        : EH_UM_DIA[visao]
+          ? startOfDay(ancora)
+          : startOfWeek(ancora, { weekStartsOn: 0 });
     const fim =
-      visao === "mes" ? addDays(endOfMonth(ancora), 1) : addDays(inicio, visao === "semana" ? 7 : 1);
+      visao === "mes" ? addDays(endOfMonth(ancora), 1) : addDays(inicio, EH_UM_DIA[visao] ? 1 : 7);
     return { de: inicio.toISOString(), ate: fim.toISOString() };
   }, [visao, ancora]);
 
@@ -217,15 +320,25 @@ export function AgendaClient({
     recorteDaGrade.de === recorteDoServidor.de && recorteDaGrade.ate === recorteDoServidor.ate;
 
   const { data: agendamentosVivos } = useAgendamentos(recorteDaGrade);
-  const todos: Agendamento[] =
-    agendamentosVivos ?? (naJanelaDoServidor ? agendamentosIniciais : []);
+  // `responsavelDaGrade`: a ocupação do Google e o agendamento legado chegam com
+  // o MEMBRO, e a grade pinta por PROFISSIONAL. Sem a tradução o bloco cai na
+  // trilha 1 e some do filtro por pessoa.
+  const todos: Agendamento[] = React.useMemo(
+    () => responsavelDaGrade(agendamentosVivos ?? (naJanelaDoServidor ? agendamentosIniciais : []), pessoas),
+    [agendamentosVivos, naJanelaDoServidor, agendamentosIniciais, pessoas],
+  );
 
   const agendamentos = React.useMemo(
-    () => (isolada === null ? todos : todos.filter((a) => a.responsavelId === isolada)),
+    // Isolar uma pessoa mostra também onde ela é APOIO: a agenda dela inclui
+    // o procedimento em que ela ajuda.
+    () =>
+      isolada === null
+        ? todos
+        : todos.filter((a) => a.responsavelId === isolada || a.apoioId === isolada),
     [isolada, todos],
   );
 
-  const passo = visao === "mes" ? 30 : visao === "semana" ? 7 : 1;
+  const passo = visao === "mes" ? 30 : EH_UM_DIA[visao] ? 1 : 7;
   // O PADRÃO de formato também muda de idioma, não só o locale: em português
   // "d 'de' MMMM" tem a preposição escrita à mão dentro do padrão, e em
   // espanhol ela também é "de" — mas quem garante isso é a chave no dicionário,
@@ -234,9 +347,9 @@ export function AgendaClient({
   const periodo =
     visao === "mes"
       ? format(ancora, t("MMMM 'de' yyyy"), { locale: localeDaData })
-      : visao === "semana"
-        ? `${format(startOfWeek(ancora, { weekStartsOn: 0 }), t("d 'de' MMM"), { locale: localeDaData })} — ${format(addDays(startOfWeek(ancora, { weekStartsOn: 0 }), 6), t("d 'de' MMM"), { locale: localeDaData })}`
-        : format(ancora, t("EEEE, d 'de' MMMM"), { locale: localeDaData });
+      : EH_UM_DIA[visao]
+        ? format(ancora, t("EEEE, d 'de' MMMM"), { locale: localeDaData })
+        : `${format(startOfWeek(ancora, { weekStartsOn: 0 }), t("d 'de' MMM"), { locale: localeDaData })} — ${format(addDays(startOfWeek(ancora, { weekStartsOn: 0 }), 6), t("d 'de' MMM"), { locale: localeDaData })}`;
 
   return (
     <div
@@ -402,7 +515,13 @@ export function AgendaClient({
           // botão depois de fechar um bloco reabriria no horário do bloco.
           if (!aberto) {
             setRemarcandoId(null);
+            setRemarcandoProfissionais(null);
             setHorarioEscolhido(null);
+            // Cliente, profissional e nota são DESTA marcação: carregá-los para
+            // a próxima marcaria o paciente anterior no horário de outro.
+            setEscolha(SEM_ESCOLHA);
+            setCliente(null);
+            setNotas("");
           }
         }}
       >
@@ -453,7 +572,11 @@ export function AgendaClient({
                     type="button"
                     data-testid={`tipo-${opcao.id}`}
                     aria-pressed={opcao.id === tipo?.id}
-                    onClick={() => setTipoId(opcao.id)}
+                    onClick={() => {
+                      setTipoId(opcao.id);
+                      // A profissional escolhida pode não fazer o outro serviço.
+                      setEscolha(SEM_ESCOLHA);
+                    }}
                     className={cn(
                       "rounded-full border px-3 py-1 text-xs transition-colors duration-fast",
                       opcao.id === tipo?.id
@@ -475,11 +598,53 @@ export function AgendaClient({
                 ancora={new Date()}
                 agora={new Date()}
                 responsavel={
-                  // O DONO DO TIPO, não o primeiro da lista. A tela dizia "com
-                  // <primeira pessoa>" enquanto oferecia a jornada de outra —
-                  // e marcava na agenda da primeira, que não tinha jornada.
-                  pessoas.find((p) => p.id === tipo.donoId) ??
-                  pessoas[0] ?? { id: "", nome: "Você", trilha: 1 }
+                  // QUEM ESTÁ ESCOLHIDA, e mais ninguém. Era "o dono do tipo, ou
+                  // a primeira da lista, ou 'Você'" — e com profissionais (0245)
+                  // e "qualquer habilitada" isso afirmaria um nome que o horário
+                  // pode desmentir. Sem escolha, quem atende aparece EM CADA
+                  // horário, que é onde a resposta de fato existe.
+                  // Remarcando, é a principal de agora: remarcar não troca quem atende.
+                  pessoas.find((p) => p.id === (escolha.principalId ?? remarcandoProfissionais?.[0])) ??
+                  (habilitadas.length === 1 ? habilitadas[0] : undefined)
+                }
+                extras={
+                  remarcandoId ? undefined : (
+                    <>
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-text-muted">{t("Cliente")}</p>
+                        <SeletorDeCliente valor={cliente} onChange={setCliente} />
+                      </div>
+                      {habilitadas.length !== 1 || tipo.profissionaisNecessarios === 2 ? (
+                        <SeletorDeProfissionais
+                          habilitadas={habilitadas}
+                          necessarias={tipo.profissionaisNecessarios}
+                          valor={escolha}
+                          onChange={setEscolha}
+                        />
+                      ) : null}
+                      {(horarios?.profissionais_com_problema?.length ?? 0) > 0 ? (
+                        // Quem ficou FORA da oferta, e por quê: sem isto a
+                        // recepção procura a Ana nos horários e não entende por
+                        // que ela não aparece.
+                        <p data-testid="profissionais-com-problema" className="text-[11px] leading-4 text-warning">
+                          {t("Fora dos horários por jornada mal configurada:")}{" "}
+                          {(horarios?.profissionais_com_problema ?? []).map((p) => p.nome).join(", ")}
+                        </p>
+                      ) : null}
+                      <label className="flex flex-col gap-1 text-xs font-medium text-text-muted">
+                        {t("Observações")}
+                        <textarea
+                          data-testid="notas-da-marcacao"
+                          value={notas}
+                          onChange={(e) => setNotas(e.target.value)}
+                          rows={2}
+                          maxLength={2000}
+                          placeholder={t("Opcional — o que a equipe precisa saber")}
+                          className="w-full resize-none rounded-md border border-border bg-surface-elevated p-2 text-sm font-normal text-text outline-none focus:border-border-strong"
+                        />
+                      </label>
+                    </>
+                  )
                 }
                 tipo={tipo.nome}
                 duracaoMin={tipo.duracaoMin}
@@ -525,11 +690,24 @@ export function AgendaClient({
                       .mutateAsync({ id: remarcandoId, starts_at: instante })
                       .then((r) => {
                         setRemarcandoId(null);
+                        setRemarcandoProfissionais(null);
                         setMarcando(false);
                         return r;
                       });
                   }
-                  return marcar.mutateAsync({ event_type_id: tipo.id, starts_at: instante });
+                  // O QUE SE VIU É O QUE SE MARCA: os ids da combinação que o
+                  // horário mostrou (ou da escolha explícita), o cliente e a nota.
+                  const horario = Object.values(horariosPorDia)
+                    .flat()
+                    .find((h) => h.instante === instante);
+                  const profissionais = idsParaMarcar(escolha, horario ?? {});
+                  return marcar.mutateAsync({
+                    event_type_id: tipo.id,
+                    starts_at: instante,
+                    ...(profissionais ? { professional_ids: profissionais } : {}),
+                    ...(cliente ? { contact_id: cliente.id } : {}),
+                    ...(notas.trim() ? { notes: notas.trim() } : {}),
+                  });
                 }}
                 // "VER NA AGENDA" — o botão que não fazia nada.
                 //
@@ -549,6 +727,10 @@ export function AgendaClient({
                   setAncora(startOfDay(new Date(instante)));
                   setMarcando(false);
                   setRemarcandoId(null);
+                  setRemarcandoProfissionais(null);
+                  setEscolha(SEM_ESCOLHA);
+                  setCliente(null);
+                  setNotas("");
                 }}
               />
             </div>
@@ -574,7 +756,7 @@ export function AgendaClient({
             <p className="text-sm text-text-muted">
               {(() => {
                 const alvo = todos.find((a) => a.id === cancelandoId);
-                if (!alvo) return t("Este agendamento não está mais na lista.");
+                if (!alvo) return resumoDoCancelamento ?? t("Este agendamento não está mais na lista.");
                 const quem = alvo.quemSeraAtendido ? ` ${t("de")} ${alvo.quemSeraAtendido}` : "";
                 return `${t(alvo.titulo)}${quem}, ${format(new Date(alvo.comeca), t("d 'de' MMMM 'às' HH:mm"), { locale: localeDaData })}.`;
               })()}
@@ -628,11 +810,27 @@ export function AgendaClient({
         // "Disponível quando a agenda estiver conectada", que é falso: PATCH e
         // DELETE não tocam o Google. Só a IA conseguia remarcar ou cancelar.
         onRemarcar={(id) => {
+          const alvo = todos.find((a) => a.id === id);
           setRemarcandoId(id);
+          // Só ids que SÃO de profissional: um agendamento legado cujo dono não
+          // virou profissional chega com o user_id, e pedir horários com ele
+          // daria 422. Sem nenhum, a rota decide como antes.
+          const deQuem = alvo
+            ? [alvo.responsavelId, ...(alvo.apoioId ? [alvo.apoioId] : [])].filter((x) =>
+                pessoas.some((p) => p.id === x),
+              )
+            : [];
+          setRemarcandoProfissionais(deQuem.length > 0 ? deQuem : null);
+          if (alvo?.eventTypeId && tiposIniciais.some((x) => x.id === alvo.eventTypeId)) {
+            setTipoId(alvo.eventTypeId);
+          }
           setMarcando(true);
         }}
+        // A linha do histórico abre o MESMO detalhe que o card da grade.
+        onAbrir={abrirDetalhe}
         onCancelar={(id) => {
           setMotivo("");
+          setResumoDoCancelamento(null);
           setCancelandoId(id);
         }}
         // E ESTAS DUAS TAMBÉM FALTAVAM — o conserto acima alcançou 2 dos 4
@@ -686,7 +884,33 @@ export function AgendaClient({
           setRemarcandoId(null);
           setMarcando(true);
         }}
+        // O CLIQUE NO CARD, que era mudo: a grade aceitava a prop desde que
+        // nasceu e esta tela não a passava.
+        onAbrirAgendamento={abrirDetalhe}
         className="min-h-0 flex-1"
+      />
+
+      <DetalheDoAgendamento
+        id={abertoId}
+        pessoas={pessoas}
+        agora={new Date()}
+        onFechar={() => abrirDetalhe(null)}
+        onRemarcar={(d) => {
+          abrirDetalhe(null);
+          setRemarcandoId(d.id);
+          // Os horários oferecidos são os de QUEM JÁ ATENDE — ver o estado.
+          setRemarcandoProfissionais(d.profissionais.length > 0 ? d.profissionais.map((p) => p.id) : null);
+          if (d.tipo && tiposIniciais.some((x) => x.id === d.tipo?.id)) setTipoId(d.tipo.id);
+          setMarcando(true);
+        }}
+        onCancelar={(d) => {
+          abrirDetalhe(null);
+          setMotivo("");
+          setResumoDoCancelamento(
+            `${d.contato?.nome ?? t(d.titulo)}, ${format(new Date(d.iniciaEm), t("d 'de' MMMM 'às' HH:mm"), { locale: localeDaData })}.`,
+          );
+          setCancelandoId(d.id);
+        }}
       />
 
     </div>

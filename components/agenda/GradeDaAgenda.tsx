@@ -157,9 +157,10 @@ function diasDaSemanaDe(ancora: Date): Date[] {
  * dá a cada um a primeira coluna livre do grupo, e reparte a largura pelo
  * número de colunas que o grupo precisou.
  */
-type Posicionado = { agendamento: Agendamento; coluna: number; colunas: number };
+export type Posicionado = { agendamento: Agendamento; coluna: number; colunas: number };
 
-function repartirSobrepostos(agendamentos: Agendamento[]): Posicionado[] {
+/** Exportado: a visão por profissional reparte cada coluna pela mesma regra. */
+export function repartirSobrepostos(agendamentos: Agendamento[]): Posicionado[] {
   const ordenados = [...agendamentos].sort(
     (a, b) => new Date(a.comeca).getTime() - new Date(b.comeca).getTime(),
   );
@@ -625,11 +626,14 @@ function VisaoDeMes({
   agora,
   agendamentos,
   pessoas,
+  onAbrir,
 }: {
   ancora: Date;
   agora: Date;
   agendamentos: Agendamento[];
   pessoas: Pessoa[];
+  /** O chip abre o compromisso, como o card das outras visões — ocupação do Google não. */
+  onAbrir?: (id: string) => void;
 }) {
   const t = useT();
   const localeDaData = useLocaleDeData();
@@ -691,11 +695,28 @@ function VisaoDeMes({
               <div className="space-y-0.5">
                 {doDia.slice(0, 2).map((c) => {
                   const trilha = pessoas.find((p) => p.id === c.responsavelId)?.trilha ?? 1;
+                  const abre = onAbrir && c.origem !== "google_sync" ? onAbrir : undefined;
                   return (
                     <div
                       key={c.id}
                       data-testid={`chip-mes-${c.id}`}
-                      className="flex items-center gap-1 rounded-sm px-1 py-0.5"
+                      role={abre ? "button" : undefined}
+                      tabIndex={abre ? 0 : undefined}
+                      onClick={abre ? () => abre(c.id) : undefined}
+                      onKeyDown={
+                        abre
+                          ? (e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                abre(c.id);
+                              }
+                            }
+                          : undefined
+                      }
+                      className={cn(
+                        "flex items-center gap-1 rounded-sm px-1 py-0.5",
+                        abre && "cursor-pointer hover:ring-1 hover:ring-border-strong",
+                      )}
                       style={{ background: fundoDaTrilha(trilha, 14) }}
                     >
                       <span
@@ -957,7 +978,13 @@ export function GradeDaAgenda({
       )}
     >
       {visao === "mes" ? (
-        <VisaoDeMes ancora={ancora} agora={agora} agendamentos={agendamentos} pessoas={pessoas} />
+        <VisaoDeMes
+          ancora={ancora}
+          agora={agora}
+          agendamentos={agendamentos}
+          pessoas={pessoas}
+          onAbrir={onAbrirAgendamento}
+        />
       ) : (
         // A rolagem mora AQUI dentro, e não na página: `html, body` têm
         // `overflow-x: hidden` no globals.css, então uma grade que estourasse a

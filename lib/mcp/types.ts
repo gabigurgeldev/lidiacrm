@@ -19,6 +19,15 @@ export interface McpContext {
   requestId: string;
   /** Service-role admin client. Tools devem filtrar `organization_id` em toda query. */
   supabase: SupabaseClient;
+  /**
+   * A conversa em que o agente está, quando a ferramenta roda DENTRO de um turno.
+   *
+   * Ausente fora de turno (chamada MCP externa, por token). Presente, os campos
+   * de `CAMPOS_DO_TURNO` (`lib/mcp/turno.ts`) saem do schema que o modelo vê e são
+   * preenchidos daqui — o modelo não escolhe quem é atendido. `contactId` é o id
+   * do contato da conversa.
+   */
+  turno?: { conversationId: string; contactId: string };
 }
 
 export type McpToolCategory = "read" | "write" | "handoff";

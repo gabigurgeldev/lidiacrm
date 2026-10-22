@@ -89,6 +89,7 @@ export function HistoricoDaAgenda({
   onCancelar,
   onRealizado,
   onFaltou,
+  onAbrir,
   className,
 }: {
   agendamentos: Agendamento[];
@@ -105,6 +106,8 @@ export function HistoricoDaAgenda({
    */
   onRealizado?: (id: string) => void;
   onFaltou?: (id: string) => void;
+  /** Abre o detalhe do agendamento — a mesma folha que o card da grade abre. */
+  onAbrir?: (id: string) => void;
   className?: string;
 }) {
   const localeDaData = useLocaleDeData();
@@ -192,7 +195,18 @@ export function HistoricoDaAgenda({
                     </div>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm">{a.quemSeraAtendido ?? t(a.titulo)}</div>
+                    {onAbrir && a.origem !== "google_sync" ? (
+                      <button
+                        type="button"
+                        data-testid={`abrir-${a.id}`}
+                        onClick={() => onAbrir(a.id)}
+                        className="block max-w-full truncate text-left text-sm underline-offset-2 hover:underline"
+                      >
+                        {a.quemSeraAtendido ?? t(a.titulo)}
+                      </button>
+                    ) : (
+                      <div className="truncate text-sm">{a.quemSeraAtendido ?? t(a.titulo)}</div>
+                    )}
                     <div className="truncate text-[11px] text-text-muted">
                       {a.tipo ? t(a.tipo) : t("Agendamento")}
                       {pessoa ? ` · ${t("com")} ${pessoa.nome}` : ""}

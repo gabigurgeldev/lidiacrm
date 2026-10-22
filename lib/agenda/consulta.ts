@@ -32,111 +32,275 @@
  * `motivoParaCliente` vai para o modelo e pode chegar ao cliente final: nada de
  * nome de campo, e ele diz o que fazer em seguida em vez de só negar. É a mesma
  * separação que `lerJornadaDoBanco` já faz, e pela mesma razão (DECISÃO 20).
+ *
+ * ─── Profissionais (migration 0245) ──────────────────────────────────────────
+ *
+ * A agenda deixou de ser "de um dono" e passou a ser de PROFISSIONAIS (com ou sem
+ * login), e um tipo pode pedir duas (principal + apoio). A coleta por pessoa mora
+ * em `./profissionais` e a combinação em `combinacoesLivres`; aqui fica a ordem
+ * em que se decide QUEM é candidata — ver `candidatasDaConsulta`.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { horariosLivres, type ExcecaoDeData, type Slot } from "./horarios-livres";
-import { lerJornadaDoBanco } from "./jornada";
+import { combinacoesLivres, type PessoaDaBusca } from "./horarios-livres";
 import {
-  agendaExternaNuncaLida,
-  ocupadosDoDono,
-  type LinhaDeAgendamento,
-  type LinhaDeEventoExterno,
-} from "./ocupados";
-import type { SituacaoDaConexao, SituacaoDoAgendamento } from "./tipos";
+  carregarAgendasDosProfissionais,
+  habilitacoesDoTipo,
+  membrosRevogados,
+  type AgendaDoProfissional,
+  type HabilitacoesDoTipo,
+} from "./profissionais";
+import {
+  AUTORES_DO_AGENDAMENTO,
+  ORIGENS_DO_AGENDAMENTO,
+  PAPEIS_DO_PROFISSIONAL,
+  type AutorDoAgendamento,
+  type OrigemDoAgendamento,
+  type PapelDoProfissional,
+  type SituacaoDaConexao,
+  type SituacaoDoAgendamento,
+} from "./tipos";
+import type {
+  AgendamentoListado,
+  CodigoDeRecusaDaConsulta,
+  ParametrosDaConsulta,
+  ResultadoDaConsulta,
+} from "./contrato";
 
 /** Teto de dias por consulta: uma varredura de ano inteiro é erro de chamada, não pedido. */
 export const MAXIMO_DE_DIAS = 62;
 
-export type CodigoDeRecusaDaConsulta =
-  | "tipo_desconhecido"
-  | "tipo_desativado"
-  | "sem_responsavel"
-  | "jornada_mal_configurada"
-  | "erro_interno";
+/**
+ * Os tipos da consulta moram em `./contrato` (migration 0245) e são reexportados
+ * daqui para quem já importava de `@/lib/agenda/consulta`.
+ */
+export type { AgendamentoListado, CodigoDeRecusaDaConsulta, ParametrosDaConsulta, ResultadoDaConsulta };
 
-export interface ParametrosDaConsulta {
-  /**
-   * O tipo, por id OU por slug — exatamente um dos dois.
-   *
-   * A rota fala `uuid` porque a tela tem o id na mão. A ferramenta MCP fala
-   * SLUG porque o modelo não tem, e o cabeçalho de `calendar_event_types` diz
-   * por quê: o slug existe para "dar à IA um handle que ela não alucina, ao
-   * contrário de um uuid". Resolver os dois aqui evita uma segunda consulta
-   * só para traduzir.
-   */
-  eventTypeId?: string | null;
-  eventTypeSlug?: string | null;
-  /** Ausente = o responsável padrão do tipo. */
-  ownerUserId?: string | null;
-  de: Date;
-  ate: Date;
-  /** INJETADO, como em `horariosLivres`. Relógio lido aqui dentro é o defeito que `janela-do-canal.ts` documenta. */
-  agora: Date;
-}
-
-export type ResultadoDaConsulta =
-  | {
-      ok: true;
-      slots: Slot[];
-      fusoDaRegra: string;
-      /** DECISÃO 1.1: "não publiquei" e "não tenho vaga" não podem chegar como a mesma lista vazia. */
-      publicouHorarios: boolean;
-      /** DECISÃO 20.2: o fuso veio do default, ninguém escolheu — e a IA oferece horário com ele. */
-      fusoSuposto: boolean;
-      fontesDefasadas: SituacaoDaConexao[];
-      /**
-       * NENHUMA conexão viva jamais sincronizou.
-       *
-       * Diferente de `fontesDefasadas`: lá a conexão já trouxe eventos e parou de
-       * atualizar; aqui ela nunca trouxe NADA, e a lista de ocupados pode estar
-       * vazia por ninguém ter perguntado — não por estar livre.
-       *
-       * ⚠️ Vive AQUI, e não na rota, porque quem mais precisa dele é a IA: uma
-       * tela que oferece horário de agenda nunca lida deixa um humano estranhar;
-       * um agente que o oferece MARCA por cima da cirurgia e confirma ao cliente.
-       */
-      agendaExternaNuncaLida: boolean;
-    }
-  | {
-      ok: false;
-      codigo: CodigoDeRecusaDaConsulta;
-      /** Nomeia campo e pessoa. Plateia: quem configura. */
-      motivoParaOperador: string;
-      /** Sem nome de campo, e diz o que fazer. Plateia: o modelo, e por tabela o cliente. */
-      motivoParaCliente: string;
-    };
-
-/** `YYYY-MM-DD` de um instante, em UTC — a régua que a coluna `date` usa. */
-function diaISO(instante: Date): string {
-  return instante.toISOString().slice(0, 10);
-}
+type Recusa = Extract<ResultadoDaConsulta, { ok: false }>;
 
 const NAO_OFERECA =
   "Não ofereça horários e não diga que está sem vaga — avise que alguém da equipe confirma o horário.";
+
+function erroInterno(motivo: string): Recusa {
+  return {
+    ok: false,
+    codigo: "erro_interno",
+    motivoParaOperador: motivo,
+    motivoParaCliente: `Não consegui consultar a agenda agora. ${NAO_OFERECA}`,
+  };
+}
+
+/** A linha de `calendar_event_types` que a consulta lê. */
+interface LinhaDoTipo {
+  id: string;
+  name: string;
+  is_active: boolean;
+  duration_minutes: number;
+  buffer_before_minutes: number;
+  buffer_after_minutes: number;
+  minimum_notice_minutes: number;
+  slot_interval_minutes: number | null;
+  booking_window_days: number;
+  default_owner_user_id: string | null;
+  professionals_required: number;
+}
+
+/**
+ * Quem a consulta considera, e quem foi pedida por nome.
+ *
+ * `fixos` é a parte "pedida": recusa por jornada quebrada só derruba a consulta
+ * inteira quando a quebrada é uma destas — a operação pediu ESSA pessoa, e
+ * pular para outra seria responder outra pergunta.
+ */
+interface Candidatas {
+  ids: string[];
+  fixos: { principalId?: string; apoioId?: string };
+}
+
+/**
+ * A ORDEM DOS CANDIDATOS — e cada degrau existe por um caso medido.
+ *
+ * 1. `profissionalIds` explícitos (ou `ownerUserId` legado, traduzido para o
+ *    profissional do membro): a tela e a IA pediram alguém. Quando o tipo pede
+ *    duas e só uma foi pedida, ela é a principal e a apoio sai das habilitadas.
+ * 2. Senão, as habilitadas ATIVAS no tipo.
+ * 3. Senão, o profissional do dono padrão do tipo — a instalação que ainda não
+ *    mexeu em habilitação segue agendável como era antes da 0245.
+ * 4. Senão, `sem_responsavel`: lista vazia aqui faria a tela dizer "nenhum
+ *    horário disponível" para uma configuração incompleta, e o erro nomeado é o
+ *    que leva alguém a corrigir.
+ *
+ * Em todos os degraus, quem SAIU da equipe (vínculo revogado) não é candidata —
+ * nem pedida por nome, nem habilitada, nem dona padrão (`membrosRevogados`).
+ */
+async function candidatasDaConsulta(
+  supabase: SupabaseClient,
+  organizationId: string,
+  tipo: LinhaDoTipo,
+  params: ParametrosDaConsulta,
+  necessarios: 1 | 2,
+): Promise<Candidatas | Recusa> {
+  const habilitadas = async (): Promise<HabilitacoesDoTipo | Recusa> => {
+    try {
+      return await habilitacoesDoTipo(supabase, organizationId, tipo.id);
+    } catch (e) {
+      return erroInterno(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  let pedidas: string[] = [];
+  if (params.profissionalIds && params.profissionalIds.length > 0) {
+    pedidas = [...new Set(params.profissionalIds)];
+  } else if (params.ownerUserId) {
+    const { data, error } = await supabase
+      .from("calendar_professionals")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("user_id", params.ownerUserId)
+      .maybeSingle();
+    if (error) return erroInterno(error.message);
+    if (!data) {
+      return {
+        ok: false,
+        codigo: "profissional_invalido",
+        motivoParaOperador:
+          "Este membro ainda não é profissional da agenda. Cadastre-o em Configurações → Agenda → Profissionais.",
+        motivoParaCliente: `Essa pessoa não atende "${tipo.name}". Ofereça os horários sem escolher profissional.`,
+      };
+    }
+    pedidas = [String(data.id)];
+  }
+
+  if (pedidas.length > 0) {
+    if (pedidas.length > necessarios) {
+      return {
+        ok: false,
+        codigo: "profissional_invalido",
+        motivoParaOperador: `"${tipo.name}" pede ${necessarios} profissional(is), e foram escolhidas ${pedidas.length}.`,
+        motivoParaCliente: `"${tipo.name}" é feito por ${necessarios === 1 ? "uma profissional" : "duas profissionais"}. Escolha de novo, ou ofereça os horários sem escolher profissional.`,
+      };
+    }
+
+    // A pedida tem de ser desta organização, estar ativa e — se o tipo tem
+    // habilitação — fazer este serviço. É a MESMA régua que o "marcar" aplica:
+    // oferecer um horário com quem o marcar depois recusa é prometer em vão.
+    const { data: linhas, error } = await supabase
+      .from("calendar_professionals")
+      .select("id, name, is_active, user_id")
+      .eq("organization_id", organizationId)
+      .in("id", pedidas);
+    if (error) return erroInterno(error.message);
+    const achadas = new Map((linhas ?? []).map((l) => [String(l.id), l]));
+
+    let revogados: Set<string>;
+    try {
+      revogados = await membrosRevogados(
+        supabase,
+        organizationId,
+        (linhas ?? []).map((l) => (l.user_id ? String(l.user_id) : null)),
+      );
+    } catch (e) {
+      return erroInterno(e instanceof Error ? e.message : String(e));
+    }
+
+    const hab = await habilitadas();
+    if ("ok" in hab) return hab;
+    // A régua de "faz este serviço" é o conjunto CRU de habilitações — a mesma
+    // que o marcar lê. Só com as ativas, um tipo cuja única habilitada saiu da
+    // equipe viraria "qualquer uma serve" aqui e não lá.
+    const idsHabilitados = hab.ids;
+
+    for (const id of pedidas) {
+      const linha = achadas.get(id);
+      const recusa = (porque: string): Recusa => ({
+        ok: false,
+        codigo: "profissional_invalido",
+        motivoParaOperador: porque,
+        motivoParaCliente: `Essa profissional não está disponível para "${tipo.name}". Ofereça os horários sem escolher profissional, ou pergunte por outra.`,
+      });
+      if (!linha) return recusa(`Profissional ${id} não existe nesta organização.`);
+      if (!linha.is_active) return recusa(`${String(linha.name)} está desativada.`);
+      if (linha.user_id && revogados.has(String(linha.user_id))) {
+        return recusa(`${String(linha.name)} não faz mais parte da equipe.`);
+      }
+      if (idsHabilitados.size > 0 && !idsHabilitados.has(id)) {
+        return recusa(`${String(linha.name)} não está habilitada em "${tipo.name}".`);
+      }
+    }
+
+    const [principalId, apoioId] = pedidas;
+    if (necessarios === 1 || apoioId) {
+      return { ids: pedidas, fixos: { principalId, apoioId } };
+    }
+    // Duas necessárias e uma pedida: ela é a principal, e a apoio vem das
+    // habilitadas (ou, sem habilitação, do dono padrão).
+    const apoios =
+      hab.ativas.length > 0 ? hab.ativas.map((p) => p.id) : await idDoDonoPadrao(supabase, organizationId, tipo);
+    if (!Array.isArray(apoios)) return apoios;
+    return { ids: [...new Set([...pedidas, ...apoios])], fixos: { principalId } };
+  }
+
+  const hab = await habilitadas();
+  if ("ok" in hab) return hab;
+  if (hab.ativas.length > 0) return { ids: hab.ativas.map((p) => p.id), fixos: {} };
+
+  const doDono = await idDoDonoPadrao(supabase, organizationId, tipo);
+  if (!Array.isArray(doDono)) return doDono;
+  if (doDono.length > 0) return { ids: doDono, fixos: {} };
+
+  return {
+    ok: false,
+    codigo: "sem_responsavel",
+    motivoParaOperador: `"${tipo.name}" não tem profissional habilitada nem responsável definido, e sem ninguém não há agenda para consultar.`,
+    motivoParaCliente: `Ainda não há quem atenda "${tipo.name}". ${NAO_OFERECA}`,
+  };
+}
+
+/**
+ * O profissional ATIVO do dono padrão do tipo, como lista (vazia se não há).
+ * Dono padrão que saiu da equipe não responde por nada: vazio, e a consulta cai
+ * em `sem_responsavel` — que é o que leva alguém a escolher outro.
+ */
+async function idDoDonoPadrao(
+  supabase: SupabaseClient,
+  organizationId: string,
+  tipo: LinhaDoTipo,
+): Promise<string[] | Recusa> {
+  if (!tipo.default_owner_user_id) return [];
+  const { data, error } = await supabase
+    .from("calendar_professionals")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("user_id", tipo.default_owner_user_id)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (error) return erroInterno(error.message);
+  if (!data) return [];
+  try {
+    const revogados = await membrosRevogados(supabase, organizationId, [tipo.default_owner_user_id]);
+    if (revogados.has(tipo.default_owner_user_id)) return [];
+  } catch (e) {
+    return erroInterno(e instanceof Error ? e.message : String(e));
+  }
+  return [String(data.id)];
+}
 
 export async function horariosLivresDaOrg(
   supabase: SupabaseClient,
   organizationId: string,
   params: ParametrosDaConsulta,
 ): Promise<ResultadoDaConsulta> {
-  const { data: tipo, error: erroTipo } = await supabase
+  const { data: tipoRaw, error: erroTipo } = await supabase
     .from("calendar_event_types")
     .select(
-      "id, name, is_active, duration_minutes, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, slot_interval_minutes, booking_window_days, default_owner_user_id",
+      "id, name, is_active, duration_minutes, buffer_before_minutes, buffer_after_minutes, minimum_notice_minutes, slot_interval_minutes, booking_window_days, default_owner_user_id, professionals_required",
     )
     .eq("organization_id", organizationId)
     .eq(params.eventTypeSlug ? "slug" : "id", params.eventTypeSlug ?? params.eventTypeId ?? "")
     .maybeSingle();
 
-  if (erroTipo) {
-    return {
-      ok: false,
-      codigo: "erro_interno",
-      motivoParaOperador: erroTipo.message,
-      motivoParaCliente: `Não consegui consultar a agenda agora. ${NAO_OFERECA}`,
-    };
-  }
+  if (erroTipo) return erroInterno(erroTipo.message);
+  const tipo = tipoRaw as LinhaDoTipo | null;
   if (!tipo) {
     return {
       ok: false,
@@ -158,137 +322,92 @@ export async function horariosLivresDaOrg(
     };
   }
 
-  const donoId = params.ownerUserId ?? tipo.default_owner_user_id;
-  if (!donoId) {
-    // Sem dono não há jornada, e sem jornada não há horário. Lista vazia aqui
-    // faria a tela dizer "nenhum horário disponível" para uma configuração
-    // incompleta — o erro nomeado é o que leva alguém a corrigir.
-    return {
-      ok: false,
-      codigo: "sem_responsavel",
-      motivoParaOperador: `"${tipo.name}" não tem responsável definido, e sem responsável não há agenda para consultar.`,
-      motivoParaCliente: `Ainda não há um responsável definido para "${tipo.name}". ${NAO_OFERECA}`,
-    };
+  const necessarios: 1 | 2 = tipo.professionals_required === 2 ? 2 : 1;
+
+  const candidatas = await candidatasDaConsulta(supabase, organizationId, tipo, params, necessarios);
+  if ("ok" in candidatas) return candidatas;
+
+  const coleta = await carregarAgendasDosProfissionais(supabase, organizationId, candidatas.ids, {
+    de: params.de,
+    ate: params.ate,
+    ignorarAgendamentoId: params.ignorarAgendamentoId,
+  });
+  if (!coleta.ok) return erroInterno(coleta.motivoParaOperador);
+
+  // Na ordem de exibição (position, nome) — a coleta já devolve o mapa nela.
+  const agendas = [...coleta.agendas.values()];
+  const pedidas = new Set([candidatas.fixos.principalId, candidatas.fixos.apoioId].filter(Boolean));
+
+  // ⚠️ JORNADA QUEBRADA DE UMA NÃO DERRUBA AS OUTRAS.
+  //
+  // Com um dono só, jornada corrompida era recusa da consulta inteira — e
+  // estava certo, não havia mais ninguém. Com seis profissionais, a mesma regra
+  // faria uma esteticista sem horário cadastrado tirar a agenda da clínica do
+  // ar. Ela é PULADA e reportada em `profissionaisComProblema` (falha aberta na
+  // informação: a tela diz quem está fora e por quê), e a consulta só falha
+  // quando não sobra ninguém — ou quando a quebrada foi PEDIDA por nome.
+  const saudaveis: (AgendaDoProfissional & { leitura: Extract<AgendaDoProfissional["leitura"], { ok: true }> })[] = [];
+  const problemas: { id: string; nome: string; motivoParaOperador: string; motivoParaCliente: string }[] = [];
+  for (const a of agendas) {
+    if (a.leitura.ok) {
+      saudaveis.push(a as (typeof saudaveis)[number]);
+      continue;
+    }
+    // `leitura.motivoParaOperador` já vem como fragmento pensado para encaixar
+    // aqui ("ainda não foi configurada. Configure em…" ou "está mal
+    // configurada: <motivo>") — ver `lerJornadaDoBanco`. Duas recusas
+    // diferentes não podem virar a mesma frase.
+    problemas.push({
+      id: a.profissional.id,
+      nome: a.profissional.nome,
+      motivoParaOperador: `A jornada de ${a.profissional.nome} ${a.leitura.motivoParaOperador}`,
+      motivoParaCliente: a.leitura.motivoParaCliente,
+    });
   }
 
-  const { data: disponibilidade, error: erroDisp } = await supabase
-    .from("attendant_availability")
-    .select("schedule")
-    .eq("organization_id", organizationId)
-    .eq("user_id", donoId)
-    .maybeSingle();
-  if (erroDisp) {
-    return {
-      ok: false,
-      codigo: "erro_interno",
-      motivoParaOperador: erroDisp.message,
-      motivoParaCliente: `Não consegui consultar a agenda agora. ${NAO_OFERECA}`,
-    };
+  // Pedida que não voltou da coleta: sumiu entre a validação e a leitura.
+  for (const id of pedidas) {
+    if (!coleta.agendas.has(String(id))) {
+      return {
+        ok: false,
+        codigo: "profissional_invalido",
+        motivoParaOperador: `Profissional ${String(id)} não existe nesta organização.`,
+        motivoParaCliente: `Essa profissional não está disponível para "${tipo.name}". Ofereça os horários sem escolher profissional.`,
+      };
+    }
   }
 
-  const leitura = lerJornadaDoBanco(disponibilidade?.schedule);
-  if (!leitura.ok) {
-    // Falha fechada na AÇÃO, aberta na INFORMAÇÃO: schedule corrompido não pode
-    // virar lista vazia, senão o dono conclui que está sem vaga e essa conclusão
-    // errada não gera chamado nenhum.
+  const pedidaQuebrada = problemas.find((p) => pedidas.has(p.id));
+  const quebradaQueImpede =
+    pedidaQuebrada ?? (saudaveis.length < necessarios ? problemas[0] : undefined);
+  if (quebradaQueImpede) {
     return {
       ok: false,
       codigo: "jornada_mal_configurada",
-      // `leitura.motivoParaOperador` já vem como fragmento pensado para
-      // encaixar aqui ("ainda não foi configurada. Configure em…" ou "está mal
-      // configurada: <motivo>") — ver `lerJornadaDoBanco`. Duas recusas
-      // diferentes ("nunca configurou" vs. "configurou errado") não podem virar
-      // a mesma frase, senão o operador lê "mal configurada" para um caso que é
-      // só "ainda não configurada".
-      motivoParaOperador: `A disponibilidade deste responsável ${leitura.motivoParaOperador}`,
-      motivoParaCliente: `${leitura.motivoParaCliente} ${NAO_OFERECA}`,
+      motivoParaOperador: quebradaQueImpede.motivoParaOperador,
+      motivoParaCliente: `${quebradaQueImpede.motivoParaCliente} ${NAO_OFERECA}`,
     };
   }
-
-  const [{ data: excecoesRaw, error: erroExc }, { data: agendaRaw, error: erroAg }] =
-    await Promise.all([
-      supabase
-        .from("calendar_availability_exceptions")
-        .select("exception_date, is_unavailable, start_minute, end_minute")
-        .eq("organization_id", organizationId)
-        .eq("user_id", donoId)
-        .gte("exception_date", diaISO(params.de))
-        .lte("exception_date", diaISO(params.ate)),
-      supabase
-        .from("calendar_appointments")
-        .select("starts_at, ends_at, status")
-        .eq("organization_id", organizationId)
-        .eq("owner_user_id", donoId)
-        .lt("starts_at", params.ate.toISOString())
-        .gt("ends_at", params.de.toISOString()),
-    ]);
-
-  const erroDeColeta = erroExc ?? erroAg;
-  if (erroDeColeta) {
+  if (saudaveis.length < necessarios) {
     return {
       ok: false,
-      codigo: "erro_interno",
-      motivoParaOperador: erroDeColeta.message,
-      motivoParaCliente: `Não consegui consultar a agenda agora. ${NAO_OFERECA}`,
+      codigo: "profissionais_insuficientes",
+      motivoParaOperador: `"${tipo.name}" pede ${necessarios} profissionais, e só ${saudaveis.length} está(ão) habilitada(s) e ativa(s).`,
+      motivoParaCliente: `"${tipo.name}" ainda não pode ser agendado. ${NAO_OFERECA}`,
     };
   }
 
-  // `calendar_external_events` NÃO tem `user_id`: o dono vem por
-  // `connection_id → calendar_connections.user_id`. O join traz de carona a
-  // situação da conexão, que decide se o horário sai com aviso de defasagem.
-  // A situação das conexões do dono, para distinguir "não tem Google" de "tem
-  // Google que nunca foi lido". Sem `.select` de erro: conexão ilegível cai no
-  // mesmo lado de "não sei", que é o lado seguro.
-  const { data: conexoesRaw } = await supabase
-    .from("calendar_connections")
-    .select("status, last_sync_at")
-    .eq("organization_id", organizationId)
-    .eq("user_id", donoId);
-
-  const { data: externosRaw, error: erroExt } = await supabase
-    .from("calendar_external_events")
-    .select("starts_at, ends_at, transparency, status, calendar_connections!inner(user_id, status)")
-    .eq("organization_id", organizationId)
-    .eq("calendar_connections.user_id", donoId)
-    .lt("starts_at", params.ate.toISOString())
-    .gt("ends_at", params.de.toISOString());
-  if (erroExt) {
-    return {
-      ok: false,
-      codigo: "erro_interno",
-      motivoParaOperador: erroExt.message,
-      motivoParaCliente: `Não consegui consultar a agenda agora. ${NAO_OFERECA}`,
-    };
-  }
-
-  const excecoes: ExcecaoDeData[] = (excecoesRaw ?? []).map((linha) => ({
-    // ⚠️ `exception_date` é `date` no Postgres e chega como "YYYY-MM-DD" pelo
-    // PostgREST. `diaLocalISO` compara STRING — um `Date` aqui não casaria com
-    // dia nenhum, e o bloqueio sumiria em silêncio.
-    data: String(linha.exception_date).slice(0, 10),
-    indisponivel: linha.is_unavailable,
-    inicioMinuto: linha.start_minute,
-    fimMinuto: linha.end_minute,
+  const pessoas: PessoaDaBusca[] = saudaveis.map((a) => ({
+    id: a.profissional.id,
+    jornada: a.leitura.jornada,
+    excecoes: a.excecoes,
+    ocupados: a.ocupados,
   }));
 
-  const { ocupados, fontesDefasadas } = ocupadosDoDono(
-    (agendaRaw ?? []) as LinhaDeAgendamento[],
-    (externosRaw ?? []).map((linha) => {
-      const conexao = linha.calendar_connections as unknown as { status?: string } | null;
-      return {
-        starts_at: linha.starts_at,
-        ends_at: linha.ends_at,
-        transparency: linha.transparency,
-        status: linha.status,
-        situacaoDaConexao: conexao?.status ?? "error",
-      } satisfies LinhaDeEventoExterno;
-    }),
-  );
-
-  const slots = horariosLivres({
-    jornada: leitura.jornada,
-    excecoes,
-    ocupados,
+  const slots = combinacoesLivres({
+    pessoas,
+    necessarios,
+    fixos: candidatas.fixos,
     tipo: {
       duracaoMin: tipo.duration_minutes,
       bufferAntesMin: tipo.buffer_before_minutes,
@@ -302,17 +421,40 @@ export async function horariosLivresDaOrg(
     agora: params.agora,
   });
 
+  // O fuso da regra é o de quem DÁ a grade: a principal pedida, ou a primeira
+  // na ordem. Profissionais em fusos diferentes são possíveis e raros; a tela
+  // exibe cada horário no fuso de apresentação de qualquer jeito.
+  const daGrade =
+    saudaveis.find((a) => a.profissional.id === candidatas.fixos.principalId) ?? saudaveis[0]!;
+
+  // "Não publiquei" vs "não tenho vaga" (DECISÃO 1.1), agora contando gente: o
+  // horário só pode existir se houver quem publicou em número suficiente — e,
+  // com principal pedida, se ELA publicou.
+  const publicaram = saudaveis.filter((a) => a.leitura.publicouHorarios);
+  const publicouHorarios =
+    publicaram.length >= necessarios &&
+    (!candidatas.fixos.principalId || publicaram.some((a) => a.profissional.id === candidatas.fixos.principalId));
+
+  const fontesDefasadas = new Set<SituacaoDaConexao>();
+  for (const a of saudaveis) for (const f of a.fontesDefasadas) fontesDefasadas.add(f);
+
   return {
     ok: true,
     slots,
-    fusoDaRegra: leitura.jornada.timezone,
-    publicouHorarios: leitura.publicouHorarios,
-    fusoSuposto: leitura.fusoSuposto,
-    fontesDefasadas,
-    agendaExternaNuncaLida: agendaExternaNuncaLida(conexoesRaw ?? []),
+    profissionais: saudaveis.map((a) => a.profissional),
+    profissionaisNecessarios: necessarios,
+    fusoDaRegra: daGrade.leitura.jornada.timezone,
+    publicouHorarios,
+    fusoSuposto: saudaveis.some((a) => a.leitura.fusoSuposto),
+    fontesDefasadas: [...fontesDefasadas],
+    agendaExternaNuncaLida: saudaveis.some((a) => a.agendaExternaNuncaLida),
+    profissionaisComProblema: problemas.map(({ id, nome, motivoParaOperador }) => ({
+      id,
+      nome,
+      motivoParaOperador,
+    })),
   };
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A LISTAGEM — "o que este cliente tem marcado?" e "como está o dia da equipe?"
@@ -325,25 +467,20 @@ export async function horariosLivresDaOrg(
 // ⚠️ O VÍNCULO COM O LEAD É POLIMÓRFICO (DECISÃO 6): não há `lead_id` em
 // `calendar_appointments` — o ponteiro é `crm_lead_links` com
 // `target_kind='appointment'`. Filtrar por lead custa uma consulta a mais, e é o
-// preço de não ter duplicado a FK.
+// preço de não ter duplicado a FK. O filtro por PROFISSIONAL segue o mesmo
+// desenho, pela mesma razão: quem atende mora em `calendar_appointment_professionals`.
 // ─────────────────────────────────────────────────────────────────────────────
-
-export interface AgendamentoListado {
-  id: string;
-  titulo: string;
-  iniciaEm: string;
-  terminaEm: string;
-  fuso: string;
-  situacao: string;
-  donoId: string | null;
-  contatoId: string | null;
-  contatoNome: string | null;
-}
 
 export interface ParametrosDaLista {
   contactId?: string | null;
   /** Resolvido por `crm_lead_links` — ver o aviso acima. */
   leadId?: string | null;
+  /**
+   * Resolvido por `calendar_appointment_professionals`: pega o que ela atende
+   * como principal E como apoio. `ownerUserId` (abaixo) só enxerga a principal
+   * com login — é o filtro legado.
+   */
+  professionalId?: string | null;
   /**
    * `YYYY-MM-DD`; filtra o dia inteiro.
    *
@@ -386,13 +523,49 @@ function nomeDoContato(
   return alvo?.name ?? alvo?.display_name ?? null;
 }
 
+/**
+ * `source` e `created_by_kind` têm CHECK no banco com estes mesmos
+ * vocabulários; o estreitamento existe para o compilador, não para o dado. Valor
+ * fora da lista (um clone com CHECK mais largo) vira o mais neutro de cada um —
+ * nunca "IA", que acenderia selo de autoria que ninguém conferiu.
+ */
+export function origemDe(valor: unknown): OrigemDoAgendamento {
+  return (ORIGENS_DO_AGENDAMENTO as readonly string[]).includes(String(valor))
+    ? (String(valor) as OrigemDoAgendamento)
+    : "ui";
+}
+
+export function autorDe(valor: unknown): AutorDoAgendamento {
+  return (AUTORES_DO_AGENDAMENTO as readonly string[]).includes(String(valor))
+    ? (String(valor) as AutorDoAgendamento)
+    : "system";
+}
+
+export function papelDe(valor: unknown): PapelDoProfissional {
+  return (PAPEIS_DO_PROFISSIONAL as readonly string[]).includes(String(valor))
+    ? (String(valor) as PapelDoProfissional)
+    : "apoio";
+}
+
+/** Principal primeiro — é a ordem que a tela usa para a cor e o card. */
+function porPapel<T extends { papel: PapelDoProfissional }>(a: T, b: T): number {
+  return PAPEIS_DO_PROFISSIONAL.indexOf(a.papel) - PAPEIS_DO_PROFISSIONAL.indexOf(b.papel);
+}
+
+const NAO_LISTEI = "Não consegui consultar os compromissos agora. Avise que alguém da equipe confirma.";
+
 export async function listaAgendamentos(
   supabase: SupabaseClient,
   organizationId: string,
   params: ParametrosDaLista,
 ): Promise<ResultadoDaLista> {
   const temAlvo = Boolean(
-    params.contactId || params.leadId || params.dia || params.ownerUserId || (params.de && params.ate),
+    params.contactId ||
+      params.leadId ||
+      params.professionalId ||
+      params.dia ||
+      params.ownerUserId ||
+      (params.de && params.ate),
   );
   if (!temAlvo) {
     // Sem recorte, isto varreria a agenda inteira da organização. Recusa com ensino,
@@ -401,11 +574,18 @@ export async function listaAgendamentos(
       ok: false,
       codigo: "sem_alvo",
       motivoParaOperador:
-        "listagem sem recorte: informe contato, lead, dia, período (de+ate) ou responsável.",
+        "listagem sem recorte: informe contato, lead, profissional, dia, período (de+ate) ou responsável.",
       motivoParaCliente:
         "Preciso saber de quem ou de que dia. Pergunte de qual cliente ou de qual data você quer ver os compromissos.",
     };
   }
+
+  const falha = (motivo: string): ResultadoDaLista => ({
+    ok: false,
+    codigo: "erro_interno",
+    motivoParaOperador: motivo,
+    motivoParaCliente: NAO_LISTEI,
+  });
 
   let idsPorLead: string[] | null = null;
   if (params.leadId) {
@@ -417,30 +597,44 @@ export async function listaAgendamentos(
       .eq("organization_id", organizationId)
       .eq("lead_id", params.leadId)
       .eq("target_kind", "appointment");
-    if (error) {
-      return {
-        ok: false,
-        codigo: "erro_interno",
-        motivoParaOperador: error.message,
-        motivoParaCliente: "Não consegui consultar os compromissos agora. Avise que alguém da equipe confirma.",
-      };
-    }
+    if (error) return falha(error.message);
     idsPorLead = (data ?? []).map((l) => String(l.target_id));
     // Lead sem nenhum vínculo: lista vazia é a resposta CERTA aqui — a pergunta era
     // "o que este negócio tem marcado?" e a resposta é "nada". Diferente de não saber.
     if (idsPorLead.length === 0) return { ok: true, agendamentos: [] };
   }
 
+  let idsPorProfissional: string[] | null = null;
+  if (params.professionalId) {
+    const { data, error } = await supabase
+      .from("calendar_appointment_professionals")
+      .select("appointment_id")
+      .eq("organization_id", organizationId)
+      .eq("professional_id", params.professionalId);
+    if (error) return falha(error.message);
+    idsPorProfissional = (data ?? []).map((l) => String(l.appointment_id));
+    if (idsPorProfissional.length === 0) return { ok: true, agendamentos: [] };
+  }
+
+  // Os dois filtros por vínculo juntos são INTERSEÇÃO: "o que a Ana atende para
+  // este negócio". Interseção vazia é resposta certa, e não consulta a mais.
+  let idsFiltrados: string[] | null = idsPorLead ?? idsPorProfissional;
+  if (idsPorLead && idsPorProfissional) {
+    const daProfissional = new Set(idsPorProfissional);
+    idsFiltrados = idsPorLead.filter((id) => daProfissional.has(id));
+    if (idsFiltrados.length === 0) return { ok: true, agendamentos: [] };
+  }
+
   let q = supabase
     .from("calendar_appointments")
     .select(
-      "id, title, starts_at, ends_at, time_zone, status, owner_user_id, contact_id, contacts(name, display_name)",
+      "id, title, starts_at, ends_at, time_zone, status, owner_user_id, contact_id, event_type_id, source, created_by_kind, conversation_id, contacts(name, display_name)",
     )
     .eq("organization_id", organizationId)
     .order("starts_at", { ascending: true })
     .limit(params.limite);
 
-  if (idsPorLead) q = q.in("id", idsPorLead);
+  if (idsFiltrados) q = q.in("id", idsFiltrados);
   if (params.contactId) q = q.eq("contact_id", params.contactId);
   if (params.ownerUserId) q = q.eq("owner_user_id", params.ownerUserId);
   if (params.situacao) q = q.eq("status", params.situacao);
@@ -473,18 +667,32 @@ export async function listaAgendamentos(
   }
 
   const { data, error } = await q;
-  if (error) {
-    return {
-      ok: false,
-      codigo: "erro_interno",
-      motivoParaOperador: error.message,
-      motivoParaCliente: "Não consegui consultar os compromissos agora. Avise que alguém da equipe confirma.",
-    };
+  if (error) return falha(error.message);
+  const linhas = data ?? [];
+
+  // Quem atende cada um — UMA consulta para a página inteira, não uma por linha.
+  const participantes = new Map<string, { id: string; papel: PapelDoProfissional }[]>();
+  if (linhas.length > 0) {
+    const { data: parts, error: erroParts } = await supabase
+      .from("calendar_appointment_professionals")
+      .select("appointment_id, professional_id, role")
+      .eq("organization_id", organizationId)
+      .in(
+        "appointment_id",
+        linhas.map((l) => String(l.id)),
+      );
+    if (erroParts) return falha(erroParts.message);
+    for (const p of parts ?? []) {
+      const chave = String(p.appointment_id);
+      const lista = participantes.get(chave) ?? [];
+      lista.push({ id: String(p.professional_id), papel: papelDe(p.role) });
+      participantes.set(chave, lista);
+    }
   }
 
   return {
     ok: true,
-    agendamentos: (data ?? []).map((l) => ({
+    agendamentos: linhas.map((l) => ({
       id: String(l.id),
       titulo: String(l.title),
       iniciaEm: String(l.starts_at),
@@ -498,6 +706,14 @@ export async function listaAgendamentos(
       // dizer "você já tem consulta marcada, Maria". Mesma coluna que a tela do
       // produto lê, mesmo precedente de `name` antes de `display_name`.
       contatoNome: nomeDoContato(l.contacts),
+      profissionais: (participantes.get(String(l.id)) ?? []).sort(porPapel),
+      eventTypeId: l.event_type_id ? String(l.event_type_id) : null,
+      // A origem é a do BANCO. O hook da tela cravava "ui" para tudo, e o selo
+      // "marcado pela IA" nunca acendia — o dado existia desde a 0177 e não
+      // entrava no select.
+      origem: origemDe(l.source),
+      autor: autorDe(l.created_by_kind),
+      conversaId: l.conversation_id ? String(l.conversation_id) : null,
     })),
   };
 }

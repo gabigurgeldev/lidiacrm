@@ -58,6 +58,7 @@
  */
 import type { ScheduleWindow } from "@/lib/schemas/routing";
 
+import type { OpcaoDeProfissionais, SlotComProfissionais } from "./contrato";
 import { diaDaSemanaLocal, diaLocalISO, instanteDe, type HoraDeParede } from "./fuso";
 
 /**
@@ -284,6 +285,105 @@ function colide(inicio: number, fim: number, faixa: FaixaEmInstantes): boolean {
   return inicio < faixa.fim && fim > faixa.inicio;
 }
 
+/**
+ * Um dia LOCAL da agenda, pronto para gerar ou testar horário.
+ *
+ * Existe porque agora há DOIS consumidores do mesmo dia: `horariosLivres`, que
+ * GERA a grade, e `cabeNaAgenda`, que TESTA um instante só (a apoio, que não
+ * gera grade nenhuma — ela só precisa estar livre no horário da principal).
+ * Se cada um montasse o dia do seu jeito, a apoio e a principal seriam julgadas
+ * por regras diferentes sobre o MESMO bloqueio, que é o defeito que a DECISÃO
+ * 12 tirou deste arquivo uma vez.
+ */
+interface DiaDaAgenda {
+  ano: number;
+  mes: number;
+  dia: number;
+  /** As faixas publicadas do dia, em minutos de parede (a grade nasce delas). */
+  faixas: FaixaEmMinutos[];
+  /** Exceções INDISPONÍVEIS do dia, já em instantes — contam como ocupado. */
+  bloqueios: FaixaEmInstantes[];
+}
+
+function montarDia(
+  jornada: JornadaDaAgenda,
+  excecoesDoDia: ExcecaoDeData[],
+  dataISO: string,
+): DiaDaAgenda {
+  const fuso = jornada.timezone;
+  const { ano, mes, dia } = dataCivil(dataISO);
+
+  // O meio-dia local como âncora do dia: é o instante que nunca cai numa
+  // virada de horário de verão (elas acontecem de madrugada), então ler o dia
+  // da semana a partir dele é seguro em qualquer fuso.
+  const meioDia = instanteDe({ ano, mes, dia, hora: 12, minuto: 0 }, fuso);
+  const dow = diaDaSemanaLocal(meioDia, fuso);
+
+  // ⚠️ O BLOQUEIO POR EXCEÇÃO CONTA COMO OCUPADO PARA EFEITO DE BUFFER.
+  //
+  // Ele já saiu das faixas pela subtração — mas isso só impede o slot de cair
+  // DENTRO dele. O buffer é outra pergunta: a dentista que pede 15 minutos
+  // entre pacientes e bloqueia 12h-14h para o almoço não quer um paciente às
+  // 11h, porque a esterilização dele invade o almoço dela. Sem esta linha o
+  // buffer valia contra compromisso e não valia contra bloqueio — mesma
+  // intenção, duas telas, dois resultados. Medido pelo QAVivo; a DECISÃO 11
+  // criou o caso, porque antes dela a exceção zerava o dia e não havia borda
+  // no meio do dia para o buffer atravessar.
+  // ⚠️ O BLOQUEIO É UM OCUPADO — não uma janela menor (DECISÃO 12).
+  //
+  // A versão anterior SUBTRAÍA o bloqueio da janela, e subtrair repartia: uma
+  // reunião das 10:30 às 11:30 fazia a segunda metade da janela começar às
+  // 11:30, e o relógio inteiro da tarde andava meia hora. Compromisso nunca
+  // fez isso, porque ele REMOVE INSTANTES em vez de REPARTIR A JANELA — as
+  // duas coisas parecem a mesma e não são.
+  //
+  // Aqui os dois viram o MESMO mecanismo, e é por isso que a correção é uma
+  // remoção de código: fazer dois caminhos concordarem exige disciplina e
+  // volta a divergir no caso que ninguém previu; ser o mesmo caminho não tem
+  // como divergir. O buffer passa a valer contra bloqueio de graça, pela
+  // mesma razão.
+  const bloqueios = excecoesDoDia
+    .filter((e) => e.indisponivel)
+    .map((e) => ({
+      inicio: instanteDoMinuto(ano, mes, dia, e.inicioMinuto, fuso),
+      fim: instanteDoMinuto(ano, mes, dia, e.fimMinuto, fuso),
+    }));
+
+  return { ano, mes, dia, faixas: janelasDoDia(jornada, excecoesDoDia, dow), bloqueios };
+}
+
+/** O instante de um minuto de parede de um dia civil, no fuso pedido. */
+function instanteDoMinuto(ano: number, mes: number, dia: number, minuto: number, fuso: string): number {
+  return instanteDe(paredeDeMinutos(ano, mes, dia, minuto), fuso).getTime();
+}
+
+/** As exceções agrupadas pela data local — a chave que `diaLocalISO` produz. */
+function excecoesPorData(excecoes: ExcecaoDeData[]): Map<string, ExcecaoDeData[]> {
+  const porData = new Map<string, ExcecaoDeData[]>();
+  for (const e of excecoes) {
+    const doDia = porData.get(e.data);
+    if (doDia) doDia.push(e);
+    else porData.set(e.data, [e]);
+  }
+  return porData;
+}
+
+/** Os compromissos, em instantes. */
+function emInstantes(ocupados: Ocupado[]): FaixaEmInstantes[] {
+  return ocupados.map((o) => ({ inicio: o.inicio.getTime(), fim: o.fim.getTime() }));
+}
+
+/** O slot, inflado pelos buffers, não encosta em nenhum ocupado nem bloqueio. */
+function semConflito(
+  inicio: number,
+  fim: number,
+  tipo: TipoDeAgendamento,
+  ocupados: FaixaEmInstantes[],
+): boolean {
+  const comFolga = slotInflado(inicio, fim, tipo);
+  return !ocupados.some((b) => colide(comFolga.inicio, comFolga.fim, b));
+}
+
 export function horariosLivres(entrada: EntradaDeHorariosLivres): Slot[] {
   const { jornada, excecoes, ocupados, tipo, de, ate, agora } = entrada;
   const fuso = jornada.timezone;
@@ -299,17 +399,8 @@ export function horariosLivres(entrada: EntradaDeHorariosLivres): Slot[] {
 
   // Os compromissos, em instantes. Os bloqueios por exceção entram por dia, no
   // laço — eles nascem em minutos de parede e só viram instante lá dentro.
-  const compromissos: FaixaEmInstantes[] = ocupados.map((o) => ({
-    inicio: o.inicio.getTime(),
-    fim: o.fim.getTime(),
-  }));
-
-  const excecoesPorData = new Map<string, ExcecaoDeData[]>();
-  for (const e of excecoes) {
-    const doDia = excecoesPorData.get(e.data);
-    if (doDia) doDia.push(e);
-    else excecoesPorData.set(e.data, [e]);
-  }
+  const compromissos = emInstantes(ocupados);
+  const porData = excecoesPorData(excecoes);
 
   // Caminhamos por DIA LOCAL, com um dia de margem de cada lado: o fuso desloca
   // as bordas, e o primeiro slot de um dia local pode cair no dia UTC anterior.
@@ -318,57 +409,15 @@ export function horariosLivres(entrada: EntradaDeHorariosLivres): Slot[] {
 
   const slots: Slot[] = [];
   for (let dataISO = primeiro; dataISO <= ultimo; dataISO = diaSeguinte(dataISO)) {
-    const { ano, mes, dia } = dataCivil(dataISO);
+    const doDia = montarDia(jornada, porData.get(dataISO) ?? [], dataISO);
+    const { ano, mes, dia } = doDia;
+    const bloqueiosDoDia = [...compromissos, ...doDia.bloqueios];
 
-    // O meio-dia local como âncora do dia: é o instante que nunca cai numa
-    // virada de horário de verão (elas acontecem de madrugada), então ler o dia
-    // da semana a partir dele é seguro em qualquer fuso.
-    const meioDia = instanteDe({ ano, mes, dia, hora: 12, minuto: 0 }, fuso);
-    const dow = diaDaSemanaLocal(meioDia, fuso);
-
-    const excecoesDoDia = excecoesPorData.get(dataISO) ?? [];
-    const emInstantes = (f: FaixaEmMinutos | ExcecaoDeData): FaixaEmInstantes => {
-      const inicio = "inicio" in f ? f.inicio : f.inicioMinuto;
-      const fim = "inicio" in f ? f.fim : f.fimMinuto;
-      return {
-        inicio: instanteDe(paredeDeMinutos(ano, mes, dia, inicio), fuso).getTime(),
-        fim: instanteDe(paredeDeMinutos(ano, mes, dia, fim), fuso).getTime(),
-      };
-    };
-
-    // ⚠️ O BLOQUEIO POR EXCEÇÃO CONTA COMO OCUPADO PARA EFEITO DE BUFFER.
-    //
-    // Ele já saiu das faixas pela subtração — mas isso só impede o slot de cair
-    // DENTRO dele. O buffer é outra pergunta: a dentista que pede 15 minutos
-    // entre pacientes e bloqueia 12h-14h para o almoço não quer um paciente às
-    // 11h, porque a esterilização dele invade o almoço dela. Sem esta linha o
-    // buffer valia contra compromisso e não valia contra bloqueio — mesma
-    // intenção, duas telas, dois resultados. Medido pelo QAVivo; a DECISÃO 11
-    // criou o caso, porque antes dela a exceção zerava o dia e não havia borda
-    // no meio do dia para o buffer atravessar.
-    // ⚠️ O BLOQUEIO É UM OCUPADO — não uma janela menor (DECISÃO 12).
-    //
-    // A versão anterior SUBTRAÍA o bloqueio da janela, e subtrair repartia: uma
-    // reunião das 10:30 às 11:30 fazia a segunda metade da janela começar às
-    // 11:30, e o relógio inteiro da tarde andava meia hora. Compromisso nunca
-    // fez isso, porque ele REMOVE INSTANTES em vez de REPARTIR A JANELA — as
-    // duas coisas parecem a mesma e não são.
-    //
-    // Aqui os dois viram o MESMO mecanismo, e é por isso que a correção é uma
-    // remoção de código: fazer dois caminhos concordarem exige disciplina e
-    // volta a divergir no caso que ninguém previu; ser o mesmo caminho não tem
-    // como divergir. O buffer passa a valer contra bloqueio de graça, pela
-    // mesma razão.
-    const bloqueiosDoDia = [
-      ...compromissos,
-      ...excecoesDoDia.filter((e) => e.indisponivel).map(emInstantes),
-    ];
-
-    for (const faixa of janelasDoDia(jornada, excecoesDoDia, dow)) {
-      const fimDaFaixa = instanteDe(paredeDeMinutos(ano, mes, dia, faixa.fim), fuso).getTime();
+    for (const faixa of doDia.faixas) {
+      const fimDaFaixa = instanteDoMinuto(ano, mes, dia, faixa.fim, fuso);
 
       for (let minuto = faixa.inicio; ; minuto += passo) {
-        const inicio = instanteDe(paredeDeMinutos(ano, mes, dia, minuto), fuso).getTime();
+        const inicio = instanteDoMinuto(ano, mes, dia, minuto, fuso);
         const fim = inicio + tipo.duracaoMin * MINUTO;
 
         // O slot inteiro precisa caber na faixa publicada. Comparação em
@@ -379,8 +428,7 @@ export function horariosLivres(entrada: EntradaDeHorariosLivres): Slot[] {
         if (inicio < naoAntesDe) continue;
         if (inicio > naoDepoisDe) break;
 
-        const comFolga = slotInflado(inicio, fim, tipo);
-        if (bloqueiosDoDia.some((b) => colide(comFolga.inicio, comFolga.fim, b))) continue;
+        if (!semConflito(inicio, fim, tipo, bloqueiosDoDia)) continue;
 
         slots.push({ inicio: new Date(inicio), fim: new Date(fim) });
       }
@@ -398,6 +446,151 @@ export function horariosLivres(entrada: EntradaDeHorariosLivres): Slot[] {
   const porInstante = new Map<number, Slot>();
   for (const slot of slots) {
     if (!porInstante.has(slot.inicio.getTime())) porInstante.set(slot.inicio.getTime(), slot);
+  }
+
+  return [...porInstante.values()].sort((a, b) => a.inicio.getTime() - b.inicio.getTime());
+}
+
+/**
+ * Esta pessoa pode atender a partir de `inicio`? — o teste de UM instante.
+ *
+ * ⚠️ NÃO EXIGE QUE `inicio` ESTEJA NA GRADE DA PESSOA, e essa é a razão de a
+ * função existir em vez de procurar `inicio` em `horariosLivres(...)`.
+ *
+ * A grade é da PRINCIPAL: é ela quem publica 09:00, 09:30, 10:00. A apoio só
+ * precisa estar livre naquele horário. Se a jornada da apoio começa 09:15, a
+ * grade DELA é 09:15, 09:45… — e procurar 09:30 nela diria "não cabe" para um
+ * horário inteiramente dentro do expediente dela. Aqui a pergunta é só
+ * CONTÉM: o atendimento inteiro cabe numa faixa publicada daquele dia.
+ *
+ * Todo o resto é a MESMA régua da grade, pelas mesmas funções: buffers contra
+ * compromissos e bloqueios (é a apoio que esteriliza a sala também),
+ * antecedência mínima e horizonte. Dois caminhos que precisam concordar viram
+ * um caminho só — a lição da DECISÃO 12, aplicada à segunda pessoa.
+ *
+ * Mesma limitação declarada no topo: o dia é o dia LOCAL de `inicio`, e nada
+ * cruza a meia-noite.
+ */
+export function cabeNaAgenda(
+  entrada: Omit<EntradaDeHorariosLivres, "de" | "ate">,
+  inicio: Date,
+): boolean {
+  const { jornada, excecoes, ocupados, tipo, agora } = entrada;
+  if (tipo.duracaoMin <= 0) return false;
+
+  const t0 = inicio.getTime();
+  if (Number.isNaN(t0)) return false;
+  const t1 = t0 + tipo.duracaoMin * MINUTO;
+
+  // Antecedência e horizonte: as mesmas duas comparações de `horariosLivres`.
+  if (t0 < agora.getTime() + tipo.avisoMinimoMin * MINUTO) return false;
+  if (t0 > agora.getTime() + tipo.janelaDias * DIA) return false;
+
+  const fuso = jornada.timezone;
+  const dataISO = diaLocalISO(inicio, fuso);
+  const doDia = montarDia(jornada, excecoesPorData(excecoes).get(dataISO) ?? [], dataISO);
+
+  const dentroDeUmaFaixa = doDia.faixas.some((faixa) => {
+    const ini = instanteDoMinuto(doDia.ano, doDia.mes, doDia.dia, faixa.inicio, fuso);
+    const fim = instanteDoMinuto(doDia.ano, doDia.mes, doDia.dia, faixa.fim, fuso);
+    return t0 >= ini && t1 <= fim;
+  });
+  if (!dentroDeUmaFaixa) return false;
+
+  return semConflito(t0, t1, tipo, [...emInstantes(ocupados), ...doDia.bloqueios]);
+}
+
+/** Uma profissional, com tudo o que o motor precisa saber da agenda dela. */
+export interface PessoaDaBusca {
+  id: string;
+  jornada: JornadaDaAgenda;
+  excecoes: ExcecaoDeData[];
+  ocupados: Ocupado[];
+}
+
+export interface EntradaDasCombinacoes {
+  /** Na ordem de exibição (position, nome) — é ela que ordena as opções de cada horário. */
+  pessoas: PessoaDaBusca[];
+  necessarios: 1 | 2;
+  /** Quem foi pedida explicitamente. Ausente = qualquer uma de `pessoas`. */
+  fixos?: { principalId?: string; apoioId?: string };
+  tipo: TipoDeAgendamento;
+  de: Date;
+  ate: Date;
+  /** INJETADO. Nunca `new Date()` aqui dentro. */
+  agora: Date;
+}
+
+/**
+ * Os horários livres de um GRUPO de profissionais — e quem atende cada um.
+ *
+ * ─── A grade é da principal ──────────────────────────────────────────────
+ *
+ * Cada principal candidata gera a própria grade, pela `horariosLivres` de
+ * sempre (então tudo que a grade de uma pessoa só garante — união de faixas,
+ * âncora fixa, buffers, dedupe de horário de verão — vale aqui sem uma linha
+ * nova). Quando o tipo pede DUAS, cada horário da principal P guarda uma opção
+ * `{P, A}` para toda outra candidata A que `cabeNaAgenda` no mesmo instante; o
+ * horário que não acha apoio nenhuma CAI. "Horário livre" com duas pessoas é
+ * "as duas estão livres", e oferecer o horário sem a segunda seria marcar um
+ * procedimento que ninguém auxilia.
+ *
+ * ─── A união ─────────────────────────────────────────────────────────────
+ *
+ * Os horários de todas as principais são MESCLADOS por instante: o cliente vê
+ * "10:00" uma vez, com as combinações que o atendem em ordem (a ordem de
+ * `pessoas`, que é a ordem que a operação escolheu). A primeira opção é a que
+ * "marcar sem escolher" usa — por isso a ordem é parte do contrato, não enfeite.
+ */
+export function combinacoesLivres(entrada: EntradaDasCombinacoes): SlotComProfissionais[] {
+  const { pessoas, necessarios, fixos, tipo, de, ate, agora } = entrada;
+
+  const principais = fixos?.principalId
+    ? pessoas.filter((p) => p.id === fixos.principalId)
+    : pessoas;
+
+  const porInstante = new Map<number, SlotComProfissionais>();
+
+  for (const principal of principais) {
+    const grade = horariosLivres({
+      jornada: principal.jornada,
+      excecoes: principal.excecoes,
+      ocupados: principal.ocupados,
+      tipo,
+      de,
+      ate,
+      agora,
+    });
+    if (grade.length === 0) continue;
+
+    const apoios =
+      necessarios === 2
+        ? pessoas.filter(
+            (a) => a.id !== principal.id && (!fixos?.apoioId || a.id === fixos.apoioId),
+          )
+        : [];
+
+    for (const slot of grade) {
+      let opcoes: OpcaoDeProfissionais[];
+      if (necessarios === 1) {
+        opcoes = [{ principalId: principal.id, apoioId: null }];
+      } else {
+        opcoes = apoios
+          .filter((a) =>
+            cabeNaAgenda(
+              { jornada: a.jornada, excecoes: a.excecoes, ocupados: a.ocupados, tipo, agora },
+              slot.inicio,
+            ),
+          )
+          .map((a) => ({ principalId: principal.id, apoioId: a.id }));
+        if (opcoes.length === 0) continue;
+      }
+
+      const chave = slot.inicio.getTime();
+      const existente = porInstante.get(chave);
+      if (existente) existente.opcoes.push(...opcoes);
+      else porInstante.set(chave, { inicio: slot.inicio, fim: slot.fim, opcoes });
+    }
   }
 
   return [...porInstante.values()].sort((a, b) => a.inicio.getTime() - b.inicio.getTime());

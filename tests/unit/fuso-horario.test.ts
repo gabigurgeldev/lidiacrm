@@ -102,7 +102,12 @@ describe("as telas OFERECEM em vez de pedir para digitar", () => {
   });
 
   it("e a agenda do atendente", () => {
+    // O seletor saiu do `AttendantsClient` para o `EditorDeJornada`, que a tela
+    // de Profissionais da agenda (0245) também monta. A garantia segue a mesma —
+    // e o atendente continua no editor, cobrado pela segunda asserção.
+    const editor = readFileSync("components/agenda/EditorDeJornada.tsx", "utf8");
+    expect(editor).toMatch(/FUSOS_OFERECIDOS\.map/);
     const fonte = readFileSync("app/app/team/_components/AttendantsClient.tsx", "utf8");
-    expect(fonte).toMatch(/FUSOS_OFERECIDOS\.map/);
+    expect(fonte).toMatch(/<EditorDeJornada\b/);
   });
 });

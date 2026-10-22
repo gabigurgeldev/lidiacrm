@@ -34,6 +34,7 @@ export function PainelDeMarcacao({
   ancora,
   agora,
   responsavel,
+  extras,
   tipo = "Consulta",
   duracaoMin = 30,
   local,
@@ -51,7 +52,18 @@ export function PainelDeMarcacao({
 }: {
   ancora: Date;
   agora: Date;
-  responsavel: Pessoa;
+  /**
+   * Quem atende, quando é UMA pessoa sabida antes do horário. Com profissionais
+   * (0245) e "qualquer habilitada", ela só se sabe por horário — e quem diz é a
+   * linha `quem` de cada um. Ausente, o cabeçalho do contexto não inventa nome.
+   */
+  responsavel?: Pessoa;
+  /**
+   * O que mais se pergunta ANTES do horário — cliente, profissionais,
+   * observações. Entra na coluna de contexto, sob o tipo: é parte do "o que se
+   * está marcando", e no celular empilha acima do calendário.
+   */
+  extras?: React.ReactNode;
   tipo?: string;
   duracaoMin?: number;
   /**
@@ -268,7 +280,10 @@ export function PainelDeMarcacao({
             {format(new Date(marcado.instante), t("EEEE, d 'de' MMMM 'às' HH:mm"), { locale: localeDaData })}
           </p>
           <p className="mt-0.5 text-xs text-text-subtle">
-            {t(tipo)} · {duracaoMin} {t("min · com")} {responsavel.nome}
+            {t(tipo)} · {duracaoMin}{" "}
+            {marcado.quem ?? responsavel?.nome
+              ? `${t("min · com")} ${marcado.quem ?? responsavel?.nome}`
+              : t("min")}
           </p>
           {quemSeraAtendido && !quemSeraAtendido.aceitaMensagem && (
             // Repetido aqui de propósito: o aviso do passo anterior sumiu da
@@ -354,11 +369,13 @@ export function PainelDeMarcacao({
         data-testid="contexto-da-marcacao"
         className="shrink-0 border-b border-border bg-surface-elevated/50 p-4 lg:w-[280px] lg:border-b-0 lg:border-r"
       >
-        <div className="flex items-center gap-2">
-          <AvatarDaPessoa pessoa={responsavel} tamanho="sm" />
-          <span className="truncate text-sm font-semibold">{responsavel.nome}</span>
-        </div>
-        <h3 className="mt-3 text-base font-semibold leading-tight">{tipo}</h3>
+        {responsavel ? (
+          <div className="mb-3 flex items-center gap-2">
+            <AvatarDaPessoa pessoa={responsavel} tamanho="sm" />
+            <span className="truncate text-sm font-semibold">{responsavel.nome}</span>
+          </div>
+        ) : null}
+        <h3 className="text-base font-semibold leading-tight">{tipo}</h3>
         <dl className="mt-3 space-y-2 text-xs text-text-muted">
           <div className="flex items-center gap-1.5">
             <Clock size={14} aria-hidden />
@@ -371,6 +388,7 @@ export function PainelDeMarcacao({
             </div>
           ) : null}
         </dl>
+        {extras ? <div className="mt-4 space-y-3 border-t border-border pt-3">{extras}</div> : null}
         {fuso ? (
           <p className="mt-4 border-t border-border pt-3 text-[11px] leading-4 text-text-subtle">
             {t("Horários no fuso")} <span className="font-mono">{fuso.replace("_", " ")}</span>.
@@ -573,6 +591,11 @@ export function PainelDeMarcacao({
                 {format(new Date(horario.instante), t("EEEE, d 'de' MMMM 'às' HH:mm"), { locale: localeDaData })}
               </span>
             </p>
+            {horario.quem ? (
+              <p className="mt-1 text-xs text-text-muted" data-testid="confirmacao-quem">
+                {t("com")} <span className="font-medium text-text">{horario.quem}</span>
+              </p>
+            ) : null}
 
             {quemSeraAtendido && !quemSeraAtendido.aceitaMensagem && (
               // Aviso, não bloqueio: o botão de confirmar continua ativo logo
@@ -662,17 +685,31 @@ export function PainelDeMarcacao({
                 type="button"
                 data-testid={`horario-${h.rotulo}`}
                 onClick={() => setHorario(h)}
+                data-quem={h.quem}
                 className={cn(
                   // Alvo de toque generoso: quem marca consulta faz isso no
-                  // celular, com o cliente esperando na frente.
-                  "h-11 shrink-0 rounded-sm border text-sm tabular-nums transition-colors duration-fast ease-out",
+                  // celular, com o cliente esperando na frente. `min-h` e não
+                  // `h`: com QUEM ATENDE embaixo da hora (0245), a altura fixa
+                  // cortaria o nome.
+                  "flex min-h-11 shrink-0 flex-col items-center justify-center rounded-sm border px-2 py-1 text-sm tabular-nums transition-colors duration-fast ease-out",
                   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-500",
                   horario?.instante === h.instante
                     ? "border-accent bg-accent font-semibold text-accent-fg"
                     : "border-border bg-surface text-text hover:border-accent hover:bg-accent-soft",
                 )}
               >
-                {h.rotulo}
+                <span>{h.rotulo}</span>
+                {h.quem ? (
+                  <span
+                    className={cn(
+                      "max-w-full truncate text-[11px] font-normal leading-4",
+                      horario?.instante === h.instante ? "text-accent-fg/90" : "text-text-muted",
+                    )}
+                  >
+                    {h.quem}
+                    {h.alternativas ? ` +${h.alternativas}` : ""}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>

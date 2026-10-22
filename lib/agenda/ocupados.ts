@@ -24,8 +24,16 @@ import {
 
 import type { Ocupado } from "./horarios-livres";
 
-/** A linha de `calendar_appointments` como o banco a devolve. */
+/**
+ * A linha de `calendar_appointments` como o banco a devolve — ou a participação
+ * (`calendar_appointment_professionals`), que espelha as mesmas três colunas.
+ *
+ * `id` é o id do AGENDAMENTO (na participação, `appointment_id`). Opcional só
+ * porque `ocupadosDoDono` não precisa dele; `ocupadosDoProfissional` precisa,
+ * para não contar duas vezes o mesmo agendamento que chega pelas duas portas.
+ */
 export interface LinhaDeAgendamento {
+  id?: string;
   starts_at: string;
   ends_at: string;
   status: string;
@@ -145,6 +153,52 @@ export function ocupadosDoDono(
   }
 
   return { ocupados, fontesDefasadas: [...defasadas] };
+}
+
+export interface FontesDoProfissional {
+  /** Onde ela atende — principal OU apoio (`calendar_appointment_professionals`). */
+  participacoes: LinhaDeAgendamento[];
+  /**
+   * Agendamentos em que o `user_id` dela é `owner_user_id` — vazio para quem não
+   * tem login. É a porta LEGADA: linha que nasceu antes da 0245 sem participante
+   * (o backfill pula duplicata legada) ou que o sync do Google trouxe pelo dono.
+   */
+  agendamentosDoDono: LinhaDeAgendamento[];
+  externos: LinhaDeEventoExterno[];
+}
+
+/**
+ * O que ocupa UMA profissional — a união das duas portas, sem contar duas vezes.
+ *
+ * ⚠️ AS DUAS PORTAS SE SOBREPÕEM DE PROPÓSITO. Todo agendamento de quem tem
+ * login aparece como participação E como `owner_user_id`; ler só a participação
+ * esqueceria a linha legada sem participante, e ler só o dono esqueceria a apoio
+ * (que nunca é dona). A união cobre as duas; o dedupe por id do agendamento é o
+ * que impede o mesmo compromisso de virar dois ocupados — inofensivo para o
+ * motor, mas cada duplicata é uma linha a mais que a próxima regra precisaria
+ * saber ignorar.
+ *
+ * `ignorarAgendamentoId` é o REMARCAR: o horário antigo do próprio agendamento
+ * não pode ocupar o novo, senão remarcar 30 minutos para frente colide consigo
+ * mesmo (o handler só tratava o mesmo instante exato).
+ */
+export function ocupadosDoProfissional(
+  fontes: FontesDoProfissional,
+  ignorarAgendamentoId?: string | null,
+): OQueOcupa {
+  const porId = new Map<string, LinhaDeAgendamento>();
+  const semId: LinhaDeAgendamento[] = [];
+  for (const linha of [...fontes.participacoes, ...fontes.agendamentosDoDono]) {
+    if (linha.id === undefined) {
+      semId.push(linha);
+      continue;
+    }
+    if (ignorarAgendamentoId && linha.id === ignorarAgendamentoId) continue;
+    // A primeira vence: a participação vem antes e carrega o espelho do status,
+    // que é o mesmo do agendamento (o trigger da 0245 o mantém).
+    if (!porId.has(linha.id)) porId.set(linha.id, linha);
+  }
+  return ocupadosDoDono([...porId.values(), ...semId], fontes.externos);
 }
 
 /**
