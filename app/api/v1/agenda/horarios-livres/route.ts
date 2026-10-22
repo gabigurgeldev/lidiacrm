@@ -46,9 +46,26 @@ import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 
+/**
+ * `professional_ids` chega como CSV (`?professional_ids=a,b`), no máximo 2 — a
+ * primeira é a principal. Ausente = "qualquer habilitada no tipo". `owner_user_id`
+ * é LEGADO: o membro, traduzido para o profissional dele pela consulta.
+ */
 const querySchema = z.object({
   event_type_id: z.string().uuid(),
   owner_user_id: z.string().uuid().optional(),
+  professional_ids: z
+    .string()
+    .optional()
+    .transform((csv) =>
+      csv === undefined
+        ? undefined
+        : csv
+            .split(",")
+            .map((x) => x.trim())
+            .filter(Boolean),
+    )
+    .pipe(z.array(z.string().uuid()).min(1).max(2).optional()),
   de: z.string().datetime({ offset: true }),
   ate: z.string().datetime({ offset: true }),
 });
@@ -64,6 +81,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   const parsed = querySchema.safeParse({
     event_type_id: url.searchParams.get("event_type_id") ?? undefined,
     owner_user_id: url.searchParams.get("owner_user_id") ?? undefined,
+    professional_ids: url.searchParams.get("professional_ids") ?? undefined,
     de: url.searchParams.get("de") ?? undefined,
     ate: url.searchParams.get("ate") ?? undefined,
   });
@@ -96,6 +114,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     eventTypeId: parsed.data.event_type_id,
     eventTypeSlug: null,
     ownerUserId: parsed.data.owner_user_id ?? null,
+    profissionalIds: parsed.data.professional_ids ?? null,
     de,
     ate,
     agora: new Date(),
@@ -120,9 +139,22 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   return ok(
     {
+      // Cada horário com QUEM o atende: as combinações principal (+ apoio)
+      // livres no instante, na ordem em que a escrita escolheria. A tela manda
+      // de volta a que mostrou, e marca o que se viu.
       slots: consulta.slots.map((s) => ({
         inicio: s.inicio.toISOString(),
         fim: s.fim.toISOString(),
+        opcoes: s.opcoes.map((o) => ({ principal_id: o.principalId, apoio_id: o.apoioId })),
+      })),
+      profissionais: consulta.profissionais.map((p) => ({ id: p.id, nome: p.nome, trilha: p.trilha })),
+      profissionais_necessarios: consulta.profissionaisNecessarios,
+      // Puladas por jornada quebrada: o resto da agenda responde, e a tela diz
+      // quem ficou de fora em vez de mostrar menos horários sem explicação.
+      profissionais_com_problema: consulta.profissionaisComProblema.map((p) => ({
+        id: p.id,
+        nome: p.nome,
+        motivo_para_operador: p.motivoParaOperador,
       })),
       fuso_da_regra: consulta.fusoDaRegra,
       // "Não publiquei meus horários" e "não tenho vaga" chegam como a mesma

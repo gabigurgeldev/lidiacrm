@@ -9,6 +9,16 @@
  *
  * Piso `agent` nos três verbos: marcar, remarcar e cancelar são mutação, e quem
  * só olha a agenda não muda nada nela.
+ *
+ * ─── Contrato (migration 0245) ─────────────────────────────────────────────
+ *
+ *   GET    ?de&ate | dia | contact_id | lead_id | owner_user_id | professional_id
+ *          [&situacao&limite] → `AgendamentoListado[]` (`lib/agenda/contrato.ts`)
+ *   POST   `MarcarInput` → 201 `{ id, starts_at, ends_at, status, time_zone, professional_ids }`
+ *          409 `agenda_horario_ocupado` (corrida perdida) · 422 `agenda_profissional_invalido`
+ *          · 422 `agenda_profissionais_insuficientes` · 422 `agenda_horario_indisponivel`
+ *   PATCH  `{ id, starts_at?, status?, notes? }` → a linha salva (409 idem no reagendar)
+ *   DELETE `{ id, reason }` → a linha cancelada
  */
 import { randomUUID } from "node:crypto";
 
@@ -21,60 +31,12 @@ import { ApiError } from "@/lib/api/types";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 
+import { alterarSchema, cancelarSchema, listarSchema, marcarSchema } from "./_schemas";
 import {
   alterarAgendamentoHandler,
   cancelarAgendamentoHandler,
   marcarAgendamentoHandler,
 } from "./_handler";
-
-const listarSchema = z.object({
-  contact_id: z.string().uuid().optional(),
-  lead_id: z.string().uuid().optional(),
-  owner_user_id: z.string().uuid().optional(),
-  dia: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
-  de: z.string().datetime({ offset: true }).optional(),
-  ate: z.string().datetime({ offset: true }).optional(),
-  situacao: z.enum(["pending", "confirmed", "cancelled", "completed", "no_show"]).optional(),
-  limite: z.coerce.number().int().min(1).max(500).optional(),
-});
-
-const marcarSchema = z.object({
-  event_type_id: z.string().uuid(),
-  starts_at: z.string().datetime({ offset: true }),
-  owner_user_id: z.string().uuid().optional(),
-  contact_id: z.string().uuid().optional(),
-  title: z.string().min(1).max(200).optional(),
-  notes: z.string().max(2000).optional(),
-});
-
-const alterarSchema = z
-  .object({
-    id: z.string().uuid(),
-    /** Remarcar: o novo início. A duração vem do tipo, como na criação. */
-    starts_at: z.string().datetime({ offset: true }).optional(),
-    /**
-     * `rescheduled` NÃO entra aqui: remarcar se pede mandando `starts_at`, e é
-     * movimento próprio — não uma situação que se escolhe.
-     */
-    status: z.enum(["confirmed", "completed", "no_show"]).optional(),
-    notes: z.string().max(2000).optional(),
-  })
-  .refine((c) => c.starts_at !== undefined || c.status !== undefined || c.notes !== undefined, {
-    message: "Informe pelo menos um campo para alterar.",
-  });
-
-const cancelarSchema = z.object({
-  id: z.string().uuid(),
-  /**
-   * ⚠️ OBRIGATÓRIO, e não é burocracia: é o que a equipe lê ao ver o horário
-   * vago. "Cancelado" sem motivo faz alguém ligar para o cliente perguntando o
-   * que houve — ou, pior, não ligar.
-   */
-  reason: z.string().min(3).max(500),
-});
 
 /**
  * GET — o que a grade desenha.
@@ -82,15 +44,11 @@ const cancelarSchema = z.object({
  * ⚠️ RECORTE OBRIGATÓRIO, herdado de `listaAgendamentos` de propósito. Sem ele a
  * consulta varreria a agenda inteira da organização, e a recusa vem com ENSINO
  * em vez de lista vazia: vazio faria a tela dizer "nada marcado" quando a
- * verdade é que a pergunta não tinha alvo. A régua é do MaestroConexoes, e vale
- * igual para a tela e para a IA.
+ * verdade é que a pergunta não tinha alvo.
  *
  * O recorte que a grade usa é `de`+`ate`, em INSTANTES. A tela é semanal e
  * mensal (seis semanas), então o filtro por `dia` não a serve — e ele tem um
- * corte em UTC que, para fuso negativo, não é o dia de quem olha: medido para
- * São Paulo, o "dia 12" pega três horas do dia 11 e perde as três últimas do 12.
- * Mandando instante, quem chama calcula os limites no fuso de APRESENTAÇÃO e
- * esta rota não precisa adivinhar em que fuso o dia foi pedido.
+ * corte em UTC que, para fuso negativo, não é o dia de quem olha.
  */
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
@@ -105,6 +63,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     contact_id: url.searchParams.get("contact_id") ?? undefined,
     lead_id: url.searchParams.get("lead_id") ?? undefined,
     owner_user_id: url.searchParams.get("owner_user_id") ?? undefined,
+    professional_id: url.searchParams.get("professional_id") ?? undefined,
     dia: url.searchParams.get("dia") ?? undefined,
     de: url.searchParams.get("de") ?? undefined,
     ate: url.searchParams.get("ate") ?? undefined,
@@ -123,6 +82,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     contactId: parsed.data.contact_id ?? null,
     leadId: parsed.data.lead_id ?? null,
     ownerUserId: parsed.data.owner_user_id ?? null,
+    professionalId: parsed.data.professional_id ?? null,
     dia: parsed.data.dia ?? null,
     de: parsed.data.de ?? null,
     ate: parsed.data.ate ?? null,
@@ -158,8 +118,7 @@ export async function DELETE(req: NextRequest): Promise<Response> {
  * O caminho comum dos três verbos: papel, forma, handler, tradução.
  *
  * Um só, e não três cópias, porque a diferença entre eles é o schema e a função
- * — o resto é idêntico, e três cópias divergiriam no primeiro ajuste, que é
- * exatamente o defeito que a extração do handler veio consertar.
+ * — o resto é idêntico, e três cópias divergiriam no primeiro ajuste.
  */
 async function despachar<T>(
   req: NextRequest,

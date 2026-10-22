@@ -11,7 +11,11 @@
  *   - um TIPO de atendimento com `slug` estável (a IA fala slug, não uuid: o schema diz
  *     que ele existe para "dar à IA um handle que ela não alucina");
  *   - JORNADA publicada para o atendente do e2e — seg-sex, 09:00-18:00, fuso explícito;
- *   - um CONTATO para ser atendido.
+ *   - um CONTATO para ser atendido;
+ *   - a PROFISSIONAL do atendente (migration 0245), habilitada no tipo — o estado que
+ *     o backfill da 0245 deixa numa VPS que atualizou. Sem ela a agenda continua
+ *     respondendo pelo dono padrão, mas a tela de profissionais e a visão por
+ *     profissional nasceriam vazias, que não é o que uma instalação real mostra.
  *
  * ⚠️ O FUSO É EXPLÍCITO DE PROPÓSITO. Se o `schedule` viesse `{}`, o Zod preencheria
  * `America/Sao_Paulo` por default e `fuso_suposto` voltaria `true` — o que é um estado
@@ -51,6 +55,7 @@ const TIPO_NOME = "Consulta E2E";
 const CONTATO_NOME = "Paciente Agenda E2E";
 const CONTATO_FONE = "+5511988887777";
 const FUSO = "America/Sao_Paulo";
+const PROFISSIONAL_NOME = "Atendente Agenda E2E";
 
 interface Creds {
   org_id: string;
@@ -111,6 +116,41 @@ async function jornadaPublicada(orgId: string, userId: string): Promise<void> {
   if (error) throw new Error(`attendant_availability: ${error.message}`);
 }
 
+/**
+ * A profissional do atendente e a habilitação dela no tipo (0245).
+ *
+ * Selecionar-e-inserir, e não `upsert`: a unicidade de `(organization_id, user_id)`
+ * é um índice PARCIAL (`where user_id is not null`), e o `on conflict` do PostgREST
+ * não alcança índice parcial. A habilitação tem chave primária cheia, e aí o
+ * `upsert` com `ignoreDuplicates` é o caminho idempotente.
+ */
+async function profissionalHabilitada(orgId: string, userId: string, tipoId: string): Promise<string> {
+  const { data: existente } = await admin
+    .from("calendar_professionals")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  let id = (existente as { id: string } | null)?.id ?? null;
+  if (!id) {
+    const { data, error } = await admin
+      .from("calendar_professionals")
+      .insert({ organization_id: orgId, user_id: userId, name: PROFISSIONAL_NOME } as never)
+      .select("id")
+      .single();
+    if (error) throw new Error(`calendar_professionals: ${error.message}`);
+    id = (data as { id: string }).id;
+  }
+  const { error } = await admin
+    .from("calendar_event_type_professionals")
+    .upsert(
+      { organization_id: orgId, event_type_id: tipoId, professional_id: id } as never,
+      { onConflict: "event_type_id,professional_id", ignoreDuplicates: true },
+    );
+  if (error) throw new Error(`calendar_event_type_professionals: ${error.message}`);
+  return id;
+}
+
 async function contato(orgId: string): Promise<string> {
   const { data: existente } = await admin
     .from("contacts")
@@ -158,6 +198,7 @@ async function main(): Promise<void> {
   await jornadaPublicada(creds.org_id, donoId);
   const tipoId = await tipoDeAtendimento(creds.org_id, donoId);
   const contatoId = await contato(creds.org_id);
+  const profissionalId = await profissionalHabilitada(creds.org_id, donoId, tipoId);
 
   const bloco = {
     tipo_id: tipoId,
@@ -167,6 +208,8 @@ async function main(): Promise<void> {
     contato_id: contatoId,
     contato_nome: CONTATO_NOME,
     fuso: FUSO,
+    profissional_id: profissionalId,
+    profissional_nome: PROFISSIONAL_NOME,
   };
   fs.writeFileSync(CREDS_PATH, JSON.stringify({ ...creds, agenda: bloco }, null, 2));
   console.info(`[seed-e2e-agenda] ${JSON.stringify(bloco)}`);

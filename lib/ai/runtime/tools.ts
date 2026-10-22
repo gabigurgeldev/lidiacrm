@@ -22,6 +22,7 @@ import { logger } from "@/lib/logger";
 import { allTools, getToolByName } from "@/lib/mcp/tools";
 import { catalogEntry } from "@/lib/mcp/tools/catalog";
 import { recusaDeCapacidadeParaOModelo } from "@/lib/mcp/recusa-para-o-modelo";
+import { aplicarTurno, shapeVisivel } from "@/lib/mcp/turno";
 import type { McpContext, McpToolDefinition } from "@/lib/mcp/types";
 import { resolveActiveLeadForContact, type LeadCandidate } from "@/lib/leads/active-lead";
 import { podeChamarFerramenta, recusaParaOModelo } from "@/lib/leads/escopo-de-funil";
@@ -61,14 +62,24 @@ function wrapMcpTool(
   def: McpToolDefinition,
   input: PickToolsInput,
 ): Tool {
-  const inputSchema = shapeToZodObject(def.inputSchema as Record<string, z.ZodTypeAny>);
+  // Dentro de um turno, os campos que a CONVERSA já responde (quem é atendido)
+  // saem do schema que o modelo vê — ver `lib/mcp/turno.ts`.
+  const inputSchema = shapeToZodObject(
+    shapeVisivel(def.name, def.inputSchema, input.ctx.turno) as Record<string, z.ZodTypeAny>,
+  );
 
   return tool({
     description: def.description,
     inputSchema,
     execute: async (args: unknown) => {
       const startedAt = Date.now();
-      const argsRecord = (args ?? {}) as Record<string, unknown>;
+      // ANTES do gate de escopo de funil: `funil_vem_do_contato` decide pelo
+      // `contact_id`, e ele tem de ver o contato que será GRAVADO.
+      const argsRecord = aplicarTurno(
+        def.name,
+        (args ?? {}) as Record<string, unknown>,
+        input.ctx.turno,
+      );
       try {
         ensureScope(input.auth.scopes, def.requiresScope);
         ensureRole(input.auth.role, def.requiresRole);

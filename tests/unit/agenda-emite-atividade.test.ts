@@ -94,6 +94,7 @@ const TIPO = "cccccccc-0000-4000-8000-00000000000c";
 const CONTATO = "dddddddd-0000-4000-8000-00000000000d";
 const NEGOCIO = "eeeeeeee-0000-4000-8000-00000000000e";
 const AGENDAMENTO = "ffffffff-0000-4000-8000-00000000000f";
+const PROFISSIONAL = "99999999-0000-4000-8000-000000000099";
 
 const HORARIO = "2026-09-02T13:00:00.000Z";
 const OUTRO_HORARIO = "2026-09-02T15:00:00.000Z";
@@ -138,8 +139,16 @@ function coletaOk(): ResultadoDaConsulta {
   const inicio = new Date(horarioOfertado);
   return {
     ok: true,
-    slots: [{ inicio, fim: new Date(inicio.getTime() + 30 * 60_000), opcoes: [] }],
-    profissionais: [],
+    // A 0245 exige QUEM atende: a escrita só aceita o instante que tem uma
+    // opção de profissional, e grava o `user_id` da principal como dono.
+    slots: [
+      {
+        inicio,
+        fim: new Date(inicio.getTime() + 30 * 60_000),
+        opcoes: [{ principalId: PROFISSIONAL, apoioId: null }],
+      },
+    ],
+    profissionais: [{ id: PROFISSIONAL, nome: "Ana", trilha: null, userId: USUARIO, ativo: true }],
     profissionaisNecessarios: 1,
     fusoDaRegra: "America/Sao_Paulo",
     publicouHorarios: true,
@@ -207,6 +216,12 @@ function cliente(): SupabaseClient {
     }),
     rpc: async (fn: string, args: Linha) => {
       banco.rpc.push({ fn, args });
+      // Marcar grava pela `fn_agenda_marcar` (migration 0245): o agendamento
+      // chega ao banco como `p_compromisso`, e a função devolve o id.
+      if (fn === "fn_agenda_marcar") {
+        (banco.inserido["calendar_appointments"] ??= []).push(args.p_compromisso as Linha);
+        return { data: AGENDAMENTO, error: null };
+      }
       return { data: null, error: null };
     },
   } as unknown as SupabaseClient;

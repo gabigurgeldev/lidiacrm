@@ -75,6 +75,13 @@ const MARIA: AgendamentoListado = {
   donoId: "u-ana",
   contatoId: "c-maria",
   contatoNome: "Maria Ferraz",
+  // Sem participante: a linha anterior à 0245 que o backfill não alcançou. É o
+  // caso em que a grade cai para `donoId` — a travessia da PRINCIPAL é da tela.
+  profissionais: [],
+  eventTypeId: "tipo-consulta",
+  origem: "ui",
+  autor: "user",
+  conversaId: null,
 };
 
 /** O corpo EXATO do wire: `ok()` é o mesmo wrapper que a rota chama no `return`. */

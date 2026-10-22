@@ -1,6 +1,8 @@
 import { recoverStuckMessages } from "@/app/api/v1/cron/recover-stuck-messages/route";
 import { criarDisparoDb } from "@/lib/bulk-send/db";
 import { enviarUmDoDisparo } from "@/lib/bulk-send/enviar";
+import { houveEfeito as lembreteTeveEfeito, rodarLembretes } from "@/lib/agenda/lembrete/motor";
+import { portasDoLembrete } from "@/lib/agenda/lembrete/supabase";
 import { houveEfeito, rodarTiqueDeDisparo } from "@/lib/bulk-send/motor";
 import { idsDoContatoEGemeos } from "@/lib/channels/contato-por-telefone";
 import { drainEventLog } from "@/lib/event-log/drain";
@@ -177,6 +179,14 @@ export async function executarTickDoRelogio(): Promise<{
       orcamentoMs: 10_000,
     });
     if (houveEfeito(resumo)) mexeu = true;
+    return resumo;
+  });
+
+  // ANTES das mensagens agendadas: o lembrete só enfileira, e quem envia é a
+  // tarefa de baixo — na mesma ordem, o lembrete devido sai no mesmo tique.
+  await uma("agenda-lembretes", async () => {
+    const resumo = await rodarLembretes(portasDoLembrete(admin), new Date());
+    if (lembreteTeveEfeito(resumo)) mexeu = true;
     return resumo;
   });
 

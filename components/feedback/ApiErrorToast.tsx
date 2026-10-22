@@ -94,6 +94,11 @@ const COPY: Record<string, { variant: Variant; msg?: string }> = {
   agenda_fora_da_jornada: { variant: "warning" },
   agenda_tipo_desativado: { variant: "warning" },
   agenda_sem_responsavel: { variant: "warning" },
+  // Migration 0245: alguém pegou o horário entre a consulta e o clique, ou a
+  // profissional escolhida não serve para o serviço — recusa rotineira, não quebra.
+  agenda_horario_ocupado: { variant: "warning" },
+  agenda_profissional_invalido: { variant: "warning" },
+  agenda_profissionais_insuficientes: { variant: "warning" },
   // Esta é da CONFIGURAÇÃO e não de quem está marcando — erro mesmo, e a rota
   // já diz qual campo está errado.
   agenda_disponibilidade_invalida: { variant: "error" },

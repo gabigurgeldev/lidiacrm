@@ -72,6 +72,11 @@ const PERMITIDOS: Permitido[] = [
     padrao: /admin: deps\.crmCfg\.supabase,$/,
     motivo: "só assina URL de mídia já existente; as mensagens do ensaio são texto.",
   },
+  {
+    nome: "bloco da agenda",
+    padrao: /blocoDaAgenda\(deps\.crmCfg\.supabase, tenantId\)/,
+    motivo: "só LÊ os tipos de atendimento e as profissionais (configuração da org); não escreve nada.",
+  },
 ];
 
 function usos(fonte: string) {

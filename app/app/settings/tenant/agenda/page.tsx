@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
@@ -42,11 +43,11 @@ export default async function TiposDeAgendamentoPage() {
   const podeEditar = user.is_platform_admin || ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
 
   const supabase = await createClient();
-  const [{ data: tipos }, { data: pessoas }] = await Promise.all([
+  const [{ data: tipos }, { data: pessoas }, { data: profissionais }, { data: habilitacoes }] = await Promise.all([
     supabase
       .from("calendar_event_types")
       .select(
-        "id, name, slug, description, category, duration_minutes, location_kind, location_details, default_owner_user_id, requires_confirmation, is_active",
+        "id, name, slug, description, category, duration_minutes, location_kind, location_details, default_owner_user_id, requires_confirmation, is_active, professionals_required, slot_interval_minutes, reminder_enabled, reminder_minutes_before",
       )
       .eq("organization_id", activeOrg.orgId)
       .order("is_active", { ascending: false })
@@ -56,7 +57,24 @@ export default async function TiposDeAgendamentoPage() {
       .select("user_id, role")
       .eq("organization_id", activeOrg.orgId)
       .is("revoked_at", null),
+    // QUEM FAZ cada serviço (0245): as profissionais e a habilitação de cada
+    // tipo. Lidas aqui, como os tipos — a tela se refaz por `router.refresh()`.
+    supabase
+      .from("calendar_professionals")
+      .select("id, name, is_active")
+      .eq("organization_id", activeOrg.orgId)
+      .order("position")
+      .order("name"),
+    supabase
+      .from("calendar_event_type_professionals")
+      .select("event_type_id, professional_id")
+      .eq("organization_id", activeOrg.orgId),
   ]);
+
+  const habilitadas = new Map<string, string[]>();
+  for (const h of habilitacoes ?? []) {
+    habilitadas.set(h.event_type_id, [...(habilitadas.get(h.event_type_id) ?? []), h.professional_id]);
+  }
 
   // O NOME DE GENTE, e não o fragmento de UUID.
   //
@@ -75,14 +93,28 @@ export default async function TiposDeAgendamentoPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Tipos de agendamento</h1>
-        <p className="mt-1 text-sm text-text-muted">
-          {t("O que se pode marcar, quanto dura e quem atende. É isto que a tela de marcar e o agente de IA oferecem ao cliente.")}
-        </p>
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("Tipos de agendamento")}</h1>
+          <p className="mt-1 text-sm text-text-muted">
+            {t("O que se pode marcar, quanto dura e quem atende. É isto que a tela de marcar e o agente de IA oferecem ao cliente.")}
+          </p>
+        </div>
+        {/* A porta para QUEM atende: habilitar alguém aqui pressupõe que ela já
+            esteja cadastrada lá, e a tela não pode mandar a pessoa adivinhar. */}
+        <Link
+          href="/app/settings/tenant/agenda/profissionais"
+          data-testid="ir-para-profissionais"
+          className="shrink-0 text-sm font-medium text-accent underline-offset-2 hover:underline"
+        >
+          {t("Profissionais e jornadas")}
+        </Link>
       </header>
       <TiposDeAgendamentoClient
-        tiposIniciais={(tipos ?? []) as TipoRow[]}
+        tiposIniciais={(tipos ?? []).map(
+          (tipo): TipoRow => ({ ...(tipo as Omit<TipoRow, "professional_ids">), professional_ids: habilitadas.get(tipo.id) ?? [] }),
+        )}
+        profissionais={(profissionais ?? []).map((p) => ({ id: p.id, nome: p.name, ativo: p.is_active }))}
         pessoas={(pessoas ?? []).map((p) => ({
           id: String(p.user_id),
           papel: String(p.role),

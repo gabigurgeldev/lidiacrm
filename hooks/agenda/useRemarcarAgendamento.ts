@@ -86,13 +86,17 @@ export function useCancelarAgendamento() {
 export function useRegistrarDesfecho() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (entrada: { id: string; status: "completed" | "no_show" }) =>
+    // `confirmed` entrou com o detalhe do agendamento (0245): o que a IA marcou
+    // em tipo que pede confirmação nasce `pending`, e quem confirma é a equipe.
+    mutationFn: async (entrada: { id: string; status: "confirmed" | "completed" | "no_show" }) =>
       apiClient.patch<{ data: { id: string } }>("/api/v1/agenda/agendamentos", entrada),
     onSuccess: (_dados, entrada) => {
       toast.success(
-        entrada.status === "completed"
-          ? "Marcado como realizado."
-          : "Marcado como falta — o horário volta a ficar livre.",
+        entrada.status === "confirmed"
+          ? "Agendamento confirmado."
+          : entrada.status === "completed"
+            ? "Marcado como realizado."
+            : "Marcado como falta — o horário volta a ficar livre.",
       );
       void qc.invalidateQueries({ queryKey: ["agenda"] });
     },
