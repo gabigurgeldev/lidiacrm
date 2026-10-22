@@ -28,7 +28,8 @@ import { beforeAll, describe, expect, it } from "vitest";
  *
  * 1. Controle positivo: quem é da organização lê a agenda dela. Sem isto, o
  *    jeito trivial de deixar o arquivo verde é quebrar a feature inteira.
- * 2. Isolamento: zero linhas do vizinho, nas SEIS tabelas.
+ * 2. Isolamento: zero linhas do vizinho, em toda tabela de `TABELAS_DA_AGENDA`
+ *    (as seis da 0177 e as três de profissionais da 0245).
  * 3. Gate de papel em `calendar_connections`: um `viewer` que não é dono da
  *    conexão lê ZERO, e o `manager` lê. É o caso que distingue esta tabela das
  *    outras cinco — ela guarda token OAuth, e o PostgREST serve a tabela com a
@@ -93,7 +94,7 @@ const VIEWER_A = "ca1e0da2-1111-4000-8000-00000000000c";
 const MANAGER_A = "ca1e0da2-1111-4000-8000-00000000000d";
 const AGENT_B = "ca1e0da2-1111-4000-8000-00000000000b";
 
-/** As seis tabelas da agenda, todas tenant-aware. */
+/** As tabelas da agenda, todas tenant-aware (as três últimas são da migration 0245). */
 const TABELAS_DA_AGENDA = [
   "calendar_event_types",
   "calendar_appointments",
@@ -101,6 +102,9 @@ const TABELAS_DA_AGENDA = [
   "calendar_connections",
   "calendar_connection_calendars",
   "calendar_external_events",
+  "calendar_professionals",
+  "calendar_event_type_professionals",
+  "calendar_appointment_professionals",
 ] as const;
 
 beforeAll(() => {
@@ -155,6 +159,29 @@ beforeAll(() => {
       from (values ('${ORG_A}'::uuid, '${AGENT_A}'::uuid), ('${ORG_B}'::uuid, '${AGENT_B}'::uuid)) as v(org, dono)
      where not exists (select 1 from public.calendar_appointments a where a.organization_id = v.org);
 
+    -- migration 0245: o atendente de cada lado é profissional, faz os tipos da
+    -- org e é a principal do compromisso semeado acima.
+    insert into public.calendar_professionals (organization_id, user_id, name)
+    select v.org, v.dono, 'Profissional do invariante'
+      from (values ('${ORG_A}'::uuid, '${AGENT_A}'::uuid), ('${ORG_B}'::uuid, '${AGENT_B}'::uuid)) as v(org, dono)
+    on conflict (organization_id, user_id) where user_id is not null do nothing;
+
+    insert into public.calendar_event_type_professionals (organization_id, event_type_id, professional_id)
+    select t.organization_id, t.id, p.id
+      from public.calendar_event_types t
+      join public.calendar_professionals p on p.organization_id = t.organization_id
+     where t.organization_id in ('${ORG_A}', '${ORG_B}')
+    on conflict do nothing;
+
+    insert into public.calendar_appointment_professionals
+      (organization_id, appointment_id, professional_id, role, starts_at, ends_at, status)
+    select a.organization_id, a.id, p.id, 'principal', a.starts_at, a.ends_at, a.status
+      from public.calendar_appointments a
+      join public.calendar_professionals p
+        on p.organization_id = a.organization_id and p.user_id = a.owner_user_id
+     where a.organization_id in ('${ORG_A}', '${ORG_B}')
+    on conflict do nothing;
+
     insert into public.calendar_availability_exceptions
       (organization_id, user_id, exception_date, is_unavailable, reason)
     select v.org, v.dono, current_date + 3, true, 'feriado do invariante'
@@ -195,7 +222,16 @@ beforeAll(() => {
 describe("agenda — isolamento entre organizações", () => {
   // O controle positivo vem PRIMEIRO de propósito: sem ele, quebrar a feature
   // inteira deixaria as asserções de isolamento verdes por ausência de dado.
-  it.each(["calendar_event_types", "calendar_appointments", "calendar_availability_exceptions", "calendar_connection_calendars", "calendar_external_events"])(
+  it.each([
+    "calendar_event_types",
+    "calendar_appointments",
+    "calendar_availability_exceptions",
+    "calendar_connection_calendars",
+    "calendar_external_events",
+    "calendar_professionals",
+    "calendar_event_type_professionals",
+    "calendar_appointment_professionals",
+  ])(
     "o agent da org A lê a própria org em %s (controle positivo)",
     (tabela) => {
       const proprias = countAs(

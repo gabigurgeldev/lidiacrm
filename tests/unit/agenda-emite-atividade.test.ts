@@ -138,12 +138,15 @@ function coletaOk(): ResultadoDaConsulta {
   const inicio = new Date(horarioOfertado);
   return {
     ok: true,
-    slots: [{ inicio, fim: new Date(inicio.getTime() + 30 * 60_000) }],
+    slots: [{ inicio, fim: new Date(inicio.getTime() + 30 * 60_000), opcoes: [] }],
+    profissionais: [],
+    profissionaisNecessarios: 1,
     fusoDaRegra: "America/Sao_Paulo",
     publicouHorarios: true,
     fusoSuposto: false,
     fontesDefasadas: [],
     agendaExternaNuncaLida: false,
+    profissionaisComProblema: [],
   };
 }
 

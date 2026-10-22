@@ -51,6 +51,15 @@ export const ApiErrorCodes = {
   agenda_disponibilidade_invalida: "agenda_disponibilidade_invalida",
   agenda_ja_cancelado: "agenda_ja_cancelado",
   agenda_listagem_sem_recorte: "agenda_listagem_sem_recorte",
+  // 409 — o horário foi tomado entre a consulta e a gravação (23505 de
+  // `calendar_appointments` ou de `calendar_appointment_professionals`, migration 0245).
+  agenda_horario_ocupado: "agenda_horario_ocupado",
+  // 422 — profissional pedida não existe na organização, está desativada ou não
+  // faz este tipo de atendimento.
+  agenda_profissional_invalido: "agenda_profissional_invalido",
+  // 422 — o tipo pede mais profissionais (principal + apoio) do que vieram, ou do
+  // que há habilitadas e ativas.
+  agenda_profissionais_insuficientes: "agenda_profissionais_insuficientes",
 
   // 409 — conflito
   idempotency_conflict: "idempotency_conflict",

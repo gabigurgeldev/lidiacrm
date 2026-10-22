@@ -44,68 +44,41 @@ import {
   type LinhaDeEventoExterno,
 } from "./ocupados";
 import type { SituacaoDaConexao, SituacaoDoAgendamento } from "./tipos";
+import type {
+  CodigoDeRecusaDaConsulta,
+  ParametrosDaConsulta,
+  ResultadoDaConsulta,
+} from "./contrato";
 
 /** Teto de dias por consulta: uma varredura de ano inteiro é erro de chamada, não pedido. */
 export const MAXIMO_DE_DIAS = 62;
 
-export type CodigoDeRecusaDaConsulta =
-  | "tipo_desconhecido"
-  | "tipo_desativado"
-  | "sem_responsavel"
-  | "jornada_mal_configurada"
-  | "erro_interno";
+/**
+ * Os tipos da consulta moram em `./contrato` (migration 0245) e são reexportados
+ * daqui para quem já importava de `@/lib/agenda/consulta`.
+ */
+export type { CodigoDeRecusaDaConsulta, ParametrosDaConsulta, ResultadoDaConsulta };
 
-export interface ParametrosDaConsulta {
-  /**
-   * O tipo, por id OU por slug — exatamente um dos dois.
-   *
-   * A rota fala `uuid` porque a tela tem o id na mão. A ferramenta MCP fala
-   * SLUG porque o modelo não tem, e o cabeçalho de `calendar_event_types` diz
-   * por quê: o slug existe para "dar à IA um handle que ela não alucina, ao
-   * contrário de um uuid". Resolver os dois aqui evita uma segunda consulta
-   * só para traduzir.
-   */
-  eventTypeId?: string | null;
-  eventTypeSlug?: string | null;
-  /** Ausente = o responsável padrão do tipo. */
-  ownerUserId?: string | null;
-  de: Date;
-  ate: Date;
-  /** INJETADO, como em `horariosLivres`. Relógio lido aqui dentro é o defeito que `janela-do-canal.ts` documenta. */
-  agora: Date;
-}
-
-export type ResultadoDaConsulta =
+/**
+ * O resultado da coleta de UM dono, como era antes dos profissionais.
+ *
+ * ⚠️ SHIM DA FASE 0: `horariosLivresDaOrg` já fala o contrato novo
+ * (`ResultadoDaConsulta`), mas por baixo ainda é a coleta por `owner_user_id`.
+ * A FRENTE A troca o miolo pela coleta por profissional; até lá os campos novos
+ * saem vazios (`opcoes: []`, `profissionais: []`, `profissionaisNecessarios: 1`,
+ * `profissionaisComProblema: []`) e o comportamento é o de antes.
+ */
+type ResultadoDoDono =
   | {
       ok: true;
       slots: Slot[];
       fusoDaRegra: string;
-      /** DECISÃO 1.1: "não publiquei" e "não tenho vaga" não podem chegar como a mesma lista vazia. */
       publicouHorarios: boolean;
-      /** DECISÃO 20.2: o fuso veio do default, ninguém escolheu — e a IA oferece horário com ele. */
       fusoSuposto: boolean;
       fontesDefasadas: SituacaoDaConexao[];
-      /**
-       * NENHUMA conexão viva jamais sincronizou.
-       *
-       * Diferente de `fontesDefasadas`: lá a conexão já trouxe eventos e parou de
-       * atualizar; aqui ela nunca trouxe NADA, e a lista de ocupados pode estar
-       * vazia por ninguém ter perguntado — não por estar livre.
-       *
-       * ⚠️ Vive AQUI, e não na rota, porque quem mais precisa dele é a IA: uma
-       * tela que oferece horário de agenda nunca lida deixa um humano estranhar;
-       * um agente que o oferece MARCA por cima da cirurgia e confirma ao cliente.
-       */
       agendaExternaNuncaLida: boolean;
     }
-  | {
-      ok: false;
-      codigo: CodigoDeRecusaDaConsulta;
-      /** Nomeia campo e pessoa. Plateia: quem configura. */
-      motivoParaOperador: string;
-      /** Sem nome de campo, e diz o que fazer. Plateia: o modelo, e por tabela o cliente. */
-      motivoParaCliente: string;
-    };
+  | Extract<ResultadoDaConsulta, { ok: false }>;
 
 /** `YYYY-MM-DD` de um instante, em UTC — a régua que a coluna `date` usa. */
 function diaISO(instante: Date): string {
@@ -120,6 +93,22 @@ export async function horariosLivresDaOrg(
   organizationId: string,
   params: ParametrosDaConsulta,
 ): Promise<ResultadoDaConsulta> {
+  const r = await horariosLivresDoDono(supabase, organizationId, params);
+  if (!r.ok) return r;
+  return {
+    ...r,
+    slots: r.slots.map((s) => ({ ...s, opcoes: [] })),
+    profissionais: [],
+    profissionaisNecessarios: 1,
+    profissionaisComProblema: [],
+  };
+}
+
+async function horariosLivresDoDono(
+  supabase: SupabaseClient,
+  organizationId: string,
+  params: ParametrosDaConsulta,
+): Promise<ResultadoDoDono> {
   const { data: tipo, error: erroTipo } = await supabase
     .from("calendar_event_types")
     .select(
@@ -328,6 +317,11 @@ export async function horariosLivresDaOrg(
 // preço de não ter duplicado a FK.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * ⚠️ FASE 0: o contrato novo é `AgendamentoListado` de `./contrato` (com
+ * profissionais, tipo, origem, autor e conversa). Esta é a forma ANTIGA, que
+ * `listaAgendamentos` ainda produz; a FRENTE A troca esta pela de lá.
+ */
 export interface AgendamentoListado {
   id: string;
   titulo: string;

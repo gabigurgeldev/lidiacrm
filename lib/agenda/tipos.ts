@@ -163,6 +163,36 @@ export const ORIGENS_DO_AGENDAMENTO = ["ui", "mcp", "google_sync", "public_page"
 export type OrigemDoAgendamento = (typeof ORIGENS_DO_AGENDAMENTO)[number];
 
 /**
+ * O papel de quem atende um agendamento (`calendar_appointment_professionals.role`,
+ * migration 0245). `principal` é quem faz — e é o `user_id` dela que vai para
+ * `calendar_appointments.owner_user_id`; `apoio` é a segunda pessoa, quando o tipo
+ * pede duas (`calendar_event_types.professionals_required = 2`).
+ */
+export const PAPEIS_DO_PROFISSIONAL = ["principal", "apoio"] as const;
+export type PapelDoProfissional = (typeof PAPEIS_DO_PROFISSIONAL)[number];
+
+/**
+ * O `ref_kind` com que um aviso da Central (`agent_inbox_items`) aponta para um
+ * agendamento. Vocabulário aberto lá (sem CHECK), por isso a constante: quem
+ * emite e quem roteia o clique (`AgentInboxList`) leem DAQUI.
+ */
+export const REF_KIND_DO_AGENDAMENTO = "calendar_appointment" as const;
+
+/**
+ * Por que o lembrete NÃO foi entregue à fila (`calendar_appointments.reminder_skipped_reason`).
+ *
+ * Coluna SEM CHECK (vocabulário aberto, como `crm_lead_activities.type`): a
+ * garantia é esta constante, e o emissor nunca escreve a string solta.
+ */
+export const MOTIVOS_DE_LEMBRETE_PULADO = [
+  "marcado_em_cima_da_hora",
+  "sem_conversa",
+  "canal_exige_template",
+  "contato_bloqueado",
+] as const;
+export type MotivoDeLembretePulado = (typeof MOTIVOS_DE_LEMBRETE_PULADO)[number];
+
+/**
  * O estado da agenda conectada.
  *
  * São os MESMOS sete valores de `tenant_integrations.status` — mesma pergunta,

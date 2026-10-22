@@ -1731,6 +1731,61 @@ export type Database = {
           },
         ]
       }
+      calendar_appointment_professionals: {
+        Row: {
+          appointment_id: string
+          created_at: string
+          ends_at: string
+          organization_id: string
+          professional_id: string
+          role: string
+          starts_at: string
+          status: string
+        }
+        Insert: {
+          appointment_id: string
+          created_at?: string
+          ends_at: string
+          organization_id: string
+          professional_id: string
+          role?: string
+          starts_at: string
+          status: string
+        }
+        Update: {
+          appointment_id?: string
+          created_at?: string
+          ends_at?: string
+          organization_id?: string
+          professional_id?: string
+          role?: string
+          starts_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_appointment_professionals_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cap_compromisso_fk"
+            columns: ["organization_id", "appointment_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_appointments"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "cap_profissional_fk"
+            columns: ["organization_id", "professional_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_professionals"
+            referencedColumns: ["organization_id", "id"]
+          },
+        ]
+      }
       calendar_appointments: {
         Row: {
           cancellation_reason: string | null
@@ -1759,7 +1814,9 @@ export type Database = {
           notes: string | null
           organization_id: string
           owner_user_id: string | null
+          reminder_scheduled_message_id: string | null
           reminder_sent_at: string | null
+          reminder_skipped_reason: string | null
           rescheduled_from_id: string | null
           source: string
           starts_at: string
@@ -1795,7 +1852,9 @@ export type Database = {
           notes?: string | null
           organization_id: string
           owner_user_id?: string | null
+          reminder_scheduled_message_id?: string | null
           reminder_sent_at?: string | null
+          reminder_skipped_reason?: string | null
           rescheduled_from_id?: string | null
           source?: string
           starts_at: string
@@ -1831,7 +1890,9 @@ export type Database = {
           notes?: string | null
           organization_id?: string
           owner_user_id?: string | null
+          reminder_scheduled_message_id?: string | null
           reminder_sent_at?: string | null
+          reminder_skipped_reason?: string | null
           rescheduled_from_id?: string | null
           source?: string
           starts_at?: string
@@ -1877,6 +1938,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "calendar_appointments_reminder_scheduled_message_id_fkey"
+            columns: ["reminder_scheduled_message_id"]
+            isOneToOne: false
+            referencedRelation: "conversation_scheduled_messages"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "calendar_appointments_rescheduled_from_id_fkey"
             columns: ["rescheduled_from_id"]
             isOneToOne: false
@@ -1893,10 +1961,11 @@ export type Database = {
           id: string
           is_unavailable: boolean
           organization_id: string
+          professional_id: string | null
           reason: string | null
           start_minute: number
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -1905,10 +1974,11 @@ export type Database = {
           id?: string
           is_unavailable?: boolean
           organization_id: string
+          professional_id?: string | null
           reason?: string | null
           start_minute?: number
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -1917,12 +1987,20 @@ export type Database = {
           id?: string
           is_unavailable?: boolean
           organization_id?: string
+          professional_id?: string | null
           reason?: string | null
           start_minute?: number
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "calendar_availability_exceptions_profissional_fk"
+            columns: ["organization_id", "professional_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_professionals"
+            referencedColumns: ["organization_id", "id"]
+          },
           {
             foreignKeyName: "calendar_availability_exceptions_organization_id_fkey"
             columns: ["organization_id"]
@@ -2051,6 +2129,49 @@ export type Database = {
           },
         ]
       }
+      calendar_event_type_professionals: {
+        Row: {
+          created_at: string
+          event_type_id: string
+          organization_id: string
+          professional_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type_id: string
+          organization_id: string
+          professional_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type_id?: string
+          organization_id?: string
+          professional_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_event_type_professionals_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cetp_profissional_fk"
+            columns: ["organization_id", "professional_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_professionals"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "cetp_tipo_fk"
+            columns: ["organization_id", "event_type_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_event_types"
+            referencedColumns: ["organization_id", "id"]
+          },
+        ]
+      }
       calendar_event_types: {
         Row: {
           booking_window_days: number
@@ -2069,6 +2190,7 @@ export type Database = {
           name: string
           organization_id: string
           position: number
+          professionals_required: number
           reminder_enabled: boolean
           reminder_minutes_before: number
           reminder_template_name: string | null
@@ -2094,6 +2216,7 @@ export type Database = {
           name: string
           organization_id: string
           position?: number
+          professionals_required?: number
           reminder_enabled?: boolean
           reminder_minutes_before?: number
           reminder_template_name?: string | null
@@ -2119,6 +2242,7 @@ export type Database = {
           name?: string
           organization_id?: string
           position?: number
+          professionals_required?: number
           reminder_enabled?: boolean
           reminder_minutes_before?: number
           reminder_template_name?: string | null
@@ -2196,6 +2320,53 @@ export type Database = {
           },
           {
             foreignKeyName: "calendar_external_events_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendar_professionals: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          organization_id: string
+          position: number
+          schedule: Json | null
+          trilha: number | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          organization_id: string
+          position?: number
+          schedule?: Json | null
+          trilha?: number | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          organization_id?: string
+          position?: number
+          schedule?: Json | null
+          trilha?: number | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_professionals_organization_id_fkey"
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
@@ -6806,6 +6977,14 @@ export type Database = {
           p_metadata?: Json
           p_organization_id?: string
           p_payload?: Json
+        }
+        Returns: string
+      }
+      fn_agenda_marcar: {
+        Args: {
+          p_compromisso: Json
+          p_organization_id: string
+          p_profissionais: string[]
         }
         Returns: string
       }

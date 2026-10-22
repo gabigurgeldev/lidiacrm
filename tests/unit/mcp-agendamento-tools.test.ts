@@ -65,12 +65,17 @@ function respondeCom(r: ResultadoDaConsulta) {
 
 const SUCESSO: ResultadoDaConsulta = {
   ok: true,
-  slots: [{ inicio: new Date("2026-09-01T14:00:00Z"), fim: new Date("2026-09-01T14:30:00Z") }],
+  slots: [
+    { inicio: new Date("2026-09-01T14:00:00Z"), fim: new Date("2026-09-01T14:30:00Z"), opcoes: [] },
+  ],
+  profissionais: [],
+  profissionaisNecessarios: 1,
   fusoDaRegra: "America/Sao_Paulo",
   publicouHorarios: true,
   fusoSuposto: false,
   fontesDefasadas: [],
   agendaExternaNuncaLida: false,
+  profissionaisComProblema: [],
 };
 
 describe("crm_find_free_slots", () => {

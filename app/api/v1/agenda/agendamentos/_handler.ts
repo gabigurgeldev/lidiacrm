@@ -46,6 +46,8 @@ const CODIGO_DA_RECUSA = {
   tipo_desativado: { status: 422, code: "agenda_tipo_desativado" },
   sem_responsavel: { status: 422, code: "agenda_sem_responsavel" },
   jornada_mal_configurada: { status: 422, code: "agenda_disponibilidade_invalida" },
+  profissional_invalido: { status: 422, code: "agenda_profissional_invalido" },
+  profissionais_insuficientes: { status: 422, code: "agenda_profissionais_insuficientes" },
   erro_interno: { status: 500, code: "internal_error" },
 } as const;
 
