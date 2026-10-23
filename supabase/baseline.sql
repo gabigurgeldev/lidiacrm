@@ -5066,7 +5066,33 @@ with ranked as (
 update public.contacts c set is_merged_into = r.canonical_id, merged_at = now()
 from ranked r where c.id = r.id and r.id <> r.canonical_id;
 
-update public.conversations       t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
+-- Remapeamento SEGURO (migration 0247): só move a conversa quando o contato de
+-- destino ainda não tem conversa 1:1 naquele número — senão o UPDATE estoura
+-- uniq_conversations_1to1_per_contact_session e o `migrate` desfaz o baseline
+-- INTEIRO (foi o que travou a produção de 15/10 a 23/10). Com vários perdedores
+-- para o mesmo destino e número, só o mais antigo vai; os outros ficam onde
+-- estão, como já estavam.
+with movivel as (
+  select t.id, c.is_merged_into as destino,
+         row_number() over (
+           partition by t.organization_id, c.is_merged_into, t.channel_session_id, t.is_group
+           order by t.created_at, t.id) as ordem
+    from public.conversations t
+    join public.contacts c on c.id = t.contact_id
+   where c.is_merged_into is not null
+)
+update public.conversations t
+   set contact_id = m.destino
+  from movivel m
+ where t.id = m.id
+   and (t.is_group
+        or (m.ordem = 1
+            and not exists (
+              select 1 from public.conversations w
+               where w.organization_id = t.organization_id
+                 and w.contact_id = m.destino
+                 and w.channel_session_id = t.channel_session_id
+                 and w.is_group = false)));
 update public.messages            t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
 update public.ai_agent_runs       t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
 update public.crm_lead_activities t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
@@ -11330,7 +11356,33 @@ update public.contacts c
   from ranked r
  where c.id = r.id and r.id <> r.canonical_id;
 
-update public.conversations       t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
+-- Remapeamento SEGURO (migration 0247): só move a conversa quando o contato de
+-- destino ainda não tem conversa 1:1 naquele número — senão o UPDATE estoura
+-- uniq_conversations_1to1_per_contact_session e o `migrate` desfaz o baseline
+-- INTEIRO (foi o que travou a produção de 15/10 a 23/10). Com vários perdedores
+-- para o mesmo destino e número, só o mais antigo vai; os outros ficam onde
+-- estão, como já estavam.
+with movivel as (
+  select t.id, c.is_merged_into as destino,
+         row_number() over (
+           partition by t.organization_id, c.is_merged_into, t.channel_session_id, t.is_group
+           order by t.created_at, t.id) as ordem
+    from public.conversations t
+    join public.contacts c on c.id = t.contact_id
+   where c.is_merged_into is not null
+)
+update public.conversations t
+   set contact_id = m.destino
+  from movivel m
+ where t.id = m.id
+   and (t.is_group
+        or (m.ordem = 1
+            and not exists (
+              select 1 from public.conversations w
+               where w.organization_id = t.organization_id
+                 and w.contact_id = m.destino
+                 and w.channel_session_id = t.channel_session_id
+                 and w.is_group = false)));
 update public.messages            t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
 update public.ai_agent_runs       t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
 update public.crm_lead_activities t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
@@ -13981,7 +14033,33 @@ update public.followup_enrollments e
         and w.status in ('active', 'waiting_reply', 'paused_handoff')
    );
 
-update public.conversations       t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
+-- Remapeamento SEGURO (migration 0247): só move a conversa quando o contato de
+-- destino ainda não tem conversa 1:1 naquele número — senão o UPDATE estoura
+-- uniq_conversations_1to1_per_contact_session e o `migrate` desfaz o baseline
+-- INTEIRO (foi o que travou a produção de 15/10 a 23/10). Com vários perdedores
+-- para o mesmo destino e número, só o mais antigo vai; os outros ficam onde
+-- estão, como já estavam.
+with movivel as (
+  select t.id, c.is_merged_into as destino,
+         row_number() over (
+           partition by t.organization_id, c.is_merged_into, t.channel_session_id, t.is_group
+           order by t.created_at, t.id) as ordem
+    from public.conversations t
+    join public.contacts c on c.id = t.contact_id
+   where c.is_merged_into is not null
+)
+update public.conversations t
+   set contact_id = m.destino
+  from movivel m
+ where t.id = m.id
+   and (t.is_group
+        or (m.ordem = 1
+            and not exists (
+              select 1 from public.conversations w
+               where w.organization_id = t.organization_id
+                 and w.contact_id = m.destino
+                 and w.channel_session_id = t.channel_session_id
+                 and w.is_group = false)));
 update public.messages            t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
 update public.ai_agent_runs       t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
 update public.crm_lead_activities t set contact_id = c.is_merged_into from public.contacts c where t.contact_id = c.id and c.is_merged_into is not null;
