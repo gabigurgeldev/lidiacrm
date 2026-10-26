@@ -39,6 +39,58 @@ async function fetchBoard(pipelineId: string): Promise<BoardData> {
  */
 const PULSE_MS = 1_200;
 
+/**
+ * Janela para juntar eventos Realtime num refetch só.
+ *
+ * Antes, CADA evento de `crm_leads` refazia o GET inteiro do quadro (pipeline,
+ * etapas, todos os leads e quatro enriquecimentos). Mover um card gera dois
+ * eventos (o movimento e o carimbo de `last_activity_at`); uma automação que
+ * move 30 negócios gerava 60 refetches em sequência. Agora o UPDATE é aplicado
+ * no cache NA HORA (ver `COLUNAS_DO_EVENTO`) e a reconciliação com o servidor
+ * acontece uma vez, quando os eventos param de chegar.
+ */
+const RECONCILIAR_MS = 600;
+
+/**
+ * As colunas de `crm_leads` que um UPDATE do Realtime pode sobrescrever no card
+ * sem refetch. Só colunas da PRÓPRIA linha: o que é derivado (dono agente,
+ * score, conversa, tags do contato) só o servidor monta — a reconciliação traz.
+ */
+const COLUNAS_DO_EVENTO = [
+  "stage_id",
+  "position_in_stage",
+  "status",
+  "title",
+  "value_cents",
+  "currency",
+  "owner_user_id",
+  "owner_kind",
+  "owner_agent_id",
+  "tags",
+  "updated_at",
+  "last_activity_at",
+  "stage_changed_at",
+  "closed_at",
+  "lost_reason",
+  "expected_close_date",
+] as const;
+
+export function aplicaEventoNoQuadro(board: BoardData | undefined, payload: unknown): BoardData | undefined {
+  if (!board || !payload || typeof payload !== "object") return board;
+  const p = payload as { eventType?: string; new?: Record<string, unknown> };
+  const novo = p.new;
+  if (p.eventType !== "UPDATE" || !novo || typeof novo.id !== "string") return board;
+  let mudou = false;
+  const leads = board.leads.map((lead) => {
+    if (lead.id !== novo.id) return lead;
+    const patch: Record<string, unknown> = {};
+    for (const col of COLUNAS_DO_EVENTO) if (col in novo) patch[col] = novo[col];
+    mudou = true;
+    return { ...lead, ...patch };
+  });
+  return mudou ? { ...board, leads } : board;
+}
+
 /** O id do lead dentro do payload do postgres_changes (new, ou old no delete). */
 function idDoEvento(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
@@ -61,6 +113,7 @@ export function useBoard(pipelineId: string | null) {
    */
   const [pulses, setPulses] = useState<Map<string, number>>(new Map());
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const reconciliacao = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const query = useQuery({
     queryKey,
@@ -70,10 +123,14 @@ export function useBoard(pipelineId: string | null) {
 
   const onChange = useCallback(
     (payload: unknown) => {
-      // Conservative: invalidate the board on any change. Optimistic patches
-      // arrive faster via useMoveCard's onMutate; this just reconciles
-      // cross-user changes within ~250ms.
-      qc.invalidateQueries({ queryKey });
+      // O UPDATE entra no cache na hora; o refetch é UM, quando os eventos
+      // param (ver RECONCILIAR_MS). INSERT/DELETE só a reconciliação resolve.
+      qc.setQueryData<BoardData>(queryKey, (atual) => aplicaEventoNoQuadro(atual, payload));
+      if (reconciliacao.current) clearTimeout(reconciliacao.current);
+      reconciliacao.current = setTimeout(() => {
+        reconciliacao.current = null;
+        void qc.invalidateQueries({ queryKey });
+      }, RECONCILIAR_MS);
 
       const leadId = idDoEvento(payload);
       // Janela, não marca gasta por evento: uma ação minha chega aqui em DUAS
@@ -138,9 +195,11 @@ export function useBoard(pipelineId: string | null) {
   // do unmount e o React reclama (e o Map de timers vaza).
   useEffect(() => {
     const pendentes = timers.current;
+    const recon = reconciliacao;
     return () => {
       for (const t of pendentes.values()) clearTimeout(t);
       pendentes.clear();
+      if (recon.current) clearTimeout(recon.current);
     };
   }, []);
 

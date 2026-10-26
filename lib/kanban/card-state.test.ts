@@ -6,7 +6,13 @@
  */
 import { describe, it, expect } from "vitest";
 
-import { resolveCardState, coolingLabel, stageAgeLabel, type CardInput } from "./card-state";
+import {
+  buildCardInput,
+  resolveCardState,
+  coolingLabel,
+  stageAgeLabel,
+  type CardInput,
+} from "./card-state";
 
 const base: CardInput = {
   id: "l-1",
@@ -18,6 +24,7 @@ const base: CardInput = {
   hoursInStage: 5,
   isCooling: false,
   tags: [],
+  contactName: null,
 };
 
 describe("resolveCardState — precedência estrita", () => {
@@ -184,5 +191,29 @@ describe("resolveCardState · proposta de retomada", () => {
   it("o prazo viaja até o slot — o card precisa dizer quanto falta", () => {
     const s = resolveCardState({ ...base, reactivation: proposta });
     expect(s.slot.type === "reactivation" && s.slot.expiresAt).toBe(proposta.expiresAt);
+  });
+});
+
+describe("buildCardInput — tags do card (migration 0248)", () => {
+  it("junta as tags do CONTATO e as do negócio, sem repetir, contato primeiro", () => {
+    const card = buildCardInput(
+      {
+        id: "l-9",
+        title: "Maria",
+        value_cents: null,
+        currency: null,
+        tags: ["Orçamento", "VIP"],
+        contact_tags: ["VIP", "Pós-venda"],
+        contact_name: "Maria Souza",
+        last_activity_at: null,
+        created_at: "2026-10-01T00:00:00Z",
+        owner_kind: null,
+        owner_user_id: null,
+        owner_agent_id: null,
+      } as unknown as Parameters<typeof buildCardInput>[0],
+      { stageName: "Novo", ownerNames: undefined },
+    );
+    expect(card.tags).toEqual(["VIP", "Pós-venda", "Orçamento"]);
+    expect(card.contactName).toBe("Maria Souza");
   });
 });

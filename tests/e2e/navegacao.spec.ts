@@ -130,7 +130,7 @@ test.describe("navegação agrupada", () => {
     // fazer: no jsdom o link continua "visível" porque não há CSS.
     const estado = await page.evaluate(() => {
       const nav = document.querySelector('nav[aria-label="Navegação principal"]')!;
-      const link = [...nav.querySelectorAll("a")].find((a) => a.textContent?.trim() === "Funis");
+      const link = [...nav.querySelectorAll("a")].find((a) => a.textContent?.trim() === "Kanbans");
       const corpo = link?.closest(".nav-grupo-corpo");
       return {
         achouOLink: Boolean(link),
@@ -144,23 +144,24 @@ test.describe("navegação agrupada", () => {
     expect(estado.altura).toBe(0);
 
     await abrirGrupo(page, "CRM");
-    await expect(sidebar(page).getByRole("link", { name: "Funis", exact: true })).toBeVisible();
+    await expect(sidebar(page).getByRole("link", { name: "Kanbans", exact: true })).toBeVisible();
   });
 
-  test("chega nas Etapas do funil pelo CRM, sem passar por Configurações", async ({ page }) => {
+  test("chega nas Colunas dos Kanbans pelo CRM, sem passar por Configurações", async ({ page }) => {
     await loginAdmin(page);
 
     // O caso que originou tudo: o usuário não sabia que esta tela existia.
     //
-    // ⚠️ O ITEM MUDOU DE NOME, e o nome antigo ("Funis") passou para o VIZINHO —
-    // a lista de funis, em /app/kanban. Um teste que continuasse clicando em
-    // "Funis" seguiria verde medindo a outra tela; por isso a asserção de URL
+    // ⚠️ O ITEM JÁ MUDOU DE NOME DUAS VEZES ("Funis" → "Etapas do funil" →
+    // "Colunas dos Kanbans", em 2026-10-26), e o vizinho — a lista, em
+    // /app/kanban — hoje se chama "Kanbans". Um teste que clicasse no nome do
+    // vizinho seguiria verde medindo a outra tela; por isso a asserção de URL
     // abaixo é específica (`settings/tenant/pipelines`) e não o antigo
     // /pipelines/, que casa com as duas.
     await abrirGrupo(page, "CRM");
-    await sidebar(page).getByRole("link", { name: "Etapas do funil" }).click();
+    await sidebar(page).getByRole("link", { name: "Colunas dos Kanbans" }).click();
     await page.waitForURL(/settings\/tenant\/pipelines/);
-    await expect(page.getByRole("heading", { name: "Etapas do funil", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Colunas dos Kanbans", level: 1 })).toBeVisible();
 
     // O grupo da tela em que se está abre sozinho: chegar aqui por link direto
     // não pode deixar a barra sem nenhuma marca de onde se está.
@@ -169,12 +170,12 @@ test.describe("navegação agrupada", () => {
     ).toHaveAttribute("aria-expanded", "true");
   });
 
-  test("e a lista de funis é o item vizinho, com nome próprio", async ({ page }) => {
+  test("e a lista de Kanbans é o item vizinho, com nome próprio", async ({ page }) => {
     await loginAdmin(page);
     await abrirGrupo(page, "CRM");
-    await sidebar(page).getByRole("link", { name: "Funis", exact: true }).click();
+    await sidebar(page).getByRole("link", { name: "Kanbans", exact: true }).click();
     await page.waitForURL(/\/app\/kanban/);
-    await expect(page.getByRole("heading", { name: "Funis", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Kanbans", level: 1 })).toBeVisible();
   });
 
   test("chega em Conhecimento, que só existia atrás das abas de IA", async ({ page }) => {
@@ -451,7 +452,7 @@ test.describe("navegação agrupada", () => {
       expect(rotulo, "na gaveta o nome de cada tela continua escrito").not.toBe("none");
 
       await abrirGrupo(page, "CRM");
-      await sidebar(page).getByRole("link", { name: "Funis", exact: true }).click();
+      await sidebar(page).getByRole("link", { name: "Kanbans", exact: true }).click();
       await page.waitForURL(/\/app\/kanban/);
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await expectSemOverflowHorizontal(page, "shell mobile após navegar pelo drawer");

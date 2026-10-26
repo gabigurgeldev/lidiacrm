@@ -366,7 +366,7 @@ function BuscaNaOrigem({
               </span>
               {!m.supports_tools ? (
                 <span className="block text-[11px] text-amber-600 dark:text-amber-400">
-                  {t("Não usa ferramentas: conversa, mas não mexe no funil nem registra nada.")}
+                  {t("Não usa ferramentas: conversa, mas não mexe no Kanban nem registra nada.")}
                 </span>
               ) : null}
             </button>

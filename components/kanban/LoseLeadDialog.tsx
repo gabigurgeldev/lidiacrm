@@ -67,7 +67,7 @@ export function LoseLeadDialog({
         <DialogHeader>
           <DialogTitle>{t("Marcar como perdido")}</DialogTitle>
           <DialogDescription>
-            {t("Informe o motivo. Essa informação ajuda a melhorar o funil.")}
+            {t("Informe o motivo. Essa informação ajuda a melhorar o Kanban.")}
           </DialogDescription>
         </DialogHeader>
 

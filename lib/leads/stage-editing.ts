@@ -95,7 +95,7 @@ export function validarNomeDeEtapa(
   if (colisao) {
     return {
       ok: false,
-      erro: `Já existe uma etapa chamada «${colisao.name}» neste funil. Escolha outro nome.`,
+      erro: `Já existe uma etapa chamada «${colisao.name}» neste Kanban. Escolha outro nome.`,
     };
   }
 
@@ -180,7 +180,7 @@ export function validarMarcacao(
 ): Resultado {
   const etapa = etapas.find((e) => e.id === etapaId);
   if (!etapa) {
-    return { ok: false, erro: "Essa etapa não faz parte deste funil. Recarregue a página e tente de novo." };
+    return { ok: false, erro: "Essa etapa não faz parte deste Kanban. Recarregue a página e tente de novo." };
   }
 
   const desejado: Record<PassoDeDesfecho, boolean> = {
@@ -203,7 +203,7 @@ export function validarMarcacao(
       return {
         ok: false,
         erro:
-          `A etapa «${etapa.name}» é a etapa ${desfecho} deste funil e o funil precisa de uma. ` +
+          `A etapa «${etapa.name}» é a etapa ${desfecho} deste Kanban e o Kanban precisa de uma. ` +
           `Marque OUTRA etapa como ${desfecho} — a marcação se muda, não se apaga.`,
       };
     }
@@ -319,7 +319,7 @@ export function validarArquivamento(
 ): ResultadoDeArquivamento {
   const etapa = etapas.find((e) => e.id === etapaId);
   if (!etapa) {
-    return { ok: false, erro: "Essa etapa não faz parte deste funil. Recarregue a página e tente de novo." };
+    return { ok: false, erro: "Essa etapa não faz parte deste Kanban. Recarregue a página e tente de novo." };
   }
 
   const restantes = ativas(etapas).filter((e) => e.id !== etapaId);
@@ -327,7 +327,7 @@ export function validarArquivamento(
     return {
       ok: false,
       erro:
-        `«${etapa.name}» é a única etapa deste funil. Um funil sem etapa nenhuma some do quadro e não ` +
+        `«${etapa.name}» é a única etapa deste Kanban. Um Kanban sem etapa nenhuma some do quadro e não ` +
         `recebe negócio novo — crie outra etapa antes de arquivar esta.`,
     };
   }
@@ -338,7 +338,7 @@ export function validarArquivamento(
       return {
         ok: false,
         erro:
-          `«${etapa.name}» é a etapa ${desfecho} deste funil. Marque OUTRA etapa como ${desfecho} antes ` +
+          `«${etapa.name}» é a etapa ${desfecho} deste Kanban. Marque OUTRA etapa como ${desfecho} antes ` +
           `de arquivar esta — senão os negócios continuariam indo parar numa coluna fora do quadro.`,
       };
     }
@@ -366,7 +366,7 @@ export function validarArquivamento(
     if (!destino) {
       return {
         ok: false,
-        erro: `A etapa escolhida para receber os negócios de «${etapa.name}» não está mais no funil. Recarregue a página.`,
+        erro: `A etapa escolhida para receber os negócios de «${etapa.name}» não está mais no Kanban. Recarregue a página.`,
       };
     }
 
@@ -383,7 +383,7 @@ export function validarArquivamento(
         return {
           ok: false,
           erro:
-            `«${destino.name}» é a etapa ${desfecho} deste funil: mandar os negócios de «${etapa.name}» ` +
+            `«${destino.name}» é a etapa ${desfecho} deste Kanban: mandar os negócios de «${etapa.name}» ` +
             `para lá os daria por encerrados. Escolha uma etapa em aberto.`,
         };
       }

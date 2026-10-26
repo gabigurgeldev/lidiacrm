@@ -132,20 +132,21 @@ describe("Sidebar agrupado", () => {
     expect(botao.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("leva às Etapas do funil sem passar por Configurações", () => {
+  it("leva às Colunas dos Kanbans sem passar por Configurações", () => {
     comoPapel("admin");
     render(<Sidebar collapsed={false} />);
-    // O rótulo mudou: "Funis" passou a ser a LISTA (/app/kanban) e esta tela,
-    // que configura as colunas, virou "Etapas do funil". Antes as duas
-    // disputavam o mesmo nome no mesmo grupo do menu.
-    const etapas = screen.getByRole("link", { name: "Etapas do funil" });
+    // O rótulo mudou: a LISTA (/app/kanban) se chama "Kanbans" e esta tela,
+    // que configura as colunas, virou "Colunas dos Kanbans" (2026-10-26; antes,
+    // "Funis" e "Etapas do funil"). Antes as duas disputavam o mesmo nome no
+    // mesmo grupo do menu.
+    const etapas = screen.getByRole("link", { name: "Colunas dos Kanbans" });
     expect(etapas).toHaveAttribute("href", "/app/settings/tenant/pipelines");
   });
 
   it("e os dois itens de funil não disputam o mesmo nome", () => {
     comoPapel("admin");
     render(<Sidebar collapsed={false} />);
-    expect(screen.getByRole("link", { name: "Funis" })).toHaveAttribute("href", "/app/kanban");
+    expect(screen.getByRole("link", { name: "Kanbans" })).toHaveAttribute("href", "/app/kanban");
   });
 
   it("desenterra Nuvemshop e Audit Log", () => {
@@ -220,8 +221,8 @@ describe("Sidebar agrupado", () => {
     comoPapel("admin");
     render(<Sidebar collapsed={false} />);
     expect(screen.getByRole("link", { name: /Inbox/ })).toHaveAttribute("aria-current", "page");
-    // "Kanban" saiu da interface; o item da mesma URL agora se chama "Funis".
-    expect(screen.getByRole("link", { name: "Funis" })).not.toHaveAttribute("aria-current");
+    // O item de /app/kanban se chama "Kanbans" desde 2026-10-26 (antes, "Funis").
+    expect(screen.getByRole("link", { name: "Kanbans" })).not.toHaveAttribute("aria-current");
   });
 });
 

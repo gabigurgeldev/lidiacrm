@@ -73,6 +73,13 @@ export interface Lead {
    * entre "não há conversa" e "ainda não carregou" — por isso `undefined` e não
    * um objeto vazio.
    */
+  /**
+   * Derivado (não é coluna): nome e tags do CONTATO do negócio, embutidos pelo
+   * quadro. A tag é do contato desde a migration 0248 — é ela que o card mostra
+   * e que o filtro por tag lê, junto de `tags` do próprio lead.
+   */
+  contact_name?: string | null;
+  contact_tags?: string[];
   conversa?: {
     id: string;
     /** O que a lista do inbox mostra: última mensagem, já truncada na origem. */

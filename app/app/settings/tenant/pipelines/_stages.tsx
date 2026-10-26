@@ -220,14 +220,14 @@ export function StagesSection({
   if (consulta.isError) {
     return (
       <p className="text-sm text-text-muted" data-testid="etapas-erro-leitura">
-        {t("Não foi possível carregar as etapas deste funil agora. Recarregue a página.")}
+        {t("Não foi possível carregar as etapas deste Kanban agora. Recarregue a página.")}
       </p>
     );
   }
   if (!consulta.data) {
     return (
       <p className="text-sm text-text-muted" data-testid="etapas-carregando">
-        {t("Carregando as etapas deste funil…")}
+        {t("Carregando as etapas deste Kanban…")}
       </p>
     );
   }
@@ -310,7 +310,7 @@ export function StagesSection({
     criar.mutate(nome, {
       onSuccess: () => {
         setNova(null);
-        toast.success(`«${nome}» ${t("entrou no fim do funil.")}`);
+        toast.success(`«${nome}» ${t("entrou no fim do Kanban.")}`);
       },
       onError: (e) => setErro({ etapaId: null, texto: mensagemDeErro(e, t) }),
     });
@@ -319,7 +319,7 @@ export function StagesSection({
   return (
     <div className="space-y-4" id={ancoraDasEtapas(pipelineId)} data-testid={`etapas-${pipelineId}`}>
       <div className="space-y-1">
-        <h3 className="text-sm font-semibold">{t("Etapas deste funil")}</h3>
+        <h3 className="text-sm font-semibold">{t("Etapas deste Kanban")}</h3>
         <p className="max-w-3xl text-sm leading-relaxed text-text-muted">
           {t(
             "Estas são as colunas do seu quadro, na ordem em que o cliente avança. Você pode renomear, criar, reordenar e arquivar.",
@@ -329,7 +329,7 @@ export function StagesSection({
           {t("Duas colunas têm papel especial: a")} <strong>{t("de fechamento")}</strong>{" "}
           {t("é onde o negócio vira venda, e a")} <strong>{t("de perda")}</strong>{" "}
           {t(
-            "é onde ele se perde. Cada funil precisa de uma de cada — por isso a marcação se muda de lugar, não se apaga.",
+            "é onde ele se perde. Cada Kanban precisa de uma de cada — por isso a marcação se muda de lugar, não se apaga.",
           )}
         </p>
       </div>
@@ -435,7 +435,7 @@ export function StagesSection({
                     disabled={ocupado}
                   >
                     <SelectTrigger
-                      aria-label={`${t("Papel de")} «${etapa.name}» ${t("no funil")}`}
+                      aria-label={`${t("Papel de")} «${etapa.name}» ${t("no Kanban")}`}
                       data-testid={`papel-${etapa.id}`}
                     >
                       <SelectValue />

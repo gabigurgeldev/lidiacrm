@@ -59,7 +59,7 @@ export default async function AtendimentoSettingsPage() {
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
           {traduzir(
-            "Quem recebe cada cliente novo, e o que cada atendente enxerga. As duas decisões andam juntas: distribuir sem restringir deixa todo mundo vendo a carteira do colega; restringir sem distribuir deixa o funil de cada um vazio.",
+            "Quem recebe cada cliente novo, e o que cada atendente enxerga. As duas decisões andam juntas: distribuir sem restringir deixa todo mundo vendo a carteira do colega; restringir sem distribuir deixa o Kanban de cada um vazio.",
             idioma,
           )}
         </p>

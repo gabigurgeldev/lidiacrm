@@ -779,7 +779,7 @@ test.describe("followup flow builder — controle de gatilho na PublishBar (Task
       // coisas — e é o que o operador de fato vê.
       const kindSelect = panel.getByRole("combobox");
       await kindSelect.click();
-      const OFERECIDOS = ["Manual", "Silêncio", "Etapa do funil", "Agente pediu ajuda", "Automação (Webhooks)"];
+      const OFERECIDOS = ["Manual", "Silêncio", "Etapa do Kanban", "Agente pediu ajuda", "Automação (Webhooks)"];
       for (const nome of OFERECIDOS) {
         await expect(page.getByRole("option", { name: nome, exact: true })).toBeVisible();
       }

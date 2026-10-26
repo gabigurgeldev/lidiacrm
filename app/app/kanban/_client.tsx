@@ -145,14 +145,14 @@ export function FunisClient({
           if (e.key === "Enter") criarFunil();
           if (e.key === "Escape") setNovo(null);
         }}
-        placeholder={t("Nome do funil — ex.: Consultas, Obras, Matrículas")}
-        aria-label={t("Nome do novo funil")}
+        placeholder={t("Nome do Kanban — ex.: Consultas, Obras, Matrículas")}
+        aria-label={t("Nome do novo Kanban")}
         data-testid="nome-do-novo-funil"
         disabled={ocupado}
       />
       <div className="flex gap-2">
         <Button onClick={criarFunil} disabled={ocupado || !novo.trim()} data-testid="confirmar-novo-funil">
-          {t("Criar funil")}
+          {t("Criar Kanban")}
         </Button>
         <Button variant="ghost" onClick={() => setNovo(null)} disabled={ocupado}>
           {t("Cancelar")}
@@ -174,7 +174,7 @@ export function FunisClient({
           <EmptyPipeline
             primary={
               podeGerenciar
-                ? { label: t("Criar meu primeiro funil"), onClick: () => setNovo("") }
+                ? { label: t("Criar meu primeiro Kanban"), onClick: () => setNovo("") }
                 : undefined
             }
           />
@@ -194,7 +194,7 @@ export function FunisClient({
         <div className="flex sm:justify-end">
           {novo === null ? (
             <Button onClick={() => setNovo("")} disabled={ocupado} data-testid="novo-funil" className="w-full sm:w-auto">
-              <Plus size={16} className="mr-2" aria-hidden /> {t("Novo funil")}
+              <Plus size={16} className="mr-2" aria-hidden /> {t("Novo Kanban")}
             </Button>
           ) : null}
         </div>

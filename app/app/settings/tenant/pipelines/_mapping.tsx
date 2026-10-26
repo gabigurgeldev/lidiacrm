@@ -120,16 +120,16 @@ export function motivoDaListaVazia(
   }
   if (passo === "won") {
     return t(
-      "Este funil não tem nenhuma etapa marcada como fechamento, então não há para onde levar o card quando a pessoa fecha. Marque uma etapa como «aqui o cliente fecha» em «Etapas deste funil».",
+      "Este Kanban não tem nenhuma etapa marcada como fechamento, então não há para onde levar o card quando a pessoa fecha. Marque uma etapa como «aqui o cliente fecha» em «Etapas deste Kanban».",
     );
   }
   if (passo === "lost") {
     return t(
-      "Este funil não tem nenhuma etapa marcada como perda, então não há para onde levar o card quando a pessoa desiste. Marque uma etapa como «aqui o cliente desiste» em «Etapas deste funil».",
+      "Este Kanban não tem nenhuma etapa marcada como perda, então não há para onde levar o card quando a pessoa desiste. Marque uma etapa como «aqui o cliente desiste» em «Etapas deste Kanban».",
     );
   }
   return t(
-    "Este funil só tem etapas de fechamento e de perda, então não há etapa comum para receber o card neste passo. Crie as etapas do meio do caminho em «Etapas deste funil».",
+    "Este Kanban só tem etapas de fechamento e de perda, então não há etapa comum para receber o card neste passo. Crie as etapas do meio do caminho em «Etapas deste Kanban».",
   );
 }
 
@@ -166,7 +166,7 @@ export function mensagemDeErro(
     if (e.status === 401)
       return t("Sua sessão expirou. Entre de novo para salvar suas escolhas.");
     if (e.status === 403)
-      return t("Você não tem permissão para mudar a configuração deste funil.");
+      return t("Você não tem permissão para mudar a configuração deste Kanban.");
   }
   return t("Não deu para salvar agora. Tente de novo em instantes.");
 }
@@ -206,14 +206,14 @@ export function AgentMappingSection({
   if (consulta.isError) {
     return (
       <p className="text-sm text-text-muted" data-testid="mapeamento-erro-leitura">
-        {t("Não foi possível carregar as etapas deste funil agora. Recarregue a página.")}
+        {t("Não foi possível carregar as etapas deste Kanban agora. Recarregue a página.")}
       </p>
     );
   }
   if (!data || !rascunho) {
     return (
       <p className="text-sm text-text-muted" data-testid="mapeamento-carregando">
-        {t("Carregando as etapas deste funil…")}
+        {t("Carregando as etapas deste Kanban…")}
       </p>
     );
   }
@@ -257,7 +257,7 @@ export function AgentMappingSection({
         <h3 className="text-sm font-semibold">{t("Para onde o card vai em cada passo")}</h3>
         <p className="max-w-3xl text-sm leading-relaxed text-text-muted">
           {t(
-            "Quando o agente avança no atendimento, o card do cliente pode andar sozinho no seu funil. Escolha para qual etapa ele vai em cada momento. Deixar em «não mover» é uma escolha válida — o card fica onde está e o agente segue trabalhando.",
+            "Quando o agente avança no atendimento, o card do cliente pode andar sozinho no seu Kanban. Escolha para qual etapa ele vai em cada momento. Deixar em «não mover» é uma escolha válida — o card fica onde está e o agente segue trabalhando.",
           )}
         </p>
       </div>
@@ -301,7 +301,7 @@ export function AgentMappingSection({
                           href={`#${ancoraEtapas}`}
                           data-testid={`ir-para-etapas-${passo}`}
                         >
-                          {t("Ir para as etapas do funil")}
+                          {t("Ir para as etapas do Kanban")}
                         </a>
                         .
                       </>

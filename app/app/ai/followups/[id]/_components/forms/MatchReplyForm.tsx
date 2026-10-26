@@ -225,7 +225,7 @@ export function MatchReplyForm({
           </div>
         )}
         <p className="text-xs text-text-muted">
-          {t("Crie os campos em Configurações → Funis. A resposta só grava quando o contato responde (não no timeout).")}
+          {t("Crie os campos em Configurações → Kanbans. A resposta só grava quando o contato responde (não no timeout).")}
         </p>
       </div>
       {error && <p className="text-xs text-error-fg">{error}</p>}

@@ -117,14 +117,16 @@ describe("o elo que some sem barulho", () => {
     // ninguém testou.
     const fonte = readFileSync("app/api/v1/pipelines/[id]/board/route.ts", "utf8");
     expect(fonte, "falta withConversas").toContain("withConversas");
-    expect(fonte, "withConversas não foi chamada").toMatch(
-      /leadsComConversa\s*=\s*await withConversas/,
-    );
+    // Desde o PR dos Kanbans os enriquecimentos rodam em PARALELO
+    // (`Promise.all`) e são mesclados por índice — a forma mudou, a pergunta não.
+    // A prova de comportamento (a conversa SAI na resposta) mora em
+    // `app/api/v1/pipelines/[id]/board/route.test.ts`; aqui fica a cerca barata.
+    expect(fonte, "withConversas não foi chamada").toMatch(/withConversas\(supabase,/);
     // Chamar e não USAR o resultado é o defeito de verdade: a função roda, o
     // custo se paga, e a resposta sai sem a conversa. A primeira versão deste
     // caso só olhava a chamada e o sabote passou.
     expect(fonte, "o resultado de withConversas não chegou à resposta").toMatch(
-      /leads:\s*leadsComConversa\.leads/,
+      /comConversa\.leads\[i\]\?\.conversa/,
     );
   });
 

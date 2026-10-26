@@ -62,10 +62,11 @@ export const DICIONARIO: Traducoes = {
   // A CHAVE É O TEXTO PT-BR, então renomear um rótulo no registro de navegação
   // sem mexer aqui NÃO quebra teste nenhum — degrada em silêncio: `traduzir()`
   // devolve a chave ausente como português e o espanhol da barra lateral some.
-  // "Kanban" saiu do menu (a tela virou "Funis"); "Etapas do funil" é o nome novo
-  // da tela de configuração, que antes disputava "Funis" com ela.
-  Funis: { es: "Embudos" },
-  "Etapas do funil": { es: "Etapas del embudo" },
+  // Em 2026-10-26 "Funis" virou "Kanbans" em todo texto visível (decisão do dono
+  // do produto), e "Etapas do funil" — a tela de configuração, que antes
+  // disputava "Funis" com ela — virou "Colunas dos Kanbans".
+  Kanbans: { es: "Kanbans" },
+  "Colunas dos Kanbans": { es: "Columnas de los Kanbans" },
   "Tipos de agendamento": { es: "Tipos de cita" },
   Automação: { es: "Automatización" },
   Agentes: { es: "Agentes" },
@@ -772,30 +773,30 @@ export const DICIONARIO: Traducoes = {
   Adicionar: { es: "Agregar" },
   // ─── Agentes de IA: funis do agente, fluxos de follow-up ───
   "Em que negócios ele pode mexer": { es: "En qué negocios puede intervenir" },
-  "Marque os funis que este assistente cuida. Ele conversa com qualquer cliente, mas só move, edita ou encerra negócio dos funis marcados aqui.": {
-    es: "Marca los embudos que este asistente gestiona. Conversa con cualquier cliente, pero solo mueve, edita o cierra negocios de los embudos marcados aquí.",
+  "Marque os Kanbans que este assistente cuida. Ele conversa com qualquer cliente, mas só move, edita ou encerra negócio dos Kanbans marcados aqui.": {
+    es: "Marca los Kanbans que este asistente gestiona. Conversa con cualquier cliente, pero solo mueve, edita o cierra negocios de los Kanbans marcados aquí.",
   },
-  "Você ainda não tem nenhum funil. Crie um em Funis para poder liberar o assistente.": {
-    es: "Todavía no tienes ningún embudo. Crea uno en Embudos para poder habilitar al asistente.",
+  "Você ainda não tem nenhum Kanban. Crie um em Kanbans para poder liberar o assistente.": {
+    es: "Todavía no tienes ningún Kanban. Crea uno en Kanbans para poder habilitar al asistente.",
   },
   "(é para cá que vão as conversas novas)": {
     es: "(aquí es donde van las conversaciones nuevas)",
   },
-  "— ele não sabe organizar este funil ainda": {
-    es: "— todavía no sabe organizar este embudo",
+  "— ele não sabe organizar este Kanban ainda": {
+    es: "— todavía no sabe organizar este Kanban",
   },
-  "Sem nenhum funil marcado, ele conversa com os clientes normalmente, mas não mexe em negócio nenhum — nem move, nem encerra, nem marca.": {
-    es: "Sin ningún embudo marcado, conversa con los clientes con normalidad, pero no interviene en ningún negocio — no mueve, no cierra, no marca.",
+  "Sem nenhum Kanban marcado, ele conversa com os clientes normalmente, mas não mexe em negócio nenhum — nem move, nem encerra, nem marca.": {
+    es: "Sin ningún Kanban marcado, conversa con los clientes con normalidad, pero no interviene en ningún negocio — no mueve, no cierra, no marca.",
   },
   "Você marcou": { es: "Marcaste" },
-  ", mas ninguém disse ao assistente o que cada etapa desse funil significa — ele vai atender e deixar os negócios parados onde estão.": {
-    es: ", pero nadie le dijo al asistente qué significa cada etapa de ese embudo — va a atender y va a dejar los negocios detenidos donde están.",
+  ", mas ninguém disse ao assistente o que cada etapa desse Kanban significa — ele vai atender e deixar os negócios parados onde estão.": {
+    es: ", pero nadie le dijo al asistente qué significa cada etapa de ese Kanban — va a atender y va a dejar los negocios detenidos donde están.",
   },
-  "funis em que ninguém disse ao assistente o que cada etapa significa — ele vai atender e deixar os negócios parados onde estão.": {
-    es: "embudos en los que nadie le dijo al asistente qué significa cada etapa — va a atender y va a dejar los negocios detenidos donde están.",
+  "Kanbans em que ninguém disse ao assistente o que cada etapa significa — ele vai atender e deixar os negócios parados onde estão.": {
+    es: "Kanbans en los que nadie le dijo al asistente qué significa cada etapa — va a atender y va a dejar los negocios detenidos donde están.",
   },
-  " Isso se configura em Configurações › Funis.": {
-    es: " Esto se configura en Configuración › Embudos.",
+  " Isso se configura em Configurações › Kanbans.": {
+    es: " Esto se configura en Configuración › Kanbans.",
   },
   "As conversas novas viram negócio em": {
     es: "Las conversaciones nuevas se convierten en negocio en",
@@ -1232,7 +1233,7 @@ export const DICIONARIO: Traducoes = {
   "Nome da saída": { es: "Nombre de la salida" },
   "Nome desta saída (opcional)": { es: "Nombre de esta salida (opcional)" },
   Operador: { es: "Operador" },
-  "Etapa do funil": { es: "Etapa del embudo" },
+  "Etapa do Kanban": { es: "Etapa del Kanban" },
   "Etiqueta do contato": { es: "Etiqueta del contacto" },
   "Passos já dados no fluxo": { es: "Pasos ya dados en el flujo" },
   "Desfecho do passo anterior": { es: "Desenlace del paso anterior" },
@@ -1292,8 +1293,8 @@ export const DICIONARIO: Traducoes = {
   "Etapa que dispara o fluxo": { es: "Etapa que dispara el flujo" },
   "Carregando etapas…": { es: "Cargando etapas…" },
   "Escolha a etapa": { es: "Elige la etapa" },
-  "Nenhuma etapa ativa encontrada — crie o funil antes de armar este gatilho.": {
-    es: "No se encontró ninguna etapa activa — crea el embudo antes de configurar este disparador.",
+  "Nenhuma etapa ativa encontrada — crie o Kanban antes de armar este gatilho.": {
+    es: "No se encontró ninguna etapa activa — crea el Kanban antes de configurar este disparador.",
   },
   "O fluxo começa quando um negócio entra nesta etapa, por arrasto no quadro ou por automação. A entrada na fila leva poucos minutos, não é instantânea.":
     {
@@ -2888,9 +2889,9 @@ export const DICIONARIO: Traducoes = {
   "Leads recebidos": { es: "Leads recibidos" },
   Automações: { es: "Automatizaciones" },
   Atividade: { es: "Actividad" },
-  Funil: { es: "Embudo" },
-  "Escolha o funil": { es: "Elige el embudo" },
-  "Escolha o funil primeiro": { es: "Elige primero el embudo" },
+  Kanban: { es: "Kanban" },
+  "Escolha o Kanban": { es: "Elige el Kanban" },
+  "Escolha o Kanban primeiro": { es: "Elige primero el Kanban" },
   desconectado: { es: "desconectado" },
   "Números desconectados aparecem desabilitados — reconecte em Conexões antes de usar.": {
     es: "Los números desconectados aparecen deshabilitados — reconéctalos en Conexiones antes de usarlos.",
@@ -2950,7 +2951,7 @@ export const DICIONARIO: Traducoes = {
     es: "no identificado — tu instalación no está detrás de un proxy que informe el origen",
   },
   Navegador: { es: "Navegador" },
-  "Ver o lead no funil": { es: "Ver el lead en el embudo" },
+  "Ver o lead no Kanban": { es: "Ver el lead en el Kanban" },
   "(sem identificação)": { es: "(sin identificación)" },
   "Nome, telefone ou e-mail": { es: "Nombre, teléfono o correo" },
   "quem você procura": { es: "a quién buscas" },
@@ -2967,16 +2968,16 @@ export const DICIONARIO: Traducoes = {
   "Ninguém preencheu seus formulários ainda. Assim que o primeiro envio chegar, ele aparece aqui — com os dados, o horário e a origem.": {
     es: "Todavía nadie completó tus formularios. En cuanto llegue el primer envío, aparece aquí — con los datos, el horario y el origen.",
   },
-  "Escolha o funil e o estágio de entrada.": { es: "Elige el embudo y la etapa de entrada." },
+  "Escolha o Kanban e o estágio de entrada.": { es: "Elige el Kanban y la etapa de entrada." },
   "Fonte criada. Agora é só conectar seu site.": {
     es: "Fuente creada. Ahora solo falta conectar tu sitio.",
   },
   "Nova fonte de captação": { es: "Nueva fuente de captación" },
-  "Dê um nome e diga em qual funil o contato deve entrar quando alguém preencher seu formulário.": {
-    es: "Dale un nombre y di en qué embudo debe entrar el contacto cuando alguien complete tu formulario.",
+  "Dê um nome e diga em qual Kanban o contato deve entrar quando alguém preencher seu formulário.": {
+    es: "Dale un nombre y di en qué Kanban debe entrar el contacto cuando alguien complete tu formulario.",
   },
   "Landing page de Black Friday": { es: "Landing page de Black Friday" },
-  "Funil de entrada": { es: "Embudo de entrada" },
+  "Kanban de entrada": { es: "Kanban de entrada" },
   "Estágio de entrada": { es: "Etapa de entrada" },
   "Escolha o estágio": { es: "Elige la etapa" },
   "URL de obrigado (opcional)": { es: "URL de agradecimiento (opcional)" },
@@ -3031,14 +3032,14 @@ export const DICIONARIO: Traducoes = {
   "Não foi possível copiar — selecione e copie manualmente.": {
     es: "No se pudo copiar — selecciona y copia manualmente.",
   },
-  "Funcionou! Um lead de teste entrou no seu funil.": {
-    es: "¡Funcionó! Un lead de prueba entró en tu embudo.",
+  "Funcionou! Um lead de teste entrou no seu Kanban.": {
+    es: "¡Funcionó! Un lead de prueba entró en tu Kanban.",
   },
   "Não conseguimos falar com o endereço. Confira sua internet e tente de novo.": {
     es: "No pudimos comunicarnos con la dirección. Revisa tu conexión e intenta de nuevo.",
   },
-  "Cada envio para o endereço abaixo vira um lead no seu funil, automaticamente.": {
-    es: "Cada envío a la dirección de abajo se convierte en un lead en tu embudo, automáticamente.",
+  "Cada envio para o endereço abaixo vira um lead no seu Kanban, automaticamente.": {
+    es: "Cada envío a la dirección de abajo se convierte en un lead en tu Kanban, automáticamente.",
   },
   "Endereço da fonte": { es: "Dirección de la fuente" },
   "Endereço copiado.": { es: "Dirección copiada." },
@@ -3062,15 +3063,15 @@ export const DICIONARIO: Traducoes = {
   "Fonte pausada.": { es: "Fuente pausada." },
   "Excluir fonte": { es: "Eliminar fuente" },
   "Excluir esta fonte?": { es: "¿Eliminar esta fuente?" },
-  "O endereço para de funcionar imediatamente. Leads já recebidos continuam no seu funil — só a captação futura é interrompida. Essa ação não pode ser desfeita.": {
-    es: "La dirección deja de funcionar de inmediato. Los leads ya recibidos siguen en tu embudo — solo se interrumpe la captación futura. Esta acción no se puede deshacer.",
+  "O endereço para de funcionar imediatamente. Leads já recebidos continuam no seu Kanban — só a captação futura é interrompida. Essa ação não pode ser desfeita.": {
+    es: "La dirección deja de funcionar de inmediato. Los leads ya recibidos siguen en tu Kanban — solo se interrumpe la captación futura. Esta acción no se puede deshacer.",
   },
   "Fonte excluída.": { es: "Fuente eliminada." },
   "nunca recebeu": { es: "nunca recibió" },
   "último recebimento": { es: "última recepción" },
   "Conecte sua landing page em 2 minutos": { es: "Conecta tu landing page en 2 minutos" },
-  "1. Crie uma fonte e diga em qual funil o contato entra.": {
-    es: "1. Crea una fuente y di en qué embudo entra el contacto.",
+  "1. Crie uma fonte e diga em qual Kanban o contato entra.": {
+    es: "1. Crea una fuente y di en qué Kanban entra el contacto.",
   },
   "2. Copie o endereço ou o formulário pronto.": {
     es: "2. Copia la dirección o el formulario listo.",
@@ -3088,13 +3089,13 @@ export const DICIONARIO: Traducoes = {
   "A assinatura não conferiu. Quem enviou não usou o segredo configurado nesta fonte.": {
     es: "La firma no coincidió. Quien envió no usó el secreto configurado en esta fuente.",
   },
-  "Os dados chegaram, mas o lead não pôde ser criado — confira se o funil e a etapa da fonte ainda existem.": {
-    es: "Los datos llegaron, pero el lead no pudo crearse — revisa si el embudo y la etapa de la fuente todavía existen.",
+  "Os dados chegaram, mas o lead não pôde ser criado — confira se o Kanban e a etapa da fonte ainda existem.": {
+    es: "Los datos llegaron, pero el lead no pudo crearse — revisa si el Kanban y la etapa de la fuente todavía existen.",
   },
   "Virou lead": { es: "Se convirtió en lead" },
   Reenvio: { es: "Reenvío" },
   "Não entrou": { es: "No entró" },
-  "Criar/mover lead no funil": { es: "Crear/mover lead en el embudo" },
+  "Criar/mover lead no Kanban": { es: "Crear/mover lead en el Kanban" },
   "Enviar mensagem no WhatsApp": { es: "Enviar mensaje por WhatsApp" },
   "Adicionar tag": { es: "Agregar etiqueta" },
   "Atribuir a um atendente": { es: "Asignar a un agente" },
@@ -3142,8 +3143,8 @@ export const DICIONARIO: Traducoes = {
   "alterado automaticamente pelo sistema": { es: "cambiado automáticamente por el sistema" },
   é: { es: "es" },
   "Revise os campos da automação.": { es: "Revisa los campos de la automatización." },
-  "Não funcionou. Confira se a fonte está ativa e se o funil/estágio ainda existem.": {
-    es: "No funcionó. Revisa si la fuente está activa y si el embudo/etapa todavía existen.",
+  "Não funcionou. Confira se a fonte está ativa e se o Kanban/estágio ainda existem.": {
+    es: "No funcionó. Revisa si la fuente está activa y si el Kanban/etapa todavía existen.",
   },
   // ─── Conexões / Integrações ───
   "Por onde seu negócio fala com o cliente. Conecte números por QR ou o número oficial da Meta, e acompanhe a saúde de cada um.": {
@@ -3444,8 +3445,8 @@ export const DICIONARIO: Traducoes = {
   "Entrada": { es: "Entrada" },
   "saída": { es: "salida" },
   "por 1M de tokens": { es: "por 1M de tokens" },
-  "Não usa ferramentas: conversa, mas não mexe no funil nem registra nada.": {
-    es: "No usa herramientas: conversa, pero no mueve el embudo ni registra nada.",
+  "Não usa ferramentas: conversa, mas não mexe no Kanban nem registra nada.": {
+    es: "No usa herramientas: conversa, pero no mueve el Kanban ni registra nada.",
   },
   "Conferindo na OpenRouter…": { es: "Verificando en OpenRouter…" },
   "Usar o código": { es: "Usar el código" },
@@ -3628,8 +3629,8 @@ export const DICIONARIO: Traducoes = {
   "O atendente vê apenas o que foi direcionado a ele — nem a fila. Combine com o rodízio: sem alguém distribuindo, ninguém recebe nada e as telas ficam vazias.": {
     es: "El agente ve solo lo que le fue asignado — ni la fila. Combínalo con la rotación: sin alguien distribuyendo, nadie recibe nada y las pantallas quedan vacías.",
   },
-  "Quem recebe cada cliente novo, e o que cada atendente enxerga. As duas decisões andam juntas: distribuir sem restringir deixa todo mundo vendo a carteira do colega; restringir sem distribuir deixa o funil de cada um vazio.": {
-    es: "Quién recibe a cada cliente nuevo, y qué ve cada agente. Las dos decisiones van juntas: distribuir sin restringir deja a todos viendo la cartera del colega; restringir sin distribuir deja el embudo de cada uno vacío.",
+  "Quem recebe cada cliente novo, e o que cada atendente enxerga. As duas decisões andam juntas: distribuir sem restringir deixa todo mundo vendo a carteira do colega; restringir sem distribuir deixa o Kanban de cada um vazio.": {
+    es: "Quién recibe a cada cliente nuevo, y qué ve cada agente. Las dos decisiones van juntas: distribuir sin restringir deja a todos viendo la cartera del colega; restringir sin distribuir deja el Kanban de cada uno vacío.",
   },
   // ─── Configurações: Atualização do sistema ───
   "Não consegui iniciar a atualização. Tente de novo em instantes.": {
@@ -3845,8 +3846,8 @@ export const DICIONARIO: Traducoes = {
     es: "La verificación en dos pasos de tu cuenta, los códigos de recuperación y las sesiones abiertas.",
   },
   // ─── Configurações: Funis (etapas + mapeamento do assistente) ───
-  "Você ainda não tem nenhum funil. Enquanto for assim, o agente atende normalmente, mas não tem para onde levar o card de ninguém — não há etapas para onde mover. Criar o funil é feito por quem instalou o sistema, direto no banco; depois ele aparece aqui para você escolher a etapa de cada passo.": {
-    es: "Todavía no tienes ningún embudo. Mientras sea así, el agente atiende normalmente, pero no tiene adónde llevar la tarjeta de nadie — no hay etapas adonde mover. Crear el embudo lo hace quien instaló el sistema, directo en la base de datos; después aparece aquí para que elijas la etapa de cada paso.",
+  "Você ainda não tem nenhum Kanban. Enquanto for assim, o agente atende normalmente, mas não tem para onde levar o card de ninguém — não há etapas para onde mover. Criar o Kanban é feito por quem instalou o sistema, direto no banco; depois ele aparece aqui para você escolher a etapa de cada passo.": {
+    es: "Todavía no tienes ningún Kanban. Mientras sea así, el agente atiende normalmente, pero no tiene adónde llevar la tarjeta de nadie — no hay etapas adonde mover. Crear el Kanban lo hace quien instaló el sistema, directo en la base de datos; después aparece aquí para que elijas la etapa de cada paso.",
   },
   "Custom fields: JSON inválido. Esperado um array.": {
     es: "Custom fields: JSON inválido. Se esperaba un array.",
@@ -3859,34 +3860,34 @@ export const DICIONARIO: Traducoes = {
   "As etapas que serviriam para este passo já estão sendo usadas por outros passos. Libere uma delas para poder escolhê-la aqui.": {
     es: "Las etapas que servirían para este paso ya están siendo usadas por otros pasos. Libera una de ellas para poder elegirla aquí.",
   },
-  "Este funil não tem nenhuma etapa marcada como fechamento, então não há para onde levar o card quando a pessoa fecha. Marque uma etapa como «aqui o cliente fecha» em «Etapas deste funil».": {
-    es: "Este embudo no tiene ninguna etapa marcada como cierre, así que no hay adónde llevar la tarjeta cuando la persona cierra. Marca una etapa como «aquí el cliente cierra» en «Etapas de este embudo».",
+  "Este Kanban não tem nenhuma etapa marcada como fechamento, então não há para onde levar o card quando a pessoa fecha. Marque uma etapa como «aqui o cliente fecha» em «Etapas deste Kanban».": {
+    es: "Este Kanban no tiene ninguna etapa marcada como cierre, así que no hay adónde llevar la tarjeta cuando la persona cierra. Marca una etapa como «aquí el cliente cierra» en «Etapas de este Kanban».",
   },
-  "Este funil não tem nenhuma etapa marcada como perda, então não há para onde levar o card quando a pessoa desiste. Marque uma etapa como «aqui o cliente desiste» em «Etapas deste funil».": {
-    es: "Este embudo no tiene ninguna etapa marcada como pérdida, así que no hay adónde llevar la tarjeta cuando la persona desiste. Marca una etapa como «aquí el cliente desiste» en «Etapas de este embudo».",
+  "Este Kanban não tem nenhuma etapa marcada como perda, então não há para onde levar o card quando a pessoa desiste. Marque uma etapa como «aqui o cliente desiste» em «Etapas deste Kanban».": {
+    es: "Este Kanban no tiene ninguna etapa marcada como pérdida, así que no hay adónde llevar la tarjeta cuando la persona desiste. Marca una etapa como «aquí el cliente desiste» en «Etapas de este Kanban».",
   },
-  "Este funil só tem etapas de fechamento e de perda, então não há etapa comum para receber o card neste passo. Crie as etapas do meio do caminho em «Etapas deste funil».": {
-    es: "Este embudo solo tiene etapas de cierre y de pérdida, así que no hay una etapa común para recibir la tarjeta en este paso. Crea las etapas intermedias en «Etapas de este embudo».",
+  "Este Kanban só tem etapas de fechamento e de perda, então não há etapa comum para receber o card neste passo. Crie as etapas do meio do caminho em «Etapas deste Kanban».": {
+    es: "Este Kanban solo tiene etapas de cierre y de pérdida, así que no hay una etapa común para recibir la tarjeta en este paso. Crea las etapas intermedias en «Etapas de este Kanban».",
   },
   "Sua sessão expirou. Entre de novo para salvar suas escolhas.": {
     es: "Tu sesión expiró. Vuelve a entrar para guardar tus elecciones.",
   },
-  "Você não tem permissão para mudar a configuração deste funil.": {
-    es: "No tienes permiso para cambiar la configuración de este embudo.",
+  "Você não tem permissão para mudar a configuração deste Kanban.": {
+    es: "No tienes permiso para cambiar la configuración de este Kanban.",
   },
   "Não deu para salvar agora. Tente de novo em instantes.": {
     es: "No se pudo guardar ahora. Intenta de nuevo en instantes.",
   },
-  "Não foi possível carregar as etapas deste funil agora. Recarregue a página.": {
-    es: "No se pudieron cargar las etapas de este embudo ahora. Recarga la página.",
+  "Não foi possível carregar as etapas deste Kanban agora. Recarregue a página.": {
+    es: "No se pudieron cargar las etapas de este Kanban ahora. Recarga la página.",
   },
-  "Carregando as etapas deste funil…": { es: "Cargando las etapas de este embudo…" },
+  "Carregando as etapas deste Kanban…": { es: "Cargando las etapas de este Kanban…" },
   "Escolhas salvas.": { es: "Elecciones guardadas." },
   "Para onde o card vai em cada passo": { es: "Adónde va la tarjeta en cada paso" },
-  "Quando o agente avança no atendimento, o card do cliente pode andar sozinho no seu funil. Escolha para qual etapa ele vai em cada momento. Deixar em «não mover» é uma escolha válida — o card fica onde está e o agente segue trabalhando.": {
-    es: "Cuando el agente avanza en la atención, la tarjeta del cliente puede moverse sola en tu embudo. Elige a qué etapa va en cada momento. Dejarlo en «no mover» es una elección válida — la tarjeta se queda donde está y el agente sigue trabajando.",
+  "Quando o agente avança no atendimento, o card do cliente pode andar sozinho no seu Kanban. Escolha para qual etapa ele vai em cada momento. Deixar em «não mover» é uma escolha válida — o card fica onde está e o agente segue trabalhando.": {
+    es: "Cuando el agente avanza en la atención, la tarjeta del cliente puede moverse sola en tu Kanban. Elige a qué etapa va en cada momento. Dejarlo en «no mover» es una elección válida — la tarjeta se queda donde está y el agente sigue trabajando.",
   },
-  "Ir para as etapas do funil": { es: "Ir a las etapas del embudo" },
+  "Ir para as etapas do Kanban": { es: "Ir a las etapas del Kanban" },
   "Etapa para": { es: "Etapa para" },
   "Não mover o card": { es: "No mover la tarjeta" },
   "As escolhas voltaram para o que está gravado agora — confira e escolha de novo.": {
@@ -3903,8 +3904,8 @@ export const DICIONARIO: Traducoes = {
     es: "Solo una etapa puede ser la de pérdida. Marcar esta desmarca",
   },
   "saiu do quadro.": { es: "salió del tablero." },
-  "entrou no fim do funil.": { es: "entró al final del embudo." },
-  "Etapas deste funil": { es: "Etapas de este embudo" },
+  "entrou no fim do Kanban.": { es: "entró al final del Kanban." },
+  "Etapas deste Kanban": { es: "Etapas de este Kanban" },
   "Estas são as colunas do seu quadro, na ordem em que o cliente avança. Você pode renomear, criar, reordenar e arquivar.": {
     es: "Estas son las columnas de tu tablero, en el orden en que el cliente avanza. Puedes renombrar, crear, reordenar y archivar.",
   },
@@ -3912,13 +3913,13 @@ export const DICIONARIO: Traducoes = {
   "de fechamento": { es: "de cierre" },
   "é onde o negócio vira venda, e a": { es: "es donde el negocio se convierte en venta, y la" },
   "de perda": { es: "de pérdida" },
-  "é onde ele se perde. Cada funil precisa de uma de cada — por isso a marcação se muda de lugar, não se apaga.": {
-    es: "es donde se pierde. Cada embudo necesita una de cada — por eso la marca se cambia de lugar, no se borra.",
+  "é onde ele se perde. Cada Kanban precisa de uma de cada — por isso a marcação se muda de lugar, não se apaga.": {
+    es: "es donde se pierde. Cada Kanban necesita una de cada — por eso la marca se cambia de lugar, no se borra.",
   },
   Mover: { es: "Mover" },
   "uma coluna para trás": { es: "una columna hacia atrás" },
   "uma coluna para frente": { es: "una columna hacia adelante" },
-  "no funil": { es: "en el embudo" },
+  "no Kanban": { es: "en el Kanban" },
   "O assistente usa esta etapa para": { es: "El asistente usa esta etapa para" },
   "Mudar isso": { es: "Cambiar esto" },
   "Marcar mesmo assim": { es: "Marcar de todas formas" },
@@ -4085,8 +4086,8 @@ export const DICIONARIO: Traducoes = {
   "Não consegui salvar o próximo passo. Tente de novo.": {
     es: "No pude guardar el próximo paso. Intenta de nuevo.",
   },
-  "Nenhum funil configurado nesta organização.": {
-    es: "No hay ningún embudo configurado en esta organización.",
+  "Nenhum Kanban configurado nesta organização.": {
+    es: "No hay ningún Kanban configurado en esta organización.",
   },
   "Não consegui ler estes dados.": { es: "No pude leer estos datos." },
   "Selecione uma conversa para ver detalhes do contato.": {
@@ -4351,8 +4352,8 @@ export const DICIONARIO: Traducoes = {
   "Falta a chave da inteligência artificial": { es: "Falta la clave de la inteligencia artificial" },
   "WhatsApp pronto para conectar seu número": { es: "WhatsApp listo para conectar tu número" },
   "O WhatsApp desta instalação ainda não subiu": { es: "El WhatsApp de esta instalación todavía no arrancó" },
-  "Funil de vendas criado:": { es: "Embudo de ventas creado:" },
-  "Nenhum funil de vendas ainda": { es: "Ningún embudo de ventas todavía" },
+  "Kanban de vendas criado:": { es: "Kanban de ventas creado:" },
+  "Nenhum Kanban de vendas ainda": { es: "Ningún Kanban de ventas todavía" },
   "Agora é montar quem vai atender por você.": { es: "Ahora es armar quién va a atender por ti." },
   "O que falta a gente resolve nos próximos passos.": {
     es: "Lo que falta lo resolvemos en los próximos pasos.",
@@ -4529,8 +4530,8 @@ export const DICIONARIO: Traducoes = {
   "Continuar sem publicar": { es: "Continuar sin publicar" },
   "— e rascunho não responde mensagem.": { es: "— y un borrador no responde mensajes." },
   "Os modelos": { es: "Los modelos" },
-  "que esta instalação conhece não sabem usar ferramentas — sem isso ele conversaria bem e nunca criaria um cliente nem moveria um negócio no funil. Escolha outra empresa de IA em": {
-    es: "que esta instalación conoce no saben usar herramientas — sin eso conversaría bien pero nunca crearía un cliente ni movería un negocio en el embudo. Elige otra empresa de IA en",
+  "que esta instalação conhece não sabem usar ferramentas — sem isso ele conversaria bem e nunca criaria um cliente nem moveria um negócio no Kanban. Escolha outra empresa de IA em": {
+    es: "que esta instalación conoce no saben usar herramientas — sin eso conversaría bien pero nunca crearía un cliente ni movería un negocio en el Kanban. Elige otra empresa de IA en",
   },
   "IA › Provedores": { es: "IA › Proveedores" },
   "Esta instalação ainda não tem a lista de modelos": {
@@ -5035,9 +5036,9 @@ export const DICIONARIO: Traducoes = {
   "Ajuste o filtro de datas ou a busca pra ver eventos.": {
     es: "Ajusta el filtro de fechas o la búsqueda para ver eventos.",
   },
-  "Nenhum funil ainda": { es: "Ningún embudo todavía" },
-  "Um funil é o caminho que o cliente percorre até fechar. Crie o primeiro para ter um quadro.": {
-    es: "Un embudo es el camino que el cliente recorre hasta cerrar. Crea el primero para tener un tablero.",
+  "Nenhum Kanban ainda": { es: "Ningún Kanban todavía" },
+  "Um Kanban é o caminho que o cliente percorre até fechar. Crie o primeiro para ter um quadro.": {
+    es: "Un Kanban es el camino que el cliente recorre hasta cerrar. Crea el primero para tener un tablero.",
   },
   "Sem membros no time": { es: "Sin miembros en el equipo" },
   "Convide colegas pra atender em conjunto.": { es: "Invita a colegas para atender en conjunto." },
@@ -5571,13 +5572,13 @@ export const DICIONARIO: Traducoes = {
   "Não consegui completar essa ação. Tente de novo.": {
     es: "No pude completar esa acción. Intenta de nuevo.",
   },
-  "Nome do funil — ex.: Consultas, Obras, Matrículas": {
-    es: "Nombre del embudo — ej.: Consultas, Obras, Matrículas",
+  "Nome do Kanban — ex.: Consultas, Obras, Matrículas": {
+    es: "Nombre del Kanban — ej.: Consultas, Obras, Matrículas",
   },
-  "Nome do novo funil": { es: "Nombre del nuevo embudo" },
-  "Criar funil": { es: "Crear embudo" },
-  "Criar meu primeiro funil": { es: "Crear mi primer embudo" },
-  "Novo funil": { es: "Nuevo embudo" },
+  "Nome do novo Kanban": { es: "Nombre del nuevo Kanban" },
+  "Criar Kanban": { es: "Crear Kanban" },
+  "Criar meu primeiro Kanban": { es: "Crear mi primer Kanban" },
+  "Novo Kanban": { es: "Nuevo Kanban" },
   "Subir": { es: "Subir" },
   "na lista": { es: "en la lista" },
   "Descer": { es: "Bajar" },
@@ -5589,7 +5590,7 @@ export const DICIONARIO: Traducoes = {
   },
   "Excluir de vez": { es: "Eliminar definitivamente" },
   "Novo Lead": { es: "Nuevo Lead" },
-  "Não consegui carregar este funil:": { es: "No pude cargar este embudo:" },
+  "Não consegui carregar este Kanban:": { es: "No pude cargar este Kanban:" },
   "sem responsável.": { es: "sin responsable." },
   "atribuído.": { es: "asignado." },
   "atribuídos.": { es: "asignados." },
@@ -5626,8 +5627,8 @@ export const DICIONARIO: Traducoes = {
     es: "No pude cargar la línea de tiempo. Intenta de nuevo en unos instantes.",
   },
   "Nada aconteceu com este negócio ainda.": { es: "Nada ha pasado con este negocio todavía." },
-  "Informe o motivo. Essa informação ajuda a melhorar o funil.": {
-    es: "Indica el motivo. Esta información ayuda a mejorar el embudo.",
+  "Informe o motivo. Essa informação ajuda a melhorar o Kanban.": {
+    es: "Indica el motivo. Esta información ayuda a mejorar el Kanban.",
   },
   "Detalhe (opcional)": { es: "Detalle (opcional)" },
   "Ex: Cliente desistiu por X motivo": { es: "Ej: El cliente desistió por X motivo" },
@@ -5930,8 +5931,8 @@ export const DICIONARIO: Traducoes = {
   "Sua performance": { es: "Tu rendimiento" },
   "Sem atividade no período (ganhos/perdidos, conversas ou respostas).": { es: "Sin actividad en el período (ganados/perdidos, conversaciones o respuestas)." },
   "1ª resposta (média)": { es: "1ª respuesta (promedio)" },
-  "Atrito, funil e performance por atendente nos últimos 30 dias.": { es: "Fricción, embudo y rendimiento por agente en los últimos 30 días." },
-  "Atrito, seu funil e sua performance nos últimos 30 dias.": { es: "Fricción, tu embudo y tu rendimiento en los últimos 30 días." },
+  "Atrito, Kanban e performance por atendente nos últimos 30 dias.": { es: "Fricción, Kanban y rendimiento por agente en los últimos 30 días." },
+  "Atrito, seu Kanban e sua performance nos últimos 30 dias.": { es: "Fricción, tu Kanban y tu rendimiento en los últimos 30 días." },
   "Nenhuma demanda em risco": { es: "Ninguna demanda en riesgo" },
   "Toda demanda aberta teve atividade recente ou já tem um retorno agendado.": { es: "Toda demanda abierta tuvo actividad reciente o ya tiene un retorno agendado." },
   "demanda aberta sem próximo passo": { es: "demanda abierta sin próximo paso" },
@@ -6040,7 +6041,7 @@ export const DICIONARIO: Traducoes = {
   "Não gravar": { es: "No guardar" },
   "Chave livre (use": { es: "Clave libre (usa" },
   "no laço)": { es: "en el bucle)" },
-  "Crie os campos em Configurações → Funis. A resposta só grava quando o contato responde (não no timeout).": { es: "Crea los campos en Configuración → Embudos. La respuesta solo se guarda cuando el contacto responde (no en el timeout)." },
+  "Crie os campos em Configurações → Kanbans. A resposta só grava quando o contato responde (não no timeout).": { es: "Crea los campos en Configuración → Kanbans. La respuesta solo se guarda cuando el contacto responde (no en el timeout)." },
   "No máximo quantas voltas": { es: "Como máximo cuántas vueltas" },
   "A última resposta vira o número de voltas (ex.: 4 filhos). O teto evita um loop sem fim.": { es: "La última respuesta se vuelve el número de vueltas (ej.: 4 hijos). El tope evita un bucle sin fin." },
   "(adaptativo)": { es: "(adaptativo)" },
@@ -6068,7 +6069,7 @@ export const DICIONARIO: Traducoes = {
   "VAPID_PRIVATE_KEY": { es: "VAPID_PRIVATE_KEY" },
   ". Email ainda não está disponível.": { es: ". El email todavía no está disponible." },
   "sem responsável — definir quem atende": { es: "sin responsable — definir quién atiende" },
-  "Campos do lead neste funil": { es: "Campos del lead en este embudo" },
+  "Campos do lead neste Kanban": { es: "Campos del lead en este Kanban" },
   "Aparecem no dossiê do negócio. No follow-up, você escolhe em qual campo gravar a resposta.": { es: "Aparecen en el expediente del negocio. En el seguimiento, eliges en qué campo guardar la respuesta." },
   "Rótulo (Endereço)": { es: "Etiqueta (Dirección)" },
   "Opções, separadas por vírgula": { es: "Opciones, separadas por coma" },
@@ -6112,7 +6113,7 @@ export const DICIONARIO: Traducoes = {
   "Este material ainda não foi preparado — não há trecho nenhum para o agente encontrar.": { es: "Este material todavía no fue preparado — no hay ningún fragmento para que el agente encuentre." },
   "Mostrando os primeiros trechos de": { es: "Mostrando los primeros fragmentos de" },
   ". Uma tela não folheia mil pedaços — o restante está no acervo e o agente alcança todos.": { es: ". Una pantalla no hojea mil pedazos — el resto está en el acervo y el agente los alcanza todos." },
-  "Este funil não tem campos extras.": { es: "Este embudo no tiene campos extra." },
+  "Este Kanban não tem campos extras.": { es: "Este Kanban no tiene campos extra." },
 
   // ─── Tabela de Contatos ───
   //
@@ -6240,7 +6241,7 @@ export const DICIONARIO: Traducoes = {
   // ─── Merge PR #365 (Web Push, relógio HTTP e follow-up reativo) — i18n ───
   "Automação (Webhooks)": { es: "Automatización (Webhooks)" },
   "Adicionar campo": { es: "Agregar campo" },
-  "Campos do funil": { es: "Campos del embudo" },
+  "Campos do Kanban": { es: "Campos del Kanban" },
   "Chave do campo": { es: "Clave del campo" },
   "Contato excluído.": { es: "Contacto eliminado." },
   "Disparado por uma automação em Webhooks": { es: "Disparado por una automatización en Webhooks" },
@@ -6333,7 +6334,7 @@ export const DICIONARIO: Traducoes = {
   "Dê um nome à etapa — é o que aparece no topo da coluna.": {
     es: "Ponle un nombre a la etapa — es lo que aparece arriba de la columna.",
   },
-  "Dê um nome ao funil — é o que aparece na lista.": { es: "Ponle un nombre al embudo — es lo que aparece en la lista." },
+  "Dê um nome ao Kanban — é o que aparece na lista.": { es: "Ponle un nombre al Kanban — es lo que aparece en la lista." },
   "Duas intenções não podem ter o mesmo nome no router.": {
     es: "Dos intenciones no pueden tener el mismo nombre en el router.",
   },
@@ -6430,7 +6431,7 @@ export const DICIONARIO: Traducoes = {
   "Falha ao carregar os avisos.": { es: "Fallo al cargar los avisos." },
   "Falha ao carregar os casos.": { es: "Fallo al cargar los casos." },
   "Falha ao decifrar credential.": { es: "Fallo al descifrar la credential." },
-  "Falha ao listar funis.": { es: "Fallo al listar embudos." },
+  "Falha ao listar Kanbans.": { es: "Fallo al listar Kanbans." },
   "Falha ao processar multipart/form-data.": { es: "Fallo al procesar multipart/form-data." },
   "Falha ao salvar os knobs.": { es: "Fallo al guardar los knobs." },
   "Falha ao salvar o teto diário.": { es: "Fallo al guardar el tope diario." },
@@ -6442,6 +6443,7 @@ export const DICIONARIO: Traducoes = {
   "Fonte de conhecimento não encontrada.": { es: "Fuente de conocimiento no encontrada." },
   "Fonte não encontrada.": { es: "Fuente no encontrada." },
   "Funil não encontrado.": { es: "Embudo no encontrado." },
+  "Kanban não encontrado.": { es: "Kanban no encontrado." },
   "Informe o novo horário.": { es: "Indica el nuevo horario." },
   "Já existe um fluxo com este nome.": { es: "Ya existe un flujo con este nombre." },
   "Janela inválida.": { es: "Ventana inválida." },
@@ -6466,7 +6468,7 @@ export const DICIONARIO: Traducoes = {
   "Não consegui liberar a atualização travada.": { es: "No pude liberar la actualización trabada." },
   "Não consegui registrar o pedido de atualização.": { es: "No pude registrar la solicitud de actualización." },
   "Não entendi o que mudar nesta etapa.": { es: "No entendí qué cambiar en esta etapa." },
-  "Não entendi o que mudar neste funil.": { es: "No entendí qué cambiar en este embudo." },
+  "Não entendi o que mudar neste Kanban.": { es: "No entendí qué cambiar en este Kanban." },
   "Não é possível revogar o próprio acesso.": { es: "No es posible revocar el propio acceso." },
   "Não foi possível gravar o dado.": { es: "No fue posible guardar el dato." },
   "Não há agenda do Google conectada para esta pessoa.": { es: "No hay una agenda de Google conectada para esta persona." },
@@ -6937,8 +6939,8 @@ export const DICIONARIO: Traducoes = {
   "Este bloco não tem ajustes.": { es: "Este bloque no tiene ajustes." },
   "Este fluxo começa sozinho toda vez que o agente de IA passa uma conversa para uma pessoa. Use {{contact.name}}, {{contact.phone_number}}, {{event.reason}} e {{event.summary}} na mensagem.":
     { es: "Este flujo empieza solo cada vez que el agente de IA pasa una conversación a una persona. Usa {{contact.name}}, {{contact.phone_number}}, {{event.reason}} y {{event.summary}} en el mensaje." },
-  "Este fluxo começa sozinho toda vez que um lead novo entra no funil.":
-    { es: "Este flujo empieza solo cada vez que un lead nuevo entra al embudo." },
+  "Este fluxo começa sozinho toda vez que um lead novo entra no Kanban.":
+    { es: "Este flujo empieza solo cada vez que un lead nuevo entra al Kanban." },
   "Esperar quantos minutos?": { es: "¿Esperar cuántos minutos?" },
   "Mínimo de 5 minutos — abaixo disso o relógio do sistema não distingue.":
     { es: "Mínimo de 5 minutos — por debajo de eso el reloj del sistema no distingue." },
@@ -7086,8 +7088,8 @@ export const DICIONARIO: Traducoes = {
   "Quando a IA passar para uma pessoa": { es: "Cuando la IA pase a una persona" },
   "Começa o fluxo toda vez que o agente de IA passa uma conversa para a equipe.":
     { es: "Empieza el flujo cada vez que el agente de IA pasa una conversación al equipo." },
-  "Começa o fluxo toda vez que um lead novo entra no funil.":
-    { es: "Empieza el flujo cada vez que un lead nuevo entra al embudo." },
+  "Começa o fluxo toda vez que um lead novo entra no Kanban.":
+    { es: "Empieza el flujo cada vez que un lead nuevo entra al Kanban." },
   "Decidir": { es: "Decidir" },
   "Segue por um caminho diferente conforme o que for verdade sobre o lead.":
     { es: "Sigue por un camino distinto según lo que sea verdad sobre el lead." },
@@ -7716,7 +7718,7 @@ export const DICIONARIO: Traducoes = {
   "Deste caminho": { es: "De este camino" },
   "Da execução": { es: "De la ejecución" },
   "A pessoa do outro lado da conversa.": { es: "La persona del otro lado de la conversación." },
-  "O card do funil. Vazio quando o fluxo não nasceu de um lead.": { es: "La tarjeta del embudo. Vacía cuando el flujo no nació de un lead." },
+  "O card do Kanban. Vazio quando o fluxo não nasceu de um lead.": { es: "La tarjeta del Kanban. Vacía cuando el flujo no nació de un lead." },
   "O dono atual do lead. Vazio enquanto ninguém assumiu.": { es: "El dueño actual del lead. Vacío mientras nadie lo asume." },
   "O que os blocos anteriores gravaram nesta execução.": { es: "Lo que los bloques anteriores guardaron en esta ejecución." },
   "Variáveis da organização, iguais em todo fluxo dela.": { es: "Variables de la organización, iguales en todos sus flujos." },
@@ -7729,7 +7731,7 @@ export const DICIONARIO: Traducoes = {
   "Score de IA": { es: "Score de IA" },
   "Faixa do score": { es: "Franja del score" },
   "Id da etapa": { es: "Id de la etapa" },
-  "Id do funil": { es: "Id del embudo" },
+  "Id do Kanban": { es: "Id del Kanban" },
   "Id do dono": { es: "Id del dueño" },
   "Id do lead": { es: "Id del lead" },
   "Telefone de aviso": { es: "Teléfono de aviso" },
@@ -7956,7 +7958,7 @@ export const DICIONARIO: Traducoes = {
   "Bloqueada": { es: "Bloqueada" },
   "CEP": { es: "Código postal" },
   "CPF ou CNPJ": { es: "CPF o CNPJ" },
-  "CRM com funis, kanban e histórico do cliente": { es: "CRM con embudos, kanban e historial del cliente" },
+  "CRM com Kanbans e histórico do cliente": { es: "CRM con Kanbans e historial del cliente" },
   "CRM completo": { es: "CRM completo" },
   "Cancelando...": { es: "Cancelando..." },
   "Cancelar assinatura": { es: "Cancelar suscripción" },
@@ -8645,6 +8647,33 @@ export const DICIONARIO: Traducoes = {
   "Índigo": { es: "Índigo" },
   "Violeta": { es: "Violeta" },
   "Framboesa": { es: "Frambuesa" },
+  // ── Kanban: colunas editáveis no quadro, card e paginação ──
+  "Clique duas vezes para renomear": { es: "Haz doble clic para renombrar" },
+  "Opções da coluna": { es: "Opciones de la columna" },
+  "Tags da coluna": { es: "Etiquetas de la columna" },
+  "Mover para a esquerda": { es: "Mover a la izquierda" },
+  "Mover para a direita": { es: "Mover a la derecha" },
+  "Arquivar coluna": { es: "Archivar columna" },
+  "Aplicar uma destas tags num contato traz o negócio dele para esta coluna": { es: "Aplicar una de estas etiquetas a un contacto trae su negocio a esta columna" },
+  "Aplicar uma destas tags num contato traz o negócio dele para esta coluna. Mover um card para cá dá as tags ao contato.": { es: "Aplicar una de estas etiquetas a un contacto trae su negocio a esta columna. Mover una tarjeta aquí le da las etiquetas al contacto." },
+  "Nenhuma tag criada ainda.": { es: "Aún no se creó ninguna etiqueta." },
+  "Criar tags": { es: "Crear etiquetas" },
+  "hoje em": { es: "hoy en" },
+  "Uma tag escolhida já está em outra coluna deste Kanban. Trazer para esta coluna?": { es: "Una etiqueta elegida ya está en otra columna de este Kanban. ¿Traerla a esta columna?" },
+  "Trazer para esta coluna": { es: "Traer a esta columna" },
+  "Arquivar a coluna": { es: "Archivar la columna" },
+  "negócio está": { es: "negocio está" },
+  "negócios estão": { es: "negocios están" },
+  "nesta coluna. Para onde eles vão?": { es: "en esta columna. ¿Adónde van?" },
+  "A coluna está vazia e sai do quadro. O histórico dos negócios continua.": { es: "La columna está vacía y sale del tablero. El historial de los negocios se mantiene." },
+  "Crie outra coluna antes de arquivar esta.": { es: "Crea otra columna antes de archivar esta." },
+  "Não consegui criar a coluna.": { es: "No pude crear la columna." },
+  "Nova coluna": { es: "Nueva columna" },
+  "Criar coluna": { es: "Crear columna" },
+  "Este Kanban ainda não tem colunas.": { es: "Este Kanban aún no tiene columnas." },
+  "Mostrar mais": { es: "Mostrar más" },
+  "Arraste um card para cá": { es: "Arrastra una tarjeta aquí" },
+  "Cor da coluna": { es: "Color de la columna" },
   // ── Catálogo de tags (migration 0248) — app/app/tags ──
   "Crie as tags da empresa, dê uma cor a cada uma e, se quiser, ligue a tag a uma coluna do Kanban: aplicá-la num contato leva o negócio dele para lá.": { es: "Crea las etiquetas de la empresa, dale un color a cada una y, si quieres, vincula la etiqueta a una columna del Kanban: aplicarla a un contacto lleva su negocio allí." },
   "Dê um nome à tag.": { es: "Dale un nombre a la etiqueta." },

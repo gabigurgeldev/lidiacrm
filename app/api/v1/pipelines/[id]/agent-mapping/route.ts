@@ -160,7 +160,7 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
 
   try {
     const funil = await lerFunil(supabase, authz.org.orgId, pipelineId);
-    if (!funil) return fail("not_found", "Funil não encontrado.", 404, { requestId });
+    if (!funil) return fail("not_found", "Kanban não encontrado.", 404, { requestId });
     return ok(corpo(funil.etapas), { requestId });
   } catch (err) {
     return fail("internal_error", (err as Error).message, 500, { requestId });
@@ -202,7 +202,7 @@ export async function PUT(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   }
   // Pipeline de outra org morre AQUI, antes de qualquer escrita: responder 404
   // depois de gravar seria pior que responder 200.
-  if (!funil) return fail("not_found", "Funil não encontrado.", 404, { requestId });
+  if (!funil) return fail("not_found", "Kanban não encontrado.", 404, { requestId });
 
   const { mapeamento } = parsed.data;
 
@@ -246,7 +246,7 @@ export async function PUT(req: NextRequest, ctx: RouteCtx): Promise<Response> {
     const nome = funil.etapas.find((e) => e.id === u.stageId)?.name ?? "escolhida";
     const conflito: Record<string, string> = {
       "23505": `A etapa «${nome}» já está representando esse passo do atendimento.`,
-      "23514": `A etapa «${nome}» mudou de papel neste funil (ganho ou perda) enquanto você editava.`,
+      "23514": `A etapa «${nome}» mudou de papel neste Kanban (ganho ou perda) enquanto você editava.`,
     };
     const motivo = conflito[(error as { code?: string }).code ?? ""];
     if (motivo) {
@@ -273,7 +273,7 @@ export async function PUT(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   // inclusive se um update parcial deixou o funil diferente do mapa enviado.
   try {
     const depois = await lerFunil(supabase, orgId, pipelineId);
-    if (!depois) return fail("not_found", "Funil não encontrado.", 404, { requestId });
+    if (!depois) return fail("not_found", "Kanban não encontrado.", 404, { requestId });
     return ok(corpo(depois.etapas), { requestId });
   } catch (err) {
     return fail("internal_error", (err as Error).message, 500, { requestId });

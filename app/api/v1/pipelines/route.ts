@@ -39,7 +39,7 @@ export async function GET(): Promise<Response> {
     });
     return ok(pipelines, { requestId });
   } catch {
-    return fail("internal_error", "Falha ao listar funis.", 500, { requestId });
+    return fail("internal_error", "Falha ao listar Kanbans.", 500, { requestId });
   }
 }
 
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
-    return fail("unprocessable_entity", "Dê um nome ao funil — é o que aparece na lista.", 422, {
+    return fail("unprocessable_entity", "Dê um nome ao Kanban — é o que aparece na lista.", 422, {
       requestId,
       details: parsed.error.flatten(),
     });

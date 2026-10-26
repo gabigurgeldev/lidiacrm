@@ -92,7 +92,7 @@ export function MetricsClient({ canCompare, currentUserId }: Props) {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">
-            {t("Funil")} {selectedOwner ? t("do atendente") : ""} · {funnelTotal}{" "}
+            {t("Kanban")} {selectedOwner ? t("do atendente") : ""} · {funnelTotal}{" "}
             {funnelTotal === 1 ? t("aberto") : t("abertos")}
           </CardTitle>
         </CardHeader>

@@ -250,7 +250,7 @@ export function SetupAiForm({ capacidades, conferencias }: Props) {
             <p className="text-sm">
               {t("Os modelos")} {provedorLegivel(provedor, t)}{" "}
               {t(
-                "que esta instalação conhece não sabem usar ferramentas — sem isso ele conversaria bem e nunca criaria um cliente nem moveria um negócio no funil. Escolha outra empresa de IA em",
+                "que esta instalação conhece não sabem usar ferramentas — sem isso ele conversaria bem e nunca criaria um cliente nem moveria um negócio no Kanban. Escolha outra empresa de IA em",
               )}{" "}
               <strong>{t("IA › Provedores")}</strong>.
             </p>

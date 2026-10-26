@@ -46,7 +46,7 @@ export default async function PipelinesSettingsPage() {
     <div className="flex h-full flex-col gap-6 p-6">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">
-          {traduzir("Etapas do funil", idioma)}
+          {traduzir("Colunas dos Kanbans", idioma)}
         </h1>
         <p className="text-sm text-muted-foreground">
           {traduzir("Para onde o agente leva o card em cada passo do atendimento", idioma)}

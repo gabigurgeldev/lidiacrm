@@ -71,14 +71,14 @@ export function FunisDoAgente({ funis, value, onChange, cobertura, disabled = fa
         <h3 className="text-sm font-medium">{t("Em que negócios ele pode mexer")}</h3>
         <p className="text-xs text-muted-foreground">
           {t(
-            "Marque os funis que este assistente cuida. Ele conversa com qualquer cliente, mas só move, edita ou encerra negócio dos funis marcados aqui.",
+            "Marque os Kanbans que este assistente cuida. Ele conversa com qualquer cliente, mas só move, edita ou encerra negócio dos Kanbans marcados aqui.",
           )}
         </p>
       </div>
 
       {funis.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          {t("Você ainda não tem nenhum funil. Crie um em Funis para poder liberar o assistente.")}
+          {t("Você ainda não tem nenhum Kanban. Crie um em Kanbans para poder liberar o assistente.")}
         </p>
       ) : (
         <div className="space-y-2" data-testid="agente-funis">
@@ -112,7 +112,7 @@ export function FunisDoAgente({ funis, value, onChange, cobertura, disabled = fa
                     data-testid={`funil-mudo-${f.id}`}
                     className="ml-2 text-xs text-warning-fg"
                   >
-                    {t("— ele não sabe organizar este funil ainda")}
+                    {t("— ele não sabe organizar este Kanban ainda")}
                   </span>
                 ) : null}
               </Label>
@@ -124,7 +124,7 @@ export function FunisDoAgente({ funis, value, onChange, cobertura, disabled = fa
       {value.length === 0 ? (
         <p data-testid="agente-sem-funil" className="text-xs text-muted-foreground">
           {t(
-            "Sem nenhum funil marcado, ele conversa com os clientes normalmente, mas não mexe em negócio nenhum — nem move, nem encerra, nem marca.",
+            "Sem nenhum Kanban marcado, ele conversa com os clientes normalmente, mas não mexe em negócio nenhum — nem move, nem encerra, nem marca.",
           )}
         </p>
       ) : null}
@@ -132,9 +132,9 @@ export function FunisDoAgente({ funis, value, onChange, cobertura, disabled = fa
       {mudosMarcados.length > 0 ? (
         <p data-testid="agente-funis-mudos" className="text-xs text-warning-fg">
           {mudosMarcados.length === 1
-            ? `${t("Você marcou")} ${mudosMarcados[0]}${t(", mas ninguém disse ao assistente o que cada etapa desse funil significa — ele vai atender e deixar os negócios parados onde estão.")}`
-            : `${t("Você marcou")} ${mudosMarcados.length} ${t("funis em que ninguém disse ao assistente o que cada etapa significa — ele vai atender e deixar os negócios parados onde estão.")}`}{" "}
-          {t(" Isso se configura em Configurações › Funis.")}
+            ? `${t("Você marcou")} ${mudosMarcados[0]}${t(", mas ninguém disse ao assistente o que cada etapa desse Kanban significa — ele vai atender e deixar os negócios parados onde estão.")}`
+            : `${t("Você marcou")} ${mudosMarcados.length} ${t("Kanbans em que ninguém disse ao assistente o que cada etapa significa — ele vai atender e deixar os negócios parados onde estão.")}`}{" "}
+          {t(" Isso se configura em Configurações › Kanbans.")}
         </p>
       ) : null}
 

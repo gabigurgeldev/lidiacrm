@@ -317,7 +317,7 @@ function CamposDoFunil({
 
   if (fieldDefs.length === 0) {
     return (
-      <p className="text-xs text-muted-foreground">{t("Este funil não tem campos extras.")}</p>
+      <p className="text-xs text-muted-foreground">{t("Este Kanban não tem campos extras.")}</p>
     );
   }
 
@@ -379,7 +379,7 @@ export function CRMSidePanel({ conversation, onFechar }: Props) {
 
   useEffect(() => {
     if (leadDialogOpen && defaultPipeline.isError) {
-      toast.error(t("Nenhum funil configurado nesta organização."));
+      toast.error(t("Nenhum Kanban configurado nesta organização."));
       setLeadDialogOpen(false);
     }
   }, [leadDialogOpen, defaultPipeline.isError, t]);

@@ -50,7 +50,7 @@ export function SourcesTab() {
           </CardHeader>
           <CardContent className="space-y-4 text-center">
             <ol className="space-y-2 text-left text-sm text-muted-foreground">
-              <li>{t("1. Crie uma fonte e diga em qual funil o contato entra.")}</li>
+              <li>{t("1. Crie uma fonte e diga em qual Kanban o contato entra.")}</li>
               <li>{t("2. Copie o endereço ou o formulário pronto.")}</li>
               <li>{t("3. Cole no seu site — cada envio vira um lead aqui dentro.")}</li>
             </ol>

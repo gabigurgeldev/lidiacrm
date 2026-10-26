@@ -97,7 +97,7 @@ describe("o que a tela EXPLICA", () => {
 
   it("organização sem nenhum funil recebe instrução, não uma lista vazia", () => {
     render(<FunisDoAgente funis={[]} value={[]} onChange={() => {}} />);
-    expect(screen.getByText(/crie um em funis/i)).toBeInTheDocument();
+    expect(screen.getByText(/crie um em Kanbans/i)).toBeInTheDocument();
   });
 });
 

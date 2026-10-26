@@ -81,7 +81,7 @@ describe("POST /api/v1/pipelines/[id]/stages", () => {
     const body = (await res.json()) as { error: { code: string; message: string } };
     expect(body.error.code).toBe("unprocessable_entity");
     expect(body.error.message).toBe(
-      "Já existe uma etapa chamada «Proposta» neste funil. Escolha outro nome.",
+      "Já existe uma etapa chamada «Proposta» neste Kanban. Escolha outro nome.",
     );
     expect(db.escritas).toEqual([]);
   });

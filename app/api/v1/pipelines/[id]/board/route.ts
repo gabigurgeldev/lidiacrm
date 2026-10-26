@@ -2,7 +2,8 @@
  * GET /api/v1/pipelines/[id]/board
  *
  * Returns the full board snapshot for the Kanban: pipeline metadata + active
- * stages (ordered by position) + open leads (excluding archived). All RLS-
+ * stages (ordered by position) + open leads + leads closed in the last
+ * `fechados_dias` days (default 30). All RLS-
  * filtered to the caller's org via cookie session.
  *
  * Why this exists: previously useBoard hit supabase-js directly from the
@@ -343,7 +344,29 @@ async function withNextActions(
   };
 }
 
-export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
+/**
+ * Quantos dias de negócios FECHADOS (ganhos/perdidos) o quadro carrega.
+ *
+ * Antes eram TODOS: o filtro `.neq("status","archived")` não tirava nada (o
+ * CHECK só admite open/won/lost), e um Kanban com dois anos de uso trazia cada
+ * venda já fechada a cada abertura — e a cada evento Realtime, que refaz o GET
+ * inteiro. As colunas de ganho/perda servem para ver o que acabou de fechar; o
+ * histórico mora nas métricas. `?fechados_dias=` amplia, até 365.
+ */
+const FECHADOS_DIAS_PADRAO = 30;
+
+function diasDeFechados(req: NextRequest): number {
+  const bruto = Number(req.nextUrl?.searchParams.get("fechados_dias"));
+  if (!Number.isFinite(bruto) || bruto <= 0) return FECHADOS_DIAS_PADRAO;
+  return Math.min(Math.floor(bruto), 365);
+}
+
+/** O contato embutido no lead pelo select (`contato:contacts(...)`). */
+type LeadComContato = Lead & {
+  contato?: { display_name: string | null; name: string | null; tags: string[] | null } | null;
+};
+
+export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const requestId = randomUUID();
   const { id: pipelineId } = await ctx.params;
 
@@ -355,6 +378,8 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (authErr || !user) {
     return fail("unauthenticated", "Auth required.", 401, { requestId });
   }
+
+  const desde = new Date(Date.now() - diasDeFechados(req) * 86_400_000).toISOString();
 
   const [
     { data: pipeline, error: pipelineErr },
@@ -370,9 +395,12 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
       .order("position"),
     supabase
       .from("crm_leads")
-      .select("*")
+      // O contato vem no MESMO select: as tags dele são o que o card e o filtro
+      // por tag mostram (a tag é do contato desde a migration 0248), e uma
+      // segunda ida ao banco por isso seria mais um roundtrip por abertura.
+      .select("*, contato:contacts(display_name, name, tags)")
       .eq("pipeline_id", pipelineId)
-      .neq("status", "archived")
+      .or(`status.eq.open,closed_at.gte.${desde}`)
       .order("position_in_stage"),
   ]);
 
@@ -381,54 +409,57 @@ export async function GET(_req: NextRequest, ctx: RouteCtx): Promise<Response> {
   if (leadsErr) return fail("internal_error", leadsErr.message, 500, { requestId });
   if (!pipeline) return fail("resource_not_found", "Pipeline não encontrado.", 404, { requestId });
 
-  const leadsWithOwner = await withOwnerAgents(
-    supabase,
-    (pipeline as Pipeline).organization_id,
-    (leads ?? []) as Lead[],
-  );
-  if (leadsWithOwner.error) {
-    return fail("internal_error", leadsWithOwner.error, 500, { requestId });
-  }
+  const orgId = (pipeline as Pipeline).organization_id;
+  const base = ((leads ?? []) as LeadComContato[]).map(({ contato, ...lead }) => ({
+    ...lead,
+    contact_name: contato?.display_name ?? contato?.name ?? null,
+    contact_tags: contato?.tags ?? [],
+  })) as Lead[];
 
-  const { data: pipelinePadrao } = await supabase
-    .from("crm_pipelines")
-    .select("id")
-    .eq("organization_id", (pipeline as Pipeline).organization_id)
-    .eq("is_default", true)
-    .maybeSingle();
+  // Os quatro enriquecimentos leem tabelas DIFERENTES e não dependem um do
+  // outro — eram quatro esperas em fila (dono → ação → score → conversa), cada
+  // uma com sua ida ao banco. Em paralelo, a abertura do quadro custa a mais
+  // lenta delas, não a soma. Cada um devolve a lista na MESMA ordem.
+  const proximasAcoes = (async () => {
+    const { data: pipelinePadrao } = await supabase
+      .from("crm_pipelines")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("is_default", true)
+      .maybeSingle();
+    return withNextActions(
+      supabase,
+      orgId,
+      base,
+      (pipelinePadrao as { id: string } | null)?.id ?? null,
+    );
+  })();
 
-  const leadsComAcao = await withNextActions(
-    supabase,
-    (pipeline as Pipeline).organization_id,
-    leadsWithOwner.leads,
-    (pipelinePadrao as { id: string } | null)?.id ?? null,
-  );
-  if (leadsComAcao.error) {
-    return fail("internal_error", leadsComAcao.error, 500, { requestId });
-  }
+  const [comDono, comAcao, comScore, comConversa] = await Promise.all([
+    withOwnerAgents(supabase, orgId, base),
+    proximasAcoes,
+    withScores(supabase, orgId, base),
+    withConversas(supabase, orgId, base),
+  ]);
+  const erro = comDono.error ?? comAcao.error ?? comScore.error ?? comConversa.error;
+  if (erro) return fail("internal_error", erro, 500, { requestId });
 
-  const leadsComScore = await withScores(
-    supabase,
-    (pipeline as Pipeline).organization_id,
-    leadsComAcao.leads,
-  );
-  if (leadsComScore.error) {
-    return fail("internal_error", leadsComScore.error, 500, { requestId });
-  }
-
-  const leadsComConversa = await withConversas(
-    supabase,
-    (pipeline as Pipeline).organization_id,
-    leadsComScore.leads,
-  );
-  if (leadsComConversa.error) {
-    return fail("internal_error", leadsComConversa.error, 500, { requestId });
-  }
+  const enriquecidos = comDono.leads.map((lead, i) => {
+    const acao = comAcao.leads[i]?.next_action;
+    const score = comScore.leads[i]?.score;
+    const conversa = comConversa.leads[i]?.conversa;
+    return {
+      ...lead,
+      ...(acao ? { next_action: acao } : {}),
+      ...(score ? { score } : {}),
+      ...(conversa ? { conversa } : {}),
+    };
+  });
 
   const board: BoardData = {
     pipeline: pipeline as Pipeline,
     stages: (stages ?? []) as Stage[],
-    leads: leadsComConversa.leads,
+    leads: enriquecidos,
   };
 
   return ok(board, { requestId });

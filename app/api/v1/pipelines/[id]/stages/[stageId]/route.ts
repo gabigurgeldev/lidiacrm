@@ -42,6 +42,14 @@ const bodySchema = z
     is_won: z.boolean().optional(),
     is_lost: z.boolean().optional(),
     depois_de: z.string().min(1).nullable().optional(),
+    // O CHECK do banco (`crm_stages_color_format`) aceita as duas caixas; a
+    // rota grava minúsculo para casar com a paleta da tela.
+    color: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .transform((c) => c.toLowerCase())
+      .nullable()
+      .optional(),
   })
   .strict()
   .refine((b) => Object.keys(b).length > 0, { message: "Nada para alterar." });

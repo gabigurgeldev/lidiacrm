@@ -153,7 +153,7 @@ export function CapturaDetail({ captura, onOpenChange }: Props) {
           {captura.lead_id ? (
             <Button asChild variant="secondary">
               <Link href={`/app/leads/${captura.lead_id}`}>
-                <ArrowSquareOut /> {t("Ver o lead no funil")}
+                <ArrowSquareOut /> {t("Ver o lead no Kanban")}
               </Link>
             </Button>
           ) : null}

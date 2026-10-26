@@ -82,7 +82,7 @@ export const CATALOGO_DE_VARIAVEIS = {
   lead: {
     raiz: "lead",
     rotulo: "Lead",
-    descricao: "O card do funil. Vazio quando o fluxo não nasceu de um lead.",
+    descricao: "O card do Kanban. Vazio quando o fluxo não nasceu de um lead.",
     aberta: false,
     folhas: [
       f("title", "Título"),
@@ -95,7 +95,7 @@ export const CATALOGO_DE_VARIAVEIS = {
       f("created_at", "Criado em"),
       f("stage_name", "Etapa"),
       f("stage_id", "Id da etapa"),
-      f("pipeline_id", "Id do funil"),
+      f("pipeline_id", "Id do Kanban"),
       f("owner_user_id", "Id do dono"),
       f("id", "Id do lead"),
     ],

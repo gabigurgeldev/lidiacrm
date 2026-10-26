@@ -151,7 +151,7 @@ test.describe("histórico de leads captados", () => {
       await expect(painel.getByText("instagram")).toBeVisible();
 
       // O laço de retorno: daqui se chega ao lead.
-      await expect(painel.getByRole("link", { name: /Ver o lead no funil/ })).toBeVisible();
+      await expect(painel.getByRole("link", { name: /Ver o lead no Kanban/ })).toBeVisible();
 
       await page.keyboard.press("Escape");
 

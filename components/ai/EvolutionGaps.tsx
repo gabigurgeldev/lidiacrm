@@ -62,7 +62,7 @@ function ressalvaDeFechamento(steps: string[]): string {
   const nomes = fechamento.map((s) => `«${ROTULO_DO_PASSO[s as LeadStage]}»`).join(" e ");
   return (
     ` ${nomes} ${plural(fechamento.length, "é exceção", "são exceção")}: ${plural(fechamento.length, "ele só pode apontar", "eles só podem apontar")} ` +
-    `para a etapa de fechamento ou de perda do funil. Se o seu funil não tem essas etapas, isso é com quem instalou o sistema.`
+    `para a etapa de fechamento ou de perda do Kanban. Se o seu Kanban não tem essas etapas, isso é com quem instalou o sistema.`
   );
 }
 
@@ -79,12 +79,12 @@ export function montaLacunas(gaps: EvolutionPayload["gaps"]): Lacuna[] {
       // mandaria o dono da clínica arrumar um funil que já está certo. O texto conta
       // a CONSEQUÊNCIA e devolve a decisão para quem conhece o próprio negócio.
       texto:
-        `No funil "${p.pipeline_name}", ${p.steps.length} ${plural(p.steps.length, "passo do atendimento não tem", "passos do atendimento não têm")} ` +
+        `No Kanban "${p.pipeline_name}", ${p.steps.length} ${plural(p.steps.length, "passo do atendimento não tem", "passos do atendimento não têm")} ` +
         // "card" e não "cartão": é o nome que a tela do conserto usa na opção
         // «Não mover o card». Um objeto, um nome — senão o usuário lê sobre
         // "cartão" aqui e procura essa palavra lá.
         `etapa correspondente: ${nomeiaPassos(p.steps)}. Quando o agente chega em um desses passos, o card do cliente ` +
-        `não se move — ele fica onde está. Às vezes isso é proposital: nem todo funil precisa de uma etapa para cada passo. ` +
+        `não se move — ele fica onde está. Às vezes isso é proposital: nem todo Kanban precisa de uma etapa para cada passo. ` +
         `Mas se você esperava ver esses clientes andarem sozinhos no quadro, é aqui que falta o vínculo — e você mesmo ` +
         `escolhe, passo a passo, para qual etapa o card vai.` +
         ressalvaDeFechamento(p.steps),
@@ -168,12 +168,12 @@ export function boaNoticia(buscas: number, decisoes: number, funis: number): str
   const partes: string[] = [];
   if (buscas > 0) partes.push("toda pergunta encontrou resposta nos seus materiais");
   if (decisoes > 0) partes.push("toda conversa achou para onde ir");
-  if (funis > 0) partes.push("todo passo do atendimento tem uma etapa do funil que o recebe");
+  if (funis > 0) partes.push("todo passo do atendimento tem uma etapa do Kanban que o recebe");
 
   const faltando: string[] = [];
   if (buscas === 0) faltando.push("ninguém consultou sua base de conhecimento");
   if (decisoes === 0) faltando.push("nenhuma conversa foi encaminhada");
-  if (funis === 0) faltando.push("você ainda não tem nenhum funil montado");
+  if (funis === 0) faltando.push("você ainda não tem nenhum Kanban montado");
 
   // Nenhuma evidência: a tela não tem o que elogiar, e dizer "nada travando"
   // seco seria elogio. Abre pelo motivo, não pela boa notícia.

@@ -216,7 +216,7 @@ test.describe("gatilho de etapa do funil", () => {
       const painel = page.getByTestId("trigger-config-panel");
       await expect(painel).toBeVisible({ timeout: ESPERA });
       await painel.getByRole("combobox").first().click();
-      await page.getByRole("option", { name: "Etapa do funil", exact: true }).click();
+      await page.getByRole("option", { name: "Etapa do Kanban", exact: true }).click();
 
       // A ETAPA É ESCOLHIDA PELO NOME. Se algum dia isto voltar a ser um campo
       // de uuid, esta linha é a que reprova.

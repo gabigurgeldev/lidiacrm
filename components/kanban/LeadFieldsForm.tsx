@@ -168,7 +168,7 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
 
         {fieldDefs.length > 0 && (
           <div className="space-y-2 border-t border-border pt-4">
-            <p className="text-sm font-medium">{t("Campos do funil")}</p>
+            <p className="text-sm font-medium">{t("Campos do Kanban")}</p>
             <CustomFieldsEditor
               fields={fieldDefs}
               value={customFields}
