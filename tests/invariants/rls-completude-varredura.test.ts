@@ -109,6 +109,14 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "nenhuma das duas (nem da própria org) e não escreve a indicação — sem isso " +
       "escolheria o próprio desconto. Sem policy: só o servidor lê e escreve.",
   })),
+  ...(["crm_tags", "crm_stage_tags"] as const).map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/catalogo-de-tags.test.ts prova, com set role authenticated + JWT, " +
+      "que o agent lê as tags da própria org e zero da vizinha (com controle positivo), " +
+      "que agent NÃO escreve no catálogo nem no vínculo de coluna, que o manager da A não " +
+      "cria na B, e que o vizinho lê zero vínculos da A. Escrita é manager+ (migration 0248).",
+  })),
   {
     tabela: "aniversario_envios",
     razao:
