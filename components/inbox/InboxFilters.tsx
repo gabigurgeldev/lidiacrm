@@ -18,7 +18,8 @@ import {
 import { TipoDeCanal } from "@/components/channels/TipoDeCanal";
 import { channelLabel, useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import { useAuth } from "@/hooks/auth/AuthProvider";
-import { useConversationTagVocabulary } from "@/hooks/inbox/useConversationTags";
+import { useTags } from "@/hooks/tags/useTags";
+import { TagChip } from "@/components/tags/TagChip";
 import { useConversationCounts } from "@/hooks/inbox/useConversationCounts";
 import type { Role, VisibilityMode } from "@/lib/auth/types";
 import type { ConversationSort } from "@/lib/schemas/messaging";
@@ -98,7 +99,9 @@ export function InboxFilters({ value, onChange }: Props) {
   const [searchInput, setSearchInput] = useState(value.search);
   const { data: channels } = useChannelSessions({ refetchInterval: 30_000 });
   const { activeOrg } = useAuth();
-  const { data: tagVocabulary } = useConversationTagVocabulary(activeOrg?.orgId ?? null);
+  // O filtro é por tag do CONTATO, e as opções são o catálogo (migration 0248):
+  // a mesma lista, com a mesma cor, que o atendente usa para aplicar a tag.
+  const { data: catalogoDeTags } = useTags();
   const { data: counts } = useConversationCounts(activeOrg?.orgId ?? null);
 
   const tabs = activeOrg
@@ -119,7 +122,7 @@ export function InboxFilters({ value, onChange }: Props) {
     !channels.some((c) => c.id === value.channel_session_id);
   // Alternador só aparece com 2+ números — com um só não há o que alternar.
   const showChannelSwitch = (channels?.length ?? 0) >= 2 || filtroForaDaLista;
-  const temTags = (tagVocabulary?.length ?? 0) > 0;
+  const temTags = (catalogoDeTags?.length ?? 0) > 0 || !!value.tag;
   // O contador do botão. Sem ele, um filtro esquecido dentro do popover deixa a
   // lista curta sem nenhum sinal na tela — o mesmo defeito que o seletor de
   // número resolve ficando à mostra.
@@ -250,7 +253,7 @@ export function InboxFilters({ value, onChange }: Props) {
 
             {temTags && (
               <div className="space-y-1.5">
-                <Label className="text-xs text-text-muted">{t("Tag da conversa")}</Label>
+                <Label className="text-xs text-text-muted">{t("Tag do contato")}</Label>
                 <Select
                   value={value.tag ?? "all"}
                   onValueChange={(v) => onChange({ ...value, tag: v === "all" ? undefined : v })}
@@ -260,9 +263,9 @@ export function InboxFilters({ value, onChange }: Props) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">{t("Todas as tags")}</SelectItem>
-                    {tagVocabulary?.map((tag) => (
-                      <SelectItem key={tag} value={tag}>
-                        {tag}
+                    {catalogoDeTags?.map((tag) => (
+                      <SelectItem key={tag.id} value={tag.name}>
+                        <TagChip nome={tag.name} cor={tag.color} tamanho="sm" />
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -8,7 +8,6 @@ import { useT } from "@/hooks/i18n/useT";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { AvatarDoContato } from "@/components/inbox/AvatarDoContato";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tag, Receipt, Users, ArrowRight, FilePdf, FileXls, X } from "@/lib/ui/icons";
@@ -17,8 +16,10 @@ import { apiClient } from "@/lib/api/client";
 import { toast } from "sonner";
 import type { ConversationWithContact } from "@/hooks/inbox/useConversationsRealtime";
 import { activityLabel, actorLabel, actorShape } from "@/lib/leads/activity-vocabulary";
-import { ConversationTagsEditor } from "./ConversationTagsEditor";
 import { ContactTagsEditor } from "./ContactTagsEditor";
+import { KanbansDoContato } from "./KanbansDoContato";
+import { TagChip } from "@/components/tags/TagChip";
+import { useTags } from "@/hooks/tags/useTags";
 import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
@@ -459,6 +460,12 @@ export function CRMSidePanel({ conversation, onFechar }: Props) {
   const recarregar = useCallback(() => setTentativa((n) => n + 1), []);
 
   const tags = contact?.tags ?? [];
+  // A cor de cada tag vem do catálogo (migration 0248) — a mesma do Kanban.
+  const { data: catalogoDeTags } = useTags();
+  const corDaTag = useMemo(
+    () => new Map((catalogoDeTags ?? []).map((tg) => [tg.name, tg.color])),
+    [catalogoDeTags],
+  );
   const displayName = rotuloDoContato(contact);
 
   // `erro` PRIMEIRO, e não é detalhe: as três listas voltam a `null` quando a
@@ -517,10 +524,8 @@ export function CRMSidePanel({ conversation, onFechar }: Props) {
         )}
         {tags.length > 0 && (
           <div className="mt-2 flex flex-wrap justify-center gap-1">
-            {tags.map((t) => (
-              <Badge key={t} variant="secondary" className="h-5 px-2 text-[11px] font-normal">
-                {t}
-              </Badge>
+            {tags.map((tag) => (
+              <TagChip key={tag} nome={tag} cor={corDaTag.get(tag) ?? "#64748b"} tamanho="sm" />
             ))}
           </div>
         )}
@@ -611,13 +616,16 @@ export function CRMSidePanel({ conversation, onFechar }: Props) {
       )}
 
 
-      <section className="bg-background px-6 py-4">
-        <ConversationTagsEditor
-          conversationId={conversation.id}
-          orgId={conversation.organization_id}
-          tags={conversation.tags ?? []}
-        />
-      </section>
+      {/* Em que fase de cada Kanban o contato está — e onde se muda. A tag de
+          CONVERSA saiu daqui (2026-10-26): a tag passou a ser do contato, do
+          catálogo, e é ela que move o Kanban. As tags antigas de conversa foram
+          copiadas para o contato pela migration 0248. */}
+      {contactId && (
+        <section className="bg-background px-6 py-4" data-testid="inbox-kanbans">
+          <h3 className="text-sm text-muted-foreground">{t("Kanbans")}</h3>
+          <KanbansDoContato key={contactId} contactId={contactId} />
+        </section>
+      )}
 
 
       {/* ANTES dos negócios de propósito (doutrina cap. 5): lead é o negócio,

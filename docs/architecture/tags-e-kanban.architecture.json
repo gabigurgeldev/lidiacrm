@@ -195,6 +195,22 @@
       "type": "route",
       "label": "PUT /api/v1/tags/[id]/colunas",
       "sublabel": "uma coluna por Kanban, escolhida na página de Tags"
+    },
+    {
+      "id": "rotaContatoKanban",
+      "lane": "borda",
+      "col": 4,
+      "type": "route",
+      "label": "GET/POST /api/v1/contacts/[id]/kanbans",
+      "sublabel": "inbox: em que coluna de cada Kanban; colocar move ou cria"
+    },
+    {
+      "id": "contatoNoKanban",
+      "lane": "regra",
+      "col": 3,
+      "type": "module",
+      "label": "lib/leads/contato-no-kanban",
+      "sublabel": "move o negócio aberto ou cria; 409 se ambíguo"
     }
   ],
   "edges": [
@@ -341,6 +357,30 @@
       "from": "rotaColunasDaTag",
       "to": "vinculo",
       "label": "substitui as colunas da tag"
+    },
+    {
+      "id": "e25",
+      "from": "inbox",
+      "to": "rotaContatoKanban",
+      "label": "seção Kanbans"
+    },
+    {
+      "id": "e26",
+      "from": "rotaContatoKanban",
+      "to": "contatoNoKanban",
+      "label": "colocar na coluna"
+    },
+    {
+      "id": "e27",
+      "from": "contatoNoKanban",
+      "to": "leads",
+      "label": "cria ou move"
+    },
+    {
+      "id": "e28",
+      "from": "contatoNoKanban",
+      "to": "regra",
+      "label": "tags da coluna → contato"
     }
   ]
 }

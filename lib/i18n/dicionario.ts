@@ -8700,6 +8700,21 @@ export const DICIONARIO: Traducoes = {
   "Nenhuma coluna": { es: "Ninguna columna" },
   "nome da tag": { es: "nombre de la etiqueta" },
   "Juntar as duas tags": { es: "Unir las dos etiquetas" },
+  // ── Inbox: tags do catálogo e o contato nos Kanbans ──
+  "Contato no Kanban": { es: "Contacto en el Kanban" },
+  "o contato tem mais de um negócio aberto — mova pelo quadro.": { es: "el contacto tiene más de un negocio abierto — muévelo en el tablero." },
+  "não consegui mover o negócio.": { es: "no pude mover el negocio." },
+  "Gerenciar tags": { es: "Administrar etiquetas" },
+  "Tags aplicadas pela coluna:": { es: "Etiquetas aplicadas por la columna:" },
+  "Não consegui mover o contato.": { es: "No pude mover el contacto." },
+  "Não consegui ler os Kanbans.": { es: "No pude leer los Kanbans." },
+  "Nenhum Kanban criado ainda.": { es: "Aún no se creó ningún Kanban." },
+  "O contato ainda não está em nenhum Kanban.": { es: "El contacto aún no está en ningún Kanban." },
+  "Coluna em": { es: "Columna en" },
+  "Coluna": { es: "Columna" },
+  "Colocar": { es: "Colocar" },
+  "Colocar em um Kanban": { es: "Colocar en un Kanban" },
+  "Tag do contato": { es: "Etiqueta del contacto" },
 };
 
 /**

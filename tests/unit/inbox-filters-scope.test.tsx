@@ -34,6 +34,8 @@ vi.mock("@/hooks/channels/useChannelSessions", async (original) => {
   const real = await original<typeof CanaisModule>();
   return { ...real, useChannelSessions: () => ({ data: canaisRef.current }) };
 });
+// Catálogo de tags (migration 0248): fora do escopo destes casos.
+vi.mock("@/hooks/tags/useTags", () => ({ useTags: () => ({ data: [], isLoading: false }) }));
 vi.mock("@/hooks/inbox/useConversationTags", () => ({
   useConversationTagVocabulary: () => ({ data: [] }),
 }));

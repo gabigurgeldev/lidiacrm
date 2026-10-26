@@ -108,6 +108,13 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 // Os editores de tag buscam vocabulário por react-query. Sem isto o painel
 // estoura em `(vocabulary ?? []).filter` e o teste falharia por MONTAGEM — um
 // vermelho que não diz nada sobre demanda.
+// Catálogo de tags (migration 0248): fora do escopo destes casos.
+vi.mock("@/hooks/tags/useTags", () => ({ useTags: () => ({ data: [], isLoading: false }) }));
+vi.mock("@/hooks/kanban/useKanbansDoContato", () => ({
+  useKanbansDoContato: () => ({ data: { kanbans: [], negocios: [] }, isLoading: false, isError: false, refetch: vi.fn() }),
+  useColocarNaColuna: () => ({ mutate: vi.fn(), isPending: false }),
+  chaveDosKanbansDoContato: (id: string | null) => ["kanbans-do-contato", id],
+}));
 vi.mock("@/hooks/inbox/useConversationTags", () => ({
   useUpdateConversationTags: () => ({ mutate: vi.fn(), isPending: false }),
   useConversationTagVocabulary: () => ({ data: [] }),
