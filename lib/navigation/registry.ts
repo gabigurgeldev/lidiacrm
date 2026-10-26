@@ -25,6 +25,7 @@ import {
   IdentificationCard,
   Inbox,
   Kanban,
+  Tag,
   Key,
   Lightbulb,
   ListChecks,
@@ -281,6 +282,19 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     label: "Funis",
     description: "Seus funis de venda — clique em um para abrir o quadro de clientes.",
     icon: Kanban,
+    group: "crm",
+    sidebar: true,
+  },
+  {
+    // O catálogo de tags (migration 0248). Antes a tag era texto solto em cada
+    // contato, sem lista nem cor — quem queria saber quais existiam não tinha
+    // onde olhar. Leitura para todos; criar e editar é manager+, e a tela
+    // esconde os botões de quem a rota recusaria.
+    href: "/app/tags",
+    label: "Tags",
+    description:
+      "As tags da empresa: crie, dê cor e ligue cada uma a uma coluna do Kanban.",
+    icon: Tag,
     group: "crm",
     sidebar: true,
   },

@@ -1,5 +1,9 @@
 /**
- * "PIPELINE" E "KANBAN" NÃO VOLTAM PARA A INTERFACE.
+ * "PIPELINE" NÃO VOLTA PARA A INTERFACE.
+ *
+ * ⚠️ "KANBAN" SAIU DA LISTA PROIBIDA EM 2026-10-26: o dono do produto decidiu
+ * que o conceito se chama "Kanban/Kanbans" em todo texto visível, no lugar de
+ * "Funil/Funis". O histórico abaixo explica por que "pipeline" segue proibido.
  *
  * ═══ O QUE ISTO GUARDA ═══
  *
@@ -52,7 +56,7 @@ function telas(raiz: string): string[] {
 const ARQUIVOS = [...telas("app"), ...telas("components")];
 
 /** Palavras do sistema que não podem virar texto de tela. */
-const PROIBIDAS = /\b(pipelines?|kanban)\b/i;
+const PROIBIDAS = /\bpipelines?\b/i;
 
 /**
  * Texto que o usuário LÊ, extraído sem parser: conteúdo entre `>` e `<` de JSX,
@@ -77,7 +81,7 @@ function textosVisiveis(src: string): string[] {
 }
 
 describe("o vocabulário do funil na interface", () => {
-  it("nenhuma tela mostra 'pipeline' ou 'kanban' ao usuário", () => {
+  it("nenhuma tela mostra 'pipeline' ao usuário", () => {
     const infratores: string[] = [];
     for (const f of ARQUIVOS) {
       const src = readFileSync(f, "utf8");
@@ -87,11 +91,11 @@ describe("o vocabulário do funil na interface", () => {
     }
     expect(
       infratores,
-      "palavra do sistema em texto de tela — use 'funil', 'etapa' ou 'quadro'",
+      "palavra do sistema em texto de tela — use 'Kanban', 'etapa' ou 'quadro'",
     ).toEqual([]);
   });
 
-  it("nenhum item de menu se chama 'Kanban' ou 'Pipelines'", () => {
+  it("nenhum item de menu se chama 'Pipelines'", () => {
     const ruins = NAV_DESTINATIONS.filter((d) => PROIBIDAS.test(d.label));
     expect(ruins.map((d) => d.label)).toEqual([]);
   });

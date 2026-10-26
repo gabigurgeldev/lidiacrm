@@ -21,6 +21,7 @@ import {
   moveLeadHandler,
 } from "@/app/api/v1/leads/_handler";
 import { createLeadSchema, updateLeadSchema } from "@/lib/schemas/leads";
+import { aplicarTagDaColuna } from "@/lib/tags/tag-no-kanban";
 import { resolveUserNames } from "./_users";
 import type { McpContext, McpToolDefinition } from "../types";
 
@@ -288,6 +289,14 @@ export const crmMoveLeadStage: McpToolDefinition<typeof moveInputShape> = {
         reason: input.reason,
       },
     );
-    return { lead };
+    // Coluna com tag vinculada: o contato ganha a tag (migration 0248).
+    const daColuna = await aplicarTagDaColuna(
+      ctx.supabase,
+      { organization_id: ctx.organizationId, actor: ctx.actor, requestId: ctx.requestId },
+      { leadId: input.lead_id, stageId: input.to_stage_id },
+    );
+    return daColuna.tagsAcrescentadas.length > 0
+      ? { lead, tags_da_coluna: daColuna.tagsAcrescentadas, kanban: daColuna.efeitos }
+      : { lead };
   },
 };

@@ -13,8 +13,10 @@
 import { z } from "zod";
 
 import { audit } from "@/lib/audit";
-import { conversationTagSchema, conversationTagsSchema } from "@/lib/schemas/messaging";
+import { conversationTagSchema } from "@/lib/schemas/messaging";
 import { getQueueStatus } from "@/lib/routing/queue";
+import { grafiaDoCatalogo } from "@/lib/tags/catalogo";
+import { aplicarTagsNoKanban } from "@/lib/tags/tag-no-kanban";
 import type { McpContext } from "../types";
 import type { McpToolDefinition } from "../types";
 
@@ -182,8 +184,20 @@ export const crmManageTags: McpToolDefinition<typeof tagsInputShape> = {
   requiresRole: "agent",
   requiresScope: "mcp:write",
   handler: async (input, ctx) => {
-    const addTags = (input.add ?? []).map((t) => conversationTagSchema.parse(t));
-    const removeTags = new Set((input.remove ?? []).map((t) => conversationTagSchema.parse(t)));
+    // A grafia vem do catálogo (migration 0248): "vip" do agente vira o "VIP"
+    // que a pessoa criou, em vez de nascer uma segunda tag.
+    const addTags = await grafiaDoCatalogo(
+      ctx.supabase,
+      ctx.organizationId,
+      (input.add ?? []).map((t) => conversationTagSchema.parse(t)),
+    );
+    const removeTags = new Set(
+      await grafiaDoCatalogo(
+        ctx.supabase,
+        ctx.organizationId,
+        (input.remove ?? []).map((t) => conversationTagSchema.parse(t)),
+      ),
+    );
     if (addTags.length === 0 && removeTags.size === 0) {
       throw new Error("informe ao menos uma tag em add ou remove");
     }
@@ -201,8 +215,11 @@ export const crmManageTags: McpToolDefinition<typeof tagsInputShape> = {
 
     const current = ((row as { tags: string[] | null }).tags ?? []).map((t) => t);
     const merged = [...current, ...addTags].filter((t) => !removeTags.has(t));
-    // Dedup + teto de 20 (rejeita se estourar) — mesma validação da G3-05.
-    const nextTags = conversationTagsSchema.parse(merged);
+    // Dedup + teto de 20 (rejeita se estourar) — mesma validação da G3-05. SEM
+    // baixar a caixa do que já estava no alvo: reescrever "VIP" como "vip"
+    // tiraria o contato de toda regra e coluna que comparam o nome exato.
+    const nextTags = [...new Set(merged)];
+    if (nextTags.length > 20) throw new Error("máximo de 20 tags por alvo");
 
     const { error: updateErr } = await ctx.supabase
       .from(table)
@@ -223,7 +240,36 @@ export const crmManageTags: McpToolDefinition<typeof tagsInputShape> = {
       metadata: { ...a.metadataActor, tags: nextTags, via: "mcp" },
     });
 
-    return { target_kind: input.target_kind, target_id: input.target_id, tags: nextTags };
+    // Contato ganhou tag: o mesmo evento e a mesma regra de Kanban do PATCH da
+    // tela. Antes o agente gravava a tag em silêncio e nenhuma automação via.
+    const adicionadas = nextTags.filter((t) => !current.includes(t));
+    let kanban: Awaited<ReturnType<typeof aplicarTagsNoKanban>> = [];
+    if (input.target_kind === "contact" && adicionadas.length > 0) {
+      await ctx.supabase
+        .rpc("emit_event", {
+          p_event_type: "contact.tag_added",
+          p_entity_kind: "contact",
+          p_entity_id: input.target_id,
+          p_payload: { added_tags: adicionadas, tags: nextTags, via: "mcp" },
+          p_metadata: { request_id: ctx.requestId, ...a.metadataActor },
+          p_organization_id: ctx.organizationId,
+        })
+        .then(({ error }) => {
+          if (error) console.error("[crm_manage_tags] emit_event failed", error.message);
+        });
+      kanban = await aplicarTagsNoKanban(
+        ctx.supabase,
+        { organization_id: ctx.organizationId, actor: ctx.actor, requestId: ctx.requestId },
+        { contactId: input.target_id, tagsAdicionadas: adicionadas },
+      );
+    }
+
+    return {
+      target_kind: input.target_kind,
+      target_id: input.target_id,
+      tags: nextTags,
+      ...(kanban.length > 0 ? { kanban } : {}),
+    };
   },
 };
 

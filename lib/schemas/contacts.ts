@@ -9,6 +9,8 @@
  */
 import { z } from "zod";
 
+import { normalizarTags } from "@/lib/tags/normalizar";
+
 const PHONE_REGEX = /^\+\d{8,15}$/;
 const CPF_DIGITS = /^\d{11}$/;
 
@@ -58,7 +60,7 @@ export const contactCreateSchema = z.object({
     .refine(dataDeNascimentoValida, "Data de nascimento inválida")
     .nullable()
     .optional(),
-  tags: z.array(z.string()).optional(),
+  tags: z.array(z.string()).transform(normalizarTags).optional(),
   source: z.string().min(1).default("manual"),
   source_metadata: z.record(z.string(), z.unknown()).optional(),
   consent: z.record(z.string(), z.unknown()).optional(),

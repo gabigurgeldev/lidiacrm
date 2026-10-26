@@ -21,6 +21,7 @@ import { logger } from "@/lib/logger";
 import { selectFixedOrder } from "@/lib/routing/decide";
 import type { RoutingCandidate } from "@/lib/routing/decide";
 import { loadEligibleAttendants } from "@/lib/routing/eligibles";
+import { aplicarTagsNoKanban } from "@/lib/tags/tag-no-kanban";
 
 import { EVENTO_DE_SUBFLUXO } from "./engine";
 import type {
@@ -662,6 +663,49 @@ async function anunciarMarcacao(
 }
 
 /**
+ * Marcador vinculado a coluna leva o contato ao Kanban (migration 0248), como
+ * quando uma pessoa aplica a tag na tela. Marcando o LEAD, vale o contato dele.
+ * NÃO lança, pelo mesmo motivo de `anunciarMarcacao`: o marcador já está
+ * gravado, e lançar faria o motor repetir o bloco.
+ */
+async function marcadorNoKanban(
+  admin: SupabaseClient,
+  orgId: string,
+  exec: FlowExecutionRow,
+  alvo: AlvoDeMarcador,
+  tag: string,
+): Promise<void> {
+  try {
+    let contactId: string | null = alvo.kind === "contato" ? alvo.id : null;
+    if (alvo.kind === "lead") {
+      const { data } = await admin
+        .from("crm_leads")
+        .select("contact_id")
+        .eq("organization_id", orgId)
+        .eq("id", alvo.id)
+        .maybeSingle();
+      contactId = (data as { contact_id: string | null } | null)?.contact_id ?? null;
+    }
+    if (!contactId) return;
+    await aplicarTagsNoKanban(
+      admin,
+      {
+        organization_id: orgId,
+        actor: { type: "webhook_source", id: exec.flow_id },
+        requestId: `flow:${exec.id}`,
+      },
+      { contactId, tagsAdicionadas: [tag] },
+    );
+  } catch (e) {
+    logger.warn("flow_engine.marcador_sem_kanban", {
+      organization_id: orgId,
+      execution_id: exec.id,
+      erro: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
+
+/**
  * Dono do lead escolhido pelo fluxo também passa a ser o dono da CONVERSA.
  *
  * Antes disto os blocos de distribuição (`crm.assign_owner`, `routing.*`) só
@@ -769,6 +813,7 @@ export function criarPortas(
         if (atuais.includes(tag)) return { jaTinha: true };
         await gravarMarcadores(admin, orgId, alvo, [...atuais, tag], agora());
         await anunciarMarcacao(admin, orgId, exec, alvo, "added", [tag], [...atuais, tag]);
+        await marcadorNoKanban(admin, orgId, exec, alvo, tag);
         return { jaTinha: false };
       },
 
