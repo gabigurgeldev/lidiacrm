@@ -371,9 +371,9 @@ export function CabecalhoDaColuna({
               {t("Cancelar")}
             </Button>
             <Button
+              onClick={confirmarArquivo}
               variant="destructive"
               disabled={arquivar.isPending || (quantos > 0 && !arquivando?.destino)}
-              onClick={confirmarArquivo}
             >
               {t("Arquivar")}
             </Button>
