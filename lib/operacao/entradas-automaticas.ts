@@ -138,7 +138,7 @@ async function destinoValido(
       "unprocessable_entity",
       undefined,
       deps.requestId,
-      "Esse funil não existe aqui. Escolha um funil da sua empresa para receber os contatos.",
+      "Esse Kanban não existe aqui. Escolha um Kanban da sua empresa para receber os contatos.",
     );
   }
 
@@ -158,7 +158,7 @@ async function destinoValido(
       "unprocessable_entity",
       undefined,
       deps.requestId,
-      "Essa etapa não pertence ao funil escolhido. Escolha uma etapa do mesmo funil.",
+      "Essa etapa não pertence ao Kanban escolhido. Escolha uma etapa do mesmo Kanban.",
     );
   }
   // Etapa arquivada sumiu do quadro: os contatos entrariam onde ninguém olha.

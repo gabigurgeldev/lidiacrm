@@ -328,7 +328,7 @@ describe("PUT /api/v1/pipelines/[id]/agent-mapping", () => {
     expect(body.error.code).toBe("unprocessable_entity");
     // A mensagem chega inteira, com o NOME da etapa e o rótulo em português.
     expect(body.error.details.erros).toEqual([
-      'A etapa «Novo» não é a etapa de fechamento (ganho) deste funil, então não pode representar «Ganho».',
+      'A etapa «Novo» não é a etapa de fechamento (ganho) deste Kanban, então não pode representar «Ganho».',
     ]);
     expect(body.error.message).toBe(body.error.details.erros[0]);
     expect(db.updates).toEqual([]);

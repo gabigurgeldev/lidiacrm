@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
 const NOME_DA_CATEGORIA: Record<string, string> = {
   trigger: "Começo",
   logic: "Decisão e tempo",
-  crm: "Funil",
+  crm: "Kanban",
   whatsapp: "WhatsApp",
   routing: "Distribuição",
   notify: "Avisos",

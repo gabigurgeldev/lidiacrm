@@ -75,7 +75,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
 
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
-    return fail("unprocessable_entity", "Não entendi o que mudar neste funil.", 422, {
+    return fail("unprocessable_entity", "Não entendi o que mudar neste Kanban.", 422, {
       requestId,
       details: parsed.error.flatten(),
     });
@@ -96,7 +96,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   // resposta é a mesma de um funil inexistente (dizer "existe, mas não é seu" já
   // vaza a existência).
   const alvo = funis.find((f) => f.id === pipelineId);
-  if (!alvo) return fail("not_found", "Funil não encontrado.", 404, { requestId });
+  if (!alvo) return fail("not_found", "Kanban não encontrado.", 404, { requestId });
 
   // ⚠️ ARQUIVADO NÃO SE EDITA. `uniq_crm_pipelines_org_default` é PARCIAL
   // (`where is_archived = false`): marcar um funil arquivado como padrão passa
@@ -106,7 +106,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (alvo.is_archived) {
     return fail(
       "state_conflict",
-      `O funil «${alvo.name}» foi arquivado e não está mais na sua lista. Recarregue a página.`,
+      `O Kanban «${alvo.name}» foi arquivado e não está mais na sua lista. Recarregue a página.`,
       409,
       { requestId },
     );
@@ -123,7 +123,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (pedido.is_default === false) {
     return fail(
       "unprocessable_entity",
-      `«${alvo.name}» é o funil padrão e a organização precisa de um. Marque OUTRO funil como padrão — ` +
+      `«${alvo.name}» é o Kanban padrão e a organização precisa de um. Marque OUTRO Kanban como padrão — ` +
         `o padrão se muda, não se apaga.`,
       422,
       { requestId },
@@ -143,7 +143,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
     if (pedido.depois_de !== null && i < 0) {
       return fail(
         "unprocessable_entity",
-        "O funil que você escolheu como vizinho não está mais na lista. Recarregue a página.",
+        "O Kanban que você escolheu como vizinho não está mais na lista. Recarregue a página.",
         422,
         { requestId },
       );
@@ -156,7 +156,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
     if (!Number.isFinite(posicao)) {
       return fail(
         "state_conflict",
-        "Os funis desta lista estão empatados na ordenação. Recarregue a página e mova o funil para outro lugar.",
+        "Os Kanbans desta lista estão empatados na ordenação. Recarregue a página e mova o Kanban para outro lugar.",
         409,
         { requestId },
       );
@@ -232,7 +232,7 @@ export async function DELETE(req: NextRequest, ctx: RouteCtx): Promise<Response>
     return fail("internal_error", (err as Error).message, 500, { requestId });
   }
   const alvo = funis.find((f) => f.id === pipelineId);
-  if (!alvo) return fail("not_found", "Funil não encontrado.", 404, { requestId });
+  if (!alvo) return fail("not_found", "Kanban não encontrado.", 404, { requestId });
 
   let deps;
   try {

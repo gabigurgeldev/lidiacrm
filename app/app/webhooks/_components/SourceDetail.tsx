@@ -112,12 +112,12 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
         toast.error(
           t(
             body?.error?.message ??
-              "Não funcionou. Confira se a fonte está ativa e se o funil/estágio ainda existem.",
+              "Não funcionou. Confira se a fonte está ativa e se o Kanban/estágio ainda existem.",
           ),
         );
         return;
       }
-      toast.success(t("Funcionou! Um lead de teste entrou no seu funil."));
+      toast.success(t("Funcionou! Um lead de teste entrou no seu Kanban."));
       setTestOk(true);
       void refetchEvents();
     } catch {
@@ -138,7 +138,7 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
             </Badge>
           </div>
           <SheetDescription>
-            {t("Cada envio para o endereço abaixo vira um lead no seu funil, automaticamente.")}
+            {t("Cada envio para o endereço abaixo vira um lead no seu Kanban, automaticamente.")}
           </SheetDescription>
         </SheetHeader>
 
@@ -280,7 +280,7 @@ export function SourceDetail({ source, open, onOpenChange }: Props) {
                 <AlertDialogTitle>{t("Excluir esta fonte?")}</AlertDialogTitle>
                 <AlertDialogDescription>
                   {t(
-                    "O endereço para de funcionar imediatamente. Leads já recebidos continuam no seu funil — só a captação futura é interrompida. Essa ação não pode ser desfeita.",
+                    "O endereço para de funcionar imediatamente. Leads já recebidos continuam no seu Kanban — só a captação futura é interrompida. Essa ação não pode ser desfeita.",
                   )}
                 </AlertDialogDescription>
               </AlertDialogHeader>

@@ -36,7 +36,7 @@ export const MOTIVO_DA_RECUSA_LABEL: Record<MotivoDaRecusa, string> = {
   assinatura_invalida:
     "A assinatura não conferiu. Quem enviou não usou o segredo configurado nesta fonte.",
   erro_ao_criar_lead:
-    "Os dados chegaram, mas o lead não pôde ser criado — confira se o funil e a etapa da fonte ainda existem.",
+    "Os dados chegaram, mas o lead não pôde ser criado — confira se o Kanban e a etapa da fonte ainda existem.",
 };
 
 export interface CaptacaoParaRegistrar {

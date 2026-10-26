@@ -73,14 +73,14 @@ function CreateOrMoveLeadForm({
   return (
     <div className="grid gap-2 sm:grid-cols-2">
       <div className="space-y-1">
-        <Label>Funil</Label>
+        <Label>Kanban</Label>
         <Select
           value={config.pipeline_id}
           onValueChange={(v) => onChange({ pipeline_id: v, stage_id: "" })}
           disabled={pipelinesLoading}
         >
           <SelectTrigger>
-            <SelectValue placeholder={t("Escolha o funil")} />
+            <SelectValue placeholder={t("Escolha o Kanban")} />
           </SelectTrigger>
           <SelectContent>
             {pipelines.map((p) => (
@@ -100,7 +100,7 @@ function CreateOrMoveLeadForm({
         >
           <SelectTrigger>
             <SelectValue
-              placeholder={config.pipeline_id ? "Escolha a etapa" : "Escolha o funil primeiro"}
+              placeholder={config.pipeline_id ? "Escolha a etapa" : "Escolha o Kanban primeiro"}
             />
           </SelectTrigger>
           <SelectContent>

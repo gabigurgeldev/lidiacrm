@@ -1,5 +1,6 @@
 import type { ScoreBand } from "@/lib/kanban/score-band";
 import { resolveLeadOwner, type OwnerDisplay } from "@/lib/kanban/owner";
+import { tagsDoLead } from "@/lib/kanban/filters";
 import type { Lead } from "@/lib/types/leads";
 
 /**
@@ -57,8 +58,15 @@ export interface CardInput {
   scoreReason?: string | null;
   /** Uma tag canônica do pipeline vira ponto ao lado do título; o resto sai do card. */
   canonicalTag?: string | null;
-  /** Todas as tags — fora do card, acessíveis no hover. */
+  /**
+   * Todas as tags que valem para o negócio: as do CONTATO (migration 0248) e as
+   * do próprio lead. O card mostra até três como chips coloridos pela cor do
+   * catálogo — a tag deixou de ser texto solto e passou a ser o que organiza o
+   * Kanban, e escondê-la num hover apagava justamente o que move o card.
+   */
   tags: string[];
+  /** Nome do contato, para o avatar. `null` quando o negócio não tem contato. */
+  contactName: string | null;
 }
 
 /**
@@ -74,6 +82,8 @@ export function buildCardInput(
     | "value_cents"
     | "currency"
     | "tags"
+    | "contact_tags"
+    | "contact_name"
     | "last_activity_at"
     | "created_at"
     | "owner_kind"
@@ -127,7 +137,8 @@ export function buildCardInput(
     // que o §5 proíbe (dado sem propósito ocupando linha).
     nextAction: lead.next_action ? { label: lead.next_action.label } : null,
     canonicalTag: (opts.canonicalTags ?? []).find((t) => lead.tags.includes(t)) ?? null,
-    tags: lead.tags,
+    tags: tagsDoLead(lead),
+    contactName: lead.contact_name ?? null,
   };
 }
 

@@ -103,7 +103,7 @@ export async function generateMetadata(): Promise<Metadata> {
       template: `%s · ${name}`,
     },
     description:
-      "Centralize o atendimento por WhatsApp num funil só. Agentes de IA resolvem o que dá pra resolver e passam para o time humano o que importa — com tudo registrado. Multi-tenant, LGPD-nativo, feito para operações brasileiras.",
+      "Centralize o atendimento por WhatsApp num Kanban só. Agentes de IA resolvem o que dá pra resolver e passam para o time humano o que importa — com tudo registrado. Multi-tenant, LGPD-nativo, feito para operações brasileiras.",
     applicationName: name,
     authors: [{ name }],
     keywords: [

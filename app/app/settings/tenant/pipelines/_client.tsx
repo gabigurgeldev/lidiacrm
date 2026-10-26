@@ -55,7 +55,7 @@ export function PipelinesClient({
     // procurando um botão que não existe em lugar nenhum.
     return (
       <Card className="p-6 text-sm leading-relaxed text-muted-foreground">
-        {t("Você ainda não tem nenhum funil. Enquanto for assim, o agente atende normalmente, mas não tem para onde levar o card de ninguém — não há etapas para onde mover. Criar o funil é feito por quem instalou o sistema, direto no banco; depois ele aparece aqui para você escolher a etapa de cada passo.")}
+        {t("Você ainda não tem nenhum Kanban. Enquanto for assim, o agente atende normalmente, mas não tem para onde levar o card de ninguém — não há etapas para onde mover. Criar o Kanban é feito por quem instalou o sistema, direto no banco; depois ele aparece aqui para você escolher a etapa de cada passo.")}
       </Card>
     );
   }
@@ -162,7 +162,7 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
       </div>
 
       <div className="space-y-2">
-        <Label className="text-xs">{t("Campos do lead neste funil")}</Label>
+        <Label className="text-xs">{t("Campos do lead neste Kanban")}</Label>
         <p className="text-xs text-muted-foreground">
           {t("Aparecem no dossiê do negócio. No follow-up, você escolhe em qual campo gravar a resposta.")}
         </p>

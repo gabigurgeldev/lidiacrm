@@ -60,6 +60,12 @@ export function filtersToParams(f: LeadFilters): string {
   return p.toString();
 }
 
+/** As tags que valem para o card: as do contato e as do próprio negócio, sem repetir. */
+export function tagsDoLead(l: Pick<Lead, "tags" | "contact_tags">): string[] {
+  const todas = [...(l.contact_tags ?? []), ...(l.tags ?? [])];
+  return [...new Set(todas)];
+}
+
 export function applyFilters(leads: Lead[], f: LeadFilters): Lead[] {
   const today = new Date().toISOString().slice(0, 10);
   const search = f.search?.trim().toLowerCase() ?? "";
@@ -80,10 +86,12 @@ export function applyFilters(leads: Lead[], f: LeadFilters): Lead[] {
       }
     }
     if (f.status && f.status !== "all" && l.status !== f.status) return false;
-    if (f.tag && !l.tags.includes(f.tag)) return false;
+    // A tag é do CONTATO desde a migration 0248; as do próprio negócio
+    // continuam valendo para quem as usava antes.
+    if (f.tag && !tagsDoLead(l).includes(f.tag)) return false;
     if (
       search &&
-      !`${l.title} ${l.description ?? ""}`.toLowerCase().includes(search)
+      !`${l.title} ${l.description ?? ""} ${l.contact_name ?? ""}`.toLowerCase().includes(search)
     )
       return false;
     if (typeof f.valueCentsMin === "number" && (l.value_cents ?? 0) < f.valueCentsMin)

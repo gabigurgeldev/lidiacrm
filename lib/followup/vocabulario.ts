@@ -92,7 +92,7 @@ export interface CampoDeCondicao {
 }
 
 export const CAMPOS_DA_CONDICAO: Record<CampoDaCondicao, CampoDeCondicao> = {
-  lead_stage: { rotulo: "Etapa do funil", tipoDeValor: "etapa" },
+  lead_stage: { rotulo: "Etapa do Kanban", tipoDeValor: "etapa" },
   tag: { rotulo: "Etiqueta do contato", tipoDeValor: "etiqueta" },
   steps_taken: { rotulo: "Passos já dados no fluxo", tipoDeValor: "numero" },
   last_outcome: { rotulo: "Desfecho do passo anterior", tipoDeValor: "texto" },
@@ -483,7 +483,7 @@ export const GATILHOS: Record<TipoDeGatilho, string> = {
   manual: "Manual",
   webhook: "Disparado por uma automação em Webhooks",
   silence: "Silêncio",
-  stage_change: "Mudança de etapa no funil",
+  stage_change: "Mudança de etapa no Kanban",
   // "Caso" é a palavra que a tela de escalação já usa. O rótulo diz o FATO que
   // dispara ("o agente pediu ajuda"), não o nome da tabela — quem lê é dono de
   // clínica, não quem escreveu o schema.

@@ -16,9 +16,12 @@ import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAssignableAgents } from "@/hooks/kanban/useAssignableAgents";
 import type { Lead, OwnerKind } from "@/lib/types/leads";
 import { OwnerBadge } from "./OwnerBadge";
+import { TagChip } from "@/components/tags/TagChip";
+import { useTags } from "@/hooks/tags/useTags";
 import {
   agentOwnerFilter,
   parseAgentOwnerFilter,
+  tagsDoLead,
   type LeadFilters,
 } from "@/lib/kanban/filters";
 import { cn } from "@/lib/utils";
@@ -54,11 +57,19 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
 
+  // As opções vêm do CATÁLOGO (com cor) e de quem está no quadro — uma tag em
+  // uso que o catálogo ainda não listou não pode sumir do filtro.
+  const { data: catalogo } = useTags();
+  const corDaTag = useMemo(
+    () => new Map((catalogo ?? []).map((tg) => [tg.name, tg.color])),
+    [catalogo],
+  );
   const tagOptions = useMemo(() => {
     const set = new Set<string>();
-    for (const l of leads) for (const t of l.tags) set.add(t);
-    return Array.from(set).sort();
-  }, [leads]);
+    for (const l of leads) for (const tg of tagsDoLead(l)) set.add(tg);
+    for (const tg of catalogo ?? []) set.add(tg.name);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [leads, catalogo]);
 
   const filteredAgentId = parseAgentOwnerFilter(filters.owner);
 
@@ -199,7 +210,7 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
           <DropdownMenuSeparator />
           {tagOptions.map((tag) => (
             <DropdownMenuItem key={tag} onClick={() => onChange({ ...filters, tag })}>
-              {tag}
+              <TagChip nome={tag} cor={corDaTag.get(tag) ?? "#64748b"} tamanho="sm" />
             </DropdownMenuItem>
           ))}
         </DropdownMenuContent>

@@ -20,7 +20,7 @@ describe("boaNoticia — cada afirmação precisa da sua própria evidência", (
     const t = boaNoticia(0, 12, 3);
     expect(t).not.toContain("toda pergunta encontrou resposta");
     expect(t).toContain("toda conversa achou para onde ir");
-    expect(t).toContain("todo passo do atendimento tem uma etapa do funil");
+    expect(t).toContain("todo passo do atendimento tem uma etapa do Kanban");
     expect(t).toContain("ninguém consultou sua base de conhecimento");
   });
 
@@ -35,8 +35,8 @@ describe("boaNoticia — cada afirmação precisa da sua própria evidência", (
     // Instalação fresca: o instalador não provisiona pipeline nenhum, então zero
     // funis ⇒ zero lacunas ⇒ a lista fica vazia sem que nada esteja certo.
     const t = boaNoticia(30, 12, 0);
-    expect(t).not.toContain("todo passo do atendimento tem uma etapa do funil");
-    expect(t).toContain("você ainda não tem nenhum funil montado");
+    expect(t).not.toContain("todo passo do atendimento tem uma etapa do Kanban");
+    expect(t).toContain("você ainda não tem nenhum Kanban montado");
   });
 
   it("sem evidência nenhuma, abre pelo motivo e não pela boa notícia", () => {
@@ -45,7 +45,7 @@ describe("boaNoticia — cada afirmação precisa da sua própria evidência", (
     expect(t).not.toContain("Nada travando");
     expect(t).not.toContain("toda pergunta encontrou resposta");
     expect(t).not.toContain("toda conversa achou para onde ir");
-    expect(t).not.toContain("todo passo do atendimento tem uma etapa do funil");
+    expect(t).not.toContain("todo passo do atendimento tem uma etapa do Kanban");
   });
 
   it("com as três evidências, afirma tudo e sem ressalva", () => {
@@ -53,7 +53,7 @@ describe("boaNoticia — cada afirmação precisa da sua própria evidência", (
     expect(t).toContain("Nada travando neste período");
     expect(t).toContain("toda pergunta encontrou resposta");
     expect(t).toContain("toda conversa achou para onde ir");
-    expect(t).toContain("todo passo do atendimento tem uma etapa do funil");
+    expect(t).toContain("todo passo do atendimento tem uma etapa do Kanban");
     expect(t).not.toContain("ressalva");
   });
 });

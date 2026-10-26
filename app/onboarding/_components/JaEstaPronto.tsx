@@ -51,8 +51,8 @@ export function JaEstaPronto({
     {
       pronto: Boolean(retrato.funil),
       texto: retrato.funil
-        ? `${t("Funil de vendas criado:")} ${retrato.funil.nome}`
-        : t("Nenhum funil de vendas ainda"),
+        ? `${t("Kanban de vendas criado:")} ${retrato.funil.nome}`
+        : t("Nenhum Kanban de vendas ainda"),
     },
   ];
 

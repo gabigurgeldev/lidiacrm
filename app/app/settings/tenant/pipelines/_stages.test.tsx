@@ -338,7 +338,7 @@ describe("StagesSection — a marcação de fechamento", () => {
         "unprocessable_entity",
         undefined,
         "r",
-        "A etapa «Pago» é a etapa de ganho deste funil e o funil precisa de uma. Marque OUTRA etapa como de ganho — a marcação se muda, não se apaga.",
+        "A etapa «Pago» é a etapa de ganho deste Kanban e o Kanban precisa de uma. Marque OUTRA etapa como de ganho — a marcação se muda, não se apaga.",
       ),
     );
     montar();
@@ -369,7 +369,7 @@ describe("StagesSection — a marcação de fechamento", () => {
     const user = userEvent.setup();
     vi.mocked(apiClient.get).mockResolvedValue({ data: estado({ won: "e3" }) });
     vi.mocked(apiClient.patch).mockRejectedValue(
-      new ApiError(422, "unprocessable_entity", undefined, "r", "Já existe uma etapa chamada «Cancelado» neste funil. Escolha outro nome."),
+      new ApiError(422, "unprocessable_entity", undefined, "r", "Já existe uma etapa chamada «Cancelado» neste Kanban. Escolha outro nome."),
     );
     montar();
     const campo = await screen.findByTestId("nome-e3");
@@ -493,7 +493,7 @@ describe("StagesSection — arquivar", () => {
         "unprocessable_entity",
         { negocios: 12, precisa_destino: false },
         "r",
-        "«Pago» é a etapa de ganho deste funil. Marque OUTRA etapa como de ganho antes de arquivar esta — senão os negócios continuariam indo parar numa coluna fora do quadro.",
+        "«Pago» é a etapa de ganho deste Kanban. Marque OUTRA etapa como de ganho antes de arquivar esta — senão os negócios continuariam indo parar numa coluna fora do quadro.",
       ),
     );
     montar();
@@ -567,7 +567,7 @@ describe("StagesSection — arquivar", () => {
         "state_conflict",
         { negocios: 7, precisa_destino: false },
         "r",
-        "«Carrinho abandonado» mudou de papel neste funil enquanto você editava.",
+        "«Carrinho abandonado» mudou de papel neste Kanban enquanto você editava.",
       ),
     );
     montar();

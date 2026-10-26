@@ -150,7 +150,7 @@ test.describe("webhooks & automações — fluxo completo", () => {
       const sheet = page.getByRole("dialog").filter({ hasText: SOURCE_NAME });
       await expect(sheet.locator("code", { hasText: "/api/v1/webhooks/in/" }).first()).toBeVisible();
       await sheet.getByRole("button", { name: "Enviar lead de teste" }).click();
-      await expectToast(page, "Funcionou! Um lead de teste entrou no seu funil.");
+      await expectToast(page, "Funcionou! Um lead de teste entrou no seu Kanban.");
       await page.keyboard.press("Escape");
 
       // --- Step 4: aba Automações — criar regra + ligar ---

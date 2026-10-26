@@ -75,7 +75,7 @@ export function TelaDeAssinatura({
 
   const inclui = [
     t("Atendimento no WhatsApp com agentes de IA"),
-    t("CRM com funis, kanban e histórico do cliente"),
+    t("CRM com Kanbans e histórico do cliente"),
     t("Fluxos, follow-ups e disparos em massa"),
     t("Agenda, equipe e relatórios"),
   ];

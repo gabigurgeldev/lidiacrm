@@ -68,7 +68,7 @@ const MIN_THRESHOLD_MINUTES = 5;
 const KIND_LABEL: Record<TriggerKind, string> = {
   manual: "Manual",
   silence: "Silêncio",
-  stage_change: "Etapa do funil",
+  stage_change: "Etapa do Kanban",
   // "Agente pediu ajuda", e não "Pedido de ajuda": numa lista ao lado de
   // "Manual", "Silêncio" e "Etapa do funil", o rótulo sem sujeito não diz
   // QUEM pediu. O resumo do botão (`resumoDoGatilho`) e o vocabulário
@@ -148,7 +148,7 @@ function summaryLabel(
     // TIPO em vez de vazar o uuid — que é justamente o que esta tela não faz.
     // Com o funil junto, este rótulo passa a distinguir as homônimas: é a única
     // superfície que o dono lê uma semana depois, sem abrir nada.
-    return etapa ? `Gatilho: entrou em «${etapa.stageName}» em ${etapa.pipelineName}` : "Gatilho: Etapa do funil";
+    return etapa ? `Gatilho: entrou em «${etapa.stageName}» em ${etapa.pipelineName}` : "Gatilho: Etapa do Kanban";
   }
   if (cfg.kind === "case_opened") return `${t("Gatilho")}: ${t("quando o agente pede ajuda")}`;
   if (cfg.kind === "webhook") return t("Disparado por uma automação em Webhooks");
@@ -274,7 +274,7 @@ export function TriggerConfigControl({ flowId, triggerConfig }: Props) {
               </Select>
               {!etapasCarregando && etapas.length === 0 && (
                 <p className="text-xs text-error-fg">
-                  {t("Nenhuma etapa ativa encontrada — crie o funil antes de armar este gatilho.")}
+                  {t("Nenhuma etapa ativa encontrada — crie o Kanban antes de armar este gatilho.")}
                 </p>
               )}
               <p className="text-xs text-muted-foreground">

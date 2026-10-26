@@ -128,7 +128,7 @@ export function conflitoDoBanco(
   if (erro?.code !== "23505") return null;
   return fail(
     "state_conflict",
-    `«${nomeDoFunil}» mudou enquanto você editava — outro funil já ocupa esse nome ou o lugar de padrão. ` +
+    `«${nomeDoFunil}» mudou enquanto você editava — outro Kanban já ocupa esse nome ou o lugar de padrão. ` +
       `Recarregue a página e tente de novo.`,
     409,
     { requestId },

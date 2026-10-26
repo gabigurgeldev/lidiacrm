@@ -34,7 +34,7 @@ export async function GET(): Promise<Response> {
     .maybeSingle();
   if (pipelineErr) return fail("internal_error", pipelineErr.message, 500, { requestId });
   if (!pipeline) {
-    return fail("resource_not_found", "Nenhum funil configurado nesta organização.", 404, {
+    return fail("resource_not_found", "Nenhum Kanban configurado nesta organização.", 404, {
       requestId,
     });
   }

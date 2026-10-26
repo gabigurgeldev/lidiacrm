@@ -23,7 +23,7 @@ export const triggerLeadCreated: FlowNodeDefinition<Record<string, never>> = {
   version: 1,
   category: "trigger",
   rotulo: "Quando um lead é criado",
-  descricao: "Começa o fluxo toda vez que um lead novo entra no funil.",
+  descricao: "Começa o fluxo toda vez que um lead novo entra no Kanban.",
   // `lead.created` já é emitido pelo trigger Postgres `fn_emit_event_on_lead_change`.
   // Nada de novo a emitir: o barramento existe, faltava quem escutasse.
   eventos: ["lead.created"],

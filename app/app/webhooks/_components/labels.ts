@@ -23,7 +23,7 @@ export const TRIGGER_LABELS: Record<TriggerEvent, string> = {
 };
 
 export const ACTION_LABELS: Record<ActionType, string> = {
-  create_or_move_lead: "Criar/mover lead no funil",
+  create_or_move_lead: "Criar/mover lead no Kanban",
   send_whatsapp_message: "Enviar mensagem no WhatsApp",
   send_ai_message: "Mensagem escrita pela IA",
   add_tag: "Adicionar tag",

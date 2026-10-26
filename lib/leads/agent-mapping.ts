@@ -125,7 +125,7 @@ export function validarMapeamento(
     const etapa = etapas.find((e) => e.id === stageId);
     if (!etapa) {
       erros.push(
-        `A etapa escolhida para «${rotulo}» não faz parte deste funil. Recarregue a página e escolha de novo.`,
+        `A etapa escolhida para «${rotulo}» não faz parte deste Kanban. Recarregue a página e escolha de novo.`,
       );
       continue;
     }
@@ -146,19 +146,19 @@ export function validarMapeamento(
     // mesmo lugar do funil.
     if (passo === "won" && !etapa.is_won) {
       erros.push(
-        `A etapa «${etapa.name}» não é a etapa de fechamento (ganho) deste funil, então não pode representar «${rotulo}».`,
+        `A etapa «${etapa.name}» não é a etapa de fechamento (ganho) deste Kanban, então não pode representar «${rotulo}».`,
       );
     } else if (passo === "lost" && !etapa.is_lost) {
       erros.push(
-        `A etapa «${etapa.name}» não é a etapa de perda deste funil, então não pode representar «${rotulo}».`,
+        `A etapa «${etapa.name}» não é a etapa de perda deste Kanban, então não pode representar «${rotulo}».`,
       );
     } else if (etapa.is_won && passo !== "won") {
       erros.push(
-        `A etapa «${etapa.name}» é a etapa de ganho deste funil, então só pode representar «${ROTULO_DO_PASSO.won}».`,
+        `A etapa «${etapa.name}» é a etapa de ganho deste Kanban, então só pode representar «${ROTULO_DO_PASSO.won}».`,
       );
     } else if (etapa.is_lost && passo !== "lost") {
       erros.push(
-        `A etapa «${etapa.name}» é a etapa de perda deste funil, então só pode representar «${ROTULO_DO_PASSO.lost}».`,
+        `A etapa «${etapa.name}» é a etapa de perda deste Kanban, então só pode representar «${ROTULO_DO_PASSO.lost}».`,
       );
     }
 

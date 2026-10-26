@@ -69,7 +69,7 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (!KINDS_COM_MOTOR.has(triggerKind)) {
     return fail(
       "trigger_kind_not_implemented",
-      `O gatilho «${triggerKind}» não está disponível — use Etapa do funil, Silêncio ou Manual.`,
+      `O gatilho «${triggerKind}» não está disponível — use Etapa do Kanban, Silêncio ou Manual.`,
       422,
       { requestId },
     );
@@ -85,7 +85,7 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
     if (!stageId || !UUID_RX.test(stageId)) {
       return fail(
         "trigger_stage_missing",
-        "Escolha a etapa do funil que dispara este fluxo antes de publicar.",
+        "Escolha a etapa do Kanban que dispara este fluxo antes de publicar.",
         422,
         { requestId },
       );
@@ -100,7 +100,7 @@ export async function POST(_req: NextRequest, ctx: RouteCtx): Promise<Response> 
     if (!stage) {
       return fail(
         "trigger_stage_not_found",
-        "A etapa escolhida para o gatilho não existe mais neste funil — escolha outra.",
+        "A etapa escolhida para o gatilho não existe mais neste Kanban — escolha outra.",
         422,
         { requestId },
       );

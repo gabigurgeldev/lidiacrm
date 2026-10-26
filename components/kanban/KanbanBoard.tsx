@@ -9,10 +9,12 @@ import { useMoveCard } from "@/hooks/kanban/useMoveCard";
 import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAtRiskLeads } from "@/hooks/leads/useAtRiskLeads";
 import { useReactivations } from "@/hooks/leads/useReactivations";
-import { midpoint } from "@/lib/kanban/fractional-indexing";
+import { posicaoNoIndice } from "@/lib/kanban/fractional-indexing";
 import type { Lead } from "@/lib/types/leads";
 import type { Pipeline, Stage } from "@/lib/kanban/types";
 import { StageColumn } from "./StageColumn";
+import { NovaColuna } from "./NovaColuna";
+import { useTags, type TagDoCatalogo } from "@/hooks/tags/useTags";
 import { LeadDossier } from "./LeadDossier";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
 
@@ -35,6 +37,8 @@ interface KanbanBoardProps {
   onSelectionChange?: (ids: string[]) => void;
   /** Lead a abrir já na montagem (deep link `?lead=` — ver o dossiê abaixo). */
   leadInicial?: string | null;
+  /** Espelha o `requireRole("manager")` das rotas de etapa: mostra o menu da coluna. */
+  podeGerenciar?: boolean;
 }
 
 function groupLeadsByStage(stages: Stage[], leads: Lead[]): Map<string, Lead[]> {
@@ -78,6 +82,7 @@ export function KanbanBoard({
   pulses: pulsesProp,
   onSelectionChange,
   leadInicial,
+  podeGerenciar = false,
 }: KanbanBoardProps) {
   const t = useT();
   const useExternal = stagesProp !== undefined && leadsProp !== undefined;
@@ -116,6 +121,24 @@ export function KanbanBoard({
     const raw = (pipelineProp ?? queryResult.data?.pipeline)?.settings?.canonical_tags;
     return Array.isArray(raw) ? raw.filter((t): t is string => typeof t === "string") : [];
   }, [pipelineProp, queryResult.data?.pipeline]);
+
+  // O catálogo de tags (migration 0248): a cor de cada chip no card e as tags
+  // de cada coluna saem da MESMA leitura que a página de Tags e o inbox usam.
+  const { data: catalogo } = useTags();
+  const coresDasTags = useMemo(
+    () => new Map((catalogo ?? []).map((tg) => [tg.name, tg.color])),
+    [catalogo],
+  );
+  const tagsPorColuna = useMemo(() => {
+    const m = new Map<string, TagDoCatalogo[]>();
+    for (const tg of catalogo ?? []) {
+      for (const c of tg.colunas) {
+        if (c.pipeline_id !== pipelineId) continue;
+        m.set(c.stage_id, [...(m.get(c.stage_id) ?? []), tg]);
+      }
+    }
+    return m;
+  }, [catalogo, pipelineId]);
 
   // O dossiê é do BOARD e não da página: ele precisa do lead inteiro e do nome
   // do estágio, que só existem aqui depois do agrupamento.
@@ -192,19 +215,12 @@ export function KanbanBoard({
         (l) => l.id !== draggableId,
       );
 
-      const before = destination.index > 0 ? destList[destination.index - 1] : null;
-      const after =
-        destination.index < destList.length ? destList[destination.index] : null;
-
-      const newPosition = midpoint(
-        before?.position_in_stage ?? null,
-        after?.position_in_stage ?? null,
+      // Empate de posição (cards nascidos juntos) não aborta mais o arrasto —
+      // ver posicaoNoIndice.
+      const newPosition = posicaoNoIndice(
+        destList.map((l) => l.position_in_stage),
+        destination.index,
       );
-
-      if (Number.isNaN(newPosition)) {
-        // Collision — Wave 8 will handle global rebalance. For now, abort silently.
-        return;
-      }
 
       moveCard.mutate({
         leadId: lead.id,
@@ -235,8 +251,9 @@ export function KanbanBoard({
 
   if (data.stages.length === 0) {
     return (
-      <Card className="m-4 p-6 text-sm text-text-muted">
-        {t("Nenhum lead nesta pipeline ainda.")}
+      <Card className="m-4 flex flex-col items-start gap-3 p-6 text-sm text-text-muted">
+        {t("Este Kanban ainda não tem colunas.")}
+        {podeGerenciar && <NovaColuna pipelineId={pipelineId} />}
       </Card>
     );
   }
@@ -258,8 +275,14 @@ export function KanbanBoard({
             selectedLeadIds={selectedLeadIds}
             onSelect={handleSelect}
             onOpen={setDossieId}
+            stages={data.stages}
+            catalogo={catalogo ?? []}
+            tagsDaColuna={tagsPorColuna.get(stage.id) ?? []}
+            coresDasTags={coresDasTags}
+            podeGerenciar={podeGerenciar}
           />
         ))}
+        {podeGerenciar && <NovaColuna pipelineId={pipelineId} />}
       </div>
       {leadDoDossie && (
         <LeadDossier

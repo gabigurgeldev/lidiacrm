@@ -32,9 +32,12 @@ import { applyFilters, filtersFromParams, filtersToParams } from "@/lib/kanban/f
 export function PipelinePageClient({
   pipelineId,
   initialName,
+  podeGerenciar = false,
 }: {
   pipelineId: string;
   initialName: string;
+  /** Papel manager+ na organização ativa — o critério das rotas de etapa. */
+  podeGerenciar?: boolean;
 }) {
   const t = useT();
   const { data, isLoading, error, pulses, realtimeStatus, seguranca } = useBoard(pipelineId);
@@ -99,7 +102,7 @@ export function PipelinePageClient({
       <FilterBar filters={filters} onChange={setFilters} leads={data?.leads ?? []} />
       {error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm">
-          {t("Não consegui carregar este funil:")} {formatError(error, t)}
+          {t("Não consegui carregar este Kanban:")} {formatError(error, t)}
         </div>
       ) : isLoading || !data ? (
         <div className="flex flex-1 animate-pulse items-center justify-center text-muted-foreground">
@@ -115,6 +118,7 @@ export function PipelinePageClient({
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
           leadInicial={searchParams.get("lead")}
+          podeGerenciar={podeGerenciar}
         />
       )}
       <BulkActionBar

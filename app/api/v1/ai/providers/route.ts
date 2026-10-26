@@ -233,7 +233,7 @@ export async function GET(): Promise<Response> {
         // catálogo; o resolvedor puro não consulta banco.
         ...(capacidade && ponto.exige.tools === true && !capacidade.supports_tools
           ? [
-              `O modelo em uso não sabe usar as ferramentas do CRM — o agente conversa, mas não registra nada no funil.`,
+              `O modelo em uso não sabe usar as ferramentas do CRM — o agente conversa, mas não registra nada no Kanban.`,
             ]
           : []),
       ],

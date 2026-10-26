@@ -64,7 +64,7 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pipelineId || !stageId) {
-      toast.error(t("Escolha o funil e o estágio de entrada."));
+      toast.error(t("Escolha o Kanban e o estágio de entrada."));
       return;
     }
     try {
@@ -89,7 +89,7 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
           <DialogTitle>{t("Nova fonte de captação")}</DialogTitle>
           <DialogDescription>
             {t(
-              "Dê um nome e diga em qual funil o contato deve entrar quando alguém preencher seu formulário.",
+              "Dê um nome e diga em qual Kanban o contato deve entrar quando alguém preencher seu formulário.",
             )}
           </DialogDescription>
         </DialogHeader>
@@ -107,10 +107,10 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
             />
           </div>
           <div className="space-y-2">
-            <Label>{t("Funil de entrada")}</Label>
+            <Label>{t("Kanban de entrada")}</Label>
             <Select value={pipelineId} onValueChange={setPipelineId} disabled={pipelinesLoading}>
               <SelectTrigger>
-                <SelectValue placeholder={t("Escolha o funil")} />
+                <SelectValue placeholder={t("Escolha o Kanban")} />
               </SelectTrigger>
               <SelectContent>
                 {pipelines.map((p) => (
@@ -130,7 +130,7 @@ export function CreateSourceDialog({ open, onOpenChange, onCreated }: Props) {
             >
               <SelectTrigger>
                 <SelectValue
-                  placeholder={pipelineId ? t("Escolha o estágio") : t("Escolha o funil primeiro")}
+                  placeholder={pipelineId ? t("Escolha o estágio") : t("Escolha o Kanban primeiro")}
                 />
               </SelectTrigger>
               <SelectContent>

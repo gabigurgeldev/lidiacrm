@@ -278,9 +278,12 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     // Ficou "Funis" porque é o que esta tela É: a lista dos funis, de onde se
     // abre o quadro de cada um. "Pipeline" é palavra de quem construiu o
     // sistema; "funil de vendas" é palavra de quem vende.
+    //
+    // Em 2026-10-26 o dono do produto trocou "Funis" por "Kanbans" em todo
+    // texto visível — rotas, testids e identificadores continuam com "funil".
     href: "/app/kanban",
-    label: "Funis",
-    description: "Seus funis de venda — clique em um para abrir o quadro de clientes.",
+    label: "Kanbans",
+    description: "Seus Kanbans de venda — clique em um para abrir o quadro de clientes.",
     icon: Kanban,
     group: "crm",
     sidebar: true,
@@ -351,10 +354,11 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     // listavam as mesmas linhas de `crm_pipelines`, lado a lado no mesmo grupo,
     // com nomes que não diziam qual servia para quê. A diferença real é o VERBO,
     // e é ela que o nome carrega agora: lá se ABRE o funil, aqui se CONFIGURA o
-    // que ele significa.
+    // que ele significa. Em 2026-10-26 virou "Colunas dos Kanbans", junto com
+    // a troca de "Funis" por "Kanbans" no destino acima.
     href: "/app/settings/tenant/pipelines",
-    label: "Etapas do funil",
-    description: "As colunas de cada funil, o vocabulário do negócio e os motivos de perda.",
+    label: "Colunas dos Kanbans",
+    description: "As colunas de cada Kanban, o vocabulário do negócio e os motivos de perda.",
     // `Funnel` subiu para o cabeçalho do grupo CRM; aqui fica a versão simples.
     // Ícone repetido entre um grupo e um filho dele lê como erro de montagem.
     icon: FunnelSimple,
@@ -563,7 +567,7 @@ export const NAV_DESTINATIONS: NavDestination[] = [
   {
     href: "/app/metrics",
     label: "Desempenho",
-    description: "Funil e performance por atendente nos últimos 30 dias.",
+    description: "Kanban e performance por atendente nos últimos 30 dias.",
     icon: ChartBar,
     group: "analise",
     sidebar: true,

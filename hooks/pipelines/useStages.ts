@@ -37,6 +37,8 @@ export interface PatchDeEtapa {
   is_won?: boolean;
   is_lost?: boolean;
   depois_de?: string | null;
+  /** `#rrggbb`; `null` volta ao neutro. */
+  color?: string | null;
 }
 
 function useReler(pipelineId: string) {

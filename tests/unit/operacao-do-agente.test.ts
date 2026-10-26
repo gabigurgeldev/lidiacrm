@@ -101,7 +101,7 @@ describe("criar entrada automática de contatos — tenancy sob service-role", (
     const erro = await recusa(() => criarEntradaAutomatica(deps(db), ENTRADA));
 
     expect(erro.status).toBe(422);
-    expect(erro.message).toContain("Esse funil não existe aqui");
+    expect(erro.message).toContain("Esse Kanban não existe aqui");
     expect(db.escritas).toEqual([]);
   });
 
@@ -114,7 +114,7 @@ describe("criar entrada automática de contatos — tenancy sob service-role", (
     const erro = await recusa(() => criarEntradaAutomatica(deps(db), ENTRADA));
 
     expect(erro.status).toBe(422);
-    expect(erro.message).toContain("não pertence ao funil escolhido");
+    expect(erro.message).toContain("não pertence ao Kanban escolhido");
     expect(db.escritas).toEqual([]);
   });
 

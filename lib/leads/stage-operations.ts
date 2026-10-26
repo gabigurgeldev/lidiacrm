@@ -146,8 +146,8 @@ export function conflitoDoBanco(
   requestId: string,
 ): ApiError | null {
   const motivo: Record<string, string> = {
-    "23505": `Outra etapa deste funil já ocupa esse lugar — «${nomeDaEtapa}» não pôde ser gravada.`,
-    "23514": `«${nomeDaEtapa}» mudou de papel neste funil (ganho ou perda) enquanto você editava.`,
+    "23505": `Outra etapa deste Kanban já ocupa esse lugar — «${nomeDaEtapa}» não pôde ser gravada.`,
+    "23514": `«${nomeDaEtapa}» mudou de papel neste Kanban (ganho ou perda) enquanto você editava.`,
   };
   const texto = motivo[erro?.code ?? ""];
   if (!texto) return null;
@@ -183,7 +183,7 @@ async function funilOuNadaFeito(deps: DepsDeEtapa, pipelineId: string): Promise<
   // Funil de outra org morre AQUI, antes de qualquer escrita: responder 404
   // depois de gravar seria pior do que responder 200.
   if (!etapas) {
-    throw new ApiError(404, "not_found", undefined, deps.requestId, "Funil não encontrado.");
+    throw new ApiError(404, "not_found", undefined, deps.requestId, "Kanban não encontrado.");
   }
   return etapas;
 }
@@ -283,6 +283,8 @@ export interface PedidoDeEdicao {
    * duas divergiriam no primeiro ajuste.
    */
   depois_de?: string | null;
+  /** Cor da coluna no quadro (`#rrggbb` minúsculo); `null` volta ao neutro. */
+  color?: string | null;
 }
 
 export async function atualizarEtapa(
@@ -333,8 +335,9 @@ export async function atualizarEtapa(
     }
   }
 
-  const patchDoAlvo: PatchDeMarcacao & { name?: string; position?: number } = {};
+  const patchDoAlvo: PatchDeMarcacao & { name?: string; position?: number; color?: string | null } = {};
   if (pedido.name !== undefined) patchDoAlvo.name = pedido.name.trim();
+  if (pedido.color !== undefined) patchDoAlvo.color = pedido.color;
 
   if (pedido.depois_de !== undefined) {
     // Só as ativas compõem a régua: arquivada não ocupa lugar no quadro.
@@ -346,7 +349,7 @@ export async function atualizarEtapa(
         "unprocessable_entity",
         undefined,
         deps.requestId,
-        "A etapa que você escolheu como vizinha não está mais no funil. Recarregue a página.",
+        "A etapa que você escolheu como vizinha não está mais no Kanban. Recarregue a página.",
       );
     }
     const posicao = posicaoEntre(ativas[i]?.position ?? null, ativas[i + 1]?.position ?? null);
@@ -360,7 +363,7 @@ export async function atualizarEtapa(
         "state_conflict",
         undefined,
         deps.requestId,
-        "As colunas deste funil estão empatadas na ordenação. Recarregue a página e mova a etapa para outro lugar.",
+        "As colunas deste Kanban estão empatadas na ordenação. Recarregue a página e mova a etapa para outro lugar.",
       );
     }
     patchDoAlvo.position = posicao;
