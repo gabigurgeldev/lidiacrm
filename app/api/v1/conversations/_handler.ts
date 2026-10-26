@@ -108,9 +108,17 @@ export async function listConversationsHandler(
   const sortCol = porEspera ? "last_inbound_at" : "last_message_at";
   const asc = porEspera;
 
+  // Filtro por tag é pela tag do CONTATO (migration 0248 — a tag passou a ser
+  // do contato). O embed vira `!inner` só nesse caso, para o filtro no
+  // contato cortar a conversa; sem filtro a conversa sem contato continua
+  // aparecendo.
+  const colunas = q.tag
+    ? SELECT_COLS.replace("contacts:contact_id (", "contacts:contact_id!inner (")
+    : SELECT_COLS;
+
   let query = supabase
     .from("conversations")
-    .select(SELECT_COLS)
+    .select(colunas)
     .eq("organization_id", ctx.organization_id)
     .order(sortCol, { ascending: asc, nullsFirst: false })
     .order("id", { ascending: asc })
@@ -128,7 +136,7 @@ export async function listConversationsHandler(
     query = query.not("status", "in", `(${CONVERSATION_TERMINAL_STATUSES.join(",")})`);
   }
   if (q.channel_session_id) query = query.eq("channel_session_id", q.channel_session_id);
-  if (q.tag) query = query.contains("tags", [q.tag]); // tags @> array[tag] (GIN)
+  if (q.tag) query = query.contains("contacts.tags", [q.tag]); // contacts.tags @> array[tag] (GIN)
 
   if (q.assigned_to === "me") {
     if (ctx.actor.type !== "user") {

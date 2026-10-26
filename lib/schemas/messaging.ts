@@ -347,7 +347,9 @@ export const listConversationsQuerySchema = z.object({
   exclude_finished: z.boolean().optional(),
   assigned_to: z.union([z.string().uuid(), z.literal("me"), z.literal("unassigned")]).optional(),
   channel_session_id: z.string().uuid().optional(),
-  tag: conversationTagSchema.optional(),
+  // Tag do CONTATO, na grafia do catálogo (migration 0248) — sem baixar a caixa:
+  // a comparação no banco é exata, e "vip" não casa com "VIP".
+  tag: z.string().trim().min(1).max(40).optional(),
   search: z.string().optional(),
   /**
    * Ordem da lista. Ausente = a de sempre: Fila por quem espera há mais tempo

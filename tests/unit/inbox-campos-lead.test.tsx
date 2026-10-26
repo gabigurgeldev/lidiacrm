@@ -59,6 +59,13 @@ vi.mock("@/hooks/pipelines/useDefaultPipeline", () => ({
   useDefaultPipeline: () => ({ data: null, isError: false }),
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+// Catálogo de tags (migration 0248): fora do escopo destes casos.
+vi.mock("@/hooks/tags/useTags", () => ({ useTags: () => ({ data: [], isLoading: false }) }));
+vi.mock("@/hooks/kanban/useKanbansDoContato", () => ({
+  useKanbansDoContato: () => ({ data: { kanbans: [], negocios: [] }, isLoading: false, isError: false, refetch: vi.fn() }),
+  useColocarNaColuna: () => ({ mutate: vi.fn(), isPending: false }),
+  chaveDosKanbansDoContato: (id: string | null) => ["kanbans-do-contato", id],
+}));
 vi.mock("@/hooks/inbox/useConversationTags", () => ({
   useUpdateConversationTags: () => ({ mutate: vi.fn(), isPending: false }),
   useConversationTagVocabulary: () => ({ data: [] }),
