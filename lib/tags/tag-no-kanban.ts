@@ -27,6 +27,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
 import { ApiError } from "@/lib/api/types";
 import { createLeadHandler, moveLeadHandler } from "@/app/api/v1/leads/_handler";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { normalizarTags } from "@/lib/tags/normalizar";
 
@@ -133,13 +134,17 @@ interface LeadAberto {
   stage_id: string;
 }
 
+/**
+ * O título do negócio que nasce pela tag: o MESMO rótulo que o inbox mostra
+ * (`rotuloDoContato` — pula id técnico de WhatsApp, formata telefone). O
+ * schema do lead exige 2+ caracteres; "Sem nome" cobre o resto.
+ */
 function tituloDoContato(c: {
   display_name?: string | null;
   name?: string | null;
   phone_number?: string | null;
 }): string {
-  const t = (c.display_name || c.name || c.phone_number || "").trim();
-  return t.length >= 2 ? t.slice(0, 200) : "Contato";
+  return rotuloDoContato(c).slice(0, 200);
 }
 
 export async function aplicarTagsNoKanban(
