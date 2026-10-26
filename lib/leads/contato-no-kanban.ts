@@ -16,6 +16,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { HandlerCtx } from "@/lib/api/handlers/types";
 import { ApiError } from "@/lib/api/types";
 import { createLeadHandler, moveLeadHandler } from "@/app/api/v1/leads/_handler";
+import { rotuloDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { emitLeadActivity } from "@/lib/leads/activity-emitter";
 import { aplicarTagDaColuna } from "@/lib/tags/tag-no-kanban";
 
@@ -147,11 +148,11 @@ export async function colocarContatoNaColuna(
       acao = "movido";
     }
   } else {
-    const nome = (contato.display_name || contato.name || contato.phone_number || "").trim();
     const criado = await createLeadHandler(supabase, ctx, {
       pipeline_id: stage.pipeline_id,
       stage_id: stage.id,
-      title: nome.length >= 2 ? nome.slice(0, 200) : "Contato",
+      // O mesmo rótulo que o inbox mostra — nunca o id técnico do WhatsApp.
+      title: rotuloDoContato(contato).slice(0, 200),
       contact_id: input.contactId,
       currency: "BRL",
       tags: [],
