@@ -3660,6 +3660,96 @@ export type Database = {
           },
         ]
       }
+      crm_stage_tags: {
+        Row: {
+          created_at: string
+          organization_id: string
+          pipeline_id: string
+          stage_id: string
+          tag_id: string
+        }
+        Insert: {
+          created_at?: string
+          organization_id: string
+          pipeline_id: string
+          stage_id: string
+          tag_id: string
+        }
+        Update: {
+          created_at?: string
+          organization_id?: string
+          pipeline_id?: string
+          stage_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_stage_tags_coluna_do_kanban_fk"
+            columns: ["pipeline_id", "stage_id"]
+            isOneToOne: false
+            referencedRelation: "crm_stages"
+            referencedColumns: ["pipeline_id", "id"]
+          },
+          {
+            foreignKeyName: "crm_stage_tags_tag_da_org_fk"
+            columns: ["organization_id", "tag_id"]
+            isOneToOne: false
+            referencedRelation: "crm_tags"
+            referencedColumns: ["organization_id", "id"]
+          },
+          {
+            foreignKeyName: "crm_stage_tags_pipeline_id_fkey"
+            columns: ["pipeline_id"]
+            isOneToOne: false
+            referencedRelation: "crm_pipelines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_tags: {
+        Row: {
+          color: string
+          created_at: string
+          created_by_user_id: string | null
+          description: string | null
+          id: string
+          is_archived: boolean
+          name: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          created_by_user_id?: string | null
+          description?: string | null
+          id?: string
+          is_archived?: boolean
+          name: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          created_by_user_id?: string | null
+          description?: string | null
+          id?: string
+          is_archived?: boolean
+          name?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_tags_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cron_jobs: {
         Row: {
           attempts: number
@@ -7208,6 +7298,11 @@ export type Database = {
           p_org: string
           p_pointer: string
         }
+        Returns: string
+      }
+      fn_cor_da_tag: { Args: { p_nome: string }; Returns: string }
+      fn_renomear_tag: {
+        Args: { p_novo_nome: string; p_organization_id: string; p_tag_id: string }
         Returns: string
       }
       fn_role_at_least: {

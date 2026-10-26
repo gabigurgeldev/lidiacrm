@@ -589,6 +589,13 @@ export const AUDIT_ACTIONS = [
   // os clientes que já existiam (quem avisa é o Back Office). Metadata: só
   // contagens, ambiente e ids do Asaas — nenhum dado do titular.
   "billing.notificacoes_asaas_desligadas",
+  // ── Catálogo de tags e vínculo com coluna do Kanban (migration 0248) ──
+  // Metadata: `{ name, color }` na criação; `{ campos, old_name?, new_name?,
+  // fundida_em? }` na edição; `{ pipeline_id, tag_ids }` no vínculo.
+  "tag.created",
+  "tag.updated",
+  "tag.archived",
+  "stage.tags_changed",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

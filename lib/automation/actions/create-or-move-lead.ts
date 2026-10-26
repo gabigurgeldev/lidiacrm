@@ -39,6 +39,29 @@ async function execute(ctx: ActionCtx, config: Record<string, unknown>): Promise
       return { type: "create_or_move_lead", status: "success", detail: { moved: lead.id } };
     }
     if (contact) {
+      // Gatilho de contato (`contact.tag_added`) não traz lead no contexto.
+      // Criar direto daria um SEGUNDO card a quem já está neste Kanban — por
+      // isso o negócio aberto dele aqui é procurado antes.
+      const { data: abertos, error: abertosErr } = await ctx.admin
+        .from("crm_leads")
+        .select("id, stage_id")
+        .eq("organization_id", ctx.organizationId)
+        .eq("contact_id", contact.id)
+        .eq("pipeline_id", pipelineId)
+        .eq("status", "open")
+        .limit(2);
+      if (abertosErr) throw new Error(abertosErr.message);
+      if ((abertos ?? []).length > 1) {
+        return { type: "create_or_move_lead", status: "skipped", detail: { reason: "ambiguous_open_leads" } };
+      }
+      const existente = (abertos ?? [])[0] as { id: string; stage_id: string } | undefined;
+      if (existente) {
+        if (existente.stage_id === stageId) {
+          return { type: "create_or_move_lead", status: "skipped", detail: { reason: "already_in_stage" } };
+        }
+        await moveLeadHandler(ctx.admin, handlerCtx, existente.id, { to_stage_id: stageId });
+        return { type: "create_or_move_lead", status: "success", detail: { moved: existente.id } };
+      }
       const created = await createLeadHandler(ctx.admin, handlerCtx, {
         pipeline_id: pipelineId,
         stage_id: stageId,

@@ -17,6 +17,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { moveLeadSchema, validateRequest } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
 import { emitLeadActivity, stageChangeReason } from "@/lib/leads/activity-emitter";
+import { aplicarTagDaColuna } from "@/lib/tags/tag-no-kanban";
 import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 
 export const dynamic = "force-dynamic";
@@ -197,6 +198,30 @@ export async function POST(
       position_in_stage: input.position_in_stage,
     },
   });
+
+  // Coluna com tag vinculada: o contato ganha a tag (migration 0248). Só quando
+  // TROCOU de coluna — reordenar dentro da mesma não é entrar nela.
+  if (lead.stage_id !== input.stage_id) {
+    const daColuna = await aplicarTagDaColuna(
+      supabase,
+      {
+        organization_id: lead.organization_id,
+        actor: { type: "user", id: user.id },
+        requestId,
+      },
+      { leadId, stageId: input.stage_id },
+    );
+    if (daColuna.tagsAcrescentadas.length > 0) {
+      return ok(
+        {
+          ...finalLead,
+          tags_da_coluna: daColuna.tagsAcrescentadas,
+          kanban_efeitos: daColuna.efeitos,
+        },
+        { requestId },
+      );
+    }
+  }
 
   return ok(finalLead, { requestId });
 }

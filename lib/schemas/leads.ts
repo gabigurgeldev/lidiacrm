@@ -9,6 +9,8 @@
  */
 import { z } from "zod";
 
+import { normalizarTags } from "@/lib/tags/normalizar";
+
 /**
  * Accept either ISO 8601 (e.g. "2026-04-29T03:15:54.000Z") or Postgres-style
  * timestamptz (e.g. "2026-04-29 03:15:54.123456+00") since Supabase returns
@@ -75,7 +77,7 @@ export const createLeadSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .nullable()
     .optional(),
-  tags: z.array(z.string()).default([]),
+  tags: z.array(z.string()).transform(normalizarTags).default([]),
   source: z.string().min(1).default("manual"),
 });
 export type CreateLeadInput = z.infer<typeof createLeadSchema>;
@@ -103,7 +105,7 @@ export const updateLeadSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .nullable()
     .optional(),
-  tags: z.array(z.string()).optional(),
+  tags: z.array(z.string()).transform(normalizarTags).optional(),
   custom_fields: z.record(z.string(), z.unknown()).optional(),
 });
 export type UpdateLeadInput = z.infer<typeof updateLeadSchema>;

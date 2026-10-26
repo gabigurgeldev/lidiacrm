@@ -16,6 +16,7 @@ import { canonicalPhoneBR, phoneLookupVariants } from "@/lib/channels/phone-vari
 import { hashCpf, encryptCpfSql } from "@/lib/contacts/cpf";
 import { rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
 import type { Contact } from "@/lib/types/contacts";
+import { aplicarTagsNoKanban, type EfeitoNoKanban } from "@/lib/tags/tag-no-kanban";
 import { ensureConversation, sessaoProntaParaEnvio } from "@/lib/automation/start-conversation";
 import type {
   ContactCreate,
@@ -476,7 +477,7 @@ export async function patchContactHandler(
   ctx: HandlerCtx,
   contactId: string,
   input: ContactPatch,
-): Promise<Contact> {
+): Promise<Contact & { kanban_efeitos?: EfeitoNoKanban[] }> {
   const { data: existing, error: selErr } = await supabase
     .from("contacts")
     // ⚠️ Os campos sensíveis entram aqui para existir o **`from`** da regra L-06
@@ -621,6 +622,7 @@ export async function patchContactHandler(
       if (error) console.error("[contacts.patch] emit_event failed", error.message);
     });
 
+  let efeitosNoKanban: EfeitoNoKanban[] = [];
   if (input.tags !== undefined) {
     const prevTags: string[] = (existing as { tags?: string[] }).tags ?? [];
     const addedTags = input.tags.filter((t) => !prevTags.includes(t));
@@ -637,6 +639,12 @@ export async function patchContactHandler(
         .then(({ error }) => {
           if (error) console.error("[contacts.patch] emit_event failed", error.message);
         });
+      // Tag vinculada a coluna põe o contato no Kanban (migration 0248). No
+      // mesmo request, para a tela mostrar o card onde ele foi parar.
+      efeitosNoKanban = await aplicarTagsNoKanban(supabase, ctx, {
+        contactId: contact.id,
+        tagsAdicionadas: addedTags,
+      });
     }
   }
 
@@ -650,7 +658,7 @@ export async function patchContactHandler(
     metadata: { ...a.metadataActor, fields, ...sensiveis },
   });
 
-  return contact;
+  return efeitosNoKanban.length > 0 ? { ...contact, kanban_efeitos: efeitosNoKanban } : contact;
 }
 
 // ---------------------------------------------------------------------------

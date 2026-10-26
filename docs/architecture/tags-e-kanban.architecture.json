@@ -1,0 +1,346 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Tags e Kanban — o catálogo e a sincronia tag ↔ coluna",
+    "subtitle": "a tag nasce no catálogo (nome, cor), liga-se a uma coluna; aplicar a tag põe o contato no Kanban e entrar na coluna dá a tag ao contato — nunca remove",
+    "output": "tags-e-kanban.html",
+    "quality_profile": "standard"
+  },
+  "lanes": [
+    {
+      "id": "tela",
+      "label": "Onde a pessoa está"
+    },
+    {
+      "id": "maquina",
+      "label": "Agente, fluxo, automação"
+    },
+    {
+      "id": "borda",
+      "label": "Rotas"
+    },
+    {
+      "id": "regra",
+      "label": "Regra"
+    },
+    {
+      "id": "dados",
+      "label": "Banco"
+    },
+    {
+      "id": "retorno",
+      "label": "Laço de retorno"
+    }
+  ],
+  "mainPath": [
+    "paginaTags",
+    "rotasTags",
+    "catalogo",
+    "vinculo",
+    "patchContato",
+    "regra",
+    "leads",
+    "quadro"
+  ],
+  "nodes": [
+    {
+      "id": "paginaTags",
+      "lane": "tela",
+      "col": 0,
+      "type": "component",
+      "label": "/app/tags",
+      "sublabel": "criar, cor, renomear (funde com confirmação), arquivar; mostra uso e colunas"
+    },
+    {
+      "id": "inbox",
+      "lane": "tela",
+      "col": 3,
+      "type": "component",
+      "label": "Inbox › painel do contato",
+      "sublabel": "aplica tag do catálogo no contato"
+    },
+    {
+      "id": "quadro",
+      "lane": "tela",
+      "col": 6,
+      "type": "component",
+      "label": "Quadro do Kanban",
+      "sublabel": "arrastar card; realtime em crm_leads"
+    },
+    {
+      "id": "mcp",
+      "lane": "maquina",
+      "col": 3,
+      "type": "module",
+      "label": "crm_manage_tags / crm_move_lead_stage",
+      "sublabel": "grafia do catálogo; emite contact.tag_added"
+    },
+    {
+      "id": "fluxo",
+      "lane": "maquina",
+      "col": 4,
+      "type": "module",
+      "label": "bloco crm.add_tag",
+      "sublabel": "marcar lead vale o contato dele"
+    },
+    {
+      "id": "automacao",
+      "lane": "maquina",
+      "col": 5,
+      "type": "module",
+      "label": "ação create_or_move_lead",
+      "sublabel": "procura o negócio aberto antes de criar"
+    },
+    {
+      "id": "rotasTags",
+      "lane": "borda",
+      "col": 1,
+      "type": "route",
+      "label": "/api/v1/tags (+ /[id])",
+      "sublabel": "viewer lê, manager escreve"
+    },
+    {
+      "id": "rotaColuna",
+      "lane": "borda",
+      "col": 2,
+      "type": "route",
+      "label": "PUT /pipelines/[id]/stages/[stageId]/tags",
+      "sublabel": "409 se a tag já está em outra coluna do Kanban"
+    },
+    {
+      "id": "patchContato",
+      "lane": "borda",
+      "col": 3,
+      "type": "route",
+      "label": "PATCH /api/v1/contacts/[id]",
+      "sublabel": "devolve kanban_efeitos para a tela"
+    },
+    {
+      "id": "rotaMove",
+      "lane": "borda",
+      "col": 5,
+      "type": "route",
+      "label": "POST /api/v1/leads/[id]/move",
+      "sublabel": "só ao trocar de coluna"
+    },
+    {
+      "id": "regra",
+      "lane": "regra",
+      "col": 4,
+      "type": "module",
+      "label": "lib/tags/tag-no-kanban",
+      "sublabel": "aplicarTagsNoKanban / aplicarTagDaColuna (um salto)"
+    },
+    {
+      "id": "operacoes",
+      "lane": "regra",
+      "col": 1,
+      "type": "module",
+      "label": "lib/tags/operacoes",
+      "sublabel": "sem duplicata por caixa; fusão pedida"
+    },
+    {
+      "id": "catalogo",
+      "lane": "dados",
+      "col": 1,
+      "type": "table",
+      "label": "crm_tags",
+      "sublabel": "nome exato único; trigger registra nome novo de contato/lead"
+    },
+    {
+      "id": "vinculo",
+      "lane": "dados",
+      "col": 2,
+      "type": "table",
+      "label": "crm_stage_tags",
+      "sublabel": "uma coluna por Kanban; FK composta (pipeline, stage)"
+    },
+    {
+      "id": "renomear",
+      "lane": "dados",
+      "col": 0,
+      "type": "service",
+      "label": "fn_renomear_tag",
+      "sublabel": "propaga para contacts/crm_leads/conversations; só service_role"
+    },
+    {
+      "id": "leads",
+      "lane": "dados",
+      "col": 5,
+      "type": "table",
+      "label": "crm_leads / contacts.tags",
+      "sublabel": "cria ou move; tag acrescentada ao contato"
+    },
+    {
+      "id": "timeline",
+      "lane": "retorno",
+      "col": 5,
+      "type": "component",
+      "label": "Timeline do lead + audit",
+      "sublabel": "\"Entrou em Proposta pela tag VIP\"; lead.moved / tag.* / stage.tags_changed"
+    },
+    {
+      "id": "aviso",
+      "lane": "retorno",
+      "col": 3,
+      "type": "module",
+      "label": "Efeito ambíguo/falhou",
+      "sublabel": "dois negócios abertos no Kanban: não adivinha, a tela avisa"
+    },
+    {
+      "id": "rotaColunasDaTag",
+      "lane": "borda",
+      "col": 2,
+      "type": "route",
+      "label": "PUT /api/v1/tags/[id]/colunas",
+      "sublabel": "uma coluna por Kanban, escolhida na página de Tags"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "paginaTags",
+      "to": "rotasTags",
+      "label": "CRUD"
+    },
+    {
+      "id": "e2",
+      "from": "rotasTags",
+      "to": "operacoes",
+      "label": "regra"
+    },
+    {
+      "id": "e3",
+      "from": "operacoes",
+      "to": "catalogo",
+      "label": "grava"
+    },
+    {
+      "id": "e4",
+      "from": "operacoes",
+      "to": "renomear",
+      "label": "renomear / fundir"
+    },
+    {
+      "id": "e5",
+      "from": "renomear",
+      "to": "leads",
+      "label": "propaga o nome"
+    },
+    {
+      "id": "e6",
+      "from": "quadro",
+      "to": "rotaColuna",
+      "label": "menu da coluna (PR 2)"
+    },
+    {
+      "id": "e7",
+      "from": "rotaColuna",
+      "to": "vinculo",
+      "label": "define tags da coluna"
+    },
+    {
+      "id": "e8",
+      "from": "inbox",
+      "to": "patchContato",
+      "label": "aplica tag"
+    },
+    {
+      "id": "e9",
+      "from": "patchContato",
+      "to": "regra",
+      "label": "tags acrescentadas"
+    },
+    {
+      "id": "e10",
+      "from": "mcp",
+      "to": "regra",
+      "label": "agente marca"
+    },
+    {
+      "id": "e11",
+      "from": "fluxo",
+      "to": "regra",
+      "label": "fluxo marca"
+    },
+    {
+      "id": "e12",
+      "from": "regra",
+      "to": "vinculo",
+      "label": "para onde a tag aponta"
+    },
+    {
+      "id": "e13",
+      "from": "regra",
+      "to": "leads",
+      "label": "cria ou move"
+    },
+    {
+      "id": "e14",
+      "from": "leads",
+      "to": "quadro",
+      "label": "realtime"
+    },
+    {
+      "id": "e15",
+      "from": "quadro",
+      "to": "rotaMove",
+      "label": "arrastar card"
+    },
+    {
+      "id": "e16",
+      "from": "rotaMove",
+      "to": "regra",
+      "label": "tags da coluna → contato"
+    },
+    {
+      "id": "e17",
+      "from": "regra",
+      "to": "timeline",
+      "label": "atividade + audit"
+    },
+    {
+      "id": "e18",
+      "from": "regra",
+      "to": "aviso",
+      "label": "ambíguo / falhou"
+    },
+    {
+      "id": "e19",
+      "from": "aviso",
+      "to": "inbox",
+      "label": "a pessoa escolhe"
+    },
+    {
+      "id": "e20",
+      "from": "automacao",
+      "to": "leads",
+      "label": "move sem duplicar"
+    },
+    {
+      "id": "e21",
+      "from": "patchContato",
+      "to": "automacao",
+      "label": "contact.tag_added (event_log)"
+    },
+    {
+      "id": "e22",
+      "from": "leads",
+      "to": "catalogo",
+      "label": "trigger registra nome novo"
+    },
+    {
+      "id": "e23",
+      "from": "paginaTags",
+      "to": "rotaColunasDaTag",
+      "label": "coluna do Kanban da tag"
+    },
+    {
+      "id": "e24",
+      "from": "rotaColunasDaTag",
+      "to": "vinculo",
+      "label": "substitui as colunas da tag"
+    }
+  ]
+}
