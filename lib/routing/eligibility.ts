@@ -73,6 +73,56 @@ export function isWithinSchedule(
   return windows.some((w) => w.dow === dow && hhmm >= w.start && hhmm < w.end);
 }
 
+/**
+ * Quando a próxima janela do schedule abre, a partir de `now`.
+ *
+ * Existe porque "ninguém elegível" tem duas causas de natureza oposta. Todo
+ * mundo lotado ou offline é estado que ninguém sabe quando muda. Todo mundo
+ * FORA DO HORÁRIO é estado com hora marcada para acabar: o almoço termina às
+ * 13h, a noite termina às 8h. O worker tratava as duas iguais — 5 tentativas de
+ * 60 s e desistia —, e o lead que chegava no almoço nunca era distribuído
+ * (medido numa org de produção: 12 conversas sem dono, invisíveis às
+ * atendentes no modo `own`). Com esta resposta o worker volta exatamente na
+ * abertura, sem gastar tentativa.
+ *
+ * - `windows` vazio ⇒ `null`: sem restrição, não há abertura a esperar.
+ * - já dentro de uma janela ⇒ `now`.
+ *
+ * A conta é em relógio de parede local (minutos até o início da janela). Uma
+ * virada de horário de verão no meio do intervalo erra a previsão em até 1h —
+ * e o erro é inofensivo: na hora prevista a elegibilidade é medida de novo, e
+ * cedo demais só reagenda para a abertura seguinte.
+ */
+export function nextScheduleOpening(
+  schedule: Pick<AvailabilitySchedule, "timezone" | "windows"> | null | undefined,
+  now: Date,
+): Date | null {
+  const windows = schedule?.windows ?? [];
+  if (windows.length === 0) return null;
+  if (isWithinSchedule(schedule, now)) return now;
+
+  const timezone = schedule?.timezone || "America/Sao_Paulo";
+  const { dow, hhmm } = localMoment(now, timezone);
+  const agoraMin = minutosDoDia(hhmm);
+  const SEMANA = 7 * 1440;
+
+  let menor: number | null = null;
+  for (const w of windows) {
+    let delta = ((w.dow - dow + 7) % 7) * 1440 + minutosDoDia(w.start) - agoraMin;
+    if (delta <= 0) delta += SEMANA;
+    if (menor === null || delta < menor) menor = delta;
+  }
+  if (menor === null) return null;
+  // `hhmm` despreza os segundos de `now`; somar minutos inteiros a `now` cai no
+  // minuto de abertura com os mesmos segundos — dentro da janela, nunca antes.
+  return new Date(now.getTime() + menor * 60_000);
+}
+
+function minutosDoDia(hhmm: string): number {
+  const [h, m] = hhmm.split(":");
+  return Number(h) * 60 + Number(m);
+}
+
 /** Heartbeat mais velho que o timeout ⇒ considerado offline (AT-08). */
 export function isHeartbeatStale(
   lastHeartbeatAt: string | Date | null | undefined,

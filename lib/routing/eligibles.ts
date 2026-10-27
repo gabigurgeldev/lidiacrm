@@ -11,7 +11,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { isAttendantEligible, OPEN_LOAD_STATUSES } from "./eligibility";
+import { isAttendantEligible, isWithinSchedule, nextScheduleOpening, OPEN_LOAD_STATUSES } from "./eligibility";
 import type { RoutingCandidate } from "./decide";
 import { availabilityScheduleSchema } from "@/lib/schemas/routing";
 
@@ -21,6 +21,28 @@ export async function loadEligibleAttendants(
   organizationId: string,
   now: Date,
 ): Promise<RoutingCandidate[]> {
+  return (await loadRoutingPool(supabase, organizationId, now)).eligibles;
+}
+
+export interface RoutingPool {
+  eligibles: RoutingCandidate[];
+  /**
+   * Quando alguém que está disponível e com folga, mas FORA DO HORÁRIO, entra
+   * na próxima janela. `null` = não há quem esteja só esperando o horário
+   * (ninguém disponível, todo mundo lotado, ou já há elegível agora).
+   *
+   * É o que permite ao worker esperar o fim do almoço em vez de desistir — ver
+   * `nextScheduleOpening`.
+   */
+  nextOpeningAt: Date | null;
+}
+
+/** Os elegíveis de agora e, se não houver, quando o primeiro volta do horário. */
+export async function loadRoutingPool(
+  supabase: SupabaseClient,
+  organizationId: string,
+  now: Date,
+): Promise<RoutingPool> {
   const { data: avail } = await supabase
     .from("attendant_availability")
     .select("user_id, capacity, schedule")
@@ -28,7 +50,7 @@ export async function loadEligibleAttendants(
     .eq("is_available", true);
 
   const rows = (avail ?? []) as Array<{ user_id: string; capacity: number; schedule: unknown }>;
-  if (rows.length === 0) return [];
+  if (rows.length === 0) return { eligibles: [], nextOpeningAt: null };
 
   const userIds = rows.map((r) => r.user_id);
 
@@ -61,6 +83,7 @@ export async function loadEligibleAttendants(
   }
 
   const candidates: RoutingCandidate[] = [];
+  let nextOpeningAt: Date | null = null;
   for (const r of rows) {
     const currentLoad = loadByUser.get(r.user_id) ?? 0;
     const schedule = availabilityScheduleSchema.parse(r.schedule ?? {});
@@ -74,7 +97,12 @@ export async function loadEligibleAttendants(
         currentLoad,
         lastAssignedAt: lastAssignedByUser.get(r.user_id) ?? null,
       });
+    } else if (currentLoad < r.capacity && !isWithinSchedule(schedule, now)) {
+      // Só o horário a impede. Quem está lotado não entra: a abertura da
+      // janela não muda a carga, e prometer a volta dela seria esperar à toa.
+      const abre = nextScheduleOpening(schedule, now);
+      if (abre !== null && (nextOpeningAt === null || abre < nextOpeningAt)) nextOpeningAt = abre;
     }
   }
-  return candidates;
+  return { eligibles: candidates, nextOpeningAt: candidates.length > 0 ? null : nextOpeningAt };
 }
