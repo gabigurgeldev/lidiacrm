@@ -58,9 +58,42 @@ export function ehIdentificadorTecnico(valor: string): boolean {
   return false;
 }
 
+/** Só dígitos, `+`, espaço e pontuação de telefone, com 8+ dígitos: é número, não nome. */
+function pareceTelefone(v: string): boolean {
+  return /^[+\d\s().-]+$/.test(v) && v.replace(/\D/g, "").length >= 8;
+}
+
 /**
- * O rótulo. Primeiro o que uma pessoa escolheu, depois o que o canal informou,
- * depois o número — e só então a admissão de que não se sabe o nome.
+ * O NOME da pessoa, ou `null` quando não se sabe — para quem tem fallback
+ * próprio (um JSON de API, um prompt). Quem desenha na tela usa
+ * `rotuloDoContato`, que completa com o telefone.
+ *
+ * ═══ `name` ANTES de `display_name` ═══
+ *
+ * Esta ordem já esteve invertida, e o cabeçalho antigo dizia que
+ * `display_name` era "o que uma pessoa escolheu". Não é: quem grava
+ * `display_name` é o ingest do WhatsApp (`fn_upsert_wa_contact`, com o
+ * `pushName` do perfil — "Eucimar Silva✨🌸"), e ele só completa o vazio, nunca
+ * sobrescreve. Quem grava `name` é gente: "Editar contato", novo contato,
+ * importação, a proposta de dado aceita.
+ *
+ * Com a ordem invertida, o atendente corrigia o nome e a tela continuava com o
+ * do perfil — medido em produção (2026-10-27): 1.680 de 5.551 contatos têm
+ * `display_name`, e em todos eles editar o nome não mudava nada na tela.
+ */
+export function nomeDoContato(c: ContatoNomeavel | null | undefined): string | null {
+  if (!c) return null;
+  for (const bruto of [c.name, c.display_name]) {
+    const v = (bruto ?? "").trim();
+    if (v !== "" && !ehIdentificadorTecnico(v) && !pareceTelefone(v)) return v;
+  }
+  return null;
+}
+
+/**
+ * O rótulo. Primeiro o nome que uma pessoa escreveu, depois o do perfil do
+ * WhatsApp (`nomeDoContato`), depois o número — e só então a admissão de que
+ * não se sabe o nome.
  *
  * Celular BR aparece COM o nono dígito: `+553284793302` e `+5532984793302` são
  * a mesma pessoa, e o 9 é o que o atendente espera copiar.
@@ -71,14 +104,18 @@ export function rotuloDoContato(
 ): string {
   if (!c) return t(SEM_NOME);
 
-  const candidatos = [c.display_name, c.name];
-  for (const bruto of candidatos) {
-    const v = (bruto ?? "").trim();
-    if (v !== "" && !ehIdentificadorTecnico(v)) return v;
-  }
+  const nome = nomeDoContato(c);
+  if (nome) return nome;
 
   const tel = (c.phone_number ?? "").trim();
   if (tel !== "") return phoneForDisplay(tel);
+
+  // Sem telefone cadastrado, um número digitado no lugar do nome ainda diz mais
+  // que "Sem nome".
+  for (const bruto of [c.name, c.display_name]) {
+    const v = (bruto ?? "").trim();
+    if (v !== "" && pareceTelefone(v)) return v;
+  }
 
   return t(SEM_NOME);
 }

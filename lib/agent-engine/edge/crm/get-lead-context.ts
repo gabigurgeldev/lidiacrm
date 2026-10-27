@@ -12,6 +12,7 @@
  *   - is_blocked lido DIRETO da fonte (contacts) — não existe mais cache.
  */
 import type { Queryable } from '../../queue/queue';
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import type { CrmEdgeConfig } from './mcp-client';
 import { deriveLgpdFromContact, type LgpdInput } from '../../guardrails/lgpd/legal-basis';
 import { respostaInterativaDaMetadata } from '@/lib/channels/opcoes-interativas';
@@ -272,7 +273,7 @@ export async function getLeadContext(
     {
       lead_id: input.leadId,
       contact: {
-        name: contact.display_name ?? contact.name,
+        name: nomeDoContato(contact),
         phone: contact.phone_number,
         email: contact.email,
         tags: contact.tags ?? [],

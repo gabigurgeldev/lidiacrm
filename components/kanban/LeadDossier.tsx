@@ -1,6 +1,7 @@
 "use client";
 
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
+import { tituloDoCard } from "@/lib/kanban/card-state";
 import { useRef, useState } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
@@ -68,6 +69,9 @@ export function LeadDossier({
   const corDaTag = new Map((catalogo ?? []).map((tg) => [tg.name, tg.color]));
   const tags = tagsDoLead(lead);
   const nome = lead.contact_name ?? lead.title;
+  // O mesmo nome que o card mostra (`tituloDoCard`): negócio automático lê o
+  // nome vivo do contato, não a cópia gravada quando ele nasceu.
+  const titulo = tituloDoCard(lead);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -91,10 +95,10 @@ export function LeadDossier({
               {ownerInitials(nome)}
             </span>
             <div className="min-w-0 flex-1">
-              {lead.contact_name && lead.contact_name !== lead.title && (
+              {lead.contact_name && lead.contact_name !== titulo && (
                 <p className="truncate text-xs font-medium text-text-muted">{lead.contact_name}</p>
               )}
-              <SheetTitle className="text-base leading-6">{lead.title}</SheetTitle>
+              <SheetTitle className="text-base leading-6">{titulo}</SheetTitle>
               <p className="text-xl font-semibold tabular-nums tracking-tight text-text">
                 {lead.value_cents != null ? formatarReais(lead.value_cents, lead.currency) : t("Sem valor")}
               </p>

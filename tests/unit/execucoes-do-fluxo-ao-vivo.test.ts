@@ -68,9 +68,11 @@ describe("quem disparou o fluxo", () => {
 });
 
 describe("o nome que a tela mostra", () => {
-  it("⭐ prefere o apelido, depois o nome, e o telefone como último recurso", () => {
-    expect(nomeDoContato(CONTATO)).toBe("Carla");
-    expect(nomeDoContato({ ...CONTATO, display_name: null })).toBe("Carla Oliveira");
+  it("⭐ prefere o nome digitado, depois o do perfil do WhatsApp, e o telefone como último recurso", () => {
+    // `display_name` é o pushName que o ingest grava; `name` é o que alguém
+    // escreveu. A ordem antiga escondia o nome corrigido (lib/contacts/rotulo-do-contato.ts).
+    expect(nomeDoContato(CONTATO)).toBe("Carla Oliveira");
+    expect(nomeDoContato({ ...CONTATO, name: null })).toBe("Carla");
     expect(nomeDoContato({ ...CONTATO, display_name: null, name: null })).toBe(
       "+5594981627533",
     );

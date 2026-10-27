@@ -27,6 +27,7 @@
  * duas pontas.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 
 import type { SearchQuery, SearchResult } from "@/lib/schemas/search";
 
@@ -58,15 +59,13 @@ function resumo(texto: string | null | undefined, max = 80): string | null {
 type Ctx = { organization_id: string };
 
 /**
- * Nome de contato como a interface o mostra.
- *
- * ⚠️ `display_name` PRIMEIRO. Contato que entra pelo WhatsApp nasce só com ele
- * (o pushName do aparelho); `name` fica nulo até alguém editar à mão. A ordem
- * inversa mostraria vazio para a maioria dos contatos de uma instalação nova —
- * o mesmo defeito que `contacts/_handler.ts` documenta no filtro de busca.
+ * Nome de contato como a interface o mostra — a regra é a de
+ * `lib/contacts/rotulo-do-contato.ts`: `name` (escrito por gente) e, vazio,
+ * o `display_name` (o pushName do WhatsApp). Contato que só tem o pushName
+ * continua aparecendo pelo pushName.
  */
-function nomeDoContato(c: { display_name?: string | null; name?: string | null }): string {
-  return (c.display_name ?? "").trim() || (c.name ?? "").trim() || "—";
+function rotuloDaBusca(c: { display_name?: string | null; name?: string | null }): string {
+  return nomeDoContato(c) ?? "—";
 }
 
 async function buscarContatos(
@@ -97,7 +96,7 @@ async function buscarContatos(
     id: c.id as string,
     // Contato anonimizado por LGPD não volta a ter nome aqui: o que o banco
     // guarda já é o rótulo anônimo, e é ele que a busca mostra.
-    title: nomeDoContato(c),
+    title: rotuloDaBusca(c),
     subtitle: resumo(c.phone_number as string | null),
     href: `/app/contacts/${c.id}`,
   }));
@@ -136,7 +135,7 @@ async function buscarConversas(
   return ((data ?? []) as unknown as Linha[]).map((c) => ({
     kind: "conversation" as const,
     id: c.id,
-    title: nomeDoContato(c.contacts ?? {}),
+    title: rotuloDaBusca(c.contacts ?? {}),
     subtitle: resumo(c.last_message_preview),
     href: `/app/inbox/${c.id}`,
   }));

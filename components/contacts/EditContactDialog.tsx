@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { useForm } from "react-hook-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -44,7 +45,7 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
 
   const form = useForm<FormShape>({
     defaultValues: {
-      name: contact.name ?? "",
+      name: nomeDoContato(contact) ?? "",
       email: contact.email ?? "",
       phone_number: contact.phone_number ? phoneForDisplay(contact.phone_number) : "",
       birthdate: contact.birthdate ?? "",
@@ -54,7 +55,9 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
   useEffect(() => {
     if (open) {
       form.reset({
-        name: contact.name ?? "",
+        // O nome que a tela MOSTRA: contato do WhatsApp só tem o do perfil
+        // (`display_name`), e o campo vinha vazio — parecia que ele não tinha nome.
+        name: nomeDoContato(contact) ?? "",
         email: contact.email ?? "",
         phone_number: contact.phone_number ? phoneForDisplay(contact.phone_number) : "",
         // Faltava: reabrir o diálogo deixava a data de nascimento da edição

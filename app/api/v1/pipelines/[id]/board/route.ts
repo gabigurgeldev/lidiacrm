@@ -14,6 +14,7 @@
  * runs, same as every other authed query.
  */
 import { randomUUID } from "node:crypto";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { type NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
@@ -412,7 +413,8 @@ export async function GET(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   const orgId = (pipeline as Pipeline).organization_id;
   const base = ((leads ?? []) as LeadComContato[]).map(({ contato, ...lead }) => ({
     ...lead,
-    contact_name: contato?.display_name ?? contato?.name ?? null,
+    // `name` (o que o atendente escreveu) antes do nome do perfil do WhatsApp.
+    contact_name: nomeDoContato(contato),
     contact_tags: contato?.tags ?? [],
   })) as Lead[];
 

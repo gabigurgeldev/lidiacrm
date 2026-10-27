@@ -81,8 +81,32 @@ export interface CardInput {
  * aqui que se decide o que o card VÊ, e é o único lugar onde a linha do banco
  * encosta no card.
  */
+/**
+ * O nome que o card MOSTRA.
+ *
+ * Negócio que nasce sozinho — pela primeira mensagem do WhatsApp, por anúncio,
+ * pela tag de uma coluna ou pelo "Colocar em um Kanban" da conversa — grava em
+ * `title` uma CÓPIA do nome do contato naquele instante. Cópia sem fonte de
+ * verdade: o atendente corrigia o nome do contato e o card seguia com o antigo
+ * (ou com o telefone, para quem entrou antes de ter nome) — relato do dono do
+ * produto, 2026-10-27; medido em produção, 80 negócios automáticos com título
+ * diferente do nome atual.
+ *
+ * Então, para esses, o card lê o nome VIVO do contato. Só o negócio criado à
+ * mão (`manual`) mantém o título digitado — "Pedido #123" é escolha, não cópia.
+ */
+export function tituloDoCard(
+  lead: Pick<Lead, "title" | "contact_name"> & { source?: string | null },
+): string {
+  const nome = (lead.contact_name ?? "").trim();
+  // Sem origem conhecida, o título gravado vale: só se troca o que se sabe cópia.
+  if (nome && lead.source && lead.source !== "manual") return nome;
+  return lead.title;
+}
+
 export function buildCardInput(
-  lead: Pick<
+  lead: Partial<Pick<Lead, "source">> &
+  Pick<
     Lead,
     | "id"
     | "title"
@@ -127,7 +151,7 @@ export function buildCardInput(
 
   return {
     id: lead.id,
-    title: lead.title,
+    title: tituloDoCard(lead),
     valueCents: lead.value_cents,
     currency: lead.currency,
     owner: resolveLeadOwner(lead, opts.ownerNames),

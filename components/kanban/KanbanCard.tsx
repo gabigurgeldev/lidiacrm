@@ -134,7 +134,11 @@ function KanbanCardBase({
           // Lista completa no hover; no card cabem três chips e um "+N".
           title={card.tags.length > 0 ? `Tags: ${card.tags.join(", ")}` : undefined}
           className={cn(
-            "group relative overflow-hidden rounded-ios-sm border border-border bg-surface",
+            // `shrink-0`: o card é item de uma coluna flex de altura PRESA (o
+            // quadro fica na altura da janela). Com `overflow-hidden` a altura
+            // mínima dele vira 0, e sem isto, com 30 cards, cada um encolhia
+            // até mostrar só meia linha do nome — em vez de a coluna rolar.
+            "group relative shrink-0 overflow-hidden rounded-ios-sm border border-border bg-surface",
             "p-3 shadow-xs",
             "transition-[box-shadow,transform,border-color] duration-150 ease-out",
             "hover:-translate-y-px hover:border-border-strong hover:shadow-md",
