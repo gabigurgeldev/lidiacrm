@@ -43,7 +43,7 @@ export function NovaColuna({ pipelineId }: { pipelineId: string }) {
       <button
         type="button"
         onClick={() => setNome("")}
-        className="flex h-11 w-72 shrink-0 items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-text-muted transition-colors hover:border-border-strong hover:bg-surface-elevated/40 hover:text-text"
+        className="flex h-12 w-[19rem] shrink-0 items-center justify-center gap-2 rounded-ios border-2 border-dashed border-border text-sm font-medium text-text-muted transition-colors hover:border-accent/50 hover:bg-accent-soft/40 hover:text-accent"
         data-testid="nova-coluna"
       >
         <Plus size={16} /> {t("Nova coluna")}
@@ -52,7 +52,7 @@ export function NovaColuna({ pipelineId }: { pipelineId: string }) {
   }
 
   return (
-    <div className="flex w-72 shrink-0 flex-col gap-2 self-start rounded-lg border border-border bg-surface p-3">
+    <div className="flex w-[19rem] shrink-0 flex-col gap-2 self-start rounded-ios border border-border bg-surface p-3 shadow-sm">
       <Input
         autoFocus
         maxLength={80}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useTagDeIdioma } from "@/hooks/i18n/useLocaleDeData";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import { useT } from "@/hooks/i18n/useT";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -11,7 +11,15 @@ import { ConversaNoDossie } from "./ConversaNoDossie";
 import { LeadFieldsForm } from "./LeadFieldsForm";
 import { ScoreSlot } from "./ScoreSlot";
 import { LeadTimeline } from "./LeadTimeline";
-import { OwnerBadge } from "./OwnerBadge";
+import { OwnerBadge, ownerInitials } from "./OwnerBadge";
+import { LoseLeadDialog } from "./LoseLeadDialog";
+import { TagChip } from "@/components/tags/TagChip";
+import { Button } from "@/components/ui/button";
+import { useTags } from "@/hooks/tags/useTags";
+import { useWinLead } from "@/hooks/kanban/useUpdateLead";
+import { formatarReais } from "@/lib/kanban/dinheiro";
+import { tagsDoLead } from "@/lib/kanban/filters";
+import { Trophy, XCircle } from "@/lib/ui/icons";
 import { resolveLeadOwner } from "@/lib/kanban/owner";
 import type { CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 
@@ -25,18 +33,6 @@ interface Props {
   ownerNames?: Map<string, string | null>;
 }
 
-function formatBRL(cents: number | null, currency: string | null): string {
-  if (cents === null) return "—";
-  try {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: currency ?? "BRL",
-      maximumFractionDigits: 0,
-    }).format(cents / 100);
-  } catch {
-    return `R$ ${(cents / 100).toFixed(0)}`;
-  }
-}
 
 /**
  * O dossiê do negócio: cabeçalho vivo → timeline → campos.
@@ -66,6 +62,12 @@ export function LeadDossier({
   const timeline = useLeadTimeline(open ? lead.id : null, lead.contact_id);
   const owner = resolveLeadOwner(lead, ownerNames);
   const score = lead.score ?? null;
+  const ganhar = useWinLead(pipelineId);
+  const [perdendo, setPerdendo] = useState(false);
+  const { data: catalogo } = useTags();
+  const corDaTag = new Map((catalogo ?? []).map((tg) => [tg.name, tg.color]));
+  const tags = tagsDoLead(lead);
+  const nome = lead.contact_name ?? lead.title;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -81,15 +83,63 @@ export function LeadDossier({
         data-refetch-divergencias={timeline.seguranca.divergencias}
       >
         <SheetHeader className="pb-3">
-          <SheetTitle className="text-base leading-6">{lead.title}</SheetTitle>
+          {/* Topo do dossiê: QUEM é (avatar + contato), O QUE é (título) e
+              quanto vale — e as duas saídas do negócio à mão. Antes, ganhar ou
+              perder só existia no menu ⋯ do card. */}
+          <div className="flex items-start gap-3 pr-8">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
+              {ownerInitials(nome)}
+            </span>
+            <div className="min-w-0 flex-1">
+              {lead.contact_name && lead.contact_name !== lead.title && (
+                <p className="truncate text-xs font-medium text-text-muted">{lead.contact_name}</p>
+              )}
+              <SheetTitle className="text-base leading-6">{lead.title}</SheetTitle>
+              <p className="text-xl font-semibold tabular-nums tracking-tight text-text">
+                {lead.value_cents != null ? formatarReais(lead.value_cents, lead.currency) : t("Sem valor")}
+              </p>
+            </div>
+          </div>
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 pt-2">
+              {tags.map((tag) => (
+                <TagChip key={tag} nome={tag} cor={corDaTag.get(tag) ?? "#64748b"} tamanho="sm" />
+              ))}
+            </div>
+          )}
+          {lead.status === "open" && (
+            <div className="flex gap-2 pt-3">
+              <Button
+                size="sm"
+                className="flex-1 gap-1.5"
+                disabled={ganhar.isPending}
+                onClick={() => ganhar.mutate({ leadId: lead.id })}
+                data-testid="dossie-ganhou"
+              >
+                <Trophy size={14} weight="fill" aria-hidden /> {t("Ganhou")}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 gap-1.5"
+                onClick={() => setPerdendo(true)}
+                data-testid="dossie-perdeu"
+              >
+                <XCircle size={14} aria-hidden /> {t("Perdeu")}
+              </Button>
+            </div>
+          )}
         </SheetHeader>
+        <LoseLeadDialog
+          open={perdendo}
+          onOpenChange={setPerdendo}
+          leadId={lead.id}
+          pipelineId={pipelineId}
+        />
 
         {/* ① cabeçalho vivo */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border pb-3 text-xs">
-          <span className="font-medium tabular-nums text-text">
-            {formatBRL(lead.value_cents, lead.currency)}
-          </span>
-          <span className="text-text-muted">{stageName}</span>
+          <span className="rounded-full bg-surface-elevated px-2 py-0.5 font-medium text-text">{stageName}</span>
           <OwnerBadge
             ownerKind={owner.kind}
             ownerName={owner.name}

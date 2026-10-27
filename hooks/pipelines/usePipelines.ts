@@ -54,10 +54,17 @@ function useReler() {
   return () => router.refresh();
 }
 
+/** O que o POST aceita: nome, descrição e o modelo de colunas (`MODELOS_DE_KANBAN`). */
+export interface NovoKanban {
+  name: string;
+  description?: string | null;
+  modelo?: string;
+}
+
 export function useCriarFunil() {
   const reler = useReler();
   return useMutation({
-    mutationFn: (name: string) => apiClient.post<Resposta>(ROTA, { name }),
+    mutationFn: (novo: NovoKanban) => apiClient.post<Resposta>(ROTA, novo),
     onSettled: reler,
   });
 }

@@ -189,4 +189,11 @@ export {
   Stop,
   // assinatura do atendente no composer do inbox
   Signature,
+  // redesenho dos Kanbans (2026-10-27): selo de padrão, valor, previsão, mensagens
+  Star,
+  CurrencyCircleDollar,
+  ChatCircleDots,
+  HourglassMedium,
+  Trophy,
+  XCircle,
 } from "@phosphor-icons/react/dist/ssr";

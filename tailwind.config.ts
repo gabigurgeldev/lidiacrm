@@ -173,6 +173,10 @@ const config: Config = {
         lg: "var(--radius-lg)",
         xl: "var(--radius-xl)",
         full: "var(--radius-full)",
+        // Raios iOS (já eram tokens em globals.css, sem utilitário): cartão e
+        // superfície interna do redesenho dos Kanbans.
+        ios: "var(--radius-ios)",
+        "ios-sm": "var(--radius-ios-sm)",
       },
       boxShadow: {
         xs: "var(--shadow-xs)",

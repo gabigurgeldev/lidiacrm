@@ -13,6 +13,8 @@ import { ScoreSlot } from "./ScoreSlot";
 import { OwnerBadge, ownerInitials } from "./OwnerBadge";
 import { TagChip } from "@/components/tags/TagChip";
 import { PALETA_DE_TAGS } from "@/lib/tags/normalizar";
+import { formatarReais } from "@/lib/kanban/dinheiro";
+import { CalendarX, CalendarBlank, HourglassMedium, Trophy, XCircle } from "@/lib/ui/icons";
 
 interface KanbanCardProps {
   /** O que o card mostra — explicitamente NÃO é a linha do banco. */
@@ -35,6 +37,21 @@ interface KanbanCardProps {
   coresDasTags?: Map<string, string>;
 }
 
+/**
+ * A previsão de fechamento como o card a mostra: "12/11", e `atrasada` quando
+ * o dia já passou. Antes ela só existia no filtro "Apenas atrasados" — quem
+ * olhava o quadro não via que o negócio tinha passado do prazo.
+ */
+export function previsaoDeFechamento(
+  data: string | null | undefined,
+  hoje: Date = new Date(),
+): { texto: string; atrasada: boolean } | null {
+  if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return null;
+  const [, mes, dia] = data.split("-");
+  const hojeIso = hoje.toISOString().slice(0, 10);
+  return { texto: `${dia}/${mes}`, atrasada: data < hojeIso };
+}
+
 /** Quantas tags cabem na faixa do card antes do "+N". */
 const TAGS_NO_CARD = 3;
 
@@ -54,17 +71,7 @@ function corDoAvatar(nome: string): string {
 }
 
 function formatBRL(cents: number | null, currency: string | null): string | null {
-  if (cents == null) return null;
-  const code = currency ?? "BRL";
-  try {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: code,
-      maximumFractionDigits: 0,
-    }).format(cents / 100);
-  } catch {
-    return `${(cents / 100).toFixed(2)} ${code}`;
-  }
+  return cents == null ? null : formatarReais(cents, currency);
 }
 
 /**
@@ -96,6 +103,7 @@ function KanbanCardBase({
   const nomeDoAvatar = card.contactName ?? card.title;
   const tagsVisiveis = card.tags.slice(0, TAGS_NO_CARD);
   const tagsEscondidas = card.tags.length - tagsVisiveis.length;
+  const previsao = previsaoDeFechamento(lead.expected_close_date);
 
   // Clique ABRE o dossiê; ctrl/cmd+clique SELECIONA. "Clicar abre" é a
   // convenção mais forte, e seleção múltipla é recurso de poder, que tolera
@@ -126,8 +134,8 @@ function KanbanCardBase({
           // Lista completa no hover; no card cabem três chips e um "+N".
           title={card.tags.length > 0 ? `Tags: ${card.tags.join(", ")}` : undefined}
           className={cn(
-            "group relative overflow-hidden rounded-lg border border-border bg-surface",
-            "py-2.5 pl-3 pr-3 shadow-xs",
+            "group relative overflow-hidden rounded-ios-sm border border-border bg-surface",
+            "p-3 shadow-xs",
             "transition-[box-shadow,transform,border-color] duration-150 ease-out",
             "hover:-translate-y-px hover:border-border-strong hover:shadow-md",
             "motion-reduce:transition-none motion-reduce:hover:translate-y-0",
@@ -165,7 +173,7 @@ function KanbanCardBase({
             <div className="flex min-w-0 flex-1 items-start gap-2">
               <span
                 aria-hidden
-                className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white"
+                className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white shadow-xs"
                 style={{ backgroundColor: corDoAvatar(nomeDoAvatar) }}
               >
                 {iniciais(nomeDoAvatar)}
@@ -187,7 +195,14 @@ function KanbanCardBase({
                   acessibilidade; deixar só onKeyDown daria uma ação que existe
                   e NÃO É DESCOBERTA por leitor de tela. O título como button
                   atende mouse, teclado e leitor sem desfazer a decisão antiga. */}
-              <h3 className="line-clamp-2 h-10 text-sm font-medium leading-5 text-text">
+              <div className="min-w-0 flex-1">
+              {/* O nome do CONTATO em cima quando o negócio tem outro título
+                  ("Pedido #123" de "Maria Souza"): é a pessoa que o atendente
+                  procura no quadro. */}
+              {card.contactName && card.contactName !== card.title && (
+                <p className="truncate text-[11px] font-medium text-text-muted">{card.contactName}</p>
+              )}
+              <h3 className="line-clamp-2 text-sm font-semibold leading-5 text-text">
                 <button
                   type="button"
                   onClick={(e) => {
@@ -199,6 +214,7 @@ function KanbanCardBase({
                   {card.title}
                 </button>
               </h3>
+              </div>
             </div>
             <KanbanCardActions lead={lead} pipelineId={pipelineId} onEditar={() => onOpen?.(card.id)} />
           </div>
@@ -206,11 +222,11 @@ function KanbanCardBase({
           {/* ② valor — altura reservada mesmo sem valor, senão o card encolhe. */}
           <p
             className={cn(
-              "mt-1 h-5 text-xs font-medium leading-5 tabular-nums",
-              value ? "text-text" : "text-text-muted",
+              "mt-2 h-6 text-base font-semibold leading-6 tabular-nums tracking-tight",
+              value ? "text-text" : "text-sm font-normal text-text-muted",
             )}
           >
-            {value ?? "—"}
+            {value ?? t("Sem valor")}
           </p>
 
           {/* As tags do contato — altura reservada como as outras faixas: o card
@@ -276,17 +292,39 @@ function KanbanCardBase({
               e some por inteiro quando não há conversa. */}
           <ConversaSlot conversa={lead.conversa} />
 
-          {/* ④ dono · ⑤ tempo no estágio */}
-          <div className="mt-1 flex h-6 items-center justify-between gap-2">
+          {/* ④ dono · ⑤ sinais: tempo na coluna, previsão de fechamento
+              (vermelha quando passou) e o selo de desfecho do negócio fechado. */}
+          <div className="mt-2 flex h-6 items-center justify-between gap-2 border-t border-border/70 pt-2">
             <OwnerBadge
               ownerKind={card.owner.kind}
               ownerName={card.owner.name}
               agentVersion={card.owner.agentVersion}
             />
-            <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-text-muted">
-              {state.showStageAge && age
-                ? `${age} ${t("em")} ${card.stageName}`
-                : `${t("em")} ${card.stageName}`}
+            <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[11px] tabular-nums text-text-muted">
+              {lead.status === "won" && (
+                <span className="inline-flex items-center gap-1 font-medium text-success-fg" data-testid="selo-ganho">
+                  <Trophy size={12} weight="fill" aria-hidden /> {t("Ganho")}
+                </span>
+              )}
+              {lead.status === "lost" && (
+                <span className="inline-flex items-center gap-1 font-medium text-error-fg" data-testid="selo-perdido">
+                  <XCircle size={12} weight="fill" aria-hidden /> {t("Perdido")}
+                </span>
+              )}
+              {lead.status === "open" && previsao && (
+                <span
+                  className={cn("inline-flex items-center gap-1", previsao.atrasada && "font-medium text-error-fg")}
+                  title={previsao.atrasada ? t("Previsão de fechamento já passou") : t("Previsão de fechamento")}
+                  data-testid={previsao.atrasada ? "previsao-atrasada" : "previsao"}
+                >
+                  {previsao.atrasada ? <CalendarX size={12} aria-hidden /> : <CalendarBlank size={12} aria-hidden />}
+                  {previsao.texto}
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1" title={`${t("em")} ${card.stageName}`}>
+                <HourglassMedium size={12} aria-hidden />
+                {state.showStageAge && age ? age : card.stageName}
+              </span>
             </span>
           </div>
         </div>

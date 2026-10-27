@@ -1,4 +1,6 @@
 import { chaveDeNome, slugDeNome } from "@/lib/leads/stage-editing";
+import { PACOTES } from "@/lib/onboarding/pacotes-de-funil";
+import { etapasParaGravar } from "@/lib/onboarding/proposta-de-funil";
 
 /**
  * As regras da edição dos FUNIS, sem tocar no banco.
@@ -256,7 +258,7 @@ export function regrasQueApontamPara(regras: RegraDeAutomacao[], pipelineId: str
  * Os nomes são neutros de propósito. O gatilho `fn_seed_default_pipeline_for_org`
  * semeia um funil de e-commerce ("Carrinho abandonado") em toda org nova, e é
  * justamente isso que uma clínica não consegue usar — repetir o erro no funil
- * criado à mão seria absurdo. Tudo aqui é renomeável em Configurações › Funis.
+ * criado à mão seria absurdo. Tudo aqui é renomeável no painel Configurar do Kanban.
  */
 export const ETAPAS_INICIAIS: ReadonlyArray<{
   name: string;
@@ -277,3 +279,52 @@ export const ETAPAS_INICIAIS: ReadonlyArray<{
  * divergiria da deles no primeiro ajuste.
  */
 export { midpoint as posicaoEntre } from "@/lib/kanban/fractional-indexing";
+
+/** Uma coluna com que o Kanban nasce, sem organização nem Kanban ainda. */
+export interface ColunaInicial {
+  name: string;
+  slug: string;
+  position: number;
+  is_won: boolean;
+  is_lost: boolean;
+  /** O passo do agente que a coluna representa; `null` = nenhum. */
+  agent_stage_hint: string | null;
+}
+
+/** Os modelos que a tela "Novo Kanban" oferece (os pacotes por nicho do onboarding). */
+export const MODELOS_DE_KANBAN = PACOTES.map((p) => ({
+  id: p.id,
+  rotulo: p.comoSeApresenta,
+  colunas: p.proposta.etapas.map((e) => e.nome),
+}));
+
+/**
+ * As colunas de um Kanban novo. Com `modelo` (id de um pacote de
+ * `lib/onboarding/pacotes-de-funil.ts`), vêm as colunas do nicho JÁ com
+ * fechamento, perda e o passo do agente de cada uma — o mesmo que o
+ * onboarding grava, por `etapasParaGravar`. Sem modelo (ou modelo que não
+ * existe), as quatro neutras de `ETAPAS_INICIAIS`, sem passo do agente.
+ */
+export function colunasIniciais(modelo?: string | null): ColunaInicial[] {
+  const pacote = modelo ? PACOTES.find((p) => p.id === modelo) : undefined;
+  if (pacote) {
+    return etapasParaGravar(pacote.proposta, (nome, existentes) => slugDeNome(nome, existentes)).map(
+      (e) => ({
+        name: e.nome,
+        slug: e.slug,
+        position: e.position,
+        is_won: e.is_won,
+        is_lost: e.is_lost,
+        agent_stage_hint: e.agent_stage_hint,
+      }),
+    );
+  }
+  return ETAPAS_INICIAIS.map((e, i) => ({
+    name: e.name,
+    slug: e.slug,
+    position: (i + 1) * 1000,
+    is_won: e.is_won,
+    is_lost: e.is_lost,
+    agent_stage_hint: null,
+  }));
+}
