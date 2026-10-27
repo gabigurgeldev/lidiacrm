@@ -18,18 +18,23 @@ import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAssignableAgents } from "@/hooks/kanban/useAssignableAgents";
 import { usePermission } from "@/hooks/auth/AuthProvider";
 import { LoseLeadDialog } from "./LoseLeadDialog";
-import { EditLeadDialog } from "./EditLeadDialog";
 import type { Lead } from "@/lib/types/leads";
 
 interface KanbanCardActionsProps {
   lead: Lead;
   pipelineId: string;
+  /**
+   * "Editar" abre o DOSSIÊ, onde mora o único formulário do negócio
+   * (`LeadFieldsForm`, com campos do Kanban e tags do contato). Havia um
+   * segundo — `EditLeadDialog` — sem os campos personalizados, que gravava o
+   * mesmo negócio por outro caminho; foi apagado em 2026-10-27.
+   */
+  onEditar?: () => void;
 }
 
-export function KanbanCardActions({ lead, pipelineId }: KanbanCardActionsProps) {
+export function KanbanCardActions({ lead, pipelineId, onEditar }: KanbanCardActionsProps) {
   const t = useT();
   const [loseOpen, setLoseOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
   const winMutation = useWinLead(pipelineId);
   const editMutation = useEditLead(pipelineId);
   // spec 13 §4: escrita no funil é agent+ — viewer não reatribui (a rota
@@ -77,9 +82,7 @@ export function KanbanCardActions({ lead, pipelineId }: KanbanCardActionsProps) 
           onClick={(e) => e.stopPropagation()}
         >
           <DropdownMenuItem
-            onSelect={() => {
-              setEditOpen(true);
-            }}
+            onSelect={() => onEditar?.()}
           >
             <PencilSimple size={14} className="mr-2" /> {t("Editar")}
           </DropdownMenuItem>
@@ -148,12 +151,6 @@ export function KanbanCardActions({ lead, pipelineId }: KanbanCardActionsProps) 
         open={loseOpen}
         onOpenChange={setLoseOpen}
         leadId={lead.id}
-        pipelineId={pipelineId}
-      />
-      <EditLeadDialog
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        lead={lead}
         pipelineId={pipelineId}
       />
     </>

@@ -30,7 +30,7 @@ import {
   opcoesDoPasso,
   motivoDaListaVazia,
   mensagemDeErro,
-} from "./_mapping";
+} from "./PassoDoAgente";
 
 // Polyfills que o Radix Select exige e o jsdom não tem.
 window.HTMLElement.prototype.scrollIntoView = vi.fn();

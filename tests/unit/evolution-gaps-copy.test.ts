@@ -76,13 +76,14 @@ describe("lacuna de funil — o botão fecha o ciclo, e o ciclo tem guarda", () 
   const lacunaDe = (steps: string[]) =>
     montaLacunas({
       ...semFuniz,
-      unmapped_agent_steps: [{ pipeline_name: "Pedidos", steps }],
+      unmapped_agent_steps: [{ pipeline_id: "pipe-1", pipeline_name: "Pedidos", steps }],
     })[0]!;
 
-  it("aponta para a tela que conserta, não para o quadro", () => {
+  it("aponta para o painel que conserta, dentro do PRÓPRIO Kanban", () => {
+    // Desde 2026-10-27 a configuração mora no Kanban (painel Configurar); a
+    // página "Colunas dos Kanbans" foi extinta.
     const l = lacunaDe(["new"]);
-    expect(l.href).toBe("/app/settings/tenant/pipelines");
-    expect(l.href).not.toBe("/app/kanban");
+    expect(l.href).toBe("/app/pipelines/pipe-1?configurar=colunas");
   });
 
   it("o verbo do botão é de ação, não de observação", () => {

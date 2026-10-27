@@ -88,11 +88,13 @@ export function montaLacunas(gaps: EvolutionPayload["gaps"]): Lacuna[] {
         `Mas se você esperava ver esses clientes andarem sozinhos no quadro, é aqui que falta o vínculo — e você mesmo ` +
         `escolhe, passo a passo, para qual etapa o card vai.` +
         ressalvaDeFechamento(p.steps),
-      // ⚠️ ESTE LINK É O QUE FECHA O CICLO. Antes ele apontava para o quadro com o
-      // verbo "Ver", porque não existia lugar nenhum no produto para escrever
-      // `agent_stage_hint` — o painel relatava uma lacuna e parava aí. Agora leva
-      // à tela que a conserta, e o verbo diz o que se faz lá.
-      href: "/app/settings/tenant/pipelines",
+      // ⚠️ ESTE LINK É O QUE FECHA O CICLO. Leva ao painel Configurar do PRÓPRIO
+      // Kanban, aberto na aba onde se escolhe a etapa de cada passo (desde
+      // 2026-10-27; antes era a página "Colunas dos Kanbans", extinta). Sem id
+      // (payload antigo em cache), cai na lista de Kanbans.
+      href: p.pipeline_id
+        ? `/app/pipelines/${p.pipeline_id}?configurar=colunas`
+        : "/app/kanban",
       cta: "Escolher a etapa de cada passo",
     });
   }

@@ -5,7 +5,6 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -20,77 +19,30 @@ import type { PipelineConfigPatch } from "@/lib/schemas/settings";
 import { camposDoFunil } from "@/lib/leads/campos-do-funil";
 import { customFieldSchema, type CustomFieldDef } from "@/lib/schemas/settings";
 import { Plus, Trash } from "@/lib/ui/icons";
-import { AgentMappingSection, ancoraDoMapeamento } from "./_mapping";
-import { StagesSection, ancoraDasEtapas } from "./_stages";
-
 export interface PipelineRow {
   id: string;
   name: string;
-  slug: string;
-  vocabulary: Record<string, string> | null;
+  vocabulary: { lead?: string; deal?: string; won?: string; lost?: string } | null;
   settings: Record<string, unknown> | null;
 }
 
-function readLostReasons(settings: Record<string, unknown> | null): string[] {
-  if (!settings) return [];
-  const r = (settings as { lost_reasons?: unknown }).lost_reasons;
-  return Array.isArray(r) ? (r as string[]) : [];
-}
-
-export function PipelinesClient({
-  pipelines,
-  podeEditarConfig,
-}: {
-  pipelines: PipelineRow[];
-  /** Vocabulário/custom fields são admin (a server action recusa o resto). */
-  podeEditarConfig: boolean;
-}) {
-  const t = useT();
-  if (pipelines.length === 0) {
-    // ⚠️ NÃO PROMETA UM CAMINHO QUE NÃO EXISTE. Criar funil não é feito por
-    // nenhuma tela, rota ou action deste produto — só por script de instalação;
-    // e como o instalador não provisiona funil, ESTE é o estado de toda
-    // instalação nova. O texto anterior mandava "crie um no quadro", e o quadro
-    // vazio manda "Ir para Configurações": pingue-pongue fechado, com o usuário
-    // procurando um botão que não existe em lugar nenhum.
-    return (
-      <Card className="p-6 text-sm leading-relaxed text-muted-foreground">
-        {t("Você ainda não tem nenhum Kanban. Enquanto for assim, o agente atende normalmente, mas não tem para onde levar o card de ninguém — não há etapas para onde mover. Criar o Kanban é feito por quem instalou o sistema, direto no banco; depois ele aparece aqui para você escolher a etapa de cada passo.")}
-      </Card>
-    );
-  }
-  return (
-    <div className="flex flex-col gap-4">
-      {pipelines.map((p) => (
-        <Card key={p.id} className="space-y-6 p-6">
-          <header>
-            <h2 className="text-base font-semibold">{p.name}</h2>
-            <p className="text-xs text-muted-foreground">/{p.slug}</p>
-          </header>
-          {/* As ETAPAS vêm primeiro, e a ordem é a do raciocínio de quem
-              configura: primeiro o quadro existe do jeito da sua operação,
-              depois se decide o que o assistente faz com ele. Invertido, a
-              primeira coisa que o dono da clínica vê é um mapeamento sobre
-              colunas de e-commerce que ele nem sabia que dava para trocar. */}
-          <StagesSection pipelineId={p.id} ancoraMapeamento={ancoraDoMapeamento(p.id)} />
-          <div className="border-t border-border pt-6">
-            <AgentMappingSection pipelineId={p.id} ancoraEtapas={ancoraDasEtapas(p.id)} />
-          </div>
-          {podeEditarConfig && <PipelineEditor pipeline={p} />}
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
+/**
+ * Campos personalizados e nomes de um Kanban — a aba "Campos e nomes" do painel
+ * Configurar (`ConfigurarKanban`). Veio da extinta página "Colunas dos
+ * Kanbans" (2026-10-27). Admin: `updatePipelineConfig` recusa o resto.
+ *
+ * Os "motivos de perda por Kanban" saíram junto com a página: nada os lia —
+ * `LoseLeadDialog` usa só `CANONICAL_LOST_REASONS` —, e um campo que se
+ * edita e não muda nada é pior que campo nenhum. O valor antigo fica no banco
+ * (o patch não manda `lost_reasons`, e a action faz merge).
+ */
+export function CamposENomes({ pipeline }: { pipeline: PipelineRow }) {
   const t = useT();
   const v = pipeline.vocabulary ?? {};
   const [lead, setLead] = useState(v.lead ?? "Lead");
   const [deal, setDeal] = useState(v.deal ?? "Deal");
   const [won, setWon] = useState(v.won ?? "Ganho");
   const [lost, setLost] = useState(v.lost ?? "Perdido");
-  const [reasonsText, setReasonsText] = useState(readLostReasons(pipeline.settings).join(", "));
   const [fields, setFields] = useState<CustomFieldDef[]>(camposDoFunil(pipeline.settings));
   const [isPending, startTransition] = useTransition();
 
@@ -104,15 +56,9 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
       }
       ok.push(parsed.data);
     }
-    const reasons = reasonsText
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
     const patch: PipelineConfigPatch = {
       vocabulary: { lead, deal, won, lost },
       fields: ok,
-      lost_reasons: reasons,
     };
     startTransition(async () => {
       const r = await updatePipelineConfig(pipeline.id, patch);
@@ -139,26 +85,21 @@ function PipelineEditor({ pipeline }: { pipeline: PipelineRow }) {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div className="space-y-1">
-          <Label className="text-xs">Lead</Label>
+          <Label className="text-xs">{t("Como chamar o cliente")}</Label>
           <Input value={lead} onChange={(e) => setLead(e.target.value)} />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Deal</Label>
+          <Label className="text-xs">{t("Como chamar o negócio")}</Label>
           <Input value={deal} onChange={(e) => setDeal(e.target.value)} />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Won</Label>
+          <Label className="text-xs">{t("Quando fecha")}</Label>
           <Input value={won} onChange={(e) => setWon(e.target.value)} />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs">Lost</Label>
+          <Label className="text-xs">{t("Quando desiste")}</Label>
           <Input value={lost} onChange={(e) => setLost(e.target.value)} />
         </div>
-      </div>
-
-      <div className="space-y-1">
-        <Label className="text-xs">{t("Motivos de perda (separados por vírgula)")}</Label>
-        <Input value={reasonsText} onChange={(e) => setReasonsText(e.target.value)} />
       </div>
 
       <div className="space-y-2">

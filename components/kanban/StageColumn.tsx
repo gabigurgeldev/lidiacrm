@@ -74,7 +74,7 @@ export function StageColumn({
 
   return (
     <div
-      className="flex w-80 shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-surface-muted/40"
+      className="flex w-80 shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-surface-elevated/40"
       data-testid={`coluna-${stage.id}`}
     >
       <CabecalhoDaColuna

@@ -20,6 +20,7 @@ import { registraFalhaDeAtividade } from "@/lib/leads/activity-write-failure";
 import { bulkLeadActionSchema, validateRequest } from "@/lib/schemas";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { patchContactHandler } from "@/app/api/v1/contacts/_handler";
 
 export const dynamic = "force-dynamic";
 
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   const organizationId = authz.org.orgId;
   const { data: scoped } = await supabase
     .from("crm_leads")
-    .select("id, organization_id, tags, stage_id, pipeline_id")
+    .select("id, organization_id, tags, stage_id, pipeline_id, contact_id")
     .eq("organization_id", organizationId)
     .in("id", input.lead_ids);
 
@@ -248,8 +249,42 @@ export async function POST(req: NextRequest): Promise<Response> {
     case "tag": {
       const add = input.params.add ?? [];
       const remove = new Set(input.params.remove ?? []);
-      // Compute next tags per row from already-fetched `scoped`.
-      for (const row of visible) {
+
+      // A tag é do CONTATO desde a migration 0248: é ela que aparece no card,
+      // que o inbox filtra e que leva o contato à coluna ligada a ela. Marcar em
+      // massa grava no contato de cada negócio, pelo MESMO handler do PATCH do
+      // contato — que emite contact.tag_added e aplica a regra do Kanban. Só o
+      // negócio SEM contato continua recebendo a tag nele mesmo.
+      const contatos = [
+        ...new Set(visible.map((r) => r.contact_id as string | null).filter((c): c is string => !!c)),
+      ];
+      if (contatos.length > 0) {
+        const { data: atuais, error: cErr } = await supabase
+          .from("contacts")
+          .select("id, tags")
+          .eq("organization_id", organizationId)
+          .in("id", contatos);
+        if (cErr) return fail("internal_error", cErr.message, 500, { requestId });
+        const ctxDoContato = {
+          organization_id: organizationId,
+          actor: { type: "user" as const, id: user.id },
+          requestId,
+        };
+        for (const c of (atuais ?? []) as Array<{ id: string; tags: string[] | null }>) {
+          const atual = c.tags ?? [];
+          const proximo = Array.from(new Set([...atual.filter((t) => !remove.has(t)), ...add]));
+          if (proximo.length === atual.length && proximo.every((t, i) => t === atual[i])) continue;
+          try {
+            await patchContactHandler(supabase, ctxDoContato, c.id, { tags: proximo });
+          } catch (e) {
+            if (e instanceof ApiError) return fail(e.code, e.message, e.status, { requestId });
+            throw e;
+          }
+        }
+        updatedCount += visible.filter((r) => r.contact_id).length;
+      }
+
+      for (const row of visible.filter((r) => !r.contact_id)) {
         const current = (row.tags ?? []) as string[];
         const next = Array.from(new Set([...current.filter((t) => !remove.has(t)), ...add]));
         const { error } = await supabase

@@ -217,3 +217,36 @@ describe("buildCardInput — tags do card (migration 0248)", () => {
     expect(card.contactName).toBe("Maria Souza");
   });
 });
+
+describe("buildCardInput — tempo na coluna", () => {
+  const base = {
+    id: "l-1",
+    title: "X",
+    value_cents: null,
+    currency: null,
+    tags: [],
+    created_at: "2026-10-01T00:00:00Z",
+    owner_kind: null,
+    owner_user_id: null,
+    owner_agent_id: null,
+  };
+  const now = new Date("2026-10-11T00:00:00Z");
+
+  it("mede desde a ENTRADA na coluna, não desde a última atividade", () => {
+    const card = buildCardInput(
+      { ...base, last_activity_at: "2026-10-10T00:00:00Z", stage_changed_at: "2026-10-04T00:00:00Z" } as never,
+      { stageName: "Proposta", ownerNames: undefined, now },
+    );
+    expect(card.horasNaColuna).toBe(7 * 24);
+    // O "esfriando" continua medindo silêncio.
+    expect(card.hoursInStage).toBe(24);
+  });
+
+  it("sem stage_changed_at (linha antiga), cai na última atividade", () => {
+    const card = buildCardInput(
+      { ...base, last_activity_at: "2026-10-10T00:00:00Z", stage_changed_at: null } as never,
+      { stageName: "Proposta", ownerNames: undefined, now },
+    );
+    expect(card.horasNaColuna).toBe(24);
+  });
+});

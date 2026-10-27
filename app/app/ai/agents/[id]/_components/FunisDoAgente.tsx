@@ -19,6 +19,7 @@
  *     negócio lê "mexer em negócio", que é o que de fato acontece.
  */
 import * as React from "react";
+import Link from "next/link";
 
 import { Label } from "@/components/ui/label";
 import { useT } from "@/hooks/i18n/useT";
@@ -61,9 +62,7 @@ export function FunisDoAgente({ funis, value, onChange, cobertura, disabled = fa
 
   // Funis que o assistente cuida e não sabe percorrer: promessa que não se
   // cumpre. O dono marcou achando que ele ia organizar, e ele não vai.
-  const mudosMarcados = funis
-    .filter((f) => marcados.has(f.id) && cobertura?.[f.id]?.mudo)
-    .map((f) => f.name);
+  const mudosMarcados = funis.filter((f) => marcados.has(f.id) && cobertura?.[f.id]?.mudo);
 
   return (
     <div className="ios-grupo space-y-3 p-4">
@@ -132,9 +131,20 @@ export function FunisDoAgente({ funis, value, onChange, cobertura, disabled = fa
       {mudosMarcados.length > 0 ? (
         <p data-testid="agente-funis-mudos" className="text-xs text-warning-fg">
           {mudosMarcados.length === 1
-            ? `${t("Você marcou")} ${mudosMarcados[0]}${t(", mas ninguém disse ao assistente o que cada etapa desse Kanban significa — ele vai atender e deixar os negócios parados onde estão.")}`
+            ? `${t("Você marcou")} ${mudosMarcados[0]!.name}${t(", mas ninguém disse ao assistente o que cada etapa desse Kanban significa — ele vai atender e deixar os negócios parados onde estão.")}`
             : `${t("Você marcou")} ${mudosMarcados.length} ${t("Kanbans em que ninguém disse ao assistente o que cada etapa significa — ele vai atender e deixar os negócios parados onde estão.")}`}{" "}
-          {t(" Isso se configura em Configurações › Kanbans.")}
+          {/* O conserto mora no painel Configurar do próprio Kanban desde
+              2026-10-27 — antes, numa página de Configurações que foi extinta. */}
+          {mudosMarcados.map((f) => (
+            <Link
+              key={f.id}
+              href={`/app/pipelines/${f.id}?configurar=colunas`}
+              className="mr-2 font-medium underline underline-offset-2"
+              data-testid={`configurar-funil-mudo-${f.id}`}
+            >
+              {t("Configurar")} {f.name}
+            </Link>
+          ))}
         </p>
       ) : null}
 

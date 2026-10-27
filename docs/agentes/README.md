@@ -126,7 +126,7 @@ Nos documentos, **"IA › X"** quer dizer o item X dentro de **Central de IA** n
 | **Conexões** | `/app/connections` | Números de WhatsApp e proteção de envio |
 | **Nuvemshop** | `/app/integrations/nuvemshop` | Integração da loja |
 | **Agenda** / **Tipos de agendamento** | `/app/agenda`, `/app/settings/tenant/agenda` | Agenda e tipos |
-| **Etapas do funil** | `/app/settings/tenant/pipelines` | Funis, etapas e "para onde o card vai em cada passo do agente" |
+| **Configurar o Kanban** | `/app/pipelines/<id>?configurar=colunas` | Funis, etapas e "para onde o card vai em cada passo do agente" |
 | **Distribuição de atendimento** | `/app/settings/atendimento` | Modo de distribuição e visibilidade |
 | **Radar** | `/app/radar` | Negócios em risco |
 

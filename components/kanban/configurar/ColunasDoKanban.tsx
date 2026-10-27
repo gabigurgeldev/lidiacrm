@@ -30,7 +30,7 @@ import { Archive, CaretDown, CaretUp, Plus, Warning } from "@/lib/ui/icons";
 import { SeloDeAutoria } from "@/components/operacao/SeloDeAutoria";
 import { useT } from "@/hooks/i18n/useT";
 
-import { mensagemDeErro } from "./_mapping";
+import { mensagemDeErro } from "./PassoDoAgente";
 
 /**
  * Onde o dono do negócio transforma o funil que veio de fábrica no funil dele.

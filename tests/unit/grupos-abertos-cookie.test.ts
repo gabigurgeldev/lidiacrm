@@ -64,15 +64,16 @@ describe("o grupo da rota", () => {
   });
 
   it("as rotas aninhadas de Configurações acendem o grupo em que a tela mora", () => {
-    // `/app/settings/tenant/pipelines` começa com `/app/settings`, que é o hub de
-    // Organização — e as Etapas do funil moram em CRM.
+    // `/app/settings/tenant/agenda/profissionais` casa com `/app/settings` e com
+    // `/app/settings/tenant/agenda`; vale o mais longo. (O exemplo era a página
+    // "Colunas dos Kanbans", que morava em CRM e foi extinta em 2026-10-27.)
     //
     // ⚠️ ESTE CASO NÃO SEPARA "prefixo mais longo" de "primeiro que casa", e eu
     // afirmei que separava até medir: sabotei a função para o primeiro casamento
     // e ele continuou verde, porque no registro de hoje o href mais longo já vem
     // primeiro no array. Ele é não-regressão do COMPORTAMENTO; quem guarda a
     // REGRA é o caso abaixo, com uma lista construída para isso.
-    expect(grupoDaRota("/app/settings/tenant/pipelines")).toBe("crm");
+    expect(grupoDaRota("/app/settings/tenant/agenda/profissionais")).toBe("organizacao");
     expect(grupoDaRota("/app/settings")).toBe("organizacao");
   });
 

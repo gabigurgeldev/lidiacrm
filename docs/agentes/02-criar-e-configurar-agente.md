@@ -13,7 +13,7 @@ Um agente só consegue ser **publicado** (e só publicado atende) se estas peça
 | 1 | **Número de WhatsApp conectado** (status "conectado"/`WORKING`) | Conexões (`/app/connections`) | O agente atende por um número. Publicar com o número desconectado é recusado. |
 | 2 | **Chave de um provedor de IA cadastrada e validada** | IA › Credenciais (`/app/ai/credentials`) | O agente usa essa chave para pensar. Ver o aviso logo abaixo sobre a "chave desta instalação". |
 | 3 | (Recomendado) **Material no acervo** — FAQ, política, tabela de preços | IA › Conhecimento (`/app/ai/knowledge/sources`) | Sem material marcado, o agente responde só com o que o modelo já sabe. Precisa de uma chave OpenAI ou OpenRouter para indexar. |
-| 4 | (Recomendado) **Funis com etapas e a tradução "para onde o card vai em cada passo"** | Etapas do funil (`/app/settings/tenant/pipelines`) | Sem isso o agente atende mas não move os cards. |
+| 4 | (Recomendado) **Funis com etapas e a tradução "para onde o card vai em cada passo"** | Kanbans › abra o Kanban › **Configurar** (`/app/pipelines/<id>?configurar=colunas`) | Sem isso o agente atende mas não move os cards. |
 | 5 | (Opcional) **Fluxos de follow-up publicados** | IA › Follow-ups | Para o agente poder armá-los. |
 | 6 | (Opcional) **Equipe com disponibilidade configurada** | Equipe / Distribuição de atendimento | Para a passagem para humano cair em alguém. |
 

@@ -147,21 +147,17 @@ test.describe("navegação agrupada", () => {
     await expect(sidebar(page).getByRole("link", { name: "Kanbans", exact: true })).toBeVisible();
   });
 
-  test("chega nas Colunas dos Kanbans pelo CRM, sem passar por Configurações", async ({ page }) => {
+  test("a antiga Colunas dos Kanbans leva ao Kanban, onde as colunas se configuram", async ({ page }) => {
     await loginAdmin(page);
 
-    // O caso que originou tudo: o usuário não sabia que esta tela existia.
-    //
-    // ⚠️ O ITEM JÁ MUDOU DE NOME DUAS VEZES ("Funis" → "Etapas do funil" →
-    // "Colunas dos Kanbans", em 2026-10-26), e o vizinho — a lista, em
-    // /app/kanban — hoje se chama "Kanbans". Um teste que clicasse no nome do
-    // vizinho seguiria verde medindo a outra tela; por isso a asserção de URL
-    // abaixo é específica (`settings/tenant/pipelines`) e não o antigo
-    // /pipelines/, que casa com as duas.
-    await abrirGrupo(page, "CRM");
-    await sidebar(page).getByRole("link", { name: "Colunas dos Kanbans" }).click();
-    await page.waitForURL(/settings\/tenant\/pipelines/);
-    await expect(page.getByRole("heading", { name: "Colunas dos Kanbans", level: 1 })).toBeVisible();
+    // A página "Colunas dos Kanbans" (antes "Etapas do funil", antes "Funis")
+    // foi extinta em 2026-10-27: colunas, papel de fechamento/perda e passo do
+    // agente se configuram no painel Configurar DENTRO do Kanban. A rota velha
+    // fica de pé só para não quebrar link salvo.
+    await expect(sidebar(page).getByRole("link", { name: "Colunas dos Kanbans" })).toHaveCount(0);
+    await page.goto(`${APP_URL}/app/settings/tenant/pipelines`);
+    await page.waitForURL(/\/app\/kanban$/);
+    await expect(page.getByRole("heading", { name: "Kanbans", level: 1 })).toBeVisible();
 
     // O grupo da tela em que se está abre sozinho: chegar aqui por link direto
     // não pode deixar a barra sem nenhuma marca de onde se está.

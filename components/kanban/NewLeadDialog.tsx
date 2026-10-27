@@ -34,7 +34,6 @@ interface FormShape {
   description: string;
   stage_id: string;
   valueReais: string;
-  tagsRaw: string;
   expected_close_date: string;
 }
 
@@ -72,7 +71,6 @@ export function NewLeadDialog({
       description: "",
       stage_id: initialStage,
       valueReais: "",
-      tagsRaw: "",
       expected_close_date: "",
     },
   });
@@ -85,11 +83,6 @@ export function NewLeadDialog({
   }, [initialStage, form]);
 
   async function onSubmit(values: FormShape) {
-    const tags = values.tagsRaw
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
     const reais = values.valueReais.trim();
     let valueCents: number | null = null;
     if (reais.length > 0) {
@@ -106,7 +99,6 @@ export function NewLeadDialog({
       title: values.title.trim(),
       currency: "BRL",
       source: "manual",
-      tags,
     };
     if (contactId) payload.contact_id = contactId;
     if (values.description.trim()) payload.description = values.description.trim();
@@ -129,7 +121,6 @@ export function NewLeadDialog({
         description: "",
         stage_id: initialStage,
         valueReais: "",
-        tagsRaw: "",
         expected_close_date: "",
       });
       onOpenChange(false);
@@ -144,9 +135,9 @@ export function NewLeadDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Novo Lead</DialogTitle>
+          <DialogTitle>{t("Novo negócio")}</DialogTitle>
           <DialogDescription>
-            {t("Crie um lead manualmente neste pipeline.")}
+            {t("Crie um negócio à mão neste Kanban.")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -170,13 +161,13 @@ export function NewLeadDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Etapa</Label>
+            <Label>{t("Coluna")}</Label>
             <Select
               value={stageId}
               onValueChange={(v) => form.setValue("stage_id", v)}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Selecione a etapa" />
+                <SelectValue placeholder={t("Escolha a coluna")} />
               </SelectTrigger>
               <SelectContent>
                 {stages
@@ -192,7 +183,7 @@ export function NewLeadDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="valueReais">Valor (R$)</Label>
+              <Label htmlFor="valueReais">{t("Valor (R$)")}</Label>
               <Input
                 id="valueReais"
                 inputMode="decimal"
@@ -207,22 +198,13 @@ export function NewLeadDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="expected_close_date">Fechamento previsto</Label>
+              <Label htmlFor="expected_close_date">{t("Fechamento previsto")}</Label>
               <Input
                 id="expected_close_date"
                 type="date"
                 {...form.register("expected_close_date")}
               />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="tagsRaw">{t("Tags (separadas por vírgula)")}</Label>
-            <Input
-              id="tagsRaw"
-              placeholder="vip, recompra"
-              {...form.register("tagsRaw")}
-            />
           </div>
 
           <DialogFooter>
@@ -232,10 +214,10 @@ export function NewLeadDialog({
               onClick={() => onOpenChange(false)}
               disabled={create.isPending}
             >
-              Cancelar
+              {t("Cancelar")}
             </Button>
             <Button type="submit" disabled={create.isPending || !stageId}>
-              {create.isPending ? "Criando…" : "Criar lead"}
+              {create.isPending ? t("Criando…") : t("Criar negócio")}
             </Button>
           </DialogFooter>
         </form>

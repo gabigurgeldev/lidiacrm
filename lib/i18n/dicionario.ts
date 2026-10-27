@@ -795,9 +795,6 @@ export const DICIONARIO: Traducoes = {
   "Kanbans em que ninguém disse ao assistente o que cada etapa significa — ele vai atender e deixar os negócios parados onde estão.": {
     es: "Kanbans en los que nadie le dijo al asistente qué significa cada etapa — va a atender y va a dejar los negocios detenidos donde están.",
   },
-  " Isso se configura em Configurações › Kanbans.": {
-    es: " Esto se configura en Configuración › Kanbans.",
-  },
   "As conversas novas viram negócio em": {
     es: "Las conversaciones nuevas se convierten en negocio en",
   },
@@ -3854,7 +3851,6 @@ export const DICIONARIO: Traducoes = {
   },
   "atualizado.": { es: "actualizado." },
   "Vocabulário e campos": { es: "Vocabulario y campos" },
-  "Motivos de perda (separados por vírgula)": { es: "Motivos de pérdida (separados por coma)" },
   "Ex:": { es: "Ej:" },
   "Salvar vocabulário e campos": { es: "Guardar vocabulario y campos" },
   "As etapas que serviriam para este passo já estão sendo usadas por outros passos. Libere uma delas para poder escolhê-la aqui.": {
@@ -3949,12 +3945,6 @@ export const DICIONARIO: Traducoes = {
   "Nome da nova coluna": { es: "Nombre de la nueva columna" },
   "Nome da nova etapa": { es: "Nombre de la nueva etapa" },
   "Nome da etapa": { es: "Nombre de la etapa" },
-  "Para onde o agente leva o card em cada passo do atendimento": {
-    es: "Adónde lleva el agente la tarjeta en cada paso de la atención",
-  },
-  ", vocabulário, custom fields e motivos de perda": {
-    es: ", vocabulario, custom fields y motivos de pérdida",
-  },
   "Nada especial": { es: "Nada especial" },
   "Aqui o cliente fecha": { es: "Aquí el cliente cierra" },
   "Aqui o cliente desiste": { es: "Aquí el cliente desiste" },
@@ -8715,6 +8705,22 @@ export const DICIONARIO: Traducoes = {
   "Colocar": { es: "Colocar" },
   "Colocar em um Kanban": { es: "Colocar en un Kanban" },
   "Tag do contato": { es: "Etiqueta del contacto" },
+  // ── Kanban: painel Configurar (a ex-página Colunas dos Kanbans) ──
+  "Como chamar o cliente": { es: "Cómo llamar al cliente" },
+  "Como chamar o negócio": { es: "Cómo llamar al negocio" },
+  "Quando fecha": { es: "Cuando cierra" },
+  "Quando desiste": { es: "Cuando desiste" },
+  "Colunas, onde o cliente fecha ou desiste, e para onde o agente leva o card em cada passo.": { es: "Columnas, dónde el cliente cierra o desiste, y adónde lleva el agente la tarjeta en cada paso." },
+  "Colunas e agente": { es: "Columnas y agente" },
+  "Campos e nomes": { es: "Campos y nombres" },
+  // ── Kanban: formulários de negócio sem tag solta, ação em massa ──
+  "Tag aplicada:": { es: "Etiqueta aplicada:" },
+  "Tag…": { es: "Etiqueta…" },
+  "Aplicar tag nos contatos": { es: "Aplicar etiqueta a los contactos" },
+  "Novo negócio": { es: "Nuevo negocio" },
+  "Crie um negócio à mão neste Kanban.": { es: "Crea un negocio a mano en este Kanban." },
+  "Escolha a coluna": { es: "Elige la columna" },
+  "Criar negócio": { es: "Crear negocio" },
 };
 
 /**

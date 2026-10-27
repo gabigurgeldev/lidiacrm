@@ -31,7 +31,8 @@ export default async function PipelinePage({
     <PipelinePageClient
       pipelineId={id}
       initialName={pipeline.name}
-      podeGerenciar={ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager}
+      podeGerenciar={user.is_platform_admin || ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager}
+      podeEditarCampos={user.is_platform_admin || ROLE_RANK[activeOrg.role] >= ROLE_RANK.admin}
     />
   );
 }
