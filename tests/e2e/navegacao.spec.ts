@@ -155,7 +155,7 @@ test.describe("navegação agrupada", () => {
     // agente se configuram no painel Configurar DENTRO do Kanban. A rota velha
     // fica de pé só para não quebrar link salvo.
     await expect(sidebar(page).getByRole("link", { name: "Colunas dos Kanbans" })).toHaveCount(0);
-    await page.goto(`${APP_URL}/app/settings/tenant/pipelines`);
+    await page.goto("/app/settings/tenant/pipelines");
     await page.waitForURL(/\/app\/kanban$/);
     await expect(page.getByRole("heading", { name: "Kanbans", level: 1 })).toBeVisible();
 
