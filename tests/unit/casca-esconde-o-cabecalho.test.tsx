@@ -40,7 +40,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 
-import { cabecalhoEscondidoEm } from "@/lib/navigation/casca";
+import { alturaDaJanelaEm, cabecalhoEscondidoEm } from "@/lib/navigation/casca";
 import { AppShell } from "@/app/app/_components/AppShell";
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
 
@@ -134,6 +134,20 @@ describe("a regra pura", () => {
     // Sem a barra no `startsWith`, uma rota futura chamada `/app/inboxes`
     // herdaria o comportamento do Inbox sem ninguém pedir.
     expect(cabecalhoEscondidoEm("/app/inboxes")).toBe(false);
+  });
+});
+
+describe("telas na altura da janela", () => {
+  // O quadro do Kanban rola POR DENTRO: sem isto a barra de rolagem lateral
+  // ia parar no fim da página, abaixo da coluna mais alta.
+  it("vale para o quadro de um Kanban", () => {
+    expect(alturaDaJanelaEm("/app/pipelines/f47ac10b-58cc-4372-a567-0e02b2c3d479")).toBe(true);
+  });
+
+  it("não vale para a lista de Kanbans nem para telas que rolam como página", () => {
+    for (const rota of ["/app/kanban", "/app/pipelines", "/app/contacts", "/app/tags", "/app/inbox"]) {
+      expect(alturaDaJanelaEm(rota), rota).toBe(false);
+    }
   });
 });
 

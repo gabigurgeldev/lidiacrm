@@ -97,7 +97,11 @@ export function PipelinePageClient({
 
   return (
     <div
-      className="flex h-full flex-col gap-4"
+      // ALTURA DA JANELA, não do conteúdo: o invólucro do AppShell dá `h-full`
+      // a esta rota (`alturaDaJanelaEm`), as colunas rolam POR DENTRO e a barra
+      // de rolagem lateral do quadro fica sempre à vista. `min-h` para a tela
+      // baixa não espremer o quadro a nada — ali a página rola, como antes.
+      className="flex h-full min-h-[28rem] flex-col gap-4"
       // OBSERVÁVEL de propósito, e é a razão de existir desta linha: "a
       // assinatura morreu" e "nada aconteceu" produzem o MESMO silêncio na
       // tela, e sem este valor nem o produto nem o teste conseguem separar as
@@ -146,7 +150,7 @@ export function PipelinePageClient({
                   </span>
                   <span>
                     <strong className="font-semibold tabular-nums text-success-fg">{numeros.ganhos}</strong>{" "}
-                    {t("ganhos em 30 dias")}
+                    {numeros.ganhos === 1 ? t("ganho em 30 dias") : t("ganhos em 30 dias")}
                   </span>
                 </p>
               )}

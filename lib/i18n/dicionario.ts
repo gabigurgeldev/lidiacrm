@@ -5048,6 +5048,8 @@ export const DICIONARIO: Traducoes = {
 
   // ─── Contacts: vocabulário da timeline (lib/leads/activity-vocabulary.ts) ───
   "Entrou pelo WhatsApp": { es: "Entró por WhatsApp" },
+  "Entrou pela tag": { es: "Entró por la etiqueta" },
+  "Colocado no Kanban": { es: "Puesto en el Kanban" },
   "Mudou de estágio": { es: "Cambió de etapa" },
   "Correção do que o assistente tinha feito": { es: "Corrección de lo que había hecho el asistente" },
   "Anotação": { es: "Anotación" },
@@ -8638,7 +8640,6 @@ export const DICIONARIO: Traducoes = {
   "Violeta": { es: "Violeta" },
   "Framboesa": { es: "Frambuesa" },
   // ── Kanban: colunas editáveis no quadro, card e paginação ──
-  "Clique duas vezes para renomear": { es: "Haz doble clic para renombrar" },
   "Opções da coluna": { es: "Opciones de la columna" },
   "Tags da coluna": { es: "Etiquetas de la columna" },
   "Mover para a esquerda": { es: "Mover a la izquierda" },
@@ -8733,6 +8734,7 @@ export const DICIONARIO: Traducoes = {
   "negócio aberto": { es: "negocio abierto" },
   "negócios abertos": { es: "negocios abiertos" },
   "ganhos em 30 dias": { es: "ganados en 30 días" },
+  "ganho em 30 dias": { es: "ganado en 30 días" },
   "Buscar negócio ou contato…": { es: "Buscar negocio o contacto…" },
   "Sem valor": { es: "Sin valor" },
   "Previsão de fechamento já passou": { es: "La fecha prevista de cierre ya pasó" },

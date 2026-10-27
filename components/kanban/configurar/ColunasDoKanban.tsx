@@ -181,7 +181,9 @@ type Arquivamento = {
 // varre o texto-fonte, então `sm:${...}` montado por interpolação NÃO gera CSS.
 // E o prefixo é o certo de qualquer jeito — no celular a linha empilha e largura
 // fixa espremeria os controles.
-const LARGURA = { ordem: "sm:w-[76px]", papel: "sm:w-56", arquivar: "sm:w-[104px]" } as const;
+// O nome é a única coluna que cresce. Medido no painel de produção: com o
+// papel em w-56 sobravam ~114px para o nome, e "Consulta marcada" já cortava.
+const LARGURA = { ordem: "sm:w-[76px]", papel: "sm:w-52", arquivar: "sm:w-[104px]" } as const;
 
 /**
  * O texto de cada rótulo, em UM lugar só — porque ele aparece em DOIS.

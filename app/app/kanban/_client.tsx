@@ -7,6 +7,7 @@ import { EmptyPipeline } from "@/components/empty";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api/types";
+import { corDaColuna } from "@/lib/kanban/cor-da-coluna";
 import { formatarReais } from "@/lib/kanban/dinheiro";
 import { MODELOS_DE_KANBAN } from "@/lib/pipelines/pipeline-editing";
 import { cn } from "@/lib/utils";
@@ -69,8 +70,6 @@ function textoDoErro(e: unknown, t: (texto: string) => string): string {
   return t("Não consegui completar essa ação. Tente de novo.");
 }
 
-/** Paleta de reserva para coluna sem cor — a barra do cartão não fica cinza chapada. */
-const CORES_DE_RESERVA = ["#2563eb", "#0891b2", "#7c3aed", "#d97706", "#16a34a", "#db2777"];
 
 /**
  * A lista de Kanbans — e onde eles nascem.
@@ -320,13 +319,13 @@ export function FunisClient({
               {/* A barra é a distribuição REAL dos negócios abertos pelas colunas.
                   Sem negócio, as colunas dividem a barra por igual. */}
               <div className="flex h-1.5 w-full" aria-hidden>
-                {(colunasComNegocio.length > 0 ? colunasComNegocio : r.colunas).map((c, k) => (
+                {(colunasComNegocio.length > 0 ? colunasComNegocio : r.colunas).map((c) => (
                   <span
                     key={c.id}
                     className="h-full"
                     style={{
                       flexGrow: colunasComNegocio.length > 0 ? c.abertos : 1,
-                      backgroundColor: c.color ?? CORES_DE_RESERVA[k % CORES_DE_RESERVA.length],
+                      backgroundColor: corDaColuna(c.color, r.colunas.indexOf(c)),
                     }}
                   />
                 ))}
@@ -412,7 +411,7 @@ export function FunisClient({
                         <span
                           aria-hidden
                           className="size-1.5 rounded-full"
-                          style={{ backgroundColor: c.color ?? CORES_DE_RESERVA[k % CORES_DE_RESERVA.length] }}
+                          style={{ backgroundColor: corDaColuna(c.color, k) }}
                         />
                         {c.name}
                         <span className="tabular-nums text-text">{c.abertos}</span>

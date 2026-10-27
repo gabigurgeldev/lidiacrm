@@ -64,7 +64,7 @@ export function ConfigurarKanban({
     <Sheet open={aberto} onOpenChange={mudarAberto}>
       <SheetContent
         side="right"
-        className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
+        className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
         data-testid="configurar-kanban"
       >
         <SheetHeader className="ios-vidro border-b border-border px-6 py-4">

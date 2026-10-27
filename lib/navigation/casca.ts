@@ -43,3 +43,24 @@ export function cabecalhoEscondidoEm(pathname: string): boolean {
  * duas listas divergiriam no dia em que uma tela nova entrasse em só uma delas.
  */
 export const conteudoSemMargemEm = cabecalhoEscondidoEm;
+
+/**
+ * Telas que FICAM na altura da janela e rolam por dentro, com cabeçalho e
+ * margem normais. É o quadro do Kanban: com muitas colunas e muitos cards, a
+ * página crescia com a coluna mais alta e a barra de rolagem LATERAL do quadro
+ * ia parar no fim da página — para arrastar para o lado era preciso descer
+ * tudo (pedido do dono do produto, 2026-10-27).
+ *
+ * Por que aqui e não um `calc(100dvh - …)` na própria tela: a soma escrita à
+ * mão é a classe de defeito que o `AppShell` documenta (o Inbox media 8px a
+ * mais depois de uma troca de padding). Com o invólucro em `h-full`, a tela
+ * pede `h-full` e herda o que sobrou, sem número para envelhecer.
+ *
+ * Prefixo com barra: `/app/pipelines/<id>` é o quadro; não há tela em
+ * `/app/pipelines` sozinho.
+ */
+const NA_ALTURA_DA_JANELA = ["/app/pipelines/"] as const;
+
+export function alturaDaJanelaEm(pathname: string): boolean {
+  return NA_ALTURA_DA_JANELA.some((rota) => pathname.startsWith(rota));
+}

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
 import {
@@ -16,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { contactCreateSchema, type ContactCreate } from "@/lib/schemas/contacts";
 import { useCreateContact } from "@/hooks/contacts/useCreateContact";
+import { SeletorDeTags } from "@/components/tags/SeletorDeTags";
+import { avisarEfeitosNoKanban, type EfeitoNoKanban } from "@/components/tags/efeitos-no-kanban";
 
 interface FormShape {
   name?: string;
@@ -23,7 +26,6 @@ interface FormShape {
   phone_number?: string;
   cpf?: string;
   birthdate?: string;
-  tagsRaw?: string;
 }
 
 interface Props {
@@ -35,18 +37,15 @@ export function NewContactDialog({ open, onOpenChange }: Props) {
   const t = useT();
   const create = useCreateContact();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
+  const qc = useQueryClient();
 
   const form = useForm<FormShape>({
-    defaultValues: { name: "", email: "", phone_number: "", cpf: "", birthdate: "", tagsRaw: "" },
+    defaultValues: { name: "", email: "", phone_number: "", cpf: "", birthdate: "" },
   });
 
   async function onSubmit(values: FormShape) {
     setServerError(null);
-    const tags = (values.tagsRaw ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
     const payload: Record<string, unknown> = { source: "manual" };
     if (values.name?.trim()) payload.name = values.name.trim();
     if (values.email?.trim()) payload.email = values.email.trim();
@@ -63,9 +62,12 @@ export function NewContactDialog({ open, onOpenChange }: Props) {
     }
 
     try {
-      await create.mutateAsync(parsed.data as ContactCreate);
+      const r = await create.mutateAsync(parsed.data as ContactCreate);
       toast.success(t("Contato criado"));
+      const efeitos = (r.data as { kanban_efeitos?: EfeitoNoKanban[] }).kanban_efeitos;
+      if (avisarEfeitosNoKanban(efeitos, t)) void qc.invalidateQueries({ queryKey: ["board"] });
       form.reset();
+      setTags([]);
       onOpenChange(false);
     } catch {
       // error toast already handled by hook
@@ -107,8 +109,13 @@ export function NewContactDialog({ open, onOpenChange }: Props) {
             <Input id="birthdate" type="date" max={new Date().toISOString().slice(0, 10)} {...form.register("birthdate")} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tagsRaw">{t("Tags (separadas por vírgula)")}</Label>
-            <Input id="tagsRaw" placeholder="vip, recompra" {...form.register("tagsRaw")} />
+            <Label>{t("Tags")}</Label>
+            <SeletorDeTags
+              valor={tags}
+              aoMudar={setTags}
+              desabilitado={create.isPending}
+              testIdDoBotao="novo-contato-adicionar-tag"
+            />
           </div>
           {serverError && (
             <p className="text-sm text-error-fg">{serverError}</p>
