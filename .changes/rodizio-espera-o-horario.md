@@ -8,9 +8,8 @@ Medido em produção, numa equipe de três atendentes: a distribuição parou de
 entregar conversas logo no primeiro dia, e o fluxo de distribuição passou a cair
 sempre em "ninguém disponível". Eram dois defeitos somados.
 
-- **Lead que chegava no almoço, à noite ou no fim de semana nunca era
-  distribuído.** Sem ninguém no horário, o rodízio tentava 5 vezes em 5 minutos e
-  desistia — e a conversa ficava sem dono para sempre. No modo de visibilidade
+- **Lead que chegava fora do horário nunca era distribuído.** No almoço, à
+  noite ou no fim de semana, o rodízio tentava 5 vezes em 5 minutos e desistia — e a conversa ficava sem dono para sempre. No modo de visibilidade
   "só as minhas", nenhuma atendente a enxergava. Agora, se alguém disponível só
   está fora do horário, a distribuição volta exatamente quando a primeira jornada
   abrir, sem gastar tentativa.
