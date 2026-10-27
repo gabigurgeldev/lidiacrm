@@ -6,7 +6,7 @@ import { AppHeader } from "@/components/shell/header/AppHeader";
 import { useInboundMessageAlerts } from "@/hooks/notifications/useInboundMessageAlerts";
 import { useCrmAlerts } from "@/hooks/notifications/useCrmAlerts";
 import { useNotifyOpenFromServiceWorker } from "@/lib/notifications/notify_open";
-import { cabecalhoEscondidoEm } from "@/lib/navigation/casca";
+import { alturaDaJanelaEm, cabecalhoEscondidoEm } from "@/lib/navigation/casca";
 import type { NavGroupId } from "@/lib/navigation/registry";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +27,7 @@ export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, children }: Ap
   // deixa órfãs. Duas cópias divergindo não dariam erro: dariam o sino e o
   // avatar duas vezes na tela, ou nenhuma.
   const semCabecalho = cabecalhoEscondidoEm(pathname);
+  const naAlturaDaJanela = alturaDaJanelaEm(pathname);
 
   return (
     /*
@@ -138,7 +139,12 @@ export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, children }: Ap
           {semCabecalho ? (
             <div className="h-full">{children}</div>
           ) : (
-            <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+            <div
+              className={cn("mx-auto w-full max-w-[1600px]", naAlturaDaJanela && "h-full")}
+              data-altura-da-janela={naAlturaDaJanela ? "true" : undefined}
+            >
+              {children}
+            </div>
           )}
         </main>
       </div>

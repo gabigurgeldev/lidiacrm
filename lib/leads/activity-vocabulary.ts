@@ -217,9 +217,25 @@ export const ACTIVITY_LABEL_FALLBACK = "Atividade registrada";
  * Nenhum teste pegaria: "stage_changed" não é uuid, então a asserção que caça
  * uuid na tela continuaria verde.
  */
-export function activityLabel(type: string): string {
+export function activityLabel(
+  type: string,
+  origem?: { source_module?: string | null; payload?: unknown } | null,
+): string {
+  if (type === "lead_created" && origem?.source_module === "crm") {
+    // Três portas criam negócio, e só uma é o WhatsApp. As outras duas gravam
+    // `source_module: "crm"`: a tag ligada a uma coluna (`lib/tags/tag-no-kanban.ts`,
+    // com a tag no payload) e o "Colocar em um Kanban" da conversa
+    // (`lib/leads/contato-no-kanban.ts`). Medido em produção: o card criado pela
+    // tag dizia "Entrou pelo WhatsApp" em cima de "Entrou em X pela tag".
+    // Linha antiga sem `source_module` segue com o rótulo de sempre.
+    const tag = (origem.payload as { tag?: unknown } | null | undefined)?.tag;
+    return typeof tag === "string" ? LEAD_CRIADO_PELA_TAG : LEAD_CRIADO_NO_KANBAN;
+  }
   return ACTIVITY_LABELS[type as ActivityType] ?? ACTIVITY_LABEL_FALLBACK;
 }
+
+export const LEAD_CRIADO_PELA_TAG = "Entrou pela tag";
+export const LEAD_CRIADO_NO_KANBAN = "Colocado no Kanban";
 
 /** Como o marcador do ator é desenhado (BRIEFING §5: forma, nunca cor). */
 export type ActivityActorShape = "filled" | "ring" | "dashed";

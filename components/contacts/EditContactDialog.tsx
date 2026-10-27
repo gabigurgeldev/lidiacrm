@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
 import {
@@ -18,13 +19,14 @@ import { contactPatchSchema, type ContactPatch } from "@/lib/schemas/contacts";
 import { useUpdateContact } from "@/hooks/contacts/useUpdateContact";
 import type { Contact } from "@/lib/types/contacts";
 import { phoneForDisplay } from "@/lib/channels/phone-variants";
+import { SeletorDeTags } from "@/components/tags/SeletorDeTags";
+import { avisarEfeitosNoKanban, type EfeitoNoKanban } from "@/components/tags/efeitos-no-kanban";
 
 interface FormShape {
   name?: string;
   email?: string;
   phone_number?: string;
   birthdate?: string;
-  tagsRaw?: string;
 }
 
 interface Props {
@@ -37,6 +39,8 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
   const t = useT();
   const update = useUpdateContact(contact.id);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>(contact.tags);
+  const qc = useQueryClient();
 
   const form = useForm<FormShape>({
     defaultValues: {
@@ -44,7 +48,6 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
       email: contact.email ?? "",
       phone_number: contact.phone_number ? phoneForDisplay(contact.phone_number) : "",
       birthdate: contact.birthdate ?? "",
-      tagsRaw: contact.tags.join(", "),
     },
   });
 
@@ -54,18 +57,16 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
         name: contact.name ?? "",
         email: contact.email ?? "",
         phone_number: contact.phone_number ? phoneForDisplay(contact.phone_number) : "",
-        tagsRaw: contact.tags.join(", "),
+        // Faltava: reabrir o diálogo deixava a data de nascimento da edição
+        // anterior (ou vazia) no campo.
+        birthdate: contact.birthdate ?? "",
       });
+      setTags(contact.tags);
     }
   }, [open, contact, form]);
 
   async function onSubmit(values: FormShape) {
     setServerError(null);
-    const tags = (values.tagsRaw ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
     const payload: Record<string, unknown> = {};
     if (values.name?.trim()) payload.name = values.name.trim();
     if (values.email?.trim()) payload.email = values.email.trim();
@@ -81,8 +82,10 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
       return;
     }
     try {
-      await update.mutateAsync(parsed.data as ContactPatch);
+      const r = await update.mutateAsync(parsed.data as ContactPatch);
       toast.success(t("Contato atualizado"));
+      const efeitos = (r.data as { kanban_efeitos?: EfeitoNoKanban[] }).kanban_efeitos;
+      if (avisarEfeitosNoKanban(efeitos, t)) void qc.invalidateQueries({ queryKey: ["board"] });
       onOpenChange(false);
     } catch {
       // hook handles toast
@@ -115,8 +118,13 @@ export function EditContactDialog({ contact, open, onOpenChange }: Props) {
             <p className="text-xs text-muted-foreground">{t("Usada para a mensagem de parabéns automática.")}</p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ec-tags">Tags</Label>
-            <Input id="ec-tags" {...form.register("tagsRaw")} />
+            <Label>{t("Tags")}</Label>
+            <SeletorDeTags
+              valor={tags}
+              aoMudar={setTags}
+              desabilitado={update.isPending}
+              testIdDoBotao="editar-contato-adicionar-tag"
+            />
           </div>
           {serverError && <p className="text-sm text-error-fg">{serverError}</p>}
           <DialogFooter>

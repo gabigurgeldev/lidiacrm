@@ -57,7 +57,7 @@ function groupLeadsByStage(stages: Stage[], leads: Lead[]): Map<string, Lead[]> 
 
 function BoardSkeleton() {
   return (
-    <div className="flex gap-3 overflow-x-auto p-4">
+    <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto overflow-y-hidden px-1 pb-3 pt-1">
       {[0, 1, 2].map((c) => (
         <div
           key={c}
@@ -260,7 +260,10 @@ export function KanbanBoard({
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="flex h-full gap-3 overflow-x-auto p-4">
+      {/* `min-h-0 flex-1`: o quadro ocupa o que sobra da altura da tela abaixo
+          do cabeçalho; cada coluna rola por dentro (StageColumn) e esta faixa
+          rola de lado, com a barra sempre visível. */}
+      <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto overflow-y-hidden px-1 pb-3 pt-1" data-testid="faixa-do-quadro">
         {data.stages.map((stage) => (
           <StageColumn
             key={stage.id}

@@ -1,5 +1,5 @@
 "use client";
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { TagChip } from "@/components/tags/TagChip";
@@ -26,6 +26,7 @@ import { useTagsDaColuna, type TagDoCatalogo } from "@/hooks/tags/useTags";
 import { ApiError } from "@/lib/api/types";
 import { PALETA_DE_TAGS } from "@/lib/tags/normalizar";
 import type { Stage } from "@/lib/kanban/types";
+import { corDaColuna } from "@/lib/kanban/cor-da-coluna";
 import { cn } from "@/lib/utils";
 import {
   Archive,
@@ -90,6 +91,31 @@ export function CabecalhoDaColuna({
   const definirTags = useTagsDaColuna();
 
   const [renomeando, setRenomeando] = useState<string | null>(null);
+  const campoNome = useRef<HTMLInputElement>(null);
+  /**
+   * Quando o campo de nome abriu. Medido em produção: pelo menu, o Radix
+   * devolve o foco ao botão ⋯ DEPOIS de o campo nascer, e pelo duplo clique o
+   * resto da sequência de clique faz o mesmo — o `blur` chegava na hora,
+   * `salvarNome` fechava o campo e renomear parecia não fazer nada.
+   */
+  const abertoEm = useRef(0);
+  const editandoNome = renomeando !== null;
+
+  function abrirRenomear() {
+    abertoEm.current = Date.now();
+    setRenomeando(stage.name);
+  }
+  const acabouDeAbrir = () => Date.now() - abertoEm.current < 400;
+
+  useEffect(() => {
+    if (!editandoNome) return;
+    // Depois do foco que o menu devolve, não antes: `autoFocus` perdia a corrida.
+    const id = window.setTimeout(() => {
+      campoNome.current?.focus();
+      campoNome.current?.select();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [editandoNome]);
   const [escolhendoTags, setEscolhendoTags] = useState<Set<string> | null>(null);
   const [conflito, setConflito] = useState(false);
   /**
@@ -171,7 +197,7 @@ export function CabecalhoDaColuna({
     );
   }
 
-  const barra: CSSProperties = { backgroundColor: stage.color ?? "var(--color-border)" };
+  const barra: CSSProperties = { backgroundColor: corDaColuna(stage.color, i) };
 
   return (
     <div className="flex flex-col gap-1.5 border-b border-border px-3 pb-2 pt-0">
@@ -179,11 +205,17 @@ export function CabecalhoDaColuna({
       <div className="flex items-center gap-2">
         {renomeando !== null ? (
           <Input
-            autoFocus
+            ref={campoNome}
             value={renomeando}
             maxLength={80}
             onChange={(e) => setRenomeando(e.target.value)}
-            onBlur={salvarNome}
+            onBlur={() => {
+              if (acabouDeAbrir()) {
+                campoNome.current?.focus();
+                return;
+              }
+              salvarNome();
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") salvarNome();
               if (e.key === "Escape") setRenomeando(null);
@@ -198,8 +230,10 @@ export function CabecalhoDaColuna({
               "flex-1 truncate text-sm font-semibold text-text",
               podeGerenciar && "cursor-text",
             )}
-            title={podeGerenciar ? t("Clique duas vezes para renomear") : stage.name}
-            onDoubleClick={() => podeGerenciar && setRenomeando(stage.name)}
+            // `title` é o nome inteiro (o h2 trunca). A dica "clique duas
+            // vezes" saiu daqui: o leitor de tela lia a dica no lugar do nome.
+            title={stage.name}
+            onDoubleClick={() => podeGerenciar && abrirRenomear()}
           >
             {stage.name}
           </h2>
@@ -220,8 +254,15 @@ export function CabecalhoDaColuna({
                 <DotsThreeVertical size={16} />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setRenomeando(stage.name)}>
+            <DropdownMenuContent
+              align="end"
+              onCloseAutoFocus={(e) => {
+                // Foco volta ao ⋯ por padrão; se o menu fechou para abrir o
+                // campo de nome, o foco é do campo.
+                if (acabouDeAbrir()) e.preventDefault();
+              }}
+            >
+              <DropdownMenuItem onClick={abrirRenomear} data-testid={`renomear-coluna-menu-${stage.id}`}>
                 <PencilSimple size={14} /> {t("Renomear")}
               </DropdownMenuItem>
               <DropdownMenuItem

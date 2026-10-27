@@ -750,7 +750,7 @@ export function CRMSidePanel({ conversation, onFechar }: Props) {
                     )}
                     aria-hidden
                   />
-                  {t(activityLabel(a.type))}
+                  {t(activityLabel(a.type, a))}
                 </div>
                 {a.reason && (
                   <div className="mt-0.5 truncate text-muted-foreground">{a.reason}</div>

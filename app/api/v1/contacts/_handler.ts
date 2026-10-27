@@ -387,6 +387,8 @@ async function erroDeContatoDuplicado(
 export interface CreateContactResult {
   contact: Contact;
   action: "created";
+  /** Onde as tags do contato novo o puseram (ver `aplicarTagsNoKanban`). */
+  kanban_efeitos?: EfeitoNoKanban[];
 }
 
 export async function createContactHandler(
@@ -465,7 +467,16 @@ export async function createContactHandler(
     metadata: { ...a.metadataActor, source: contact.source },
   });
 
-  return { contact, action: "created" };
+  // Tag ligada a coluna põe o contato no Kanban TAMBÉM na criação. Só o PATCH
+  // fazia isso: quem cadastrava o contato já com "Quer agendar" via o card
+  // aparecer só se tirasse e pusesse a tag de novo. A regra nunca lança.
+  const efeitos = contact.tags.length
+    ? await aplicarTagsNoKanban(supabase, ctx, { contactId: contact.id, tagsAdicionadas: contact.tags })
+    : [];
+
+  return efeitos.length > 0
+    ? { contact, action: "created", kanban_efeitos: efeitos }
+    : { contact, action: "created" };
 }
 
 // ---------------------------------------------------------------------------
