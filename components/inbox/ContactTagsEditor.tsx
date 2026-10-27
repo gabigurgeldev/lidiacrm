@@ -70,6 +70,10 @@ export function ContactTagsEditor({ contactId, tags }: Props) {
           if (efeitos.length > 0) {
             void qc.invalidateQueries({ queryKey: chaveDosKanbansDoContato(contactId) });
           }
+          // As tags do contato aparecem no CARD de todo Kanban onde ele está, e o
+          // Realtime do quadro só escuta crm_leads — sem isto o card mostrava a
+          // tag velha até alguém mexer no negócio.
+          void qc.invalidateQueries({ queryKey: ["board"] });
         },
       },
     );

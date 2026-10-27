@@ -219,7 +219,9 @@ test.describe("o agente organiza a operação e a tela conta quem foi", () => {
       expect(criada.etapas.map((e) => e.name)).toContain(ETAPA);
 
       // ---- a etapa aparece NA TELA, marcada como mudança do assistente ----
-      await page.goto(`${APP_URL}/app/settings/tenant/pipelines`);
+      // A lista de colunas com o selo de autoria mora no painel Configurar do
+      // próprio Kanban desde 2026-10-27 (a página de Configurações foi extinta).
+      await page.goto(`${APP_URL}/app/pipelines/${funil.id}?configurar=colunas`);
       const linhaDaEtapa = page.getByTestId(`etapa-${stageId}`);
       await expect(linhaDaEtapa).toBeVisible({ timeout: 15_000 });
       // O nome mora num campo editável (clique para renomear), então `toContainText`

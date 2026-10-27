@@ -109,9 +109,14 @@ describe("sidebarGroups", () => {
     expect(hrefs).toContain("/app/ai/agents");
   });
 
-  it("promove Funis para o grupo de CRM — o achado que originou esta mudança", () => {
+  it("o grupo de CRM leva aos Kanbans e às Tags — a configuração das colunas mora DENTRO do Kanban", () => {
+    // "Colunas dos Kanbans" saiu do menu em 2026-10-27: virou o painel Configurar
+    // do próprio Kanban. A rota antiga só redireciona.
     const crm = sidebarGroups(true, null).find((g) => g.group.id === "crm");
-    expect(crm?.items.map((i) => i.href)).toContain("/app/settings/tenant/pipelines");
+    const hrefs = crm?.items.map((i) => i.href) ?? [];
+    expect(hrefs).toContain("/app/kanban");
+    expect(hrefs).toContain("/app/tags");
+    expect(hrefs).not.toContain("/app/settings/tenant/pipelines");
   });
 
   it("omite o grupo inteiro quando o papel não vê nenhum item dele", () => {

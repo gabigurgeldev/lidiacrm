@@ -199,7 +199,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     // Sem janela de data — é o estado ATUAL do funil, não um evento do período.
     supabase
       .from("crm_stages")
-      .select("agent_stage_hint, crm_pipelines!inner(name)")
+      .select("agent_stage_hint, crm_pipelines!inner(id, name)")
       .eq("organization_id", orgId)
       .eq("crm_pipelines.organization_id", orgId)
       .eq("is_archived", false)
@@ -208,16 +208,18 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   if (stages.error) fonteFalhou("crm_stages", stages.error);
 
-  const porPipeline = new Map<string, Array<string | null>>();
+  // Por ID, não por nome: o aviso agora leva ao painel Configurar DAQUELE
+  // Kanban, e dois Kanbans com o mesmo nome iriam para o mesmo lugar.
+  const porPipeline = new Map<string, { name: string; hints: Array<string | null> }>();
   for (const r of (stages.data ?? []) as Array<{
     agent_stage_hint: string | null;
-    crm_pipelines: { name: string } | { name: string }[];
+    crm_pipelines: { id: string; name: string } | { id: string; name: string }[];
   }>) {
     const p = Array.isArray(r.crm_pipelines) ? r.crm_pipelines[0] : r.crm_pipelines;
     if (!p) continue;
-    const lista = porPipeline.get(p.name) ?? [];
-    lista.push(r.agent_stage_hint);
-    porPipeline.set(p.name, lista);
+    const atual = porPipeline.get(p.id) ?? { name: p.name, hints: [] };
+    atual.hints.push(r.agent_stage_hint);
+    porPipeline.set(p.id, atual);
   }
 
   const input: EvolutionInput = {
@@ -235,7 +237,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     costCents: llmCalls.reduce((acc, c) => acc + Number(c.cost_cents ?? 0), 0),
     inboundCount,
     handoffCount: handoffInbox + handoffEvents,
-    pipelines: [...porPipeline.entries()].map(([name, hints]) => ({ name, hints })),
+    pipelines: [...porPipeline.entries()].map(([id, { name, hints }]) => ({ id, name, hints })),
   };
 
   return ok(aggregateEvolution(input), { requestId });

@@ -1,4 +1,5 @@
 "use client";
+import { ContactTagsEditor } from "@/components/inbox/ContactTagsEditor";
 
 import { useT } from "@/hooks/i18n/useT";
 import { useEffect, useState } from "react";
@@ -20,7 +21,6 @@ interface FormShape {
   title: string;
   description: string;
   valueReais: string;
-  tagsRaw: string;
   expected_close_date: string;
 }
 
@@ -58,7 +58,6 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
       title: lead.title,
       description: lead.description ?? "",
       valueReais: centsToReais(lead.value_cents),
-      tagsRaw: (lead.tags ?? []).join(", "),
       expected_close_date: lead.expected_close_date ?? "",
     },
   });
@@ -68,7 +67,6 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
       title: lead.title,
       description: lead.description ?? "",
       valueReais: centsToReais(lead.value_cents),
-      tagsRaw: (lead.tags ?? []).join(", "),
       expected_close_date: lead.expected_close_date ?? "",
     });
     setCustomFields(lead.custom_fields ?? {});
@@ -76,11 +74,6 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
   }, [lead.id]);
 
   async function onSubmit(values: FormShape) {
-    const tags = values.tagsRaw
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
     const reais = values.valueReais.trim();
     let valueCents: number | null = null;
     if (reais.length > 0) {
@@ -95,7 +88,6 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
       title: values.title.trim(),
       description: values.description.trim() ? values.description.trim() : null,
       value_cents: valueCents,
-      tags,
       expected_close_date: values.expected_close_date || null,
       ...(fieldDefs.length > 0 ? { custom_fields: customFields } : {}),
     };
@@ -161,10 +153,15 @@ export function LeadFieldsForm({ lead, pipelineId, fieldDefs = [], onSaved, onCa
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="tagsRaw">{t("Tags (separadas por vírgula)")}</Label>
-          <Input id="tagsRaw" placeholder="vip, recompra" {...form.register("tagsRaw")} />
-        </div>
+        {/* A tag é do CONTATO e vem do catálogo (migration 0248). O campo de
+            texto livre que gravava em `lead.tags` saiu: criava grafias soltas
+            que nenhuma coluna nem filtro reconhecia. */}
+        {lead.contact_id && (
+          <div className="space-y-2">
+            <Label>{t("Tags do contato")}</Label>
+            <ContactTagsEditor contactId={lead.contact_id} tags={lead.contact_tags ?? []} />
+          </div>
+        )}
 
         {fieldDefs.length > 0 && (
           <div className="space-y-2 border-t border-border pt-4">

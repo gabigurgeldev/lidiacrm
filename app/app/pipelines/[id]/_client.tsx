@@ -25,7 +25,8 @@ import { FilterBar } from "@/components/kanban/FilterBar";
 import { BulkActionBar } from "@/components/kanban/BulkActionBar";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
 import { Button } from "@/components/ui/button";
-import { Plus } from "@/lib/ui/icons";
+import { Gear, Plus } from "@/lib/ui/icons";
+import { ConfigurarKanban, type AbaDeConfiguracao } from "@/components/kanban/configurar/ConfigurarKanban";
 import type { LeadFilters } from "@/lib/kanban/filters";
 import { applyFilters, filtersFromParams, filtersToParams } from "@/lib/kanban/filters";
 
@@ -33,11 +34,14 @@ export function PipelinePageClient({
   pipelineId,
   initialName,
   podeGerenciar = false,
+  podeEditarCampos = false,
 }: {
   pipelineId: string;
   initialName: string;
   /** Papel manager+ na organização ativa — o critério das rotas de etapa. */
   podeGerenciar?: boolean;
+  /** Admin: campos personalizados e nomes (`updatePipelineConfig` recusa o resto). */
+  podeEditarCampos?: boolean;
 }) {
   const t = useT();
   const { data, isLoading, error, pulses, realtimeStatus, seguranca } = useBoard(pipelineId);
@@ -54,6 +58,22 @@ export function PipelinePageClient({
   );
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [newOpen, setNewOpen] = useState(false);
+  // `?configurar=colunas|campos` abre o painel direto — é o destino dos links
+  // que antes levavam à página "Colunas dos Kanbans" (Painel de Evolução, agente).
+  const abaDaUrl = searchParams.get("configurar");
+  const configurando = podeGerenciar && (abaDaUrl === "colunas" || abaDaUrl === "campos");
+  const abaAtual: AbaDeConfiguracao =
+    abaDaUrl === "campos" && podeEditarCampos ? "campos" : "colunas";
+  const abrirConfiguracao = useCallback(
+    (aba: AbaDeConfiguracao | null) => {
+      const qs = new URLSearchParams(searchParams.toString());
+      if (aba) qs.set("configurar", aba);
+      else qs.delete("configurar");
+      const s = qs.toString();
+      router.replace(s ? `${pathname}?${s}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
 
   const filteredLeads = data ? applyFilters(data.leads, filters) : [];
 
@@ -87,10 +107,32 @@ export function PipelinePageClient({
         <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">
           {data?.pipeline.name ?? initialName}
         </h1>
-        <Button onClick={() => setNewOpen(true)} disabled={!data} className="shrink-0">
-          <Plus size={16} className="mr-2" /> {t("Novo Lead")}
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {podeGerenciar && (
+            <Button
+              variant="outline"
+              onClick={() => abrirConfiguracao("colunas")}
+              disabled={!data}
+              data-testid="abrir-configurar-kanban"
+            >
+              <Gear size={16} className="mr-2" /> {t("Configurar")}
+            </Button>
+          )}
+          <Button onClick={() => setNewOpen(true)} disabled={!data} className="shrink-0">
+            <Plus size={16} className="mr-2" /> {t("Novo negócio")}
+          </Button>
+        </div>
       </header>
+      {data && podeGerenciar && (
+        <ConfigurarKanban
+          pipeline={data.pipeline}
+          aberto={configurando}
+          aba={abaAtual}
+          onAbaChange={(aba) => abrirConfiguracao(aba)}
+          onOpenChange={(v) => abrirConfiguracao(v ? abaAtual : null)}
+          podeEditarCampos={podeEditarCampos}
+        />
+      )}
       {data && (
         <NewLeadDialog
           open={newOpen}

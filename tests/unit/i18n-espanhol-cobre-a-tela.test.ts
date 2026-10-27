@@ -97,7 +97,7 @@ const EM_PORTUGUES_DE_PROPOSITO: { arquivo: string; texto: string; motivo: strin
       "é o error boundary da RAIZ: renderiza fora de qualquer provider, quando o app já falhou. Chamar um hook de contexto ali é justamente o que não pode falhar de novo",
   },
   {
-    arquivo: "app/app/settings/tenant/pipelines/_stages.tsx",
+    arquivo: "components/kanban/configurar/ColunasDoKanban.tsx",
     texto: "nenhum",
     motivo: "valor de wire do papel da etapa; o rótulo visível já sai por t(ROTULO_DO_PAPEL[p])",
   },

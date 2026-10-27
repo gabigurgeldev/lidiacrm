@@ -211,6 +211,14 @@
       "type": "module",
       "label": "lib/leads/contato-no-kanban",
       "sublabel": "move o negócio aberto ou cria; 409 se ambíguo"
+    },
+    {
+      "id": "configurar",
+      "lane": "tela",
+      "col": 5,
+      "type": "component",
+      "label": "Painel Configurar do Kanban",
+      "sublabel": "colunas, ganho/perda, passo do agente, campos e nomes — ex-página Colunas dos Kanbans"
     }
   ],
   "edges": [
@@ -381,6 +389,18 @@
       "from": "contatoNoKanban",
       "to": "regra",
       "label": "tags da coluna → contato"
+    },
+    {
+      "id": "e29",
+      "from": "quadro",
+      "to": "configurar",
+      "label": "⚙ Configurar / ?configurar="
+    },
+    {
+      "id": "e30",
+      "from": "configurar",
+      "to": "vinculo",
+      "label": "colunas e tags"
     }
   ]
 }

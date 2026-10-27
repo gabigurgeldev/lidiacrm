@@ -34,7 +34,7 @@ export interface EvolutionInput {
   costCents: number;
   inboundCount: number;
   handoffCount: number;
-  pipelines: Array<{ name: string; hints: Array<string | null> }>;
+  pipelines: Array<{ id?: string; name: string; hints: Array<string | null> }>;
 }
 
 export interface TimelineItem {
@@ -78,7 +78,7 @@ export interface EvolutionPayload {
     messages_received: number;
   };
   gaps: {
-    unmapped_agent_steps: Array<{ pipeline_name: string; steps: string[] }>;
+    unmapped_agent_steps: Array<{ pipeline_id?: string; pipeline_name: string; steps: string[] }>;
     /**
      * Quantos funis foram EXAMINADOS para produzir `unmapped_agent_steps`.
      * Sem isto, lista vazia é ambígua: pode ser "todo passo tem etapa" ou
@@ -180,6 +180,7 @@ export function aggregateEvolution(input: EvolutionInput): EvolutionPayload {
     .map((p) => {
       const declarados = new Set(p.hints.filter((h): h is string => h !== null));
       return {
+        ...(p.id ? { pipeline_id: p.id } : {}),
         pipeline_name: p.name,
         steps: LEAD_STAGES.filter((s) => !declarados.has(s)),
       };

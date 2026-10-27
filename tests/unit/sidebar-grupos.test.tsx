@@ -132,18 +132,15 @@ describe("Sidebar agrupado", () => {
     expect(botao.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("leva às Colunas dos Kanbans sem passar por Configurações", () => {
+  it("não há mais página separada para as colunas — elas se configuram no Kanban", () => {
     comoPapel("admin");
     render(<Sidebar collapsed={false} />);
-    // O rótulo mudou: a LISTA (/app/kanban) se chama "Kanbans" e esta tela,
-    // que configura as colunas, virou "Colunas dos Kanbans" (2026-10-26; antes,
-    // "Funis" e "Etapas do funil"). Antes as duas disputavam o mesmo nome no
-    // mesmo grupo do menu.
-    const etapas = screen.getByRole("link", { name: "Colunas dos Kanbans" });
-    expect(etapas).toHaveAttribute("href", "/app/settings/tenant/pipelines");
+    // "Colunas dos Kanbans" (antes "Etapas do funil") foi extinta em 2026-10-27:
+    // o dono do produto quis tudo dentro de Kanbans (painel Configurar).
+    expect(screen.queryByRole("link", { name: "Colunas dos Kanbans" })).toBeNull();
   });
 
-  it("e os dois itens de funil não disputam o mesmo nome", () => {
+  it("e o Kanban continua no menu com o nome de sempre", () => {
     comoPapel("admin");
     render(<Sidebar collapsed={false} />);
     expect(screen.getByRole("link", { name: "Kanbans" })).toHaveAttribute("href", "/app/kanban");

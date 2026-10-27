@@ -97,7 +97,7 @@ async function login(page: Page): Promise<void> {
  * aqui conhece `stage_id` — é exatamente o que o dono da clínica tem à mão.
  */
 async function escolherNaTela(page: Page, nomeDaEtapa: string): Promise<void> {
-  await page.goto(`${APP}/app/settings/tenant/pipelines`);
+  await page.goto(`${APP}/app/kanban` /* colunas agora no painel Configurar do Kanban (2026-10-27) */);
   const secao = page.locator(`[data-testid="mapeamento-${CLINICA}"]`);
   await secao.locator(`[data-testid="etapa-${PASSO}"]`).waitFor({ state: "visible" });
   await secao.locator(`[data-testid="etapa-${PASSO}"]`).click();

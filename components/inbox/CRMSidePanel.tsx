@@ -20,8 +20,6 @@ import { ContactTagsEditor } from "./ContactTagsEditor";
 import { KanbansDoContato } from "./KanbansDoContato";
 import { TagChip } from "@/components/tags/TagChip";
 import { useTags } from "@/hooks/tags/useTags";
-import { useDefaultPipeline } from "@/hooks/pipelines/useDefaultPipeline";
-import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
 import { CustomFieldsEditor, type CustomFieldDef } from "@/components/contacts/CustomFieldsEditor";
 import { useEditLead } from "@/hooks/kanban/useUpdateLead";
 import { cn } from "@/lib/utils";
@@ -374,16 +372,7 @@ export function CRMSidePanel({ conversation, onFechar }: Props) {
   const [tentativa, setTentativa] = useState(0);
 
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
-  const [leadDialogOpen, setLeadDialogOpen] = useState(false);
   const [leadAtivoId, setLeadAtivoId] = useState<string | null>(null);
-  const defaultPipeline = useDefaultPipeline(leadDialogOpen);
-
-  useEffect(() => {
-    if (leadDialogOpen && defaultPipeline.isError) {
-      toast.error(t("Nenhum Kanban configurado nesta organização."));
-      setLeadDialogOpen(false);
-    }
-  }, [leadDialogOpen, defaultPipeline.isError, t]);
 
   useEffect(() => {
     if (!contactId) {
@@ -542,14 +531,22 @@ export function CRMSidePanel({ conversation, onFechar }: Props) {
             <Tag size={20} className="text-accent" aria-hidden />
             {t("Tag")}
           </button>
+          {/* Era "Lead", e criava SEMPRE um negócio novo no Kanban padrão —
+              clicar duas vezes dava dois cards para a mesma pessoa. Agora leva à
+              seção Kanbans, onde "Colocar em um Kanban" move o negócio que já
+              existe ou cria um (2026-10-27). */}
           <button
             type="button"
-            disabled={!contactId || (leadDialogOpen && defaultPipeline.isLoading)}
-            onClick={() => setLeadDialogOpen(true)}
+            disabled={!contactId}
+            onClick={() =>
+              document
+                .querySelector('[data-testid="inbox-kanbans"]')
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
             className="flex flex-col items-center gap-1.5 rounded-xl border border-border/70 py-3 text-xs text-foreground transition-colors hover:bg-surface-elevated disabled:opacity-40"
           >
             <Users size={20} className="text-accent" aria-hidden />
-            {leadDialogOpen && defaultPipeline.isLoading ? t("Carregando…") : t("Lead")}
+            {t("Kanban")}
           </button>
           {contactId ? (
             <Link
@@ -601,19 +598,6 @@ export function CRMSidePanel({ conversation, onFechar }: Props) {
         </div>
       </section>
 
-      {contactId && defaultPipeline.data && (
-        <NewLeadDialog
-          open={leadDialogOpen}
-          onOpenChange={setLeadDialogOpen}
-          pipelineId={defaultPipeline.data.pipeline.id}
-          stages={defaultPipeline.data.stages}
-          contactId={contactId}
-          onCreated={() => {
-            setLeadAtivoId(null);
-            recarregar();
-          }}
-        />
-      )}
 
 
       {/* Em que fase de cada Kanban o contato está — e onde se muda. A tag de

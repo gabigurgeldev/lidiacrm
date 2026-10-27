@@ -80,6 +80,7 @@ export async function updatePipelineConfig(
     },
   });
 
-  revalidatePath("/app/settings/tenant/pipelines");
+  // A configuração mora no próprio Kanban desde 2026-10-27 (painel Configurar).
+  revalidatePath(`/app/pipelines/${pipelineId}`);
   return { ok: true };
 }

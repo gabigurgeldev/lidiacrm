@@ -34,7 +34,7 @@ import {
   patchDePapel,
   ROTULO,
   vizinhoAoMover,
-} from "./_stages";
+} from "./ColunasDoKanban";
 
 // Polyfills que o Radix Select exige e o jsdom não tem.
 window.HTMLElement.prototype.scrollIntoView = vi.fn();

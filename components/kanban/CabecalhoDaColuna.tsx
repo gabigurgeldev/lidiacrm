@@ -92,7 +92,13 @@ export function CabecalhoDaColuna({
   const [renomeando, setRenomeando] = useState<string | null>(null);
   const [escolhendoTags, setEscolhendoTags] = useState<Set<string> | null>(null);
   const [conflito, setConflito] = useState(false);
-  const [arquivando, setArquivando] = useState<{ destino: string } | null>(null);
+  /**
+   * `negocios` é a contagem que o SERVIDOR devolveu no 422 (`precisa_destino`).
+   * O quadro não sabe contar sozinho: com filtro ativo ele só vê parte dos
+   * cards, e negócio fechado há mais de 30 dias nem chega ao quadro — a coluna
+   * parecia vazia, o pedido ia sem destino e voltava recusado sem explicação.
+   */
+  const [arquivando, setArquivando] = useState<{ destino: string; negocios: number | null } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   const reler = () => void qc.invalidateQueries({ queryKey: ["board", pipelineId] });
@@ -143,12 +149,23 @@ export function CabecalhoDaColuna({
     );
   }
 
+  const negociosNaColuna = arquivando?.negocios ?? quantos;
+
   function confirmarArquivo() {
     arquivar.mutate(
-      { stageId: stage.id, destinoId: quantos > 0 ? (arquivando?.destino ?? null) : null },
+      { stageId: stage.id, destinoId: negociosNaColuna > 0 ? (arquivando?.destino || null) : null },
       {
         onSuccess: () => setArquivando(null),
-        onError: (e) => setErro(textoDoErro(e, t)),
+        onError: (e) => {
+          const d = e instanceof ApiError ? (e.details as Record<string, unknown> | undefined) : undefined;
+          if (d?.precisa_destino === true && typeof d.negocios === "number") {
+            // A coluna tem negócios que o quadro não mostrava: pergunta o destino.
+            setArquivando((a) => ({ destino: a?.destino || destinos[0]?.id || "", negocios: d.negocios as number }));
+            return;
+          }
+          setArquivando(null);
+          setErro(textoDoErro(e, t));
+        },
         onSettled: reler,
       },
     );
@@ -241,7 +258,7 @@ export function CabecalhoDaColuna({
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive"
-                onClick={() => setArquivando({ destino: destinos[0]?.id ?? "" })}
+                onClick={() => setArquivando({ destino: destinos[0]?.id ?? "", negocios: null })}
               >
                 <Archive size={14} /> {t("Arquivar coluna")}
               </DropdownMenuItem>
@@ -345,19 +362,19 @@ export function CabecalhoDaColuna({
               {t("Arquivar a coluna")} «{stage.name}»?
             </DialogTitle>
             <DialogDescription>
-              {quantos > 0
-                ? `${quantos} ${quantos === 1 ? t("negócio está") : t("negócios estão")} ${t("nesta coluna. Para onde eles vão?")}`
+              {negociosNaColuna > 0
+                ? `${negociosNaColuna} ${negociosNaColuna === 1 ? t("negócio está") : t("negócios estão")} ${t("nesta coluna. Para onde eles vão?")}`
                 : t("A coluna está vazia e sai do quadro. O histórico dos negócios continua.")}
             </DialogDescription>
           </DialogHeader>
-          {quantos > 0 &&
+          {negociosNaColuna > 0 &&
             (destinos.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("Crie outra coluna antes de arquivar esta.")}</p>
             ) : (
               <select
                 className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                 value={arquivando?.destino ?? ""}
-                onChange={(e) => setArquivando({ destino: e.target.value })}
+                onChange={(e) => setArquivando({ destino: e.target.value, negocios: arquivando?.negocios ?? null })}
               >
                 {destinos.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -373,7 +390,7 @@ export function CabecalhoDaColuna({
             <Button
               onClick={confirmarArquivo}
               variant="destructive"
-              disabled={arquivar.isPending || (quantos > 0 && !arquivando?.destino)}
+              disabled={arquivar.isPending || (negociosNaColuna > 0 && !arquivando?.destino)}
             >
               {t("Arquivar")}
             </Button>

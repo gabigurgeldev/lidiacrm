@@ -1,9 +1,10 @@
 "use client";
+import { TagChip } from "@/components/tags/TagChip";
+import { useTags } from "@/hooks/tags/useTags";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useT } from "@/hooks/i18n/useT";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +42,7 @@ export function BulkActionBar({
   const user = useUser();
   const bulk = useBulkAction(pipelineId);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [tagInput, setTagInput] = useState("");
+  const { data: catalogo } = useTags();
 
   // Esc to clear selection
   useEffect(() => {
@@ -87,14 +88,15 @@ export function BulkActionBar({
     );
   };
 
-  const runTagAdd = () => {
-    const t = tagInput.trim();
-    if (!t) return;
+  // A tag vem do CATÁLOGO e vai para o CONTATO de cada negócio (migration
+  // 0248) — a rota de massa usa o mesmo handler do PATCH do contato, então a
+  // tag ligada a coluna também leva os contatos para lá.
+  const runTagAdd = (nome: string) => {
     bulk.mutate(
-      { action: "tag", lead_ids: selectedIds, params: { add: [t] } },
+      { action: "tag", lead_ids: selectedIds, params: { add: [nome] } },
       {
-        onSuccess: () => {
-          setTagInput("");
+        onSuccess: (res) => {
+          toast.success(`${t("Tag aplicada:")} ${nome} (${res.data.updated_count})`);
           onClear();
         },
       },
@@ -133,7 +135,7 @@ export function BulkActionBar({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuLabel>Stage</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("Coluna")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {stages.map((s) => (
               <DropdownMenuItem key={s.id} onClick={() => runMove(s.id)}>
@@ -160,27 +162,23 @@ export function BulkActionBar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" variant="outline" disabled={bulk.isPending}>
-              Tag…
+              {t("Tag…")}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <div className="flex items-center gap-2 p-2">
-              <Input
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                placeholder={t("nova tag")}
-                className="h-8 w-40"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    runTagAdd();
-                  }
-                }}
-              />
-              <Button size="sm" onClick={runTagAdd} disabled={!tagInput.trim()}>
-                {t("Adicionar")}
-              </Button>
-            </div>
+          <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+            <DropdownMenuLabel>{t("Aplicar tag nos contatos")}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {(catalogo ?? []).length === 0 ? (
+              <DropdownMenuItem asChild>
+                <a href="/app/tags">{t("Nenhuma tag criada ainda.")}</a>
+              </DropdownMenuItem>
+            ) : (
+              (catalogo ?? []).map((tag) => (
+                <DropdownMenuItem key={tag.id} onClick={() => runTagAdd(tag.name)}>
+                  <TagChip nome={tag.name} cor={tag.color} tamanho="sm" />
+                </DropdownMenuItem>
+              ))
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 

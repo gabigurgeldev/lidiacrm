@@ -10,7 +10,7 @@ import { NextActionSlot } from "./NextActionSlot";
 import { ReactivationSlot } from "./ReactivationSlot";
 import { ConversaSlot } from "./ConversaSlot";
 import { ScoreSlot } from "./ScoreSlot";
-import { OwnerBadge } from "./OwnerBadge";
+import { OwnerBadge, ownerInitials } from "./OwnerBadge";
 import { TagChip } from "@/components/tags/TagChip";
 import { PALETA_DE_TAGS } from "@/lib/tags/normalizar";
 
@@ -38,13 +38,13 @@ interface KanbanCardProps {
 /** Quantas tags cabem na faixa do card antes do "+N". */
 const TAGS_NO_CARD = 3;
 
-/** Duas iniciais do nome — "Maria Souza" → "MS"; uma palavra só → duas letras. */
-export function iniciais(nome: string): string {
-  const partes = nome.trim().split(/s+/).filter(Boolean);
-  if (partes.length === 0) return "?";
-  if (partes.length === 1) return partes[0]!.slice(0, 2).toUpperCase();
-  return (partes[0]![0]! + partes[partes.length - 1]![0]!).toUpperCase();
-}
+/**
+ * Duas iniciais do nome — "Maria Souza" → "MS"; uma palavra só → duas letras.
+ *
+ * A MESMA regra do dono (`ownerInitials`). A cópia que morava aqui partia o
+ * nome na letra "s" (regex sem a barra) e "Maria Souza" virava "MA".
+ */
+export const iniciais = ownerInitials;
 
 /** A cor do avatar sai do nome: a mesma pessoa tem a mesma cor em todo card. */
 function corDoAvatar(nome: string): string {
@@ -92,7 +92,7 @@ function KanbanCardBase({
   const t = useT();
   const value = formatBRL(card.valueCents, card.currency);
   const state = resolveCardState(card, t);
-  const age = stageAgeLabel(card.hoursInStage, t);
+  const age = stageAgeLabel(card.horasNaColuna ?? card.hoursInStage, t);
   const nomeDoAvatar = card.contactName ?? card.title;
   const tagsVisiveis = card.tags.slice(0, TAGS_NO_CARD);
   const tagsEscondidas = card.tags.length - tagsVisiveis.length;
@@ -200,7 +200,7 @@ function KanbanCardBase({
                 </button>
               </h3>
             </div>
-            <KanbanCardActions lead={lead} pipelineId={pipelineId} />
+            <KanbanCardActions lead={lead} pipelineId={pipelineId} onEditar={() => onOpen?.(card.id)} />
           </div>
 
           {/* ② valor — altura reservada mesmo sem valor, senão o card encolhe. */}

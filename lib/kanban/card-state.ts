@@ -22,6 +22,13 @@ export interface CardInput {
   /** Horas paradas no estágio (board calcula; null = sem sinal). */
   hoursInStage: number | null;
   /**
+   * Horas desde que o negócio ENTROU na coluna atual (`stage_changed_at`, 0071) —
+   * o "3d em Proposta" do card. Separado de `hoursInStage` de propósito: aquele
+   * mede silêncio (última atividade) e alimenta o "esfriando"; este mede
+   * permanência. Sem `stage_changed_at` (linha antiga), cai no mesmo valor.
+   */
+  horasNaColuna?: number | null;
+  /**
    * Esfriou pela janela DO ESTÁGIO. Quem classifica é o board, via
    * `resolveStageWindow` (lib/leads/risk-radar.ts) — o card não classifica nada:
    * um segundo classificador de esfriamento seria a doença que esta entrega cura.
@@ -85,6 +92,7 @@ export function buildCardInput(
     | "contact_tags"
     | "contact_name"
     | "last_activity_at"
+    | "stage_changed_at"
     | "created_at"
     | "owner_kind"
     | "owner_user_id"
@@ -113,6 +121,9 @@ export function buildCardInput(
   const hoursInStage = reference
     ? Math.max(0, (now.getTime() - new Date(reference).getTime()) / 3_600_000)
     : null;
+  const horasNaColuna = lead.stage_changed_at
+    ? Math.max(0, (now.getTime() - new Date(lead.stage_changed_at).getTime()) / 3_600_000)
+    : hoursInStage;
 
   return {
     id: lead.id,
@@ -122,6 +133,7 @@ export function buildCardInput(
     owner: resolveLeadOwner(lead, opts.ownerNames),
     stageName: opts.stageName,
     hoursInStage,
+    horasNaColuna,
     isCooling: opts.coolingIds?.has(lead.id) ?? false,
     // Proposta viva do negócio, se houver. `undefined` e não `null` porque a
     // ausência aqui é "não há proposta", não "há uma proposta vazia".

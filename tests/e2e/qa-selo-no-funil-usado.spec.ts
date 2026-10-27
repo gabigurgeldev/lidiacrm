@@ -74,7 +74,11 @@ test.describe("QA — o selo de autoria com o funil já vivido", () => {
     `);
 
     await login(page);
-    await page.goto(`${APP_URL}/app/settings/tenant/pipelines`);
+    // Os selos moram no painel Configurar do Kanban desde 2026-10-27.
+    await page.goto(`${APP_URL}/app/kanban`);
+    await page.locator('li[data-testid^="funil-"]').first().getByRole("link").first().click();
+    await page.getByTestId("abrir-configurar-kanban").click();
+    await page.getByTestId("configurar-kanban").waitFor();
     await page.waitForLoadState("networkidle");
 
     const doAgente = page.locator('[data-autoria="ai"]');

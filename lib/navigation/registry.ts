@@ -18,7 +18,6 @@ import {
   Flag,
   FlowArrow,
   Funnel,
-  FunnelSimple,
   Gauge,
   Gear,
   Headset,
@@ -346,26 +345,9 @@ export const NAV_DESTINATIONS: NavDestination[] = [
     // o grupo tem hub, e é por "Configurações" que se chega aqui.
     section: "Sua empresa",
   },
-  {
-    // Estava enterrado em Configurações e ninguém sabia que existia — o achado
-    // que originou esta reorganização. A URL não muda; só o lugar na navegação.
-    //
-    // ⚠️ ERA "Funis", nome que ele DISPUTAVA com o destino acima: os dois
-    // listavam as mesmas linhas de `crm_pipelines`, lado a lado no mesmo grupo,
-    // com nomes que não diziam qual servia para quê. A diferença real é o VERBO,
-    // e é ela que o nome carrega agora: lá se ABRE o funil, aqui se CONFIGURA o
-    // que ele significa. Em 2026-10-26 virou "Colunas dos Kanbans", junto com
-    // a troca de "Funis" por "Kanbans" no destino acima.
-    href: "/app/settings/tenant/pipelines",
-    label: "Colunas dos Kanbans",
-    description: "As colunas de cada Kanban, o vocabulário do negócio e os motivos de perda.",
-    // `Funnel` subiu para o cabeçalho do grupo CRM; aqui fica a versão simples.
-    // Ícone repetido entre um grupo e um filho dele lê como erro de montagem.
-    icon: FunnelSimple,
-    group: "crm",
-    minRole: "manager",
-    sidebar: true,
-  },
+  // "Colunas dos Kanbans" saiu daqui em 2026-10-27: virou o painel Configurar
+  // dentro do próprio Kanban (components/kanban/configurar/). A rota antiga
+  // redireciona para /app/kanban.
 
   // ---- Agente de IA — montar, ensinar, acompanhar ----
   {

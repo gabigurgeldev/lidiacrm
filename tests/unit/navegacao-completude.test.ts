@@ -38,6 +38,8 @@ const NAV_ALLOWLIST: Record<string, string> = {
     "sub-fluxo de criar agente com IA, alcançado pelo botão \"Criar com IA\" dentro da lista de Agentes",
   "/app/team/invite": "sub-fluxo de convite, alcançado de dentro de Equipe",
   "/app/settings/tenant/whatsapp": "redirect legado para /app/connections; mantido por links salvos",
+  "/app/settings/tenant/pipelines":
+    "redirect legado para /app/kanban; a página Colunas dos Kanbans virou o painel Configurar dentro do Kanban (2026-10-27)",
   "/app/settings/canal-oficial":
     "redirect para /app/connections?aba=oficial desde o PR #105 — conectar canal passou a ter um lugar só. Conexões é a porta; a aba é navegação interna dela",
   "/app/settings/templates":

@@ -22,6 +22,9 @@ export function NovaColuna({ pipelineId }: { pipelineId: string }) {
   const [erro, setErro] = useState<string | null>(null);
 
   function salvar() {
+    // Enter repetido durante o envio mandava um segundo POST, que voltava
+    // "nome repetido" depois de a coluna já ter nascido.
+    if (criar.isPending) return;
     const n = (nome ?? "").trim();
     if (!n) {
       setNome(null);
@@ -40,7 +43,7 @@ export function NovaColuna({ pipelineId }: { pipelineId: string }) {
       <button
         type="button"
         onClick={() => setNome("")}
-        className="flex h-11 w-72 shrink-0 items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-text-muted transition-colors hover:border-border-strong hover:bg-surface-muted/40 hover:text-text"
+        className="flex h-11 w-72 shrink-0 items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-text-muted transition-colors hover:border-border-strong hover:bg-surface-elevated/40 hover:text-text"
         data-testid="nova-coluna"
       >
         <Plus size={16} /> {t("Nova coluna")}
@@ -56,6 +59,7 @@ export function NovaColuna({ pipelineId }: { pipelineId: string }) {
         placeholder={t("Nome da coluna")}
         value={nome}
         onChange={(e) => setNome(e.target.value)}
+        disabled={criar.isPending}
         onKeyDown={(e) => {
           if (e.key === "Enter") salvar();
           if (e.key === "Escape") setNome(null);
