@@ -144,7 +144,8 @@ describe("o negócio de um funil que o assistente NÃO cuida", () => {
       escopoDeFunis: [],
     });
     expect(r.motivo).toBe("fora_do_escopo");
-    expect(r.detalhe).toMatch(/nenhum funil liberado/i);
+    // "Funil" virou "Kanban" no texto visível em 2026-10-26 (PR #80).
+    expect(r.detalhe).toMatch(/nenhum Kanban liberado/i);
   });
 });
 
