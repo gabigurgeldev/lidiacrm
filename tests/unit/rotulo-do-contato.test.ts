@@ -4,7 +4,12 @@ import * as path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { ehIdentificadorTecnico, rotuloDoContato, SEM_NOME } from "@/lib/contacts/rotulo-do-contato";
+import {
+  ehIdentificadorTecnico,
+  nomeDoContato,
+  rotuloDoContato,
+  SEM_NOME,
+} from "@/lib/contacts/rotulo-do-contato";
 
 /**
  * COMO SE CHAMA ESTA PESSOA NA TELA.
@@ -44,9 +49,27 @@ describe("ehIdentificadorTecnico", () => {
 });
 
 describe("rotuloDoContato", () => {
-  it("prefere o nome que uma pessoa escolheu", () => {
-    expect(rotuloDoContato({ display_name: "Kaio Gomes", name: "Kaio G", phone_number: "+5531988887777" })).toBe(
+  it("o nome que uma pessoa ESCREVEU (`name`) vence o do perfil do WhatsApp (`display_name`)", () => {
+    // `display_name` é o pushName que o ingest grava (fn_upsert_wa_contact). Com
+    // a ordem invertida, "Editar contato" gravava `name` e a tela seguia com o
+    // do perfil — o atendente corrigia o nome e nada mudava.
+    expect(rotuloDoContato({ display_name: "Kaio✨", name: "Kaio Gomes", phone_number: "+5531988887777" })).toBe(
       "Kaio Gomes",
+    );
+  });
+
+  it("sem `name`, o do perfil do WhatsApp aparece — contato que só falou pelo canal", () => {
+    expect(rotuloDoContato({ display_name: "Eucimar Silva", name: null, phone_number: "+5594992423551" })).toBe(
+      "Eucimar Silva",
+    );
+    expect(rotuloDoContato({ display_name: "Eucimar Silva", name: "  ", phone_number: null })).toBe("Eucimar Silva");
+  });
+
+  it("um telefone digitado no lugar do nome não esconde o nome do perfil", () => {
+    expect(rotuloDoContato({ display_name: "Alisson", name: "+55 11 95323-1803", phone_number: null })).toBe("Alisson");
+    // …e, sem mais nada, ainda diz mais que "Sem nome".
+    expect(rotuloDoContato({ display_name: null, name: "+55 11 95323-1803", phone_number: null })).toBe(
+      "+55 11 95323-1803",
     );
   });
 
@@ -88,18 +111,34 @@ describe("rotuloDoContato", () => {
   });
 });
 
+describe("nomeDoContato", () => {
+  it("devolve null quando não se sabe o nome — quem chama decide o fallback", () => {
+    expect(nomeDoContato({ display_name: null, name: null, phone_number: "+5531988887777" })).toBeNull();
+    expect(nomeDoContato({ display_name: "Contato 543134@lid", name: "" })).toBeNull();
+    expect(nomeDoContato(null)).toBeNull();
+  });
+
+  it("segue a mesma ordem do rótulo", () => {
+    expect(nomeDoContato({ display_name: "Perfil", name: "Escrito" })).toBe("Escrito");
+    expect(nomeDoContato({ display_name: "Perfil", name: null })).toBe("Perfil");
+  });
+});
+
 describe("a sétima cópia não nasce", () => {
   it("nenhum arquivo remonta a cadeia de fallback à mão", () => {
     // A função central só resolve o problema enquanto for a ÚNICA. Seis cópias
     // não divergiram por descuido: cada tela nova reescreveu a cadeia do jeito
     // que parecia certo naquele arquivo, e nasceram quatro finais diferentes.
-    const arquivos = execFileSync("git", ["ls-files", "app", "lib", "components"], { encoding: "utf8" })
+    const arquivos = execFileSync("git", ["ls-files", "app", "lib", "components", "hooks"], { encoding: "utf8" })
       .split("\n")
       .filter((f) => /\.(ts|tsx)$/.test(f) && !/\.test\.tsx?$/.test(f))
       .filter((f) => f !== "lib/contacts/rotulo-do-contato.ts");
 
     // `display_name` seguido de `||` na MESMA expressão: a assinatura da cadeia.
-    const cadeia = /display_name\s*(\?\.\s*trim\(\)\s*)?\|\|/;
+    // Também com `??`: oito cópias de `display_name ?? name` passaram pela
+    // versão desta cerca que só olhava `||` — todas na ordem errada.
+    const cadeia =
+      /display_name(\s+as\s+string\s*\|\s*null\))?\s*(\?\.\s*trim\(\)\s*)?(\|\||\?\?)\s*\(?[\w?.]*\bname\b|display_name\s*\?\?\s*""\)\.trim\(\)\s*\|\|/;
     const reincidentes: string[] = [];
 
     for (const f of arquivos) {

@@ -8,6 +8,7 @@
  * de cookie).
  */
 import { z } from "zod";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 
 import {
   listContactsHandler,
@@ -48,7 +49,7 @@ export const crmSearchContacts: McpToolDefinition<typeof searchInputShape> = {
     return {
       contacts: result.contacts.map((c) => ({
         id: c.id,
-        name: c.display_name ?? c.name,
+        name: nomeDoContato(c),
         phone: c.phone_number,
         email: c.email,
         tags: c.tags ?? [],

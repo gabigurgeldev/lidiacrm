@@ -123,14 +123,14 @@ export function StageColumn({
               <button
                 type="button"
                 onClick={() => setPaginas((p) => p + 1)}
-                className="rounded-md border border-dashed border-border py-2 text-xs font-medium text-text-muted hover:border-border-strong hover:text-text"
+                className="shrink-0 rounded-md border border-dashed border-border py-2 text-xs font-medium text-text-muted hover:border-border-strong hover:text-text"
                 data-testid={`mostrar-mais-${stage.id}`}
               >
                 {t("Mostrar mais")} ({restantes})
               </button>
             )}
             {leads.length === 0 && !snapshot.isDraggingOver && (
-              <div className="flex h-24 items-center justify-center rounded-ios-sm border border-dashed border-border-strong/60 text-[11px] text-text-muted">
+              <div className="flex h-24 shrink-0 items-center justify-center rounded-ios-sm border border-dashed border-border-strong/60 text-[11px] text-text-muted">
                 {t("Arraste um card para cá")}
               </div>
             )}

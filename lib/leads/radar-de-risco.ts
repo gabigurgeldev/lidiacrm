@@ -15,6 +15,7 @@
  * de fonte confiável pelo chamador (JWT ou contexto do agente), nunca do body.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 
 import {
   classifyRisk,
@@ -193,7 +194,7 @@ export async function carregaRadarDeRisco(
       }
     }
     for (const p of contacts.data ?? []) {
-      nameByContact.set(p.id, p.display_name ?? p.name ?? null);
+      nameByContact.set(p.id, nomeDoContato(p));
     }
   }
 

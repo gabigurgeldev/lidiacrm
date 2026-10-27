@@ -1,5 +1,6 @@
 "use client";
 import { useCallback } from "react";
+import { nomeDoContato as nomeDaPessoa } from "@/lib/contacts/rotulo-do-contato";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api/client";
@@ -54,7 +55,7 @@ export function contatoDaExecucao(e: ExecucaoDeFluxo): ContatoDaExecucao | null 
 /** O nome que a tela mostra, com o telefone como último recurso. */
 export function nomeDoContato(c: ContatoDaExecucao | null): string | null {
   if (c === null) return null;
-  return c.display_name ?? c.name ?? c.phone_number ?? null;
+  return nomeDaPessoa(c) ?? c.phone_number ?? null;
 }
 
 /**

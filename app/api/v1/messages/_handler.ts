@@ -7,6 +7,7 @@
  *  - MCP tools (S-13.04)
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 
 import { ApiError } from "@/lib/api/types";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
@@ -473,7 +474,7 @@ export async function sendMessageHandler(
           "Contato sem telefone para envio como cartão.",
         );
       }
-      const displayName = row.display_name ?? row.name ?? row.phone_number;
+      const displayName = nomeDoContato(row) ?? row.phone_number;
       outboundBody = displayName;
       outboundMetadata = {
         ...outboundMetadata,

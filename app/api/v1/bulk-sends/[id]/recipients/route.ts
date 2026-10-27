@@ -10,6 +10,7 @@
  * não foi. Só essas duas colunas: é PII, e a tela não precisa do dossiê.
  */
 import { randomUUID } from "node:crypto";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { type NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
@@ -78,7 +79,7 @@ export async function GET(
     pagina.map((l) => ({
       id: l.id,
       contact_id: l.contact_id,
-      nome: l.contacts?.display_name ?? l.contacts?.name ?? null,
+      nome: nomeDoContato(l.contacts),
       telefone: l.contacts?.phone_number ?? null,
       status: l.status,
       sent_at: l.sent_at,

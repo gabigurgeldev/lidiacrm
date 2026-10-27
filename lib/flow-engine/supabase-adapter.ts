@@ -10,6 +10,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 
 import { sendMessageHandler } from "@/app/api/v1/messages/_handler";
 import { desfechoDoEnvio, type MensagemEnviada } from "@/lib/automation/desfecho-do-envio";
@@ -489,7 +490,7 @@ async function carregarFatos(
     if (c !== null) {
       contact = {
         id: String(c.id),
-        name: (c.display_name as string | null) ?? (c.name as string | null) ?? null,
+        name: nomeDoContato(c as { display_name?: string | null; name?: string | null }),
         phone_number: (c.phone_number as string | null) ?? null,
         email: (c.email as string | null) ?? null,
         tags: Array.isArray(c.tags) ? (c.tags as string[]) : [],
