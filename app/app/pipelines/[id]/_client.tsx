@@ -25,7 +25,8 @@ import { FilterBar } from "@/components/kanban/FilterBar";
 import { BulkActionBar } from "@/components/kanban/BulkActionBar";
 import { NewLeadDialog } from "@/components/kanban/NewLeadDialog";
 import { Button } from "@/components/ui/button";
-import { Gear, Plus } from "@/lib/ui/icons";
+import { Gear, Kanban as KanbanIcon, Plus } from "@/lib/ui/icons";
+import { formatarReais } from "@/lib/kanban/dinheiro";
 import { ConfigurarKanban, type AbaDeConfiguracao } from "@/components/kanban/configurar/ConfigurarKanban";
 import type { LeadFilters } from "@/lib/kanban/filters";
 import { applyFilters, filtersFromParams, filtersToParams } from "@/lib/kanban/filters";
@@ -76,6 +77,23 @@ export function PipelinePageClient({
   );
 
   const filteredLeads = data ? applyFilters(data.leads, filters) : [];
+  // Os números do topo leem o quadro INTEIRO (sem filtro): são o retrato do
+  // Kanban, não da busca. Ganhos = fechados nos 30 dias que o GET traz.
+  const numeros = useMemo(() => {
+    if (!data) return null;
+    let abertos = 0;
+    let valorCents = 0;
+    let ganhos = 0;
+    for (const l of data.leads) {
+      if (l.status === "open") {
+        abertos += 1;
+        valorCents += l.value_cents ?? 0;
+      } else if (l.status === "won") {
+        ganhos += 1;
+      }
+    }
+    return { abertos, valorCents, ganhos };
+  }, [data]);
 
   return (
     <div
@@ -103,11 +121,38 @@ export function PipelinePageClient({
           limite curto) + botão na mesma linha sem quebra empurrava o botão pra
           fora da viewport em telas estreitas. De `sm:` pra cima volta a ser
           uma linha só, como sempre foi. */}
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">
-          {data?.pipeline.name ?? initialName}
-        </h1>
-        <div className="flex shrink-0 items-center gap-2">
+      {/* Chassi em vidro: o cabeçalho é a ÚNICA superfície translúcida do quadro
+          (vidro por coluna ou por card custaria GPU por elemento e travaria o
+          arrasto — docs/design-system/09-anti-patterns.md). */}
+      <header className="ios-vidro sticky top-0 z-20 flex flex-col gap-3 rounded-ios border border-border p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-ios-sm bg-accent-soft text-accent">
+              <KanbanIcon size={22} weight="duotone" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
+                {data?.pipeline.name ?? initialName}
+              </h1>
+              {numeros && (
+                <p className="flex flex-wrap gap-x-3 text-xs text-text-muted" data-testid="numeros-do-kanban">
+                  <span>
+                    <strong className="font-semibold tabular-nums text-text">{numeros.abertos}</strong>{" "}
+                    {numeros.abertos === 1 ? t("negócio aberto") : t("negócios abertos")}
+                  </span>
+                  <span>
+                    <strong className="font-semibold tabular-nums text-text">{formatarReais(numeros.valorCents)}</strong>{" "}
+                    {t("em aberto")}
+                  </span>
+                  <span>
+                    <strong className="font-semibold tabular-nums text-success-fg">{numeros.ganhos}</strong>{" "}
+                    {t("ganhos em 30 dias")}
+                  </span>
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
           {podeGerenciar && (
             <Button
               variant="outline"
@@ -121,7 +166,9 @@ export function PipelinePageClient({
           <Button onClick={() => setNewOpen(true)} disabled={!data} className="shrink-0">
             <Plus size={16} className="mr-2" /> {t("Novo negócio")}
           </Button>
+          </div>
         </div>
+        <FilterBar filters={filters} onChange={setFilters} leads={data?.leads ?? []} />
       </header>
       {data && podeGerenciar && (
         <ConfigurarKanban
@@ -141,7 +188,6 @@ export function PipelinePageClient({
           stages={data.stages}
         />
       )}
-      <FilterBar filters={filters} onChange={setFilters} leads={data?.leads ?? []} />
       {error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm">
           {t("Não consegui carregar este Kanban:")} {formatError(error, t)}

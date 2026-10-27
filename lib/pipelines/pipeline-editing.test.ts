@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   ETAPAS_INICIAIS,
+  MODELOS_DE_KANBAN,
+  colunasIniciais,
   podeExcluirDeVez,
   regrasQueApontamPara,
   updatesDePadrao,
@@ -214,5 +216,35 @@ describe('ETAPAS_INICIAIS', () => {
     const slugs = ETAPAS_INICIAIS.map((e) => e.slug);
     expect(new Set(slugs).size).toBe(slugs.length);
     for (const slug of slugs) expect(slug).toMatch(/^[a-z0-9_-]{2,40}$/);
+  });
+});
+
+describe("colunasIniciais — Kanban novo a partir de modelo", () => {
+  it("sem modelo: as quatro neutras, sem passo do agente", () => {
+    const c = colunasIniciais();
+    expect(c.map((x) => x.name)).toEqual(["Novo", "Em andamento", "Ganho", "Perdido"]);
+    expect(c.every((x) => x.agent_stage_hint === null)).toBe(true);
+  });
+
+  it("modelo clínica: colunas do nicho, com fechamento, perda e passo do agente", () => {
+    const c = colunasIniciais("clinica");
+    expect(c[0]).toMatchObject({ name: "Novo contato", agent_stage_hint: "new", is_won: false });
+    expect(c.find((x) => x.is_won)?.name).toBe("Consulta marcada");
+    expect(c.find((x) => x.is_lost)?.name).toBe("Não vai marcar");
+    expect(c.filter((x) => x.is_won)).toHaveLength(1);
+    expect(new Set(c.map((x) => x.slug)).size).toBe(c.length);
+    expect(c.map((x) => x.position)).toEqual(c.map((_, i) => (i + 1) * 1000));
+  });
+
+  it("modelo que não existe cai nas neutras (nunca cria Kanban vazio)", () => {
+    expect(colunasIniciais("nao-existe")).toHaveLength(4);
+  });
+
+  it("todo modelo oferecido tem exatamente uma coluna de fechamento e uma de perda", () => {
+    for (const m of MODELOS_DE_KANBAN) {
+      const c = colunasIniciais(m.id);
+      expect(c.filter((x) => x.is_won), m.id).toHaveLength(1);
+      expect(c.filter((x) => x.is_lost), m.id).toHaveLength(1);
+    }
   });
 });

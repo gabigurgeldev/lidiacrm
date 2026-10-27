@@ -8721,6 +8721,24 @@ export const DICIONARIO: Traducoes = {
   "Crie um negócio à mão neste Kanban.": { es: "Crea un negocio a mano en este Kanban." },
   "Escolha a coluna": { es: "Elige la columna" },
   "Criar negócio": { es: "Crear negocio" },
+  // ── Kanban: redesenho (lista, quadro, card, dossiê) ──
+  "Descrição do Kanban": { es: "Descripción del Kanban" },
+  "Começar com as colunas de": { es: "Empezar con las columnas de" },
+  "Modelo de colunas": { es: "Modelo de columnas" },
+  "Em branco": { es: "En blanco" },
+  "Prévia das colunas": { es: "Vista previa de las columnas" },
+  "O modelo já marca onde o cliente fecha e onde desiste, e diz ao agente para onde levar o card em cada passo. Tudo é editável depois em Configurar.": { es: "El modelo ya marca dónde el cliente cierra y dónde desiste, y le dice al agente adónde llevar la tarjeta en cada paso. Todo se puede editar después en Configurar." },
+  "Negócios abertos": { es: "Negocios abiertos" },
+  "Colunas": { es: "Columnas" },
+  "negócio aberto": { es: "negocio abierto" },
+  "negócios abertos": { es: "negocios abiertos" },
+  "ganhos em 30 dias": { es: "ganados en 30 días" },
+  "Buscar negócio ou contato…": { es: "Buscar negocio o contacto…" },
+  "Sem valor": { es: "Sin valor" },
+  "Previsão de fechamento já passou": { es: "La fecha prevista de cierre ya pasó" },
+  "Previsão de fechamento": { es: "Fecha prevista de cierre" },
+  "Ganhou": { es: "Ganó" },
+  "Perdeu": { es: "Perdió" },
 };
 
 /**

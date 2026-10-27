@@ -5,7 +5,8 @@ import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 import { ROLE_RANK } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
-import { FunisClient, type FunilDaLista } from "./_client";
+import { formatarReais } from "@/lib/kanban/dinheiro";
+import { FunisClient, type FunilDaLista, type ResumoDoKanban } from "./_client";
 
 export const dynamic = "force-dynamic";
 
@@ -34,22 +35,63 @@ export default async function KanbanPickerPage() {
   if (!activeOrg) redirect("/app");
 
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("crm_pipelines")
-    .select("id, name, slug, description, position, is_default")
-    .eq("organization_id", activeOrg.orgId)
-    .eq("is_archived", false)
-    .order("position");
+  // Três leituras em paralelo, todas com a organização ATIVA filtrada à mão (a
+  // RLS libera todas as organizações do usuário — ver o comentário acima).
+  // Os negócios vêm só com o necessário para contar e somar: pipeline, coluna e
+  // valor dos ABERTOS. Fechado não entra no retrato de "o que está andando".
+  const [{ data }, { data: colunas }, { data: abertos }] = await Promise.all([
+    supabase
+      .from("crm_pipelines")
+      .select("id, name, slug, description, position, is_default")
+      .eq("organization_id", activeOrg.orgId)
+      .eq("is_archived", false)
+      .order("position"),
+    supabase
+      .from("crm_stages")
+      .select("id, name, color, pipeline_id, position")
+      .eq("organization_id", activeOrg.orgId)
+      .eq("is_archived", false)
+      .order("position"),
+    supabase
+      .from("crm_leads")
+      .select("pipeline_id, stage_id, value_cents")
+      .eq("organization_id", activeOrg.orgId)
+      .eq("status", "open"),
+  ]);
 
   const funis = (data ?? []) as FunilDaLista[];
+  const porColuna = new Map<string, number>();
+  const resumo: Record<string, ResumoDoKanban> = {};
+  for (const f of funis) resumo[f.id] = { abertos: 0, valorCents: 0, colunas: [] };
+  for (const l of (abertos ?? []) as Array<{ pipeline_id: string; stage_id: string; value_cents: number | null }>) {
+    const r = resumo[l.pipeline_id];
+    if (!r) continue;
+    r.abertos += 1;
+    r.valorCents += l.value_cents ?? 0;
+    porColuna.set(l.stage_id, (porColuna.get(l.stage_id) ?? 0) + 1);
+  }
+  for (const c of (colunas ?? []) as Array<{ id: string; name: string; color: string | null; pipeline_id: string }>) {
+    resumo[c.pipeline_id]?.colunas.push({
+      id: c.id,
+      name: c.name,
+      color: c.color,
+      abertos: porColuna.get(c.id) ?? 0,
+    });
+  }
+  const totalAbertos = Object.values(resumo).reduce((s, r) => s + r.abertos, 0);
+  const totalValor = Object.values(resumo).reduce((s, r) => s + r.valorCents, 0);
   const podeGerenciar = ROLE_RANK[activeOrg.role] >= ROLE_RANK.manager;
   const idioma = user.idioma;
   const t = (texto: string) => traduzir(texto, idioma);
 
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
-      <header className="flex items-center gap-3">
-        <Kanban size={28} className="text-muted-foreground" weight="duotone" />
+    <div className="flex h-full flex-col gap-5 p-4 sm:p-6">
+      {/* Chassi em vidro: o cabeçalho é a única superfície translúcida da tela
+          (docs/design-system/09-anti-patterns.md — vidro só em chassi). */}
+      <header className="ios-vidro sticky top-0 z-20 -mx-4 -mt-4 flex flex-wrap items-center gap-3 border-b border-border px-4 py-4 sm:-mx-6 sm:-mt-6 sm:px-6">
+        <span className="flex size-11 items-center justify-center rounded-ios bg-accent-soft text-accent">
+          <Kanban size={24} weight="duotone" />
+        </span>
         {/* Era "Pipelines" — nome de quem construiu o sistema, não de quem
             vende. O comentário anterior aqui listava o preço de trocá-lo
             (`rbac-roles.spec.ts` e `invite-lifecycle.spec.ts`) e dizia que
@@ -57,10 +99,16 @@ export default async function KanbanPickerPage() {
             era maior do que o comentário contava: são QUATRO assertions em TRÊS
             specs, e `pipelines-gestao.spec.ts` — a spec da própria feature que
             gerou o comentário — é uma delas. Todas atualizadas junto. */}
-        <h1 className="text-2xl font-semibold tracking-tight">{t("Kanbans")}</h1>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-semibold tracking-tight">{t("Kanbans")}</h1>
+          <p className="text-sm text-text-muted">
+            {totalAbertos} {totalAbertos === 1 ? t("negócio aberto") : t("negócios abertos")} ·{" "}
+            {formatarReais(totalValor)} {t("em aberto")}
+          </p>
+        </div>
       </header>
 
-      <FunisClient funis={funis} podeGerenciar={podeGerenciar} />
+      <FunisClient funis={funis} resumo={resumo} podeGerenciar={podeGerenciar} />
     </div>
   );
 }

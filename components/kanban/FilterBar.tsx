@@ -16,6 +16,7 @@ import { useAssignableMembers } from "@/hooks/inbox/useAssignableMembers";
 import { useAssignableAgents } from "@/hooks/kanban/useAssignableAgents";
 import type { Lead, OwnerKind } from "@/lib/types/leads";
 import { OwnerBadge } from "./OwnerBadge";
+import { MagnifyingGlass } from "@/lib/ui/icons";
 import { TagChip } from "@/components/tags/TagChip";
 import { useTags } from "@/hooks/tags/useTags";
 import {
@@ -118,25 +119,29 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
             : (members?.find((m) => m.user_id === filters.owner)?.full_name ??
               t("Responsável"));
 
-  const statusLabel = t(
-    STATUS_OPTIONS.find((o) => o.value === (filters.status ?? "all"))?.label ?? "Todos",
-  );
-
   const tagLabel = filters.tag ?? t("Tag: todas");
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2">
-      <Input
-        type="search"
-        placeholder={t("Buscar por título…")}
-        value={searchInput}
-        onChange={(e) => setSearchInput(e.target.value)}
-        className="h-9 w-full sm:w-64"
-      />
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="relative w-full sm:w-64">
+        <MagnifyingGlass
+          size={15}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+          aria-hidden
+        />
+        <Input
+          type="search"
+          placeholder={t("Buscar negócio ou contato…")}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          className="h-9 rounded-full pl-9"
+          aria-label={t("Buscar negócio ou contato…")}
+        />
+      </div>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" className="h-8 rounded-full">
             {t("Responsável")}: {ownerLabel}
           </Button>
         </DropdownMenuTrigger>
@@ -179,27 +184,33 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm">
-            {t("Status")}: {statusLabel}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {STATUS_OPTIONS.map((o) => (
-            <DropdownMenuItem
+      {/* Status como controle segmentado (iOS): quatro estados, sempre à vista —
+          escolher qual vista se olha não é ação, por isso não é botão de accent. */}
+      <div className="ios-segmentado" role="radiogroup" aria-label={t("Status")}>
+        {STATUS_OPTIONS.map((o) => {
+          const ativo = (filters.status ?? "all") === o.value;
+          return (
+            <button
               key={o.value}
+              type="button"
+              role="radio"
+              aria-checked={ativo}
               onClick={() => onChange({ ...filters, status: o.value })}
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                ativo ? "bg-surface text-text shadow-xs" : "text-text-muted hover:text-text",
+              )}
+              data-testid={`status-${o.value}`}
             >
               {t(o.label)}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+            </button>
+          );
+        })}
+      </div>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" disabled={tagOptions.length === 0}>
+          <Button variant="outline" size="sm" className="h-8 rounded-full" disabled={tagOptions.length === 0}>
             {tagLabel}
           </Button>
         </DropdownMenuTrigger>
@@ -218,7 +229,7 @@ export function FilterBar({ filters, onChange, leads }: FilterBarProps) {
 
       <label
         className={cn(
-          "flex cursor-pointer select-none items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm",
+          "flex h-8 cursor-pointer select-none items-center gap-2 rounded-full border border-border px-3 text-xs font-medium",
           filters.overdueOnly && "border-accent bg-accent/10",
         )}
       >

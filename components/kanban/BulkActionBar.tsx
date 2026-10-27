@@ -123,7 +123,7 @@ export function BulkActionBar({
           é `mx-auto`, então o excesso ficava invisível dos dois lados, não só
           cortado. `max-w-[calc(100vw-2rem)]` + `flex-wrap` deixam a barra
           quebrar em linhas em vez de vazar. */}
-      <div className="sticky bottom-4 z-30 mx-auto flex w-fit max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 shadow-md">
+      <div className="ios-vidro sticky bottom-4 z-30 mx-auto flex w-fit max-w-[calc(100vw-2rem)] flex-wrap items-center justify-center gap-2 rounded-full border border-border px-4 py-2 shadow-lg">
         <span className="text-sm font-medium">
           {selectedIds.length} {t(selectedIds.length > 1 ? "selecionados" : "selecionado")}
         </span>

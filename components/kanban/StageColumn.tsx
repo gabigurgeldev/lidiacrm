@@ -74,7 +74,7 @@ export function StageColumn({
 
   return (
     <div
-      className="flex w-80 shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-surface-elevated/40"
+      className="flex max-h-full w-[19rem] shrink-0 flex-col overflow-hidden rounded-ios border border-border bg-surface-elevated shadow-xs"
       data-testid={`coluna-${stage.id}`}
     >
       <CabecalhoDaColuna
@@ -94,8 +94,8 @@ export function StageColumn({
             ref={provided.innerRef}
             {...provided.droppableProps}
             className={cn(
-              "flex flex-1 flex-col gap-2 overflow-y-auto p-2 transition-colors",
-              snapshot.isDraggingOver && "bg-accent/5 ring-1 ring-inset ring-accent/30",
+              "flex min-h-24 flex-1 flex-col gap-2.5 overflow-y-auto p-2.5 transition-colors",
+              snapshot.isDraggingOver && "bg-accent-soft/60 ring-2 ring-inset ring-accent/40",
             )}
           >
             {visiveis.map((lead, idx) => (
@@ -130,7 +130,7 @@ export function StageColumn({
               </button>
             )}
             {leads.length === 0 && !snapshot.isDraggingOver && (
-              <div className="flex h-20 items-center justify-center rounded-md border border-dashed border-border text-[11px] text-text-muted/70">
+              <div className="flex h-24 items-center justify-center rounded-ios-sm border border-dashed border-border-strong/60 text-[11px] text-text-muted">
                 {t("Arraste um card para cá")}
               </div>
             )}

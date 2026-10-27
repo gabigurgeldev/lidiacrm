@@ -13,7 +13,7 @@ import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import {
-  ETAPAS_INICIAIS,
+  colunasIniciais,
   posicaoEntre,
   slugDeFunil,
   validarNomeDeFunil,
@@ -49,19 +49,17 @@ const bodySchema = z
   .object({
     name: z.string().min(1).max(80),
     description: z.string().max(280).nullable().optional(),
+    /** Id de um modelo de `MODELOS_DE_KANBAN` (clínica, imobiliária…). */
+    modelo: z.string().max(40).optional(),
   })
   .strict();
 
-/** As etapas com que o funil nasce, já com a régua de posição do board. */
-function etapasIniciais(orgId: string, pipelineId: string) {
-  return ETAPAS_INICIAIS.map((etapa, i) => ({
+/** As colunas com que o Kanban nasce — do modelo escolhido, ou as neutras. */
+function etapasIniciais(orgId: string, pipelineId: string, modelo: string | undefined) {
+  return colunasIniciais(modelo).map((c) => ({
     organization_id: orgId,
     pipeline_id: pipelineId,
-    name: etapa.name,
-    slug: etapa.slug,
-    position: (i + 1) * 1000,
-    is_won: etapa.is_won,
-    is_lost: etapa.is_lost,
+    ...c,
   }));
 }
 
@@ -133,7 +131,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const { error: etapasErr } = await supabase
     .from("crm_stages")
-    .insert(etapasIniciais(orgId, pipelineId));
+    .insert(etapasIniciais(orgId, pipelineId, parsed.data.modelo));
 
   // ⚠️ COMPENSAÇÃO, PORQUE SÃO DUAS ESCRITAS SEM TRANSAÇÃO. Um funil sem etapa é
   // quadro morto: o board abre sem coluna nenhuma, não recebe negócio, e quem
@@ -163,7 +161,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     resourceType: "crm_pipeline",
     resourceId: pipelineId,
     requestId,
-    metadata: { name, slug: row.slug, is_default: row.is_default },
+    metadata: { name, slug: row.slug, is_default: row.is_default, modelo: parsed.data.modelo ?? null },
   });
 
   // Relê em vez de espelhar o que foi pedido: a tela mostra o que o banco tem.

@@ -175,7 +175,7 @@ export function CabecalhoDaColuna({
 
   return (
     <div className="flex flex-col gap-1.5 border-b border-border px-3 pb-2 pt-0">
-      <span aria-hidden className="-mx-3 mb-1 h-1 rounded-t-lg" style={barra} />
+      <span aria-hidden className="-mx-3 mb-1.5 h-1.5" style={barra} />
       <div className="flex items-center gap-2">
         {renomeando !== null ? (
           <Input
@@ -204,7 +204,7 @@ export function CabecalhoDaColuna({
             {stage.name}
           </h2>
         )}
-        <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-medium tabular-nums text-text-muted">
+        <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold tabular-nums text-text shadow-xs">
           {quantos}
         </span>
         {podeGerenciar && (
