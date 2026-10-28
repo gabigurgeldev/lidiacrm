@@ -100,6 +100,20 @@ describe("o lote é o que impede a poda de derrubar a entrada", () => {
     expect(r.temMais).toBe(true);
   });
 
+  it("o lote padrão de 500 vai ao banco em fatias de 100 — 500 ids numa URL davam 414", async () => {
+    // Medido em produção em 2026-10-27: `PATCH webhook_events_log` respondia
+    // `414 URI too long` no Kong a cada rodada, e a poda nunca esvaziou uma
+    // linha. O lote continua 500 por rodada; o que muda é quantos ids por URL.
+    const alvos = Array.from({ length: 500 }, (_, i) => ({ id: `x${i}` }));
+    const { admin, chamadas } = fakeAdmin({ alvos });
+    const r = await podarArquivoDeWebhooks(admin, { diasComCorpo: 7, diasParaApagar: 90 });
+
+    const updates = chamadas.filter((c) => c.op === "update");
+    expect(updates.map((u) => u.ids?.length)).toEqual([100, 100, 100, 100, 100]);
+    expect(new Set(updates.flatMap((u) => u.ids ?? [])).size).toBe(500);
+    expect(r.esvaziadas).toBe(500);
+  });
+
   it("lote com folga significa fila vazia", async () => {
     const { admin } = fakeAdmin({ alvos: [{ id: "x" }] });
     const r = await podarArquivoDeWebhooks(admin, { diasComCorpo: 7, diasParaApagar: 90, lote: 500 });

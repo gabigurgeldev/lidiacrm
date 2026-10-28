@@ -43,6 +43,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { logger } from "@/lib/logger";
+import { fatiar } from "@/lib/supabase/em-lotes";
 
 /** Quantas linhas cada rodada esvazia. Ver o cabeçalho: lote pequeno é o ponto. */
 export const LOTE_PADRAO = 500;
@@ -97,7 +98,14 @@ export async function podarArquivoDeWebhooks(
   const ids = (alvos ?? []).map((r) => (r as { id: string }).id);
   let esvaziadas = 0;
 
-  if (ids.length > 0) {
+  // Em fatias, e uma de cada vez: 500 ids numa URL só passam do teto do Kong
+  // (`414 URI too long`) — medido em produção, onde a poda falhou a cada rodada
+  // sem esvaziar uma linha. Em série, e não em paralelo, porque o ponto deste
+  // arquivo é nunca ser o dono de uma trava longa na tabela que todo webhook
+  // escreve. Fatia que falha não desfaz as anteriores: elas já estão esvaziadas
+  // e carimbadas, e a próxima rodada retoma do que sobrou.
+  const archivedAt = new Date().toISOString();
+  for (const fatia of fatiar(ids)) {
     const { error: erroUpdate } = await admin
       .from("webhook_events_log")
       .update({
@@ -107,17 +115,17 @@ export async function podarArquivoDeWebhooks(
         // O carimbo é o que diz "o corpo existiu e foi descartado" — sem ele,
         // NULL se confundiria com "nunca teve corpo", e a próxima pessoa a
         // investigar não saberia se o arquivo falhou ou se a poda passou.
-        archived_at: new Date().toISOString(),
+        archived_at: archivedAt,
       })
-      .in("id", ids);
+      .in("id", fatia);
 
     if (erroUpdate) {
       logger.warn("[retencao-webhook] não consegui esvaziar o lote", {
         detail: erroUpdate.message.slice(0, 160),
       });
-    } else {
-      esvaziadas = ids.length;
+      break;
     }
+    esvaziadas += fatia.length;
   }
 
   // ── 2. Apagar as velhas demais ────────────────────────────────────────────
