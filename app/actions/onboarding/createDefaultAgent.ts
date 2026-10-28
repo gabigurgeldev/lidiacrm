@@ -344,7 +344,7 @@ export async function createDefaultAgent(formData: FormData): Promise<CreateAgen
 
   const publicacao = await publishFirstVersion(admin, ctx.orgId, agent, systemPrompt, ctx.userId);
 
-  // Estado, audit e evento saem em QUALQUER desfecho da publicação: o agente
+  // Estado e audit saem em QUALQUER desfecho da publicação: o agente
   // existe, e o passo do onboarding é "configurar IA", não "publicar". Deixar
   // de gravá-los por causa da versão era o que fazia o wizard esquecer um passo
   // que na verdade aconteceu.

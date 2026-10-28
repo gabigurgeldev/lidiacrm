@@ -5,6 +5,7 @@ titulo: O agente pode responder em áudio
 ---
 
 Novo em **Agente de IA › agente › Estilo de resposta**: **Responder em áudio**.
+
 Ligado, cada resposta do agente sai como **nota de voz** no WhatsApp, com a voz
 escolhida (Dora, Alex ou Santa). O texto fica guardado na conversa como
 transcrição.

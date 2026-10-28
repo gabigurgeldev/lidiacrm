@@ -6,6 +6,7 @@ titulo: O agente pode tentar resolver uma vez antes de passar o cliente que pedi
 
 Até aqui, quando o cliente escrevia "quero falar com um atendente", a
 conversa ia para a equipe na hora, antes de o agente dizer qualquer coisa.
+
 Muita gente pede uma pessoa por hábito, logo no primeiro "oi" — e o agente,
 que resolveria a dúvida ensinando o passo a passo, nunca chegava a falar.
 

@@ -62,6 +62,20 @@ vi.mock("@/lib/auth/server", () => ({
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => clienteFalso() }));
 
 import { createDefaultAgent, type CreateAgentResult } from "@/app/actions/onboarding/createDefaultAgent";
+import { audit } from "@/lib/audit";
+
+/**
+ * O rastro do passo é o `api_audit_log`, não o `event_log`. O insert de
+ * `ai_agent.created` que o onboarding fazia nunca gravou (faltava `entity_kind`,
+ * NOT NULL) e não tinha consumidor; foi removido em b6b353b1. Medir o evento
+ * aqui depois disso é medir uma linha que o produto decidiu não escrever.
+ */
+function auditDoPasso(): Record<string, unknown> | undefined {
+  const chamada = vi
+    .mocked(audit)
+    .mock.calls.find(([a]) => (a as { action?: string }).action === "onboarding.ai_configured");
+  return (chamada?.[0] as { metadata?: Record<string, unknown> } | undefined)?.metadata;
+}
 
 /**
  * Construtor de consulta no formato do PostgREST: encadeável, thenable, e com
@@ -360,6 +374,7 @@ const FALHA_AO_LISTAR: Resposta = {
 
 beforeEach(() => {
   redirects.length = 0;
+  vi.mocked(audit).mockClear();
 });
 
 describe("onboarding: publicação impossível não pode terminar em silêncio", () => {
@@ -379,15 +394,16 @@ describe("onboarding: publicação impossível não pode terminar em silêncio",
     expect(redirects).toEqual([]);
   });
 
-  it("o passo fica gravado mesmo sem publicar — estado, evento e agente existem", async () => {
+  it("o passo fica gravado mesmo sem publicar — estado, audit e agente existem", async () => {
     const estado = montarBanco({ canais: FALHA_AO_LISTAR });
 
     await clicar();
 
     const ai = (estado.onboardingState.ai ?? {}) as { agent_id?: string };
     expect(ai.agent_id).toBe(estado.agentes[0]?.id);
-    expect(estado.eventos).toHaveLength(1);
-    expect(estado.eventos[0]?.payload).toMatchObject({ source: "onboarding", published: false });
+    expect(auditDoPasso()).toMatchObject({ published: false, publish_blocked_by: "failed" });
+    // Nenhum evento sem consumidor volta a nascer aqui.
+    expect(estado.eventos).toEqual([]);
   });
 
   it("segundo clique NÃO cria um segundo agente — o dano real da falha", async () => {
@@ -436,7 +452,7 @@ describe("onboarding: publicação impossível não pode terminar em silêncio",
     // sobre um caminho normal. É o `failed` do teste anterior que é diferente.
     expect(res).toBe("redirecionou");
     expect(estado.versoes).toHaveLength(0);
-    expect(estado.eventos[0]?.payload).toMatchObject({ published: false });
+    expect(auditDoPasso()).toMatchObject({ published: false, publish_blocked_by: "no_channel" });
   });
 
   it("versão já gravada por uma passagem anterior: repontar, não bater em duplicate key", async () => {

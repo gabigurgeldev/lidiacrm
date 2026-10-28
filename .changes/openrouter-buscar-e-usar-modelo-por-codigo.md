@@ -5,7 +5,9 @@ titulo: Agentes de IA podem usar qualquer modelo da OpenRouter, inclusive o lan�
 ---
 
 A lista de modelos da OpenRouter no agente só mudava uma vez por dia, de
-madrugada. Um modelo lançado de manhã não dava para escolher até o dia
+madrugada.
+
+Um modelo lançado de manhã não dava para escolher até o dia
 seguinte — e não havia onde digitar o código dele, porque o agente só publica
 com um modelo que esteja na lista.
 

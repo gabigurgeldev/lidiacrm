@@ -5,7 +5,9 @@ titulo: A busca do topo agora acha cliente, conversa e negócio — e o cabeçal
 ---
 
 A caixa de busca do topo parecia completa e não era: ela achava só as telas do
-sistema. Quem digitava o nome de um cliente não encontrava nada e concluía que o
+sistema.
+
+Quem digitava o nome de um cliente não encontrava nada e concluía que o
 cliente não estava cadastrado.
 
 **Agora ela acha gente.** Digite duas letras e a lista traz, em seções

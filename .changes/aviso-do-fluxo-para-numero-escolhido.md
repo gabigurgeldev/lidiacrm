@@ -5,7 +5,9 @@ titulo: O bloco de aviso do fluxo agora manda para um número escolhido
 ---
 
 O bloco "Avisar o vendedor no WhatsApp", no editor de fluxos, só sabia mandar
-mensagem para uma pessoa: quem estivesse com o lead naquele momento. O número
+mensagem para uma pessoa: quem estivesse com o lead naquele momento.
+
+O número
 vinha do telefone de aviso cadastrado para aquele atendente, e não havia campo
 nenhum na tela do bloco para escrever outro. Quem quisesse avisar o gerente, o
 plantão ou um número de grupo interno não tinha caminho — o bloco parecia

@@ -4,7 +4,9 @@ secao: adicionado
 titulo: Bloco novo divide as execuções entre os caminhos do fluxo
 ---
 
-Bloco "Dividir os caminhos", em Decisão e tempo. Reparte o tráfego: este lead
+Bloco "Dividir os caminhos", em Decisão e tempo.
+
+Reparte o tráfego: este lead
 por uma linha, o próximo por outra, sem que nada no lead determine qual. Você
 acrescenta de 2 a 10 caminhos, nomeia cada um e liga cada saída — caminho solto
 não publica, de propósito.

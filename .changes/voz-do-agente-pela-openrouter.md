@@ -5,7 +5,9 @@ titulo: O agente responde em áudio pela chave da OpenRouter, sem instalar nada 
 ---
 
 "Responder em áudio" funcionava só com um serviço de voz instalado na própria
-VPS (o Kokoro). Numa VPS de 2 núcleos ele levava ~9 segundos por fala. Com
+VPS (o Kokoro).
+
+Numa VPS de 2 núcleos ele levava ~9 segundos por fala. Com
 vários agentes respondendo ao mesmo tempo, as falas passavam do tempo limite e
 viravam texto, e o serviço disputava CPU com o WhatsApp.
 

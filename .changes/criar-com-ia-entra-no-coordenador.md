@@ -6,7 +6,9 @@ titulo: Agente criado com IA já entra no Coordenador
 
 Ao criar um agente com IA, a prévia ganhou o cartão **Coordenação**: quando o
 Coordenador deve passar a conversa para esse agente, exemplos de mensagem e o
-que não é com ele. Ao criar, o agente entra como destino do Coordenador sem
+que não é com ele.
+
+Ao criar, o agente entra como destino do Coordenador sem
 mudar o modo em que ele está (quem ainda não tinha Coordenador ganha um em
 modo de observação).
 

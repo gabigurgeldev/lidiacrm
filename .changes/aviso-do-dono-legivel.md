@@ -5,7 +5,9 @@ titulo: O aviso de passagem para o dono pode chegar organizado, uma informação
 ---
 
 Quando a IA passa um cliente para a equipe, o motivo vem numa linha só, com os
-campos separados por `|` (pedido, nome, telefone, itens, pagamento…). Colocado
+campos separados por `|` (pedido, nome, telefone, itens, pagamento…).
+
+Colocado
 direto no WhatsApp do dono, virava um bloco corrido difícil de ler.
 
 O gatilho "Quando a IA passar para uma pessoa" agora também entrega
