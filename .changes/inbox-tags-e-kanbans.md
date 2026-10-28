@@ -5,7 +5,9 @@ titulo: No inbox, tags do catálogo e o contato em qualquer fase de qualquer Kan
 ---
 
 No painel do contato, a tag agora se escolhe da lista da página Tags (com
-cor), em vez de ser digitada. Aplicar uma tag ligada a uma coluna leva o
+cor), em vez de ser digitada.
+
+Aplicar uma tag ligada a uma coluna leva o
 contato para aquele Kanban, e a tela avisa para onde ele foi.
 
 A nova seção **Kanbans** mostra em que coluna de cada Kanban o contato está e

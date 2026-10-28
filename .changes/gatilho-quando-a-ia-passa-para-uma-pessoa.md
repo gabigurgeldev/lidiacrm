@@ -4,7 +4,9 @@ secao: adicionado
 titulo: Fluxo que começa quando a IA passa a conversa para uma pessoa
 ---
 
-Novo gatilho nos Fluxos: **Quando a IA passar para uma pessoa**. Ele dispara uma
+Novo gatilho nos Fluxos: **Quando a IA passar para uma pessoa**.
+
+Ele dispara uma
 vez por passagem (pedido do cliente, decisão do agente, teto de gasto) e deixa a
 mensagem usar `{{contact.name}}`, `{{contact.phone_number}}`, `{{event.reason}}`
 e `{{event.summary}}`.

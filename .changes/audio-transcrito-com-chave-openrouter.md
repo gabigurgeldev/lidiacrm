@@ -4,7 +4,9 @@ secao: corrigido
 titulo: O agente entende áudio com a chave da OpenRouter
 ---
 
-A transcrição de áudio só funcionava com uma chave da OpenAI. Quem instalou
+A transcrição de áudio só funcionava com uma chave da OpenAI.
+
+Quem instalou
 usando só a OpenRouter, que é a primeira opção do instalador, ficava com o
 agente respondendo a todo áudio de cliente com "não consegui abrir o arquivo".
 A chave existia e servia, mas o código não a usava.

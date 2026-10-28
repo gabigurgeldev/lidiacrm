@@ -5,7 +5,9 @@ titulo: O fluxo passa a saber que horas são — bloco de horário de funcioname
 ---
 
 Até aqui um fluxo respondia 3h de domingo exatamente como responderia 10h de
-terça. O único bloco de tempo era "Esperar", que é duração fixa: para segurar
+terça.
+
+O único bloco de tempo era "Esperar", que é duração fixa: para segurar
 uma cobrança até segunda-feira era preciso escrever "espere 10 horas" à mão, e
 esse número acerta uma vez e erra em todas as outras.
 

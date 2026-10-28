@@ -5,7 +5,9 @@ titulo: O agente pode responder em áudio só quando o cliente manda áudio
 ---
 
 "Responder em áudio" valia para toda resposta: o cliente escrevia "oi, bom dia"
-e recebia uma nota de voz. Para quem escreveu, é estranho — e cada resposta em
+e recebia uma nota de voz.
+
+Para quem escreveu, é estranho — e cada resposta em
 áudio custa alguns segundos a mais de síntese.
 
 Agora, com o áudio ligado, aparece a opção **"Só quando o cliente mandar áudio"**

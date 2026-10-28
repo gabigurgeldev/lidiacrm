@@ -5,7 +5,9 @@ titulo: O disparo em massa não tem mais o teto de 500 destinatários por planil
 ---
 
 A planilha do Novo disparo aceitava no máximo 500 linhas, e o disparo por etiqueta
-parava em 1.000 contatos sem avisar. Agora não há teto de linhas: o que limita a
+parava em 1.000 contatos sem avisar.
+
+Agora não há teto de linhas: o que limita a
 planilha é o tamanho do arquivo (5 MB), e o que limita o ritmo da campanha continua
 sendo o intervalo entre mensagens e o teto diário de cada número.
 

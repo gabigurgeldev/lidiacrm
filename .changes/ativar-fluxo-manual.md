@@ -5,7 +5,9 @@ titulo: Ativar um fluxo à mão, pelo botão da conversa
 ---
 
 Até agora um fluxo do editor só começava sozinho, quando um lead novo entrava no
-funil (o gatilho "Quando um lead é criado"). Não havia como o atendente, dentro
+funil (o gatilho "Quando um lead é criado").
+
+Não havia como o atendente, dentro
 de um atendimento, disparar um fluxo para aquele contato na hora.
 
 Agora existe um bloco de início novo, **"Ativação manual pelo botão"**. Um fluxo

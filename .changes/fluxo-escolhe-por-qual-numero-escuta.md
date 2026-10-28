@@ -5,7 +5,9 @@ titulo: Escolher por quais números o fluxo começa
 ---
 
 Quem tem mais de um número de WhatsApp conectado não tinha como dizer a qual
-deles um fluxo respondia. Os blocos de início — "Quando o cliente manda
+deles um fluxo respondia.
+
+Os blocos de início — "Quando o cliente manda
 mensagem" e "Quando o cliente escrever uma palavra" — não perguntavam nada, e o
 fluxo valia para todos os números da conta. Um fluxo de atendimento montado para
 a loja disparava também no número da clínica.

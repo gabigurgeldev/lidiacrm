@@ -5,7 +5,9 @@ titulo: O quadro do fluxo diz o que cada bloco faz, e aceita arrastar e duplicar
 ---
 
 O editor de fluxos mostrava, embaixo do nome de cada bloco, o identificador
-interno dele: `logic.wait`, `whatsapp.send_to_lead`, `routing.round_robin`. Num
+interno dele: `logic.wait`, `whatsapp.send_to_lead`, `routing.round_robin`.
+
+Num
 fluxo com cinco mensagens seguidas isso eram cinco cartões idênticos — para
 saber qual era qual, abria-se um por um. E as linhas entre os blocos também não
 diziam nada: um bloco "Decidir" com quatro regras produzia quatro fios iguais

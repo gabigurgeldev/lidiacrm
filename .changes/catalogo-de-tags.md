@@ -6,7 +6,9 @@ titulo: Página de Tags e tag ligada a coluna do Kanban
 
 Nova página **Tags** no menu do CRM: crie as tags da empresa, escolha uma cor
 para cada uma, renomeie (o nome muda em todos os contatos que já a têm) e
-arquive o que não usa mais. Criar e editar é de gerente e admin; o atendente
+arquive o que não usa mais.
+
+Criar e editar é de gerente e admin; o atendente
 aplica as tags que existem.
 
 Uma tag pode ser ligada a uma coluna de um Kanban. Aplicar essa tag num

@@ -4,7 +4,9 @@ secao: adicionado
 titulo: Renomear e excluir um fluxo, direto na lista
 ---
 
-A lista de fluxos sabia ligar, pausar e abrir. Não sabia renomear nem excluir —
+A lista de fluxos sabia ligar, pausar e abrir.
+
+Não sabia renomear nem excluir —
 quem errava o nome na criação recriava o fluxo do zero, e quem queria apagar um
 fluxo não tinha caminho nenhum pela tela. As duas operações existiam no servidor
 desde o primeiro dia do motor de fluxos; o que faltava era a porta.

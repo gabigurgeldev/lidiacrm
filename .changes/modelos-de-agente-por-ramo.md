@@ -6,7 +6,9 @@ titulo: Novo agente pode começar de um modelo do seu tipo de negócio
 
 Em **IA › Agentes › Novo agente**, a tela agora oferece modelos por tipo de
 negócio: clínica, imobiliária, serviços, curso, loja e "outro tipo de
-negócio". Os mesmos ramos do quadro pronto do onboarding.
+negócio".
+
+Os mesmos ramos do quadro pronto do onboarding.
 
 Escolher um modelo preenche o formulário com:
 

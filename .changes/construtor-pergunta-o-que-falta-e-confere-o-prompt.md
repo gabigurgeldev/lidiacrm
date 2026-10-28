@@ -4,7 +4,9 @@ secao: corrigido
 titulo: Criar agente com IA pergunta o que falta e confere o prompt antes de você revisar
 ---
 
-As perguntas do "Criar com IA" não são mais puladas. Agora cabem as três
+As perguntas do "Criar com IA" não são mais puladas.
+
+Agora cabem as três
 rodadas prometidas (só cabiam duas), a IA só encerra quando o essencial do
 negócio está escrito no que você contou, e uma rodada que viria vazia é
 refeita ou montada a partir do checklist. Resposta em branco pede confirmação,

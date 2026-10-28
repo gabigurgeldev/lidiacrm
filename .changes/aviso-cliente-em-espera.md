@@ -5,7 +5,9 @@ titulo: Fluxo pode avisar quando um cliente que espera a equipe escreve de novo
 ---
 
 Quando o agente de IA passa um cliente para a equipe, ele fica calado com esse
-cliente até alguém devolver a conversa. Se o cliente escrevia de novo nesse
+cliente até alguém devolver a conversa.
+
+Se o cliente escrevia de novo nesse
 meio-tempo, ninguém respondia — e ninguém era avisado, porque o aviso ao dono
 só saía numa passagem nova.
 

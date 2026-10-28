@@ -4,7 +4,9 @@ secao: adicionado
 titulo: Criar a pessoa direto, com e-mail e senha, no lugar do convite
 ---
 
-Até agora, colocar alguém na equipe passava por um convite enviado por e-mail. Se
+Até agora, colocar alguém na equipe passava por um convite enviado por e-mail.
+
+Se
 a instalação ainda não tinha serviço de e-mail configurado — que é o estado normal
 de quem acabou de instalar, e justamente o momento em que se monta o time — a tela
 terminava exibindo um endereço longo para você copiar e mandar por conta própria.

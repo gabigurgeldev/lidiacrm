@@ -6,6 +6,7 @@ titulo: Agenda com profissionais, duas por horário, e a IA marcando pela conver
 
 A agenda ganhou o cadastro de **Profissionais** (Configurações › Agenda ›
 Profissionais): quem atende não precisa ter login nem ocupar vaga de usuário.
+
 Cada profissional tem jornada, folgas e os serviços que faz. Um serviço pode
 pedir **duas profissionais** (principal + apoio); o horário só aparece livre se
 as duas estiverem livres.

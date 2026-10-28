@@ -4,7 +4,9 @@ secao: alterado
 titulo: Os fluxos deixaram de esperar o relógio para continuar
 ---
 
-Um fluxo avançava por saltos de um minuto. Não porque os blocos fossem lentos —
+Um fluxo avançava por saltos de um minuto.
+
+Não porque os blocos fossem lentos —
 eles rodam em frações de segundo — mas porque, toda vez que o fluxo precisava
 ser retomado (depois de uma espera, depois de aguardar a resposta do cliente), o
 motor esperava a próxima batida de um relógio que só batia uma vez por minuto.

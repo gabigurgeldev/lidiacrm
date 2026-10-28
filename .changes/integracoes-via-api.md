@@ -4,7 +4,9 @@ secao: adicionado
 titulo: O agente de IA passa a consultar os sistemas do seu negócio — e corrige com o SIM do cliente
 ---
 
-Nova tela na Central de IA: **Integrações via API**. Você cadastra o endereço da
+Nova tela na Central de IA: **Integrações via API**.
+
+Você cadastra o endereço da
 API de um sistema seu (loja, ERP, plataforma), a chave de acesso e os pontos que
 o agente pode chamar. Na tela do agente, em "Sistemas que ele consulta", marca o
 que ele pode usar.

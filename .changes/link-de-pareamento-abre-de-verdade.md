@@ -5,7 +5,9 @@ titulo: O link para o cliente conectar o WhatsApp agora abre de verdade
 ---
 
 O link gerado no botão "QR code" de uma conexão saía como
-`https://placeholder.invalid/pair/...` — um endereço que não existe. A tela
+`https://placeholder.invalid/pair/...` — um endereço que não existe.
+
+A tela
 mostrava o link com ar de pronto e o botão Copiar copiava, mas quem recebesse
 abriria o nada. Com isso, o método de conectar o WhatsApp pelo celular do
 cliente não funcionava.

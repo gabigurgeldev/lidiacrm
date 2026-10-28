@@ -5,6 +5,7 @@ titulo: O fluxo agora fala com o cliente, e dispara campanha
 ---
 
 O construtor de fluxos sabia avisar o vendedor e não sabia falar com o cliente.
+
 Quem montava um fluxo via o bloco "Avisar o vendedor no WhatsApp" e supunha,
 com razão, que houvesse o outro lado. Não havia — e a única forma de o fluxo
 falar com o cliente era não falar.

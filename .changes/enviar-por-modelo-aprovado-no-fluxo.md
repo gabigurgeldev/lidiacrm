@@ -4,7 +4,9 @@ secao: adicionado
 titulo: Os blocos de envio passam a mandar modelo aprovado — inclusive pela conexão intermediada
 ---
 
-Fora da janela de 24 horas, uma conexão oficial do WhatsApp **não entrega texto livre** — é regra da plataforma. Até aqui só o disparo em massa sabia mandar
+Fora da janela de 24 horas, uma conexão oficial do WhatsApp **não entrega texto livre** — é regra da plataforma.
+
+Até aqui só o disparo em massa sabia mandar
 modelo aprovado; os dois blocos que mandam mensagem 1:1 ("Mandar mensagem para o
 cliente" e "Avisar o vendedor no WhatsApp") só sabiam texto. Numa conexão
 oficial, um fluxo que reagisse a um lead parado há dois dias simplesmente não

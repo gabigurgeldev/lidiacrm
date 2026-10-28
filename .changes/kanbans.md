@@ -4,7 +4,9 @@ secao: alterado
 titulo: Funis viram Kanbans, com colunas editáveis no próprio quadro
 ---
 
-O menu e as telas passam a chamar os funis de **Kanbans**. Dentro de cada
+O menu e as telas passam a chamar os funis de **Kanbans**.
+
+Dentro de cada
 Kanban, gerente e admin criam, renomeiam (duplo clique no nome), colorem,
 reordenam e arquivam colunas direto no quadro, e ligam tags a cada coluna.
 

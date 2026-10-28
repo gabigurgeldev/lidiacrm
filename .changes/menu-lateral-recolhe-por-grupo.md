@@ -6,6 +6,7 @@ titulo: O menu lateral agora recolhe por assunto, e lembra como você o deixou
 
 A barra lateral mostrava as vinte telas do sistema de uma vez, empilhadas, com
 os títulos de seção em letras miúdas e maiúsculas que serviam só de etiqueta.
+
 Numa tela de notebook comum a lista não cabia inteira, e achar uma tela era
 percorrer a coluna de cima a baixo.
 
