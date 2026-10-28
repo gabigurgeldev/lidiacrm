@@ -12,7 +12,9 @@ import {
 const COOKIE_NAME = "sb-deskcomm-auth";
 
 export async function proxy(request: NextRequest) {
-  const response = NextResponse.next({ request: { headers: request.headers } });
+  // `let`: quando o `getUser()` abaixo renova a sessão, a resposta é REFEITA
+  // com a requisição já reescrita — ver o `setAll`.
+  let response = NextResponse.next({ request: { headers: request.headers } });
 
   // Inject X-Request-Id for downstream correlation (audit log, error wrappers).
   const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
@@ -59,10 +61,33 @@ export async function proxy(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value);
-            response.cookies.set(name, value, options);
-          });
+          // A SESSÃO RENOVADA TEM DE CHEGAR À ROTA, e não só ao browser.
+          //
+          // `NextResponse.next({ request: { headers } })` COPIA os headers da
+          // requisição no momento em que é construído. `request.cookies.set`
+          // feito depois muda o objeto, mas não a cópia — e o cookie novo só
+          // seguia para o browser. Páginas escapavam por acaso: o Next funde o
+          // `Set-Cookie` do proxy no `cookies()` do render. Route Handler NÃO:
+          // a fusão só lê headers do Node, e a rota recebe um `NextRequest`
+          // (o próprio Next marca isso com um TODO em `request-store.js`).
+          //
+          // Medido em produção em 2026-10-27: toda `/api/v1/*` que chegava com
+          // o token vencido renovava DE NOVO, com dois clientes Supabase na
+          // mesma requisição; o `@supabase/auth-js` descartava a renovação de
+          // um deles (`AuthRefreshDiscardedError`, 409), o `getUser()` voltava
+          // sem usuário e a rota respondia 401 — para quem estava logado. Três
+          // `POST /token` no mesmo segundo no GoTrue, um para cada cliente.
+          //
+          // Refazer a resposta com a requisição já reescrita é o padrão do
+          // `@supabase/ssr`: a rota passa a ler o token que o proxy acabou de
+          // emitir e não renova nada.
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request: { headers: request.headers } });
+          response.headers.set("x-request-id", requestId);
+          response.headers.set("x-pathname", pathname);
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options),
+          );
         },
       },
       cookieOptions: {

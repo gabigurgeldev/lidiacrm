@@ -16,6 +16,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
+import { consultarEmLotes } from "@/lib/supabase/em-lotes";
 
 import {
   classifyRisk,
@@ -163,25 +164,33 @@ export async function carregaRadarDeRisco(
   const nameByContact = new Map<string, string | null>();
 
   if (contactIds.length > 0) {
+    // Em lotes: até SCAN_CAP contatos numa URL só passavam do teto do Kong, e o
+    // 414 voltava calado — o radar saía sem "em voo", sem conversa e sem nome.
     const [followups, convs, contacts] = await Promise.all([
-      admin
-        .from("cron_jobs")
-        .select("contact_id, next_run_at")
-        .eq("organization_id", organizationId)
-        .eq("kind", "at")
-        .eq("enabled", true)
-        .gt("next_run_at", nowIso)
-        .in("contact_id", contactIds),
-      admin
-        .from("conversations")
-        .select("id, contact_id, assignee_kind")
-        .eq("organization_id", organizationId)
-        .in("contact_id", contactIds),
-      admin
-        .from("contacts")
-        .select("id, name, display_name")
-        .eq("organization_id", organizationId)
-        .in("id", contactIds),
+      consultarEmLotes(contactIds, (lote) =>
+        admin
+          .from("cron_jobs")
+          .select("contact_id, next_run_at")
+          .eq("organization_id", organizationId)
+          .eq("kind", "at")
+          .eq("enabled", true)
+          .gt("next_run_at", nowIso)
+          .in("contact_id", lote),
+      ),
+      consultarEmLotes(contactIds, (lote) =>
+        admin
+          .from("conversations")
+          .select("id, contact_id, assignee_kind")
+          .eq("organization_id", organizationId)
+          .in("contact_id", lote),
+      ),
+      consultarEmLotes(contactIds, (lote) =>
+        admin
+          .from("contacts")
+          .select("id, name, display_name")
+          .eq("organization_id", organizationId)
+          .in("id", lote),
+      ),
     ]);
 
     for (const f of followups.data ?? []) {

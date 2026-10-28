@@ -52,6 +52,20 @@ export function ehFalhaDeServico(error: ErroDoAuth | null | undefined): boolean 
   return error.name === "AuthApiError" && (error.status ?? 0) >= 500;
 }
 
+/**
+ * A renovação foi DESCARTADA por corrida — a sessão está boa.
+ *
+ * O `@supabase/auth-js` (2.112) confere o cookie antes e depois de renovar: se
+ * outro cliente da mesma requisição gravou tokens novos no meio do caminho, ele
+ * joga fora os seus e devolve `AuthRefreshDiscardedError` (409). Não é token
+ * recusado nem GoTrue fora do ar: os tokens válidos já estão no cookie, gravados
+ * pelo vencedor. Tratar como "sem sessão" desloga quem estava logado — medido em
+ * produção em 2026-10-27. Ler de novo resolve.
+ */
+export function ehRefreshDescartado(error: ErroDoAuth | null | undefined): boolean {
+  return error?.name === "AuthRefreshDiscardedError";
+}
+
 export type DesfechoDaMfa = "codigo" | "indisponivel";
 
 /**

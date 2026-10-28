@@ -9,6 +9,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookieSecure } from "@/lib/supabase/cookie-secure";
 import { cookies } from "next/headers";
 import { env } from "@/lib/env";
+import { ehRefreshDescartado } from "@/lib/auth/erro-do-gotrue";
 
 /** Nome do cookie de sessão — o mesmo do browser e do `proxy.ts`. */
 export const NOME_DO_COOKIE_DE_SESSAO = "sb-deskcomm-auth";
@@ -16,7 +17,7 @@ export const NOME_DO_COOKIE_DE_SESSAO = "sb-deskcomm-auth";
 export async function createClient() {
   const cookieStore = await cookies();
 
-  return createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+  const client = createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -41,4 +42,17 @@ export async function createClient() {
       path: "/",
     },
   });
+
+  // Renovação descartada por corrida NÃO é "sem sessão" (ver
+  // `ehRefreshDescartado`). Duas leituras do cookie bastam: depois do descarte,
+  // o cookie já tem os tokens que o cliente vencedor gravou. Aqui, e não em cada
+  // chamador, porque são dezenas de rotas chamando `auth.getUser()` direto — e o
+  // `proxy.ts` já elimina a causa comum; isto cobre o que sobrar.
+  const getUser = client.auth.getUser.bind(client.auth);
+  client.auth.getUser = async (jwt?: string) => {
+    const primeira = await getUser(jwt);
+    return ehRefreshDescartado(primeira.error) ? getUser(jwt) : primeira;
+  };
+
+  return client;
 }
