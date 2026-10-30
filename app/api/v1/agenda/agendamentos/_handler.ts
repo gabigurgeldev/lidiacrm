@@ -97,6 +97,24 @@ export interface CancelarInput {
   reason: string;
 }
 
+/**
+ * O que só quem chama de DENTRO decide — nunca vem do corpo da requisição.
+ *
+ *  · `leitorDaOcupacao`: o client que COLETA a ocupação (horários livres). Desde
+ *    a 0249 o atendente só lê a própria agenda, e pelo client de sessão a coleta
+ *    deixaria de ver o compromisso legado e a conexão Google do colega — horário
+ *    ocupado viraria livre. A rota passa o admin (org do cookie; a coleta filtra
+ *    `organization_id` em toda query). A ESCRITA segue no client recebido, com a
+ *    RLS e a autoria por `auth.uid()`. Ausente = o próprio client.
+ *  · `preferirProfissionalId`: sem profissional pedida, a opção em que ESTA é a
+ *    principal vence a 1ª livre. É como a ferramenta da IA põe o atendente da
+ *    conversa na frente — preferência, não trava: ocupado, cai na 1ª livre.
+ */
+export interface OpcoesDoHandler {
+  leitorDaOcupacao?: SB;
+  preferirProfissionalId?: string | null;
+}
+
 interface TipoParaMarcar {
   id: string;
   name: string;
@@ -118,6 +136,7 @@ export async function marcarAgendamentoHandler(
   supabase: SB,
   ctx: HandlerCtx,
   input: MarcarInput,
+  opcoes: OpcoesDoHandler = {},
 ): Promise<Record<string, unknown>> {
   const inicio = new Date(input.starts_at);
 
@@ -191,15 +210,17 @@ export async function marcarAgendamentoHandler(
 
   const necessarios = necessariosDo(tipo);
   const pedido = await resolverPedidoDeProfissionais(supabase, ctx, tipo, necessarios, input);
+  const preferido = pedido.casa ? null : (opcoes.preferirProfissionalId ?? null);
 
   const fim = new Date(inicio.getTime() + tipo.duration_minutes * 60_000);
-  const consulta = await exigeHorarioLivre(supabase, ctx, {
+  const consulta = await exigeHorarioLivre(opcoes.leitorDaOcupacao ?? supabase, ctx, {
     eventTypeId: tipo.id,
     profissionalIds: pedido.consultar,
     ignorarAgendamentoId: null,
     inicio,
     fim,
     casa: pedido.casa,
+    preferir: preferido ? (o) => o.principalId === preferido : null,
   });
 
   const profissionalIds = [consulta.opcao.principalId, consulta.opcao.apoioId].filter(
@@ -297,6 +318,13 @@ export async function marcarAgendamentoHandler(
       contact_id: contatoId,
       conversation_id: conversaId,
       time_zone: criado.time_zone,
+      // Por que ESTA pessoa atende: pedida, a preferida (o atendente da conversa,
+      // quando a IA marca) ou a 1ª livre do instante.
+      responsavel_por: pedido.casa
+        ? "pedido"
+        : preferido && consulta.opcao.principalId === preferido
+          ? "atendente_da_conversa"
+          : "primeira_livre",
     },
   });
 
@@ -321,6 +349,7 @@ export async function alterarAgendamentoHandler(
   supabase: SB,
   ctx: HandlerCtx,
   input: AlterarInput,
+  opcoes: OpcoesDoHandler = {},
 ): Promise<Record<string, unknown>> {
   const atual = await exigeAgendamento(supabase, ctx, input.id, [
     "id",
@@ -366,7 +395,7 @@ export async function alterarAgendamentoHandler(
       const principal = participantes.find((p) => p.role === "principal")?.professional_id ?? null;
       const apoio = participantes.find((p) => p.role === "apoio")?.professional_id ?? null;
 
-      const consulta = await exigeHorarioLivre(supabase, ctx, {
+      const consulta = await exigeHorarioLivre(opcoes.leitorDaOcupacao ?? supabase, ctx, {
         eventTypeId: tipo.id,
         profissionalIds: principal ? [principal, ...(apoio ? [apoio] : [])] : null,
         ownerUserId: principal ? null : ((atual.owner_user_id as string | null) ?? null),
@@ -377,6 +406,7 @@ export async function alterarAgendamentoHandler(
         inicio: novoInicio,
         fim: novoFim,
         casa: principal ? (o) => o.principalId === principal && (!apoio || o.apoioId === apoio) : null,
+        preferir: null,
       });
       mudanca.starts_at = novoInicio.toISOString();
       mudanca.ends_at = novoFim.toISOString();
@@ -728,11 +758,14 @@ async function resolverPedidoDeProfissionais(
  * aceita um que a tela não ofereceu.
  *
  * O instante tem de existir EXATO na lista, e precisa ter uma opção de
- * profissionais que case com o pedido (`casa`); sem pedido, vale a 1ª opção,
- * que a consulta já devolve ordenada.
+ * profissionais que case com o pedido (`casa`); sem pedido, vale a preferida
+ * (`preferir`) se estiver livre, senão a 1ª opção, que a consulta já devolve
+ * ordenada.
+ *
+ * `leitor` é o client da COLETA — ver `OpcoesDoHandler.leitorDaOcupacao`.
  */
 async function exigeHorarioLivre(
-  supabase: SB,
+  leitor: SB,
   ctx: HandlerCtx,
   args: {
     eventTypeId: string;
@@ -742,9 +775,10 @@ async function exigeHorarioLivre(
     inicio: Date;
     fim: Date;
     casa: ((o: OpcaoDeProfissionais) => boolean) | null;
+    preferir: ((o: OpcaoDeProfissionais) => boolean) | null;
   },
 ): Promise<{ fusoDaRegra: string; opcao: OpcaoDeProfissionais; profissionais: ProfissionalResumo[] }> {
-  const consulta = await horariosLivresDaOrg(supabase, ctx.organization_id, {
+  const consulta = await horariosLivresDaOrg(leitor, ctx.organization_id, {
     eventTypeId: args.eventTypeId,
     profissionalIds: args.profissionalIds,
     ownerUserId: args.ownerUserId ?? null,
@@ -768,7 +802,11 @@ async function exigeHorarioLivre(
     );
   }
   const slot = consulta.slots.find((s) => s.inicio.getTime() === args.inicio.getTime());
-  const opcao = slot ? (args.casa ? slot.opcoes.find(args.casa) : slot.opcoes[0]) : undefined;
+  const opcao = slot
+    ? args.casa
+      ? slot.opcoes.find(args.casa)
+      : ((args.preferir ? slot.opcoes.find(args.preferir) : undefined) ?? slot.opcoes[0])
+    : undefined;
   if (!opcao) {
     throw new ApiError(
       422,

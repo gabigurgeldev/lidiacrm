@@ -16,12 +16,13 @@
  *
  * ─── Escopo ───────────────────────────────────────────────────────────────
  *
- * Client user-scoped (cookie session), e MESMO ASSIM toda query filtra
- * `organization_id` explicitamente. Não é redundância à toa: a RLS é a defesa
- * que vale, e o filtro é a que sobra se uma policy for afrouxada — as cinco
- * tabelas são tenant-aware, e o `CLAUDE.md` cobra o filtro explícito em toda
- * query que as cruza. O `organization_id` vem do cookie validado, NUNCA da
- * query string.
+ * Client ADMIN, com a organização do cookie validado (NUNCA da query string) e
+ * `organization_id` explícito em toda query da coleta. Era o client de sessão
+ * até a 0249, quando o atendente passou a ler só a PRÓPRIA agenda: pela sessão,
+ * a coleta deixaria de ver o compromisso legado e a conexão Google do colega, e
+ * o horário ocupado dele apareceria livre (já acontecia com o Google, cuja
+ * conexão só o dono e a gerência leem). O que sai daqui é só OCUPAÇÃO — slots e
+ * ids de profissional —, nunca o compromisso, o cliente ou o título do evento.
  *
  * O caso concreto que isso cobre: `attendant_availability` seria buscada só por
  * `user_id`, e `user_id` chega pela query (`owner_user_id`). Sem o filtro de
@@ -44,7 +45,7 @@ import {
 } from "@/lib/agenda/consulta";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * `professional_ids` chega como CSV (`?professional_ids=a,b`), no máximo 2 — a
@@ -105,7 +106,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     });
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // O miolo mora em `lib/agenda/consulta.ts` porque as ferramentas MCP precisam
   // do MESMO cálculo sem ter request nem cookie. Duas coletas dariam à IA e à
