@@ -124,6 +124,9 @@ const ACTION_MIN_ROLE: Record<string, Role> = {
   "ai.credentials.view": "manager",
   "ai.credentials.write": "admin",
   "webhooks.manage": "manager",
+  // Agenda (0249): quem atende marca; a agenda da equipe inteira é da gerência.
+  "agenda.book": "agent",
+  "agenda.view_all": "manager",
 };
 
 export function usePermission(action: string): boolean {

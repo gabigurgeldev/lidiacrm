@@ -287,13 +287,15 @@ describe("calendar_connections — o gate de papel que as outras cinco não têm
     expect(doColega).toBe(0);
   });
 
-  it("o viewer LÊ o resto da agenda da própria org — o gate é só da conexão", () => {
+  it("o viewer LÊ a configuração da agenda da própria org — o gate é só da conexão", () => {
     // Sem este caso, uma policy que barrasse o viewer em TUDO passaria no caso
-    // de cima e quebraria o produto: quem tem acesso de leitura precisa ver a
-    // agenda, só não o token.
+    // de cima e quebraria o produto: quem tem acesso de leitura precisa ver os
+    // tipos e as profissionais, só não o token. (Era `calendar_appointments`;
+    // desde a 0249 o viewer lê só os compromissos dele — medido em
+    // `agenda-cada-um-ve-a-sua.test.ts`.)
     const agenda = countAs(
       VIEWER_A,
-      `select count(*) from public.calendar_appointments where organization_id = '${ORG_A}';`,
+      `select count(*) from public.calendar_event_types where organization_id = '${ORG_A}';`,
     );
     expect(agenda).toBeGreaterThan(0);
   });

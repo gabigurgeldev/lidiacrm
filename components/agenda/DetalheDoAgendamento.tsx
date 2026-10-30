@@ -94,6 +94,7 @@ export function DetalheDoAgendamento({
   onFechar,
   onRemarcar,
   onCancelar,
+  podeOperar = true,
 }: {
   /** `null` = fechado. */
   id: string | null;
@@ -104,6 +105,12 @@ export function DetalheDoAgendamento({
   onFechar: () => void;
   onRemarcar: (detalhe: Detalhe) => void;
   onCancelar: (detalhe: Detalhe) => void;
+  /**
+   * `false` para quem só olha (viewer): as ações somem em vez de devolver 403
+   * no clique. A rota continua sendo quem decide — isto só não oferece o que
+   * ela vai recusar.
+   */
+  podeOperar?: boolean;
 }) {
   const t = useT();
   const { data, isLoading, isError, error } = useDetalheDoAgendamento(id);
@@ -122,14 +129,24 @@ export function DetalheDoAgendamento({
             <Skeleton className="h-24 w-full" />
           </div>
         ) : data ? (
-          <Conteudo detalhe={data} pessoas={pessoas} agora={agora} onRemarcar={onRemarcar} onCancelar={onCancelar} />
+          <Conteudo
+            detalhe={data}
+            pessoas={pessoas}
+            agora={agora}
+            onRemarcar={onRemarcar}
+            onCancelar={onCancelar}
+            podeOperar={podeOperar}
+          />
         ) : (
           <div data-testid="detalhe-indisponivel">
             <SheetHeader>
               <SheetTitle>{t("Agendamento")}</SheetTitle>
               <SheetDescription>
+                {/* Desde a 0249 o 404 também é "é da agenda de um colega": o
+                    atendente só vê a própria. A frase cobre os três casos sem
+                    confirmar que o id existe. */}
                 {naoExiste
-                  ? t("Este agendamento não está disponível — o link pode ser de outra organização, ou ele foi removido.")
+                  ? t("Este agendamento não está na sua agenda — ele pode ser de um colega, de outra organização, ou ter sido removido.")
                   : t("Não consegui carregar este agendamento. Tente de novo em instantes.")}
               </SheetDescription>
             </SheetHeader>
@@ -146,12 +163,14 @@ function Conteudo({
   agora,
   onRemarcar,
   onCancelar,
+  podeOperar,
 }: {
   detalhe: Detalhe;
   pessoas: Pessoa[];
   agora: Date;
   onRemarcar: (detalhe: Detalhe) => void;
   onCancelar: (detalhe: Detalhe) => void;
+  podeOperar: boolean;
 }) {
   const t = useT();
   const localeDaData = useLocaleDeData();
@@ -296,6 +315,7 @@ function Conteudo({
 
       {/* AS AÇÕES — a mesma regra do histórico, para as duas telas não
           discordarem sobre o que se pode fazer com o mesmo compromisso. */}
+      {podeOperar ? (
       <div className="flex flex-wrap gap-2 border-t border-border pt-4" data-testid="acoes-do-agendamento">
         {situacao === "pending" ? (
           <Button
@@ -343,6 +363,7 @@ function Conteudo({
           <p className="text-xs text-text-subtle">{t("Este agendamento já tem desfecho registrado.")}</p>
         ) : null}
       </div>
+      ) : null}
     </div>
   );
 }

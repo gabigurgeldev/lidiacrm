@@ -633,3 +633,104 @@ describe("remarcar e cancelar dentro do turno", () => {
     expect(r.cancelado).toBe(true);
   });
 });
+
+/**
+ * 0249 — o atendente HUMANO da conversa vem na frente quando o modelo não
+ * escolheu ninguém. Desde que cada atendente vê só a própria agenda, o que a IA
+ * marcasse na agenda do dono padrão do tipo sumiria da tela de quem está
+ * atendendo o cliente.
+ */
+describe("o atendente da conversa é o preferido (0249)", () => {
+  const ATENDENTE = "u-atendente";
+  const PROF_DO_ATENDENTE = "p-atendente";
+
+  /** Dublê mínimo: conversa, profissional do atendente e o vínculo na equipe. */
+  function bancoCom(opcoes: { assignee_kind?: string; revogado?: boolean; temProfissional?: boolean } = {}) {
+    const linhas: Record<string, unknown[]> = {
+      conversations: [{ assigned_to_user_id: ATENDENTE, assignee_kind: opcoes.assignee_kind ?? "user" }],
+      calendar_professionals: opcoes.temProfissional === false ? [] : [{ id: PROF_DO_ATENDENTE }],
+      user_organizations: [{ user_id: ATENDENTE, revoked_at: opcoes.revogado ? "2026-01-01" : null }],
+    };
+    return {
+      from(tabela: string) {
+        const cadeia: Record<string, unknown> = {};
+        for (const m of ["select", "eq", "in", "limit"]) cadeia[m] = () => cadeia;
+        const resposta = { data: linhas[tabela] ?? [], error: null };
+        cadeia.maybeSingle = async () => ({ data: (linhas[tabela] ?? [])[0] ?? null, error: null });
+        cadeia.then = (r: (v: unknown) => unknown) => r(resposta);
+        return cadeia;
+      },
+    } as unknown as SupabaseClient;
+  }
+
+  const noTurno = (supabase: SupabaseClient): McpContext => ({
+    ...ctx,
+    supabase,
+    turno: { conversationId: "conv-1", contactId: "c-1" },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(idDoTipoPorSlug).mockResolvedValue({ id: "t-1", nome: "Consulta" });
+    vi.mocked(handlers.marcarAgendamentoHandler).mockResolvedValue({ id: "a-1" });
+  });
+
+  const marcarSemEscolha = (c: McpContext) =>
+    crmBookAppointment.handler({ event_type_slug: "consulta", starts_at: "2026-09-01T14:00:00Z", contact_id: "c-1" }, c);
+
+  it("sem escolha do modelo, a profissional do atendente vai como preferida", async () => {
+    await marcarSemEscolha(noTurno(bancoCom()));
+    expect(vi.mocked(handlers.marcarAgendamentoHandler).mock.calls[0]![3]).toEqual({
+      preferirProfissionalId: PROF_DO_ATENDENTE,
+    });
+  });
+
+  it.each([
+    ["a conversa está com a IA", { assignee_kind: "ai" }],
+    ["o atendente saiu da equipe", { revogado: true }],
+    ["o atendente não é profissional", { temProfissional: false }],
+  ])("%s: nenhuma preferida — vale a regra de antes", async (_caso, opcoes) => {
+    await marcarSemEscolha(noTurno(bancoCom(opcoes)));
+    expect(vi.mocked(handlers.marcarAgendamentoHandler).mock.calls[0]![3]).toEqual({ preferirProfissionalId: null });
+  });
+
+  it("o modelo escolheu alguém: a escolha dele vale e nem se consulta o atendente", async () => {
+    await crmBookAppointment.handler(
+      { event_type_slug: "consulta", starts_at: "2026-09-01T14:00:00Z", contact_id: "c-1", professional_ids: ["p-1"] },
+      noTurno(bancoCom()),
+    );
+    expect(vi.mocked(handlers.marcarAgendamentoHandler).mock.calls[0]![3]).toEqual({ preferirProfissionalId: null });
+  });
+
+  it("ao oferecer, o atendente vem primeiro em cada horário", async () => {
+    const inicio = new Date("2026-09-01T14:00:00Z");
+    vi.mocked(horariosLivresDaOrg).mockResolvedValue({
+      ok: true,
+      slots: [
+        {
+          inicio,
+          fim: new Date(inicio.getTime() + 30 * 60_000),
+          opcoes: [
+            { principalId: "p-outra", apoioId: null },
+            { principalId: PROF_DO_ATENDENTE, apoioId: null },
+          ],
+        },
+      ],
+      profissionais: [
+        { id: "p-outra", nome: "Outra", trilha: 1, userId: null, ativo: true },
+        { id: PROF_DO_ATENDENTE, nome: "Atendente", trilha: 2, userId: ATENDENTE, ativo: true },
+      ],
+      profissionaisNecessarios: 1,
+      fusoDaRegra: "America/Sao_Paulo",
+      publicouHorarios: true,
+      fusoSuposto: false,
+      fontesDefasadas: [],
+      agendaExternaNuncaLida: false,
+      profissionaisComProblema: [],
+    } as ResultadoDaConsulta);
+    const r = (await crmFindFreeSlots.handler({ event_type_slug: "consulta" }, noTurno(bancoCom()))) as {
+      horarios: Array<{ profissionais: Array<{ id: string }> }>;
+    };
+    expect(r.horarios[0]!.profissionais[0]!.id).toBe(PROF_DO_ATENDENTE);
+  });
+});

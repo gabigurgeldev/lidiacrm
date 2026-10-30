@@ -10,7 +10,10 @@ import { format } from "date-fns";
 import { AvatarDoContato } from "@/components/inbox/AvatarDoContato";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tag, Receipt, Users, ArrowRight, FilePdf, FileXls, X } from "@/lib/ui/icons";
+import { Tag, Receipt, Users, ArrowRight, CalendarCheck, FilePdf, FileXls, X } from "@/lib/ui/icons";
+import { usePermission } from "@/hooks/auth/AuthProvider";
+import { AgendamentosDoContato } from "./AgendamentosDoContato";
+import { MarcarHorarioDialog } from "./MarcarHorarioDialog";
 import { DataDeNascimentoInline } from "./DataDeNascimentoInline";
 import { apiClient } from "@/lib/api/client";
 import { toast } from "sonner";
@@ -373,6 +376,9 @@ export function CRMSidePanel({ conversation, onFechar }: Props) {
 
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
   const [leadAtivoId, setLeadAtivoId] = useState<string | null>(null);
+  // Marcar horário na agenda com este cliente — o mesmo diálogo do ⋮ da conversa.
+  const [marcarHorarioOpen, setMarcarHorarioOpen] = useState(false);
+  const podeMarcarHorario = usePermission("agenda.book") && !conversation?.is_group;
 
   useEffect(() => {
     if (!contactId) {
@@ -520,7 +526,7 @@ export function CRMSidePanel({ conversation, onFechar }: Props) {
         )}
         {/* Ações em cartões com ícone e rótulo embaixo, como os atalhos do
             perfil do WhatsApp (Áudio · Vídeo · Pesquisar). */}
-        <div className="mt-5 grid w-full grid-cols-3 gap-2">
+        <div className={cn("mt-5 grid w-full gap-2", podeMarcarHorario ? "grid-cols-4" : "grid-cols-3")}>
           <button
             type="button"
             disabled={!contactId}
@@ -548,6 +554,18 @@ export function CRMSidePanel({ conversation, onFechar }: Props) {
             <Users size={20} className="text-accent" aria-hidden />
             {t("Kanban")}
           </button>
+          {podeMarcarHorario ? (
+            <button
+              type="button"
+              disabled={!contactId}
+              data-testid="cartao-agendar"
+              onClick={() => setMarcarHorarioOpen(true)}
+              className="flex flex-col items-center gap-1.5 rounded-xl border border-border/70 py-3 text-xs text-foreground transition-colors hover:bg-surface-elevated disabled:opacity-40"
+            >
+              <CalendarCheck size={20} className="text-accent" aria-hidden />
+              {t("Agendar")}
+            </button>
+          ) : null}
           {contactId ? (
             <Link
               href={`/app/contacts/${contactId}`}
@@ -564,6 +582,23 @@ export function CRMSidePanel({ conversation, onFechar }: Props) {
           </div>
         )}
       </section>
+
+      {contactId && (
+        <AgendamentosDoContato
+          key={`agenda-${contactId}`}
+          contactId={contactId}
+          onMarcar={podeMarcarHorario ? () => setMarcarHorarioOpen(true) : undefined}
+        />
+      )}
+      {contactId && podeMarcarHorario ? (
+        <MarcarHorarioDialog
+          open={marcarHorarioOpen}
+          onOpenChange={setMarcarHorarioOpen}
+          contactId={contactId}
+          contactName={displayName}
+          conversationId={conversation.id}
+        />
+      ) : null}
 
       {contactId && (
         <section className="bg-background px-6 py-4">

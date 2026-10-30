@@ -36,6 +36,12 @@ import { describe, expect, it } from "vitest";
  */
 const RAIZ = process.cwd();
 const TELA_DA_AGENDA = path.join(RAIZ, "app", "app", "agenda");
+/**
+ * A rota que alimenta a grade depois da primeira pintura (0249). Ela entrega à
+ * tela o mesmo bloco "Ocupado" que a página — e com o mesmo dever de não levar
+ * o nome do evento.
+ */
+const ROTA_DA_OCUPACAO = path.join(RAIZ, "app", "api", "v1", "agenda", "ocupacao-externa");
 
 function arquivos(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
@@ -60,7 +66,7 @@ function semComentarios(fonte: string): string {
  */
 function consultasDeEventoExterno(): Array<{ onde: string; colunas: string }> {
   const out: Array<{ onde: string; colunas: string }> = [];
-  for (const arquivo of arquivos(TELA_DA_AGENDA)) {
+  for (const arquivo of [...arquivos(TELA_DA_AGENDA), ...arquivos(ROTA_DA_OCUPACAO)]) {
     const fonte = semComentarios(fs.readFileSync(arquivo, "utf8"));
     const rel = path.relative(RAIZ, arquivo);
     for (const m of fonte.matchAll(/\.from\("calendar_external_events"\)([\s\S]*?);/g)) {
@@ -86,6 +92,12 @@ describe("a ocupação do Google não leva o nome do evento para a tela", () => 
       "nenhuma consulta a `calendar_external_events` em `app/app/agenda/` — ou a " +
         "ocupação deixou de ser buscada, ou ela mudou de lugar e este gate ficou cego",
     ).toBeGreaterThanOrEqual(1);
+    // E a rota da grade também é medida — sem isto ela poderia pedir o título
+    // fora do alcance do gate.
+    expect(
+      consultas.some((c) => c.onde.includes("ocupacao-externa")),
+      "a rota `ocupacao-externa` deixou de ser medida",
+    ).toBe(true);
   });
 
   it("nenhuma delas pede a coluna `title`", () => {

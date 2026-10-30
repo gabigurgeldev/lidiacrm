@@ -51,6 +51,8 @@ vi.mock("@/hooks/inbox/useResumeAiAttendance", () => ({
 }));
 vi.mock("@/hooks/auth/AuthProvider", () => ({
   useAuth: () => ({ user: { id: "u-1" }, activeOrg: { orgId: "org-1", role: "manager" } }),
+  // "Marcar horário na agenda…" (0249) pergunta a permissão; fora do escopo daqui.
+  usePermission: () => true,
 }));
 
 const conversation = {
