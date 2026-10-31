@@ -592,6 +592,9 @@ export const DICIONARIO: Traducoes = {
     es: "Este agente está archivado y no puede modificarse.",
   },
   "Este agente não existe mais.": { es: "Este agente ya no existe." },
+  "Este agente nunca esteve no ar. Abra o editor e publique uma versão.": {
+    es: "Este agente nunca estuvo activo. Abra el editor y publique una versión.",
+  },
   "Esta versão não existe mais. Recarregue a página.": {
     es: "Esta versión ya no existe. Recarga la página.",
   },

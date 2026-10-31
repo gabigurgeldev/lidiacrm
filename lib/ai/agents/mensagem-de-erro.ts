@@ -25,6 +25,7 @@ const MENSAGENS: Record<string, string> = {
   tool_id_invalid: "Uma das capacidades marcadas não existe mais. Revise a lista de capacidades.",
   agent_archived: "Este agente está arquivado e não pode ser alterado.",
   agent_not_found: "Este agente não existe mais.",
+  nada_para_despausar: "Este agente nunca esteve no ar. Abra o editor e publique uma versão.",
   not_found: "Este agente não existe mais.",
   version_not_found: "Esta versão não existe mais. Recarregue a página.",
   version_invalid_state: "Esta versão já foi publicada. Recarregue a página para ver a mais recente.",

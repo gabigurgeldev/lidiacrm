@@ -18,6 +18,8 @@ import { ROLE_RANK } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Role } from "@/lib/auth/types";
 import { duplicateAgentWithVersion } from "@/lib/ai/agents/duplicate";
+import { despausarAgente } from "@/lib/ai/agents/despausar";
+import { mensagemDeErroDoAgente } from "@/lib/ai/agents/mensagem-de-erro";
 
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -114,9 +116,32 @@ export async function unpauseAgentAction(id: string): Promise<ActionResult> {
   if (!existing) return { ok: false, error: "not_found" };
   if (existing.archived_at) return { ok: false, error: "state_conflict" };
 
-  // mcp_agent não pode ser despausado por aqui — precisa ir em /publish escolhendo versão.
+  // mcp_agent: pausar tirou a versão do ar; despausar a devolve. Antes daqui
+  // saía "Publique uma versão" — e o editor só publica rascunho, que o agente
+  // pausado não tem. Ver lib/ai/agents/despausar.ts.
   if (existing.kind === "mcp_agent") {
-    return { ok: false, error: "publish_required", message: "Publique uma versão para reativar." };
+    const requestId = randomUUID();
+    const result = await despausarAgente(admin, { orgId: activeOrg.orgId, agentId: id });
+    if (!result.ok) {
+      return { ok: false, error: result.code, message: mensagemDeErroDoAgente(result.code) };
+    }
+
+    void audit({
+      action: "ai_agent.published",
+      actorUserId: authUser.id,
+      organizationId: activeOrg.orgId,
+      resourceType: "ai_agent",
+      resourceId: id,
+      requestId,
+      metadata: {
+        version_id: result.version_id,
+        previous_version_id: result.previous_version_id,
+        unpaused: true,
+      },
+    });
+
+    revalidatePath("/app/ai/agents");
+    return { ok: true };
   }
 
   const { error } = await admin
