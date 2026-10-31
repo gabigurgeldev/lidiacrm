@@ -509,6 +509,14 @@ export interface ParametrosDaLista {
   ownerUserId?: string | null;
   situacao?: SituacaoDoAgendamento | null;
   limite: number;
+  /**
+   * Escopo de quem pergunta (migration 0249). Atendente e viewer veem só a
+   * própria agenda: o que são donos, em que participam ou que criaram. A RLS já
+   * recorta isso no client de sessão; o filtro aqui é a defesa que sobra se uma
+   * policy for afrouxada — e o que vale quando o client é o admin.
+   * `null`/ausente = a organização inteira (gerente+).
+   */
+  restritoA?: { userId: string } | null;
 }
 
 export type ResultadoDaLista =
@@ -553,6 +561,47 @@ function porPapel<T extends { papel: PapelDoProfissional }>(a: T, b: T): number 
 }
 
 const NAO_LISTEI = "Não consegui consultar os compromissos agora. Avise que alguém da equipe confirma.";
+
+/**
+ * O filtro PostgREST "a agenda desta pessoa": dona OU quem criou OU participa
+ * como profissional com login. É a mesma regra de `fn_can_view_appointment`
+ * (0249), dita em filtro para valer também fora da RLS.
+ *
+ * A participação sai de `calendar_appointment_professionals` recortada pela
+ * mesma janela da listagem, para a lista de ids não crescer com o histórico.
+ */
+async function escopoDaPessoa(
+  supabase: SupabaseClient,
+  organizationId: string,
+  userId: string,
+  params: Pick<ParametrosDaLista, "de" | "ate">,
+): Promise<{ ok: true; filtro: string } | { ok: false; motivo: string }> {
+  const { data: minhas, error: erroMinhas } = await supabase
+    .from("calendar_professionals")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId);
+  if (erroMinhas) return { ok: false, motivo: erroMinhas.message };
+
+  let participo: string[] = [];
+  const profissionais = (minhas ?? []).map((p) => String(p.id));
+  if (profissionais.length > 0) {
+    let q = supabase
+      .from("calendar_appointment_professionals")
+      .select("appointment_id")
+      .eq("organization_id", organizationId)
+      .in("professional_id", profissionais)
+      .limit(1000);
+    if (params.de && params.ate) q = q.lt("starts_at", params.ate).gt("ends_at", params.de);
+    const { data, error } = await q;
+    if (error) return { ok: false, motivo: error.message };
+    participo = [...new Set((data ?? []).map((l) => String(l.appointment_id)))];
+  }
+
+  const partes = [`owner_user_id.eq.${userId}`, `created_by_user_id.eq.${userId}`];
+  if (participo.length > 0) partes.push(`id.in.(${participo.join(",")})`);
+  return { ok: true, filtro: partes.join(",") };
+}
 
 export async function listaAgendamentos(
   supabase: SupabaseClient,
@@ -635,6 +684,11 @@ export async function listaAgendamentos(
     .limit(params.limite);
 
   if (idsFiltrados) q = q.in("id", idsFiltrados);
+  if (params.restritoA) {
+    const escopo = await escopoDaPessoa(supabase, organizationId, params.restritoA.userId, params);
+    if (!escopo.ok) return falha(escopo.motivo);
+    q = q.or(escopo.filtro);
+  }
   if (params.contactId) q = q.eq("contact_id", params.contactId);
   if (params.ownerUserId) q = q.eq("owner_user_id", params.ownerUserId);
   if (params.situacao) q = q.eq("status", params.situacao);

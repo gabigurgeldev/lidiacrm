@@ -86,6 +86,15 @@ const AUTHENTICATED_PERMITIDO: readonly Excecao[] = [
       "declarado pela migration 0034 e não há call site de RPC para removê-lo " +
       "com segurança sem medir o disparo de cada trigger.",
   },
+  {
+    fn: "fn_agenda_conferir_livre(uuid,uuid[],timestampwithtimezone,timestampwithtimezone,uuid)",
+    razao:
+      "Chamada pela `fn_agenda_marcar` (invoker) com a sessão do agent, via " +
+      "app/api/v1/agenda/agendamentos/_handler.ts. Definer desde a 0249 para " +
+      "enxergar o agendamento legado do colega que a sessão não lê; guarda de " +
+      "organização no corpo (42501), não devolve linha — só trava e lança 23505. " +
+      "Volátil por causa do pg_advisory_xact_lock. Medido em agenda-cada-um-ve-a-sua.",
+  },
 ];
 
 interface Definer {

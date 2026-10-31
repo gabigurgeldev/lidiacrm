@@ -14,6 +14,7 @@ import { AgendaInterativa } from "@/components/agenda/AgendaInterativa";
 import { DetalheDoAgendamento } from "@/components/agenda/DetalheDoAgendamento";
 import { FiltroDePessoas } from "@/components/agenda/FiltroDePessoas";
 import { HistoricoDaAgenda } from "@/components/agenda/HistoricoDaAgenda";
+import { ResumoDoDia } from "@/components/agenda/ResumoDoDia";
 import {
   filtrarPorEscolha,
   horariosPorDiaComQuem,
@@ -33,6 +34,7 @@ import { useAgendaAoVivo } from "@/hooks/agenda/useAgendaAoVivo";
 import { useAgendamentos } from "@/hooks/agenda/useAgendamentos";
 import { useHorariosLivres } from "@/hooks/agenda/useHorariosLivres";
 import { useMarcarAgendamento } from "@/hooks/agenda/useMarcarAgendamento";
+import { useOcupacaoExterna } from "@/hooks/agenda/useOcupacaoExterna";
 import {
   useCancelarAgendamento,
   useRegistrarDesfecho,
@@ -40,6 +42,7 @@ import {
 } from "@/hooks/agenda/useRemarcarAgendamento";
 import { usePessoasDaAgenda } from "@/hooks/agenda/usePessoasDaAgenda";
 import type { ProfissionalDaApi } from "@/hooks/agenda/useProfissionais";
+import type { EscopoDaAgenda } from "@/lib/agenda/escopo";
 import { CalendarPlus, CaretLeft, CaretRight } from "@/lib/ui/icons";
 import { cn } from "@/lib/utils";
 
@@ -115,9 +118,23 @@ export function AgendaClient({
   linkDeConfiguracaoDoGoogle,
   tiposIniciais,
   agendamentosIniciais,
+  escopo = "organizacao",
+  meuUserId = null,
+  podeMarcar = true,
 }: {
   /** Escopo do canal de tempo real — ver `useAgendaAoVivo`. */
   organizationId: string;
+  /**
+   * De quem é a agenda que esta tela mostra (migration 0249). `proprio` =
+   * atendente/viewer: a lista já chega recortada pelo banco, e a tela deixa de
+   * oferecer o filtro de pessoas e a visão por profissional — controles sobre
+   * uma equipe que ela não mostra. Ver `lib/agenda/escopo.ts`.
+   */
+  escopo?: EscopoDaAgenda;
+  /** O login de quem olha — vira a profissional padrão ao marcar. */
+  meuUserId?: string | null;
+  /** `false` para viewer: sem "Novo agendamento" e sem ações no detalhe. */
+  podeMarcar?: boolean;
   /** As profissionais, lidas no servidor para a primeira pintura (sem piscar a barra de pessoas). */
   profissionaisIniciais?: ProfissionalDaApi[];
   /** `?agendamento=<id>` — o link da Central e de quem compartilhou abre o detalhe direto. */
@@ -195,6 +212,10 @@ export function AgendaClient({
   const [visao, setVisao] = React.useState<VisaoDaAgenda>("semana");
   const [isolada, setIsolada] = React.useState<string | null>(null);
   const [ancora, setAncora] = React.useState(() => new Date());
+  const soAMinha = escopo === "proprio";
+  // A visão por profissional é a de quem DISTRIBUI o dia da equipe; para quem só
+  // vê a própria agenda ela seria uma coluna só, igual à visão de dia.
+  const visoes = soAMinha ? VISOES.filter((v) => v.id !== "profissionais") : VISOES;
 
   // AS PESSOAS SÃO REAIS: vêm de `/api/v1/team`, com a trilha de cor derivada do
   // `user_id`. Até esta linha o filtro por pessoa era invisível na tela do
@@ -202,6 +223,8 @@ export function AgendaClient({
   // lista estava vazia. Ele existia, estava provado na vitrine, e ninguém o via
   // aqui.
   const { data: pessoas = [] } = usePessoasDaAgenda(profissionaisIniciais);
+  // A profissional de quem olha: é ela que o painel de marcar já traz escolhida.
+  const minhaProfissional = meuUserId ? (pessoas.find((p) => p.userId === meuUserId) ?? null) : null;
 
   // AO VIVO: o que a IA marca numa conversa aparece aqui sem recarregar.
   useAgendaAoVivo(organizationId);
@@ -320,13 +343,46 @@ export function AgendaClient({
     recorteDaGrade.de === recorteDoServidor.de && recorteDaGrade.ate === recorteDoServidor.ate;
 
   const { data: agendamentosVivos } = useAgendamentos(recorteDaGrade);
-  // `responsavelDaGrade`: a ocupação do Google e o agendamento legado chegam com
-  // o MEMBRO, e a grade pinta por PROFISSIONAL. Sem a tradução o bloco cai na
-  // trilha 1 e some do filtro por pessoa.
-  const todos: Agendamento[] = React.useMemo(
-    () => responsavelDaGrade(agendamentosVivos ?? (naJanelaDoServidor ? agendamentosIniciais : []), pessoas),
-    [agendamentosVivos, naJanelaDoServidor, agendamentosIniciais, pessoas],
-  );
+  // A OCUPAÇÃO DO GOOGLE tem fio próprio. O servidor a entrega na primeira
+  // pintura, junto dos agendamentos — e o refetch acima trocava a lista inteira
+  // por uma que não a tem: os blocos "Ocupado" apareciam e sumiam no segundo
+  // seguinte. Agora cada metade vem da sua fonte e as duas se juntam aqui.
+  const { data: ocupacaoViva } = useOcupacaoExterna(recorteDaGrade);
+  const todos: Agendamento[] = React.useMemo(() => {
+    const doServidor = naJanelaDoServidor ? agendamentosIniciais : [];
+    const proprios = agendamentosVivos ?? doServidor.filter((a) => a.origem !== "google_sync");
+    const externos = ocupacaoViva ?? doServidor.filter((a) => a.origem === "google_sync");
+    // `responsavelDaGrade`: a ocupação do Google e o agendamento legado chegam
+    // com o MEMBRO, e a grade pinta por PROFISSIONAL. Sem a tradução o bloco cai
+    // na trilha 1 e some do filtro por pessoa.
+    return responsavelDaGrade([...proprios, ...externos], pessoas);
+  }, [agendamentosVivos, ocupacaoViva, naJanelaDoServidor, agendamentosIniciais, pessoas]);
+
+  // HOJE, para a faixa de resumo — independente da semana que a grade mostra:
+  // quem navegou para o mês que vem continua sabendo o que vem agora.
+  const [recorteDeHoje] = React.useState(() => {
+    const inicio = startOfDay(new Date());
+    return { de: inicio.toISOString(), ate: addDays(inicio, 1).toISOString() };
+  });
+  const { data: deHoje = [] } = useAgendamentos(recorteDeHoje);
+
+  /**
+   * Abre o painel de marcar. Para quem atende, a própria profissional já vem
+   * escolhida quando ela faz o serviço — o caso comum é "marco na minha
+   * agenda", e escolher a si mesma toda vez era um clique sem informação.
+   * Trocar por um colega continua a um clique (e mostra só os horários livres
+   * dele, nunca a agenda).
+   */
+  const abrirMarcacao = React.useCallback(() => {
+    setRemarcandoId(null);
+    setRemarcandoProfissionais(null);
+    if (minhaProfissional && tipo && tipo.profissionaisNecessarios === 1) {
+      const faz =
+        tipo.habilitadas.length === 0 ? tipo.donoId === meuUserId : tipo.habilitadas.includes(minhaProfissional.id);
+      setEscolha(faz ? { principalId: minhaProfissional.id, apoioId: null } : SEM_ESCOLHA);
+    }
+    setMarcando(true);
+  }, [minhaProfissional, tipo, meuUserId]);
 
   const agendamentos = React.useMemo(
     // Isolar uma pessoa mostra também onde ela é APOIO: a agenda dela inclui
@@ -377,9 +433,13 @@ export function AgendaClient({
 
       <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">{t("Agenda")}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight" data-testid="titulo-da-agenda" data-escopo={escopo}>
+            {soAMinha ? t("Minha agenda") : t("Agenda")}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            {t("O que está marcado, com quem, e quem atende — seu e da equipe.")}
+            {soAMinha
+              ? t("Os seus atendimentos e o que você marcou. A gerência vê a agenda da equipe inteira.")
+              : t("O que está marcado, com quem, e quem atende — seu e da equipe.")}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -409,6 +469,7 @@ export function AgendaClient({
               {t("Cadastre um tipo de agendamento para começar")}
             </span>
           )}
+          {podeMarcar ? (
           <Button
             size="sm"
             disabled={!tipo}
@@ -422,11 +483,12 @@ export function AgendaClient({
             // escreveu, e vai anotada no PR.
             data-testid="novo-agendamento"
             title={tipo ? undefined : t("Cadastre um tipo de agendamento para começar")}
-            onClick={() => setMarcando(true)}
+            onClick={abrirMarcacao}
           >
             <CalendarPlus size={16} weight="bold" aria-hidden />
             <span>{t("Novo agendamento")}</span>
           </Button>
+          ) : null}
         </div>
       </header>
 
@@ -473,12 +535,12 @@ export function AgendaClient({
             gente no filtro, ela estoura igual — e o `overflow-x: hidden` corta o
             alternador de visão em silêncio. */}
         <div className="flex flex-wrap items-center gap-3">
-          <FiltroDePessoas pessoas={pessoas} isolada={isolada} onIsolar={setIsolada} />
+          {soAMinha ? null : <FiltroDePessoas pessoas={pessoas} isolada={isolada} onIsolar={setIsolada} />}
           <div
             data-testid="alternador-de-visao"
             className="flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5"
           >
-            {VISOES.map((v) => (
+            {visoes.map((v) => (
               <button
                 key={v.id}
                 type="button"
@@ -799,6 +861,8 @@ export function AgendaClient({
         </SheetContent>
       </Sheet>
 
+      <ResumoDoDia agendamentos={deHoje} agora={new Date()} onAbrir={abrirDetalhe} />
+
       <HistoricoDaAgenda
         agendamentos={agendamentos}
         pessoas={pessoas}
@@ -880,9 +944,14 @@ export function AgendaClient({
         tipo={tipo ? { id: tipo.id, duracaoMin: tipo.duracaoMin } : null}
         onEscolherTipo={setTipoId}
         onMarcarEm={(instante) => {
+          if (!podeMarcar) return;
           setHorarioEscolhido({ instante, rotulo: format(new Date(instante), "HH:mm") });
-          setRemarcandoId(null);
-          setMarcando(true);
+          abrirMarcacao();
+        }}
+        // O MÊS leva ao dia: o número e o "+N" abrem a visão de dia da data.
+        onIrParaDia={(d) => {
+          setAncora(startOfDay(d));
+          setVisao("dia");
         }}
         // O CLIQUE NO CARD, que era mudo: a grade aceitava a prop desde que
         // nasceu e esta tela não a passava.
@@ -895,6 +964,7 @@ export function AgendaClient({
         pessoas={pessoas}
         agora={new Date()}
         onFechar={() => abrirDetalhe(null)}
+        podeOperar={podeMarcar}
         onRemarcar={(d) => {
           abrirDetalhe(null);
           setRemarcandoId(d.id);

@@ -2,8 +2,10 @@ import { addDays, startOfWeek } from "date-fns";
 import { redirect } from "next/navigation";
 
 import { enderecoDeRetorno, faltaParaConectarOGoogle, googleEstaConfigurado } from "@/lib/agenda/google/config";
+import { escopoDaAgenda } from "@/lib/agenda/escopo";
 import { ORIGENS_DO_AGENDAMENTO, PROVEDOR_GOOGLE, type OrigemDoAgendamento } from "@/lib/agenda/tipos";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
+import { roleAtLeast } from "@/lib/auth/types";
 import { createClient } from "@/lib/supabase/server";
 
 import type { Agendamento as AgendamentoDaTela } from "@/components/agenda/tipos";
@@ -62,6 +64,11 @@ export default async function AgendaPage({
   // não expõe o metadata cru — ele extrai o que toda tela precisa no primeiro
   // render, como já fazia com o `locale`. O fuso entrou lá pela mesma razão.
   const fusoDeApresentacao = user.timezone ?? null;
+
+  // De quem é a agenda que se vê (0249). As consultas abaixo já chegam
+  // recortadas pela RLS — atendente e viewer leem só o que são donos, em que
+  // participam ou que criaram; isto só diz à tela qual das duas ela é.
+  const escopo = escopoDaAgenda(activeOrg.role, user.is_platform_admin);
 
   // Resolvido no SERVIDOR: `GOOGLE_CALENDAR_*` é env de servidor e não pode
   // atravessar para o cliente. A tela recebe o booleano e a lista do que falta,
@@ -258,6 +265,9 @@ export default async function AgendaPage({
     <AgendaClient
       organizationId={activeOrg.orgId}
       agendamentoInicial={agendamentoInicial}
+      escopo={escopo}
+      meuUserId={user.id}
+      podeMarcar={user.is_platform_admin || roleAtLeast(activeOrg.role, "agent")}
       profissionaisIniciais={(profissionais ?? []).map(
         (p): ProfissionalDaApi => ({
           id: p.id,

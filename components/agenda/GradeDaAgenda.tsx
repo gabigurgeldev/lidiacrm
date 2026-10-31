@@ -627,6 +627,7 @@ function VisaoDeMes({
   agendamentos,
   pessoas,
   onAbrir,
+  onIrParaDia,
 }: {
   ancora: Date;
   agora: Date;
@@ -634,6 +635,12 @@ function VisaoDeMes({
   pessoas: Pessoa[];
   /** O chip abre o compromisso, como o card das outras visões — ocupação do Google não. */
   onAbrir?: (id: string) => void;
+  /**
+   * O número do dia e o "+N" levam à visão de DIA daquela data. Sem isto o mês
+   * mostrava dois chips e um "+3" que não abria nada: o terceiro compromisso só
+   * era alcançável trocando de visão e navegando até o dia na mão.
+   */
+  onIrParaDia?: (dia: Date) => void;
 }) {
   const t = useT();
   const localeDaData = useLocaleDeData();
@@ -674,9 +681,16 @@ function VisaoDeMes({
               )}
             >
               <div className="mb-1 flex items-center justify-between px-0.5">
-                <span
+                <button
+                  type="button"
+                  data-testid={`dia-do-mes-${format(d, "yyyy-MM-dd")}`}
+                  disabled={!onIrParaDia}
+                  onClick={onIrParaDia ? () => onIrParaDia(d) : undefined}
+                  aria-label={format(d, t("EEEE, d 'de' MMMM"), { locale: localeDaData })}
                   className={cn(
                     "flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] tabular-nums",
+                    onIrParaDia && "cursor-pointer hover:ring-1 hover:ring-border-strong",
+                    "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-500",
                     isSameDay(d, agora)
                       ? "bg-accent font-semibold text-accent-fg"
                       : doMes
@@ -685,11 +699,20 @@ function VisaoDeMes({
                   )}
                 >
                   {format(d, "d")}
-                </span>
+                </button>
                 {doDia.length > 2 && (
-                  <span className="text-[10px] tabular-nums text-text-subtle">
+                  <button
+                    type="button"
+                    data-testid={`mais-do-dia-${format(d, "yyyy-MM-dd")}`}
+                    disabled={!onIrParaDia}
+                    onClick={onIrParaDia ? () => onIrParaDia(d) : undefined}
+                    className={cn(
+                      "rounded-sm px-1 text-[10px] tabular-nums text-text-subtle",
+                      onIrParaDia && "cursor-pointer hover:bg-surface-elevated hover:text-text",
+                    )}
+                  >
                     +{doDia.length - 2}
-                  </span>
+                  </button>
                 )}
               </div>
               <div className="space-y-0.5">
@@ -746,6 +769,7 @@ export function GradeDaAgenda({
   pessoas,
   agendamentos,
   onAbrirAgendamento,
+  onIrParaDia,
   interacao,
   className,
 }: {
@@ -763,6 +787,8 @@ export function GradeDaAgenda({
   pessoas: Pessoa[];
   agendamentos: Agendamento[];
   onAbrirAgendamento?: (id: string) => void;
+  /** Visão de mês: o dia clicado vira a visão de dia. Ver `VisaoDeMes`. */
+  onIrParaDia?: (dia: Date) => void;
   /** Ausente = grade só de leitura, como a vitrine a monta. Ver `InteracaoDaGrade`. */
   interacao?: InteracaoDaGrade;
   className?: string;
@@ -984,6 +1010,7 @@ export function GradeDaAgenda({
           agendamentos={agendamentos}
           pessoas={pessoas}
           onAbrir={onAbrirAgendamento}
+          onIrParaDia={onIrParaDia}
         />
       ) : (
         // A rolagem mora AQUI dentro, e não na página: `html, body` têm

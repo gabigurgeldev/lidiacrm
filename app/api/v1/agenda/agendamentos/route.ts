@@ -26,9 +26,11 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { listaAgendamentos } from "@/lib/agenda/consulta";
+import { escopoDaAgenda } from "@/lib/agenda/escopo";
 import { fail, ok } from "@/lib/api/wrappers";
 import { ApiError } from "@/lib/api/types";
 import { requireRole } from "@/lib/auth/require-role";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 import { alterarSchema, cancelarSchema, listarSchema, marcarSchema } from "./_schemas";
@@ -36,6 +38,7 @@ import {
   alterarAgendamentoHandler,
   cancelarAgendamentoHandler,
   marcarAgendamentoHandler,
+  type OpcoesDoHandler,
 } from "./_handler";
 
 /**
@@ -56,7 +59,10 @@ export async function GET(req: NextRequest): Promise<Response> {
   // `viewer`: olhar a agenda é o menor privilégio desta feature.
   const authz = await requireRole("viewer", { requestId, resource: "agenda" });
   if (!authz.ok) return authz.response;
-  const { org: activeOrg } = authz;
+  const { org: activeOrg, user } = authz;
+  // Atendente e viewer veem só a própria agenda (0249). A RLS já recorta; o
+  // filtro explícito é a defesa que sobra e o que diz à tela qual é o escopo.
+  const escopo = escopoDaAgenda(activeOrg.role, user.is_platform_admin);
 
   const url = new URL(req.url);
   const parsed = listarSchema.safeParse({
@@ -88,6 +94,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     ate: parsed.data.ate ?? null,
     situacao: parsed.data.situacao ?? null,
     limite: parsed.data.limite ?? 200,
+    restritoA: escopo === "proprio" ? { userId: user.id } : null,
   });
 
   if (!resultado.ok) {
@@ -99,7 +106,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     );
   }
 
-  return ok(resultado.agendamentos, { requestId });
+  return ok(resultado.agendamentos, { requestId, meta: { escopo } });
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
@@ -127,6 +134,7 @@ async function despachar<T>(
     supabase: Awaited<ReturnType<typeof createClient>>,
     ctx: { organization_id: string; actor: { type: "user"; id: string }; requestId: string },
     input: T,
+    opcoes: OpcoesDoHandler,
   ) => Promise<Record<string, unknown>>,
   status: 200 | 201,
 ): Promise<Response> {
@@ -157,6 +165,10 @@ async function despachar<T>(
         requestId,
       },
       parsed.data,
+      // A COLETA da ocupação é do admin, a escrita é da sessão (0249): o
+      // atendente não lê a agenda do colega, mas o horário ocupado dele tem de
+      // continuar ocupado. Ver `OpcoesDoHandler`.
+      { leitorDaOcupacao: createAdminClient() },
     );
     return ok(resultado, { requestId, status });
   } catch (err) {

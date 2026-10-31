@@ -112,11 +112,16 @@ function novoTipo(quem: string, slug: string): boolean {
   );
 }
 
+/**
+ * Com a autoria de quem grava: desde a 0249 o agent só insere em nome próprio
+ * (`created_by_user_id = auth.uid()`) — é assim que a `fn_agenda_marcar` grava
+ * pela sessão. A recusa do nome alheio é medida em `agenda-cada-um-ve-a-sua`.
+ */
 function novoCompromisso(quem: string, titulo: string): boolean {
   return escreveComo(
     quem,
-    `insert into public.calendar_appointments (organization_id, title, starts_at, ends_at)
-       values ('${ORG}', '${titulo}', now() + interval '1 day', now() + interval '1 day 30 minutes');`,
+    `insert into public.calendar_appointments (organization_id, title, starts_at, ends_at, created_by_user_id)
+       values ('${ORG}', '${titulo}', now() + interval '1 day', now() + interval '1 day 30 minutes', '${quem}');`,
   );
 }
 
@@ -147,14 +152,22 @@ describe("compromissos — a operação do dia, escreve agent+", () => {
     expect(novoCompromisso(AGENT, "marcado pelo agent")).toBe(true);
   });
 
-  it("mas o viewer LÊ a agenda: o gate é de escrita, não de acesso", () => {
-    const quantos = sql(`
-      set role authenticated;
-      select set_config('request.jwt.claims', '{"sub":"${VIEWER}"}', false);
-      select count(*) from public.calendar_appointments where organization_id = '${ORG}';
-    `);
-    const linhas = quantos.split("\n");
-    expect(Number(linhas[linhas.length - 1])).toBeGreaterThan(0);
+  it("o viewer LÊ a PRÓPRIA agenda, e não a do agent (0249: cada um vê a sua)", () => {
+    // Era "o viewer lê a agenda" — a organização inteira. Desde a 0249 ele lê o
+    // que é dele; o par abaixo prova as duas metades.
+    sql(`insert into public.calendar_appointments (organization_id, title, starts_at, ends_at, owner_user_id)
+           values ('${ORG}', 'do viewer', now() + interval '2 days', now() + interval '2 days 30 minutes', '${VIEWER}');`);
+    const conta = (titulo: string) => {
+      const saida = sql(`
+        set role authenticated;
+        select set_config('request.jwt.claims', '{"sub":"${VIEWER}"}', false);
+        select count(*) from public.calendar_appointments where organization_id = '${ORG}' and title = '${titulo}';
+      `);
+      const linhas = saida.split("\n");
+      return Number(linhas[linhas.length - 1]);
+    };
+    expect(conta("do viewer")).toBe(1);
+    expect(conta("marcado pelo agent")).toBe(0);
   });
 });
 

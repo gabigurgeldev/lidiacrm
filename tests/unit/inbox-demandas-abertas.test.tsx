@@ -122,6 +122,10 @@ vi.mock("@/hooks/inbox/useConversationTags", () => ({
 vi.mock("@/hooks/contacts/useUpdateContact", () => ({
   useUpdateContact: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+// Agenda no painel (0249): fora do escopo destes casos. Sem o mock, a lista de
+// horários consumiria um `get` do resumo e o painel ainda pediria o AuthProvider.
+vi.mock("@/hooks/auth/AuthProvider", () => ({ usePermission: () => false }));
+vi.mock("@/components/inbox/AgendamentosDoContato", () => ({ AgendamentosDoContato: () => null }));
 
 beforeEach(() => {
   get.mockReset();

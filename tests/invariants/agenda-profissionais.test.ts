@@ -810,7 +810,13 @@ describe("sobreposição parcial da mesma profissional é 23505", () => {
 describe("o espelho é só do trigger — ninguém edita a cópia pelo PostgREST", () => {
   let id = "";
   beforeAll(() => {
-    id = ultimaLinha(sql(marcar("Espelho travado", "2027-06-20T13:00:00Z", "2027-06-20T13:30:00Z", [BIA])));
+    // Marcado PELA SESSÃO do agent: desde a 0249 ele só remarca o que vê (dono,
+    // participante ou quem criou), e o CONTROLE abaixo remarca como ele. Pelo
+    // service role, o agendamento da Bia (sem login) não seria dele, o UPDATE
+    // alcançaria zero linhas sem erro — e o controle cairia pelo motivo errado.
+    id = ultimaLinha(
+      sql(comoUsuario(AGENT_A, marcar("Espelho travado", "2027-06-20T13:00:00Z", "2027-06-20T13:30:00Z", [BIA]))),
+    );
   });
 
   it("o agent NÃO dá UPDATE na cópia (tiraria a profissional da guarda sem mexer no agendamento)", () => {

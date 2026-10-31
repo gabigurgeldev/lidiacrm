@@ -34,7 +34,9 @@
     { "id": "participantes", "lane": "dados", "col": 4, "type": "table", "label": "calendar_appointment_professionals", "sublabel": "principal + apoio; horário/status espelhados por trigger" },
     { "id": "fila", "lane": "dados", "col": 5, "type": "table", "label": "conversation_scheduled_messages", "sublabel": "o lembrete entra aqui; quem envia é o cron scheduled-messages" },
     { "id": "central", "lane": "retorno", "col": 4, "type": "component", "label": "Central (agent_inbox_items)", "sublabel": "aviso quando a IA marca/remarca/cancela; lembrete que exige template" },
-    { "id": "recusa", "lane": "retorno", "col": 2, "type": "module", "label": "Recusa que ensina", "sublabel": "horário tomado, profissional inválida, faltam profissionais — volta ao modelo" }
+    { "id": "recusa", "lane": "retorno", "col": 2, "type": "module", "label": "Recusa que ensina", "sublabel": "horário tomado, profissional inválida, faltam profissionais — volta ao modelo" },
+    { "id": "inboxMarcar", "lane": "tela", "col": 2, "type": "component", "label": "Marcar horário (inbox)", "sublabel": "⋮ da conversa e painel do contato; cliente e conversa fixos; padrão = quem está logado" },
+    { "id": "escopo", "lane": "dados", "col": 6, "type": "service", "label": "fn_can_view_appointment (0249)", "sublabel": "agent/viewer veem o que são donos, participam ou criaram; gerente+ vê a organização" }
   ],
   "edges": [
     { "id": "e1", "from": "conversa", "to": "ferramentas", "label": "cliente pede horário" },
@@ -60,6 +62,11 @@
     { "id": "e21", "from": "cronLembrete", "to": "participantes", "label": "agendamentos confirmados devidos" },
     { "id": "e22", "from": "cronLembrete", "to": "fila", "label": "enfileira o lembrete" },
     { "id": "e23", "from": "cronLembrete", "to": "central", "label": "canal exige template" },
-    { "id": "e24", "from": "fila", "to": "conversa", "label": "a cliente recebe na conversa" }
+    { "id": "e24", "from": "fila", "to": "conversa", "label": "a cliente recebe na conversa" },
+    { "id": "e25", "from": "inboxMarcar", "to": "handler", "label": "POST com contato + conversa" },
+    { "id": "e26", "from": "inboxMarcar", "to": "motor", "label": "horários livres (coleta pelo admin)" },
+    { "id": "e27", "from": "escopo", "to": "grade", "label": "recorta o que cada um vê" },
+    { "id": "e28", "from": "escopo", "to": "inboxMarcar", "label": "próximos horários do contato" },
+    { "id": "e29", "from": "escopo", "to": "detalhe", "label": "fora do escopo: 404, \"não está na sua agenda\"" }
   ]
 }

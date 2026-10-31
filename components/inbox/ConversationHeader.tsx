@@ -11,6 +11,7 @@ import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import {
   ArrowBendUpLeft,
   ArrowCounterClockwise,
+  CalendarCheck,
   CalendarPlus,
   CaretDown,
   CheckCircle,
@@ -37,7 +38,8 @@ import {
 import { useSnoozeConversation } from "@/hooks/inbox/useSnoozeConversation";
 import { AtivarFluxoDialog } from "@/components/inbox/AtivarFluxoDialog";
 import { AgendarMensagemDialog } from "@/components/inbox/AgendarMensagemDialog";
-import { useAuth } from "@/hooks/auth/AuthProvider";
+import { MarcarHorarioDialog } from "@/components/inbox/MarcarHorarioDialog";
+import { useAuth, usePermission } from "@/hooks/auth/AuthProvider";
 import { useClaimConversation } from "@/hooks/inbox/useClaimConversation";
 import { useReleaseConversation } from "@/hooks/inbox/useReleaseConversation";
 import { useCloseConversation } from "@/hooks/inbox/useCloseConversation";
@@ -112,6 +114,10 @@ export function ConversationHeader({ conversation, onAbrirPerfil, onIrParaAba }:
   const [reassignOpen, setReassignOpen] = useState(false);
   const [ativarFluxoOpen, setAtivarFluxoOpen] = useState(false);
   const [agendarOpen, setAgendarOpen] = useState(false);
+  // MARCAR HORÁRIO é compromisso na Agenda (consulta, visita); "Agendar
+  // mensagem" é envio programado ao cliente. Dois gestos, dois nomes.
+  const [marcarHorarioOpen, setMarcarHorarioOpen] = useState(false);
+  const podeMarcarHorario = usePermission("agenda.book");
 
   const c = conversation.contacts ?? null;
   const displayName = rotuloDoContato(c);
@@ -449,6 +455,12 @@ export function ConversationHeader({ conversation, onAbrirPerfil, onIrParaAba }:
                 {t("Transferir")}
               </DropdownMenuItem>
             )}
+            {c?.id && !conversation.is_group && podeMarcarHorario && (
+              <DropdownMenuItem data-testid="acao-marcar-horario" onSelect={() => setMarcarHorarioOpen(true)}>
+                <CalendarCheck size={16} aria-hidden className="mr-2" />
+                {t("Marcar horário na agenda…")}
+              </DropdownMenuItem>
+            )}
             {aberta && (
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
@@ -545,6 +557,15 @@ export function ConversationHeader({ conversation, onAbrirPerfil, onIrParaAba }:
         open={agendarOpen}
         onOpenChange={setAgendarOpen}
       />
+      {c?.id && !conversation.is_group && podeMarcarHorario ? (
+        <MarcarHorarioDialog
+          open={marcarHorarioOpen}
+          onOpenChange={setMarcarHorarioOpen}
+          contactId={c.id}
+          contactName={displayName}
+          conversationId={conversation.id}
+        />
+      ) : null}
     </div>
   );
 }

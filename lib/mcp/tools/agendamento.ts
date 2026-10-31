@@ -54,6 +54,7 @@ import type {
   ProfissionalResumo,
   SlotComProfissionais,
 } from "@/lib/agenda/contrato";
+import { membrosRevogados } from "@/lib/agenda/profissionais";
 import {
   alterarAgendamentoHandler,
   cancelarAgendamentoHandler,
@@ -62,6 +63,63 @@ import {
 import { ApiError } from "@/lib/api/types";
 import { SITUACOES_DO_AGENDAMENTO } from "@/lib/agenda/tipos";
 import type { McpContext, McpToolDefinition } from "@/lib/mcp/types";
+
+/**
+ * A profissional do ATENDENTE HUMANO da conversa — quem a IA põe na frente ao
+ * oferecer e ao marcar, quando o modelo não escolheu ninguém.
+ *
+ * Desde a 0249 cada atendente vê só a própria agenda: compromisso que a IA
+ * marcasse na agenda do dono padrão do tipo sumiria da tela de quem está
+ * atendendo o cliente. Preferência, não trava — se o atendente não faz este
+ * serviço ou está ocupado no horário, vale a 1ª opção livre, como antes.
+ *
+ * `null` sem turno, sem atendente humano, ou com atendente sem profissional
+ * ativa / fora da equipe. Erro de banco também vira `null`: perder a preferência
+ * é melhor que derrubar a marcação.
+ */
+async function profissionalDoAtendenteDaConversa(
+  ctx: McpContext,
+  conversationId: string | null | undefined,
+): Promise<string | null> {
+  if (!conversationId) return null;
+  const { data: conversa, error } = await ctx.supabase
+    .from("conversations")
+    .select("assigned_to_user_id, assignee_kind")
+    .eq("organization_id", ctx.organizationId)
+    .eq("id", conversationId)
+    .maybeSingle();
+  if (error || !conversa) return null;
+  const linha = conversa as { assigned_to_user_id: string | null; assignee_kind: string | null };
+  if (!linha.assigned_to_user_id || linha.assignee_kind === "ai") return null;
+
+  const { data: prof, error: erroProf } = await ctx.supabase
+    .from("calendar_professionals")
+    .select("id")
+    .eq("organization_id", ctx.organizationId)
+    .eq("user_id", linha.assigned_to_user_id)
+    .eq("is_active", true)
+    .limit(1)
+    .maybeSingle();
+  if (erroProf || !prof) return null;
+
+  try {
+    const revogados = await membrosRevogados(ctx.supabase, ctx.organizationId, [linha.assigned_to_user_id]);
+    if (revogados.has(linha.assigned_to_user_id)) return null;
+  } catch {
+    return null;
+  }
+  return String((prof as { id: string }).id);
+}
+
+/** As opções de cada horário com a preferida na frente — a ordem que a escrita usa. */
+function comPreferidaNaFrente(slots: SlotComProfissionais[], preferida: string | null): SlotComProfissionais[] {
+  if (!preferida) return slots;
+  return slots.map((s) => {
+    const i = s.opcoes.findIndex((o) => o.principalId === preferida);
+    if (i <= 0) return s;
+    return { ...s, opcoes: [s.opcoes[i]!, ...s.opcoes.slice(0, i), ...s.opcoes.slice(i + 1)] };
+  });
+}
 
 /** Teto do horizonte pedido — espelha o da rota, e o excesso é erro de chamada. */
 const DIAS_PADRAO = 14;
@@ -256,7 +314,13 @@ export const crmFindFreeSlots: McpToolDefinition<typeof horariosLivresShape> = {
     // Pedido por NOME: resolvido entre quem a consulta considerou (as habilitadas
     // no tipo). Filtrar aqui, em vez de reconsultar, mantém a mesma régua de
     // "quem atende este serviço" que a lista inteira usou.
-    let slots: SlotComProfissionais[] = consulta.slots;
+    // Sem pedido de pessoa, o atendente da conversa vem primeiro em cada
+    // horário — a mesma preferência que `crm_book_appointment` aplica ao marcar,
+    // para a oferta e a marcação contarem a mesma história.
+    let slots: SlotComProfissionais[] =
+      input.profissional || input.owner_user_id
+        ? consulta.slots
+        : comPreferidaNaFrente(consulta.slots, await profissionalDoAtendenteDaConversa(ctx, ctx.turno?.conversationId));
     if (input.profissional) {
       const comProblema = consulta.profissionaisComProblema.map((p) => ({ id: p.id, nome: p.nome }));
       const r = resolverProfissional(input.profissional, [
@@ -512,6 +576,10 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
               ((await listaDeTipos(ctx)) || " Pergunte que tipo de atendimento a pessoa quer."),
           };
         }
+        const escolheuAlguem = Boolean(input.professional_ids?.length || input.owner_user_id);
+        const preferida = escolheuAlguem
+          ? null
+          : await profissionalDoAtendenteDaConversa(ctx, ctx.turno?.conversationId ?? input.conversation_id);
         const r = await marcarAgendamentoHandler(
           ctx.supabase,
           { organization_id: ctx.organizationId, actor: ctx.actor, requestId: ctx.requestId },
@@ -525,6 +593,7 @@ export const crmBookAppointment: McpToolDefinition<typeof marcarShape> = {
             ...(input.title ? { title: input.title } : {}),
             ...(input.notes ? { notes: input.notes } : {}),
           },
+          { preferirProfissionalId: preferida },
         );
         return { marcado: true, compromisso: r };
       },

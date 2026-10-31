@@ -7131,6 +7131,15 @@ export type Database = {
         Args: { p_from: string; p_org: string; p_owner?: string; p_to: string }
         Returns: Json
       }
+      fn_can_view_appointment: {
+        Args: {
+          p_appointment_id: string
+          p_created_by_user_id: string
+          p_org: string
+          p_owner_user_id: string
+        }
+        Returns: boolean
+      }
       fn_can_view_conversation: {
         Args: { p_assigned_to_user_id: string; p_org: string }
         Returns: boolean

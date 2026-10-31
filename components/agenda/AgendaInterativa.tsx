@@ -52,6 +52,7 @@ export function AgendaInterativa({
   onEscolherTipo,
   onMarcarEm,
   onAbrirAgendamento,
+  onIrParaDia,
   className,
 }: {
   visao: VisaoDaAgenda;
@@ -93,6 +94,8 @@ export function AgendaInterativa({
   onEscolherTipo: (id: string) => void;
   onMarcarEm: (instante: string) => void;
   onAbrirAgendamento?: (id: string) => void;
+  /** Visão de mês: clicar no número do dia (ou no "+N") abre a visão de dia. */
+  onIrParaDia?: (dia: Date) => void;
   className?: string;
 }) {
   const localeDaData = useLocaleDeData();
@@ -335,6 +338,7 @@ export function AgendaInterativa({
           pessoas={pessoas}
           agendamentos={desenhados}
           onAbrirAgendamento={onAbrirAgendamento}
+          onIrParaDia={onIrParaDia}
           className="min-h-0 flex-1"
           interacao={
             tipo

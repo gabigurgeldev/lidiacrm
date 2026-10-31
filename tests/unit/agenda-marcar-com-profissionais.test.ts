@@ -697,3 +697,71 @@ describe("o texto do aviso", () => {
     expect(corpo).toContain("De 02/09/2026 às 10:00 para 02/09/2026 às 11:00");
   });
 });
+
+/**
+ * 0249 — cada atendente vê a sua agenda, e duas coisas que só quem chama de
+ * DENTRO decide (`OpcoesDoHandler`):
+ *
+ *  · a COLETA da ocupação vai pelo leitor recebido (a rota passa o admin): pela
+ *    sessão do atendente, o compromisso legado e o Google do colega sumiriam, e
+ *    o horário ocupado dele apareceria livre;
+ *  · a PREFERIDA (o atendente da conversa, quando a IA marca) vence a 1ª livre
+ *    — mas é preferência, não trava, e pedido explícito ganha dela.
+ */
+describe("quem lê a ocupação e quem é preferida (0249)", () => {
+  it("a coleta usa o leitor recebido; a gravação segue no client da sessão", async () => {
+    const sessao = cliente();
+    const leitor = cliente();
+    await marcarAgendamentoHandler(sessao, humano, { event_type_id: TIPO, starts_at: HORARIO }, { leitorDaOcupacao: leitor });
+
+    expect(vi.mocked(horariosLivresDaOrg).mock.calls.at(-1)?.[0], "a coleta não usou o leitor da ocupação").toBe(leitor);
+    expect(rpcs.some((c) => c.fn === "fn_agenda_marcar"), "a gravação saiu do client da sessão").toBe(true);
+  });
+
+  it("CONTROLE: sem leitor, a coleta usa o próprio client — o caminho da IA não muda", async () => {
+    const sessao = cliente();
+    await marcarAgendamentoHandler(sessao, ia, { event_type_id: TIPO, starts_at: HORARIO, contact_id: CONTATO });
+    expect(vi.mocked(horariosLivresDaOrg).mock.calls.at(-1)?.[0]).toBe(sessao);
+  });
+
+  it("remarcar também coleta pelo leitor recebido", async () => {
+    ofertado = consultaCom([slot(OUTRO_HORARIO, [{ principalId: ANA, apoioId: null }])]);
+    const leitor = cliente();
+    await alterarAgendamentoHandler(cliente(), humano, { id: AGENDAMENTO, starts_at: OUTRO_HORARIO }, { leitorDaOcupacao: leitor });
+    expect(vi.mocked(horariosLivresDaOrg).mock.calls.at(-1)?.[0]).toBe(leitor);
+  });
+
+  it("a preferida livre no instante vence a 1ª opção", async () => {
+    await marcarAgendamentoHandler(
+      cliente(),
+      ia,
+      { event_type_id: TIPO, starts_at: HORARIO, contact_id: CONTATO },
+      { preferirProfissionalId: BIA },
+    );
+    expect(ultimoMarcar().p_profissionais).toEqual([BIA]);
+    expect(vi.mocked(audit).mock.calls.at(-1)?.[0]?.metadata?.responsavel_por).toBe("atendente_da_conversa");
+  });
+
+  it("preferida OCUPADA no instante: cai na 1ª livre, sem recusar", async () => {
+    ofertado = consultaCom([slot(HORARIO, [{ principalId: ANA, apoioId: null }])]);
+    await marcarAgendamentoHandler(
+      cliente(),
+      ia,
+      { event_type_id: TIPO, starts_at: HORARIO, contact_id: CONTATO },
+      { preferirProfissionalId: BIA },
+    );
+    expect(ultimoMarcar().p_profissionais).toEqual([ANA]);
+    expect(vi.mocked(audit).mock.calls.at(-1)?.[0]?.metadata?.responsavel_por).toBe("primeira_livre");
+  });
+
+  it("pedido explícito ganha da preferida", async () => {
+    await marcarAgendamentoHandler(
+      cliente(),
+      ia,
+      { event_type_id: TIPO, starts_at: HORARIO, contact_id: CONTATO, professional_ids: [ANA] },
+      { preferirProfissionalId: BIA },
+    );
+    expect(ultimoMarcar().p_profissionais).toEqual([ANA]);
+    expect(vi.mocked(audit).mock.calls.at(-1)?.[0]?.metadata?.responsavel_por).toBe("pedido");
+  });
+});
