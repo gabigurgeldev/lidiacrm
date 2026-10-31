@@ -57,7 +57,7 @@ export function AgentRowMenu({ agent }: Props) {
           toast.success(label);
           router.refresh();
         } else {
-          toast.error(res.message ?? `${t("Falha")}: ${res.error ?? "unknown"}`);
+          toast.error(res.message ? t(res.message) : `${t("Falha")}: ${res.error ?? "unknown"}`);
         }
       } catch {
         toast.error(t("Erro ao executar ação."));
@@ -102,7 +102,7 @@ export function AgentRowMenu({ agent }: Props) {
           </DropdownMenuItem>
           {isPaused ? (
             <DropdownMenuItem
-              disabled={isArchived || agent.kind === "mcp_agent"}
+              disabled={isArchived}
               onSelect={() => run(t("Agente reativado."), () => unpauseAgentAction(agent.id))}
             >
               <Play size={14} aria-hidden className="mr-2" /> {t("Despausar")}
