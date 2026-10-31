@@ -5556,6 +5556,10 @@ export const DICIONARIO: Traducoes = {
   "Disponível": { es: "Disponible" },
   "Sempre disponível": { es: "Siempre disponible" },
   "Disponível no horário": { es: "Disponible en su horario" },
+  "Lotada": { es: "Sin cupo" },
+  "Atingiu a capacidade: não recebe conversa nova da distribuição. Aumente a capacidade ou encerre conversas.": {
+    es: "Llegó a su capacidad: no recibe conversaciones nuevas de la distribución. Aumenta la capacidad o cierra conversaciones.",
+  },
   "Fica disponível no horário mesmo com o CRM fechado": {
     es: "Queda disponible en su horario aunque el CRM esté cerrado",
   },

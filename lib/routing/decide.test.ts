@@ -118,3 +118,67 @@ describe("decideRouting — os 5 cenários do acceptance", () => {
     expect(action).toEqual({ kind: "skip", reason: "unsupported_mode:load" });
   });
 });
+
+describe("decideRouting — fora do horário não é tentativa", () => {
+  it("sem elegível e com abertura marcada ⇒ volta NA abertura e não gasta tentativa", () => {
+    const abre = new Date(NOW.getTime() + 90 * 60_000);
+    const action = decideRouting({
+      mode: "round_robin",
+      alreadyAssigned: false,
+      eligibles: [],
+      config,
+      attempts: 5, // já no teto: pelo caminho antigo, morreria aqui
+      now: NOW,
+      nextOpeningAt: abre,
+    });
+    expect(action).toEqual({
+      kind: "requeue",
+      nextAttemptAt: abre.toISOString(),
+      attempts: 5,
+      aguardandoHorario: true,
+    });
+  });
+
+  it("abertura nula (todo mundo lotado ou offline) ⇒ caminho antigo, até morrer", () => {
+    const action = decideRouting({
+      mode: "round_robin",
+      alreadyAssigned: false,
+      eligibles: [],
+      config,
+      attempts: 5,
+      now: NOW,
+      nextOpeningAt: null,
+    });
+    expect(action.kind).toBe("dead");
+  });
+
+  it("abertura no passado não vira espera (defesa contra relógio torto)", () => {
+    const action = decideRouting({
+      mode: "round_robin",
+      alreadyAssigned: false,
+      eligibles: [],
+      config,
+      attempts: 0,
+      now: NOW,
+      nextOpeningAt: new Date(NOW.getTime() - 1000),
+    });
+    expect(action).toEqual({
+      kind: "requeue",
+      nextAttemptAt: new Date(NOW.getTime() + 60_000).toISOString(),
+      attempts: 1,
+    });
+  });
+
+  it("com elegível, a abertura é irrelevante ⇒ atribui", () => {
+    const action = decideRouting({
+      mode: "round_robin",
+      alreadyAssigned: false,
+      eligibles: [cand("a", null)],
+      config,
+      attempts: 0,
+      now: NOW,
+      nextOpeningAt: new Date(NOW.getTime() + 60_000),
+    });
+    expect(action).toEqual({ kind: "assign", userId: "a" });
+  });
+});
