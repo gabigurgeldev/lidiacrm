@@ -186,6 +186,15 @@ const schema = z.object({
   // `cabecalhosDeAtribuicaoOpenRouter()`, em edge/llm/providers.ts.
   OPENROUTER_APP_URL: z.string().optional().default(""),
   OPENROUTER_APP_TITLE: z.string().optional().default(""),
+  // Agente de SUPORTE in-app (a assistente da bolinha no canto — módulo
+  // `agente/`). Chave PRÓPRIA, separada de propósito de `OPENROUTER_API_KEY` e
+  // das credenciais por organização: quem paga a ajuda de uso é a instalação,
+  // não o tenant, e o agente do CRM não pode passar a gastar desta conta por um
+  // fallback. Vazia = a bolinha responde "assistente indisponível" (503).
+  AGENTE_OPENROUTER_API_KEY: z.string().optional().default(""),
+  AGENTE_MODEL: z.string().optional().default("anthropic/claude-haiku-5.5"),
+  AGENTE_LIMITE_DIARIO: inteiroPositivo("AGENTE_LIMITE_DIARIO", 50),
+  AGENTE_NOME: z.string().optional().default("Lia"),
   VERCEL_AI_GATEWAY_URL: z.string().optional().default(""),
   ANTHROPIC_API_KEY: z.string().optional().default(""),
   OPENAI_API_KEY: z.string().optional().default(""),

@@ -128,6 +128,12 @@ DeskcommCRM é um sistema operacional de vendas open source com agentes de IA na
 - **O PDF de LGPD NUNCA leva marca.** Ele nomeia o **controlador** (`organizations.legal_name`) e o DPO resolvido. Nomear ali o revendedor — que é operador — inverteria papéis num documento que responde a direito legal. Vigiado em `tests/unit/mapas-de-arquitetura.test.ts`
 - Vazamento de marca no código é vigiado por `tests/unit/branding.test.ts` (varre `app|components|lib|workers|hooks`), com allowlist que **só encolhe**. Contexto de venda em [`docs/white-label.md`](docs/white-label.md); mapa em `docs/architecture/marca-propria.architecture.json`
 
+### Assistente de suporte in-app (módulo `agente/`)
+- **Toda mudança visível ao usuário (tela, menu, fluxo, campo) deve atualizar `agente/conhecimento/` no mesmo commit.** É o manual que a assistente da bolinha no canto usa para responder "onde fica X". Depois de editar os `.md`, rode `pnpm exec tsx scripts/agente/gerar-conhecimento.ts` (o `prebuild` também roda) e commite `agente/conhecimento.gerado.ts`. `tests/unit/agente-conhecimento.test.ts` reprova tela do menu sem página e gerado desatualizado
+- O manual é voltado ao CLIENTE: nada de tabela, env, endpoint, migration ou marca de fábrica (o teste varre). O gerador só lê `lib/navigation/registry.ts` e `agente/conhecimento/*.md` — nunca este arquivo nem `docs/`
+- **Ferramentas da assistente são só leitura** (`agente/ferramentas.ts`): client do usuário + `.eq("organization_id", escopo)` em TODA consulta (a RLS deixa platform admin passar), nenhum id vindo do modelo, nenhum service role. Service role só em `agente/registro.server.ts`, para o histórico. Vigiado por `tests/unit/agente-isolamento.test.ts`
+- Chave própria `AGENTE_OPENROUTER_API_KEY` — nunca `resolveLanguageModel`/BYOK da organização
+
 ### Doutrina DIRC (antes de adicionar campo)
 - **D**uplicar — vive aqui mesmo?
 - **I**ntegrar — vem de outra tabela via FK?

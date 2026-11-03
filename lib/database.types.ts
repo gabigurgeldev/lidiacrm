@@ -221,6 +221,116 @@ export type Database = {
           },
         ]
       }
+      agente_conversas: {
+        Row: {
+          created_at: string
+          id: string
+          organization_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          organization_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          organization_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agente_conversas_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agente_mensagens: {
+        Row: {
+          content: string
+          conversa_id: string
+          created_at: string
+          custo_usd: number | null
+          id: string
+          modelo: string | null
+          organization_id: string
+          role: string
+          tokens_in: number | null
+          tokens_out: number | null
+          tool_calls: Json | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          conversa_id: string
+          created_at?: string
+          custo_usd?: number | null
+          id?: string
+          modelo?: string | null
+          organization_id: string
+          role: string
+          tokens_in?: number | null
+          tokens_out?: number | null
+          tool_calls?: Json | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          conversa_id?: string
+          created_at?: string
+          custo_usd?: number | null
+          id?: string
+          modelo?: string | null
+          organization_id?: string
+          role?: string
+          tokens_in?: number | null
+          tokens_out?: number | null
+          tool_calls?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agente_mensagens_conversa_id_fkey"
+            columns: ["conversa_id"]
+            isOneToOne: false
+            referencedRelation: "agente_conversas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agente_mensagens_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agente_uso_diario: {
+        Row: {
+          atualizado_em: string
+          dia: string
+          perguntas: number
+          user_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          dia: string
+          perguntas?: number
+          user_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          dia?: string
+          perguntas?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       ai_agent_runs: {
         Row: {
           abort_reason: string | null
@@ -7249,6 +7359,14 @@ export type Database = {
         Returns: undefined
       }
       fn_expurgar_auditoria_vencida: {
+        Args: { p_limite?: number; p_retencao_dias?: number }
+        Returns: number
+      }
+      fn_agente_reservar_pergunta: {
+        Args: { p_dia: string; p_limite: number; p_user_id: string }
+        Returns: number
+      }
+      fn_expurgar_historico_do_agente: {
         Args: { p_limite?: number; p_retencao_dias?: number }
         Returns: number
       }

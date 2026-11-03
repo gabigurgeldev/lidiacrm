@@ -148,6 +148,13 @@ verify, build-and-size, invariants, e2e, imagens-ok
 - `lib/database.types.ts` (6.1k linhas — gerado do schema Supabase)
 - `graphify-out/` (grafo de conhecimento; regenerado por `/graphify .`)
 - `pnpm-lock.yaml`, `tsconfig.tsbuildinfo`, `next-env.d.ts`, `.next/`
+- `agente/conhecimento.gerado.ts` (base da assistente de suporte; gerado por
+  `scripts/agente/gerar-conhecimento.ts`, que roda no `prebuild`)
+
+**Toda mudança visível ao usuário (tela, menu, fluxo, campo) deve atualizar
+`agente/conhecimento/` no mesmo commit** — é o manual da assistente de suporte in-app.
+Edite o `.md` do módulo e regenere o arquivo acima. Detalhes em `CLAUDE.md`
+(seção "Assistente de suporte in-app").
 
 ## Como validar uma alteração
 
