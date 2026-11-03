@@ -25642,7 +25642,8 @@ create table if not exists public.agente_mensagens (
   -- das ferramentas NÃO é gravado (pode trazer nome de cliente); o que fica é
   -- QUAIS ferramentas rodaram, em `tool_calls`.
   -- A resposta final, em texto, PODE citar nome de cliente: este histórico
-  -- ainda não entra no redact da LGPD nem na retenção (follow-up).
+  -- é redigido quando o contato é anonimizado ou apagado, e expurgado em
+  -- 90 dias (migration 0251).
   role text not null,
   content text not null,
   tool_calls jsonb,
@@ -25708,10 +25709,10 @@ notify pgrst, 'reload schema';
 --    registro — 90 dias por padrão, piso de 30. Chamada em lotes pelo cron
 --    `data-retention`.
 --
--- 4. Trigger em `contacts`: quando um contato é anonimizado (LGPD), o nome, o
---    nome de exibição e o e-mail que ele tinha somem também do histórico da
---    assistente daquela organização — a resposta gravada pode ter citado o
---    cliente pelo nome. Trigger, e não mais uma linha dentro de
+-- 4. Triggers em `contacts`: quando um contato é anonimizado (LGPD) ou apagado
+--    de vez, o nome, o nome de exibição e o e-mail que ele tinha somem também
+--    do histórico da assistente daquela organização — a resposta gravada pode
+--    ter citado o cliente pelo nome. Trigger, e não mais uma linha dentro de
 --    `fn_lgpd_cascade_redact_contact`, porque assim TODO caminho de
 --    anonimização é alcançado (pedido LGPD aprovado, botão "anonimizar",
 --    webhook de redact da Nuvemshop) sem ninguém precisar lembrar desta tabela.
@@ -25851,9 +25852,14 @@ $$;
 revoke execute on function public.fn_expurgar_historico_do_agente(int, int) from public, anon, authenticated;
 grant  execute on function public.fn_expurgar_historico_do_agente(int, int) to service_role;
 
--- ---- 4. anonimização LGPD alcança o histórico ------------------------------
+-- ---- 4. contato anonimizado ou apagado sai do histórico --------------------
 
-create or replace function public.fn_agente_redigir_contato_anonimizado()
+-- A varredura do redact é por organização: sem índice, cada contato
+-- anonimizado percorreria a tabela inteira.
+create index if not exists agente_mensagens_org_idx
+  on public.agente_mensagens (organization_id);
+
+create or replace function public.fn_agente_redigir_contato()
 returns trigger
 language plpgsql
 security definer
@@ -25863,6 +25869,14 @@ declare
   v_trecho text;
   v_padrao text;
 begin
+  -- Organização sendo apagada inteira: o histórico dela vai em cascata, e
+  -- redigir linha que está saindo é trabalho jogado fora.
+  if not exists (select 1 from public.organizations o where o.id = old.organization_id) then
+    return null;
+  end if;
+
+  -- OLD nos dois casos: no UPDATE é o nome de antes da anonimização; no DELETE,
+  -- o nome do contato que deixou de existir.
   foreach v_trecho in array array[old.name, old.display_name, old.email] loop
     -- Menos de 3 letras casaria pedaço de qualquer palavra. Acima disso, apagar
     -- a mais é aceitável: é histórico de ajuda, não registro.
@@ -25872,21 +25886,32 @@ begin
     v_padrao := regexp_replace(v_trecho, '([.^$|?*+()\[\]{}\\])', '\\\1', 'g');
     update public.agente_mensagens m
        set content = regexp_replace(m.content, v_padrao, 'Cliente anonimizado', 'gi')
-     where m.organization_id = new.organization_id
+     where m.organization_id = old.organization_id
        and m.content ~* v_padrao;
   end loop;
-  return new;
+  return null;
 end;
 $$;
 
-revoke execute on function public.fn_agente_redigir_contato_anonimizado() from public, anon, authenticated;
+revoke execute on function public.fn_agente_redigir_contato() from public, anon, authenticated;
 
+-- Anonimização (LGPD): pedido aprovado, botão "anonimizar", webhook de redact.
 drop trigger if exists trg_contacts_agente_redigir on public.contacts;
 create trigger trg_contacts_agente_redigir
   after update of is_anonymized on public.contacts
   for each row
   when (new.is_anonymized is true and old.is_anonymized is distinct from true)
-  execute function public.fn_agente_redigir_contato_anonimizado();
+  execute function public.fn_agente_redigir_contato();
+
+-- Exclusão definitiva do contato (`DELETE /api/v1/contacts/:id`): sem isto o
+-- nome dele seguiria no histórico até a retenção de 90 dias o alcançar. O já
+-- anonimizado não tem mais nome a redigir.
+drop trigger if exists trg_contacts_agente_redigir_delete on public.contacts;
+create trigger trg_contacts_agente_redigir_delete
+  after delete on public.contacts
+  for each row
+  when (old.is_anonymized is distinct from true)
+  execute function public.fn_agente_redigir_contato();
 
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --

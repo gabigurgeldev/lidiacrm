@@ -170,8 +170,10 @@ export function registroNoBanco(admin: SupabaseClient = createAdminClient()): Re
         role: "assistant",
         content: texto,
         // Só os NOMES: o resultado bruto de uma ferramenta não é guardado. O
-        // TEXTO da resposta, porém, pode citar nome de cliente — e este
-        // histórico ainda não entra no redact da LGPD nem na retenção.
+        // TEXTO da resposta, porém, pode citar nome de cliente — por isso o
+        // banco o redige quando o contato é anonimizado ou apagado
+        // (`fn_agente_redigir_contato`, migration 0251) e o cron
+        // `data-retention` o expurga depois de 90 dias.
         tool_calls: consumo.ferramentas.length > 0 ? consumo.ferramentas : null,
         tokens_in: consumo.tokensIn,
         tokens_out: consumo.tokensOut,

@@ -196,6 +196,35 @@ describe("0250 · histórico da assistente de suporte: cada um lê o seu, ningu�
     ).toBe("1");
   });
 
+  it("0251 · contato APAGADO de vez também some do histórico da organização", () => {
+    const APAGADO = "0250aaaa-3333-4000-8000-000000000002";
+    sql(`
+      insert into public.contacts (id, organization_id, name, display_name, email)
+        values ('${APAGADO}', '${ORG_A}', 'Bernardete Lopes', 'Bernardete', 'berna.lopes@exemplo.com.br')
+        on conflict do nothing;
+      insert into public.agente_mensagens (organization_id, conversa_id, user_id, role, content)
+        values ('${ORG_A}', '${CONV_A}', '${PESSOA_A}', 'assistant',
+                'Bernardete Lopes (berna.lopes@exemplo.com.br) pediu retorno.');
+      delete from public.contacts where id = '${APAGADO}';
+    `);
+    expect(
+      sql(
+        `select count(*) from public.agente_mensagens where content ilike '%bernardete%' or content ilike '%berna.lopes%'`,
+      ),
+    ).toBe("0");
+    expect(
+      sql(
+        `select count(*) from public.agente_mensagens where content = 'Cliente anonimizado (Cliente anonimizado) pediu retorno.'`,
+      ),
+    ).toBe("1");
+    // O trigger nasce sem EXECUTE para o cliente.
+    expect(
+      sql(
+        `select has_function_privilege('authenticated', 'public.fn_agente_redigir_contato()', 'execute')::text`,
+      ),
+    ).toBe("false");
+  });
+
   it("0251 · o expurgo respeita o piso de 30 dias no corpo da função", () => {
     sql(`
       insert into public.agente_mensagens (organization_id, conversa_id, user_id, role, content, created_at)

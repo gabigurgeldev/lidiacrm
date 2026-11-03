@@ -43,7 +43,8 @@ create table if not exists public.agente_mensagens (
   -- das ferramentas NÃO é gravado (pode trazer nome de cliente); o que fica é
   -- QUAIS ferramentas rodaram, em `tool_calls`.
   -- A resposta final, em texto, PODE citar nome de cliente: este histórico
-  -- ainda não entra no redact da LGPD nem na retenção (follow-up).
+  -- é redigido quando o contato é anonimizado ou apagado, e expurgado em
+  -- 90 dias (migration 0251).
   role text not null,
   content text not null,
   tool_calls jsonb,
