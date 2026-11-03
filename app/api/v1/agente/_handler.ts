@@ -9,8 +9,10 @@
  *
  *  1. Conta as perguntas de hoje ANTES de qualquer custo. No limite, 429 — sem
  *     gravar nada e sem chamar o modelo.
- *  2. Grava a pergunta antes de chamar o modelo: duas abas mandando ao mesmo
- *     tempo passam a enxergar uma a outra na contagem.
+ *  2. Grava a pergunta antes de chamar o modelo e confere se ela ficou entre
+ *     as `limite` primeiras do dia. Sem isso, uma rajada de requisições que
+ *     passaram juntas pela contagem do passo 1 (todas viram 49) estouraria o
+ *     teto; a que ficou de fora apaga a própria pergunta e recebe 429.
  *  3. Laço de ferramentas no servidor: no máximo `RODADAS` chamadas ao modelo, e
  *     a última sai com `tool_choice: "none"` para forçar a resposta em texto.
  *     O conjunto inteiro corre contra `TEMPO_MAXIMO_MS`.
@@ -96,7 +98,11 @@ export async function responderPergunta(
   // O histórico vem do BANCO, nunca do corpo: um "assistant" forjado no corpo
   // seria a forma mais barata de pôr palavras na boca da assistente.
   const historico = await registro.historico(escopo.userId, conversaId, MENSAGENS_DE_HISTORICO);
-  await registro.gravarPergunta(escopo.userId, escopo.organizationId, conversaId, corpo.mensagem);
+  const perguntaId = await registro.gravarPergunta(escopo.userId, escopo.organizationId, conversaId, corpo.mensagem);
+  if (!(await registro.dentroDoLimite(escopo.userId, desde, perguntaId, deps.limiteDiario))) {
+    await registro.descartarPergunta(escopo.userId, perguntaId);
+    return { tipo: "limite_atingido", usadas_hoje: deps.limiteDiario, limite: deps.limiteDiario };
+  }
 
   const mensagens: MensagemDoModelo[] = [
     { role: "system", content: mensagemDeSistema(deps.identidade, deps.contexto) },

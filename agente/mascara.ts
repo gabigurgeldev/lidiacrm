@@ -25,11 +25,20 @@ export function mascararDocumento(bruto: string | null | undefined): string | nu
 /**
  * Rede de segurança para TEXTO LIVRE (título de agendamento, nome de etapa):
  * qualquer sequência que pareça telefone, CPF ou CNPJ é mascarada antes de ir
- * ao modelo. Pega 10+ dígitos, com ou sem pontuação no meio.
+ * ao modelo. 10+ dígitos sempre; 8–9 dígitos também (celular e fixo sem DDD:
+ * "98765-4321", "3456 7890"), menos o que tem forma de data ("03/11/2026").
  */
 export function mascararNumerosLongos(texto: string): string {
-  return texto.replace(/(?:\+?\d[\d\s().\-/]{8,}\d)/g, (trecho) => {
+  return texto.replace(/(?:\+?\d[\d\s().\-/]{6,}\d)/g, (trecho) => {
     const digitos = trecho.replace(/\D/g, "");
-    return digitos.length >= 10 ? `•••• ${digitos.slice(-4)}` : trecho;
+    if (digitos.length >= 10) return `•••• ${digitos.slice(-4)}`;
+    if (digitos.length >= 8 && !pareceData(trecho)) return `•••• ${digitos.slice(-4)}`;
+    return trecho;
   });
+}
+
+const DATA = /^\s*\d{1,4}\s*[/.\-]\s*\d{1,2}\s*[/.\-]\s*\d{2,4}\s*$/;
+
+function pareceData(trecho: string): boolean {
+  return trecho.includes("/") || DATA.test(trecho);
 }

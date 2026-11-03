@@ -28,14 +28,18 @@ const ESCOPO: EscopoDoAgente = {
   fuso: "America/Sao_Paulo",
 };
 
-function registroFalso(opts: { usadas?: number; conversaValida?: string | null; historico?: MensagemGravada[] } = {}) {
+function registroFalso(
+  opts: { usadas?: number; conversaValida?: string | null; historico?: MensagemGravada[]; perdeuARajada?: boolean } = {},
+) {
   const r = {
     contarPerguntas: vi.fn(async () => opts.usadas ?? 0),
     conversaValida: vi.fn(async () => opts.conversaValida ?? null),
     abrirConversa: vi.fn(async () => CONVERSA),
     historico: vi.fn(async () => opts.historico ?? []),
     ultimaConversa: vi.fn(async () => null),
-    gravarPergunta: vi.fn(async () => {}),
+    gravarPergunta: vi.fn(async () => "pergunta-1"),
+    dentroDoLimite: vi.fn(async () => !opts.perdeuARajada),
+    descartarPergunta: vi.fn(async () => {}),
     gravarResposta: vi.fn(async () => {}),
   } satisfies RegistroDoAgente;
   return r;
@@ -80,6 +84,17 @@ describe("assistente · limite diário", () => {
     expect(chamarModelo).not.toHaveBeenCalled();
     expect(registro.gravarPergunta).not.toHaveBeenCalled();
     expect(registro.abrirConversa).not.toHaveBeenCalled();
+  });
+
+  it("rajada: passou pela contagem, mas outra requisição gravou antes — apaga a própria pergunta e recusa", async () => {
+    const registro = registroFalso({ usadas: 49, perdeuARajada: true });
+    const { d, chamarModelo } = deps(registro, [RESPOSTA_TEXTO]);
+    const r = await responderPergunta(ESCOPO, { mensagem: "oi" }, d);
+    expect(r).toEqual({ tipo: "limite_atingido", usadas_hoje: 50, limite: 50 });
+    expect(registro.dentroDoLimite).toHaveBeenCalledWith(USER, expect.any(Date), "pergunta-1", 50);
+    expect(registro.descartarPergunta).toHaveBeenCalledWith(USER, "pergunta-1");
+    expect(chamarModelo).not.toHaveBeenCalled();
+    expect(registro.gravarResposta).not.toHaveBeenCalled();
   });
 
   it("a 50ª passa, e o contador volta 50", async () => {

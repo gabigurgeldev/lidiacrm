@@ -41,6 +41,7 @@ import { DEFAULT_VISIBILITY_MODE, type AuthUser, type VisibilityMode } from "@/l
 import { marcaDaInstalacao } from "@/lib/branding/instalacao";
 import { resolverMarcaDaOrganizacao } from "@/lib/branding/organizacao";
 import { env } from "@/lib/env";
+import { tagDeIdioma } from "@/lib/i18n/datas";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 
@@ -177,7 +178,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         primeiroNome: user.full_name?.trim().split(/\s+/)[0] ?? null,
         papel: escopo.role,
         organizacao: nomeDaOrganizacao,
-        agoraLocal: new Intl.DateTimeFormat("pt-BR", {
+        agoraLocal: new Intl.DateTimeFormat(tagDeIdioma(user.idioma), {
           timeZone: escopo.fuso,
           dateStyle: "full",
           timeStyle: "short",

@@ -25641,6 +25641,8 @@ create table if not exists public.agente_mensagens (
   -- Fechado: o histórico guarda só a pergunta e a resposta final. O resultado
   -- das ferramentas NÃO é gravado (pode trazer nome de cliente); o que fica é
   -- QUAIS ferramentas rodaram, em `tool_calls`.
+  -- A resposta final, em texto, PODE citar nome de cliente: este histórico
+  -- ainda não entra no redact da LGPD nem na retenção (follow-up).
   role text not null,
   content text not null,
   tool_calls jsonb,

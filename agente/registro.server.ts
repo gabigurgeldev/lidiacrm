@@ -47,7 +47,15 @@ export interface RegistroDoAgente {
   historico(userId: string, conversaId: string, n: number): Promise<MensagemGravada[]>;
   /** A conversa mais recente da pessoa nesta organização. */
   ultimaConversa(userId: string, organizationId: string): Promise<string | null>;
-  gravarPergunta(userId: string, organizationId: string, conversaId: string, texto: string): Promise<void>;
+  /** Grava a pergunta e devolve o id dela. */
+  gravarPergunta(userId: string, organizationId: string, conversaId: string, texto: string): Promise<string>;
+  /**
+   * A pergunta `perguntaId` está entre as `limite` primeiras do dia da pessoa?
+   * Ordem por `created_at, id` — a mesma para todas as requisições que olham.
+   */
+  dentroDoLimite(userId: string, desde: Date, perguntaId: string, limite: number): Promise<boolean>;
+  /** Apaga a pergunta que estourou o limite (só dela, só desta pessoa). */
+  descartarPergunta(userId: string, perguntaId: string): Promise<void>;
   gravarResposta(
     userId: string,
     organizationId: string,
@@ -118,14 +126,43 @@ export function registroNoBanco(admin: SupabaseClient = createAdminClient()): Re
     },
 
     async gravarPergunta(userId, organizationId, conversaId, texto) {
-      const { error } = await admin.from("agente_mensagens").insert({
-        user_id: userId,
-        organization_id: organizationId,
-        conversa_id: conversaId,
-        role: "user",
-        content: texto,
-      });
-      if (error) throw new Error(`agente_mensagens (pergunta): ${error.message}`);
+      const { data, error } = await admin
+        .from("agente_mensagens")
+        .insert({
+          user_id: userId,
+          organization_id: organizationId,
+          conversa_id: conversaId,
+          role: "user",
+          content: texto,
+        })
+        .select("id")
+        .single();
+      if (error || !data) throw new Error(`agente_mensagens (pergunta): ${error?.message ?? "sem linha"}`);
+      return (data as { id: string }).id;
+    },
+
+    async dentroDoLimite(userId, desde, perguntaId, limite) {
+      const { data, error } = await admin
+        .from("agente_mensagens")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("role", "user")
+        .gte("created_at", desde.toISOString())
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .limit(limite);
+      if (error) throw new Error(`agente_mensagens (limite): ${error.message}`);
+      return ((data ?? []) as Array<{ id: string }>).some((m) => m.id === perguntaId);
+    },
+
+    async descartarPergunta(userId, perguntaId) {
+      const { error } = await admin
+        .from("agente_mensagens")
+        .delete()
+        .eq("id", perguntaId)
+        .eq("user_id", userId)
+        .eq("role", "user");
+      if (error) throw new Error(`agente_mensagens (descarte): ${error.message}`);
     },
 
     async gravarResposta(userId, organizationId, conversaId, texto, consumo) {
@@ -135,8 +172,9 @@ export function registroNoBanco(admin: SupabaseClient = createAdminClient()): Re
         conversa_id: conversaId,
         role: "assistant",
         content: texto,
-        // Só os NOMES: o resultado de uma ferramenta pode trazer nome de
-        // cliente, e este histórico não é alcançado pela anonimização da LGPD.
+        // Só os NOMES: o resultado bruto de uma ferramenta não é guardado. O
+        // TEXTO da resposta, porém, pode citar nome de cliente — e este
+        // histórico ainda não entra no redact da LGPD nem na retenção.
         tool_calls: consumo.ferramentas.length > 0 ? consumo.ferramentas : null,
         tokens_in: consumo.tokensIn,
         tokens_out: consumo.tokensOut,

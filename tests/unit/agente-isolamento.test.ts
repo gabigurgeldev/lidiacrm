@@ -104,7 +104,7 @@ function banco(): Record<string, Linha[]> {
       { organization_id: ORG_A, current_month_consumed_cents: 1234, monthly_limit_cents: 5000, is_throttled: false, is_disabled: false },
       { organization_id: ORG_B, current_month_consumed_cents: 999999, monthly_limit_cents: 1, is_throttled: true, is_disabled: true },
     ],
-    ai_invocations: [
+    llm_calls: [
       { organization_id: ORG_A, created_at: daqui(-24) },
       { organization_id: ORG_B, created_at: daqui(-24) },
       { organization_id: ORG_B, created_at: daqui(-24) },
@@ -303,7 +303,7 @@ describe("assistente de suporte · isolamento entre organizações (RLS como a d
       contatos: [{ nome: "Maria Cliente", telefone: "•••• 1234", tags: ["vip"], cadastrado_em: expect.any(String) }],
     });
 
-    const conexoes = await rodar("status_conexoes", escopo("viewer"));
+    const conexoes = await rodar("status_conexoes", escopo("admin"));
     expect(conexoes.json.conexoes).toEqual([
       { nome: "Zap A", numero: "•••• 2222", situacao: "conectado", desde: expect.any(String) },
     ]);
@@ -357,6 +357,14 @@ describe("assistente de suporte · isolamento entre organizações (RLS como a d
     expect(resumo.json.assinatura).toMatchObject({ indisponivel: true });
     const resumoAgent = await rodar("resumo_conta", escopo("agent"));
     expect(resumoAgent.json.usuarios_ativos).toBeUndefined();
+
+    // Conexões é tela de admin: os demais sabem SE está conectado (o aviso de
+    // queda aparece para todos), mas não o nome nem o final do número.
+    const conexoes = await rodar("status_conexoes", escopo("manager"));
+    expect(conexoes.json.conexoes).toEqual([{ situacao: "conectado" }]);
+    expect(conexoes.json.detalhes).toMatchObject({ indisponivel: true });
+    expect(conexoes.texto).not.toContain("2222");
+    expect(conexoes.texto).not.toContain("Zap A");
   });
 
   it("ferramenta desconhecida e argumento ilegível viram erro curto, sem lançar", async () => {

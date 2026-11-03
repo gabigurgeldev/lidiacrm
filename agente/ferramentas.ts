@@ -256,7 +256,7 @@ const leadsPorEtapa: Ferramenta = {
         );
         if (r.error) throw new Error("contagem de leads falhou");
         return {
-          etapa: mascararNumerosLongos(e.name),
+          etapa: rotuloCurto(e.name),
           leads: r.count ?? 0,
           ...(e.is_won ? { tipo: "ganho" } : e.is_lost ? { tipo: "perdido" } : {}),
         };
@@ -343,7 +343,21 @@ function rotuloDoContato(c: ContatoEmbutido | ContatoEmbutido[] | null | undefin
   const um = Array.isArray(c) ? c[0] : c;
   if (!um) return "—";
   if (um.is_anonymized) return "Cliente anonimizado";
-  return mascararNumerosLongos(nomeDoContato(um) ?? "—");
+  return rotuloCurto(nomeDoContato(um) ?? "—");
+}
+
+const TAMANHO_MAXIMO_DO_ROTULO = 60;
+
+/**
+ * Nome digitado por terceiro (contato, conexão) vai ao modelo como DADO: uma
+ * linha, curto e sem número longo. Quebra de linha e texto comprido são o
+ * formato de quem tenta escrever instrução dentro do próprio nome.
+ */
+function rotuloCurto(bruto: string): string {
+  const umaLinha = mascararNumerosLongos(bruto.replace(/\s+/g, " ").trim());
+  return umaLinha.length > TAMANHO_MAXIMO_DO_ROTULO
+    ? `${umaLinha.slice(0, TAMANHO_MAXIMO_DO_ROTULO - 1)}…`
+    : umaLinha || "—";
 }
 
 // ─── minha_agenda ────────────────────────────────────────────────────────────
@@ -462,7 +476,7 @@ const minhaAgenda: Ferramenta = {
       agendamentos: todos.slice(0, LIMITE_DE_LINHAS).map((a) => ({
         quando: dataHoraCurta(escopo.fuso, a.starts_at),
         ate: dataHoraCurta(escopo.fuso, a.ends_at),
-        titulo: mascararNumerosLongos(a.title ?? ""),
+        titulo: rotuloCurto(a.title ?? ""),
         cliente: rotuloDoContato(a.contacts),
         situacao: STATUS_DO_AGENDAMENTO[a.status] ?? a.status,
       })),
@@ -510,7 +524,7 @@ const buscarContato: Ferramenta = {
 
     return {
       contatos: linhas.map((c) => ({
-        nome: mascararNumerosLongos(nomeDoContato(c) ?? "—"),
+        nome: rotuloCurto(nomeDoContato(c) ?? "—"),
         telefone: mascararTelefone(c.phone_number),
         tags: (c.tags ?? []).slice(0, 5),
         cadastrado_em: dataCurta(escopo.fuso, c.created_at),
@@ -536,8 +550,11 @@ const usoIaMes: Ferramenta = {
         .select("current_month_consumed_cents, monthly_limit_cents, is_throttled, is_disabled")
         .eq("organization_id", org)
         .maybeSingle(),
+      // `llm_calls` é a ÚNICA tabela de telemetria desde a migration 0130 —
+      // `ai_invocations` não tem escritor e a contagem dela congela
+      // (`tests/unit/telemetria-tem-um-leitor-so.test.ts`).
       supabase
-        .from("ai_invocations")
+        .from("llm_calls")
         .select("id", { count: "exact", head: true })
         .eq("organization_id", org)
         .gte("created_at", inicioDoMes(escopo.fuso, agora).toISOString()),
@@ -586,11 +603,23 @@ const statusConexoes: Ferramenta = {
       status: string | null;
       last_status_change_at: string | null;
     }>;
+    const situacao = (c: { status: string | null }) =>
+      STATUS_DA_CONEXAO[c.status ?? ""] ?? c.status ?? "desconhecida";
+
+    // A tela Conexões é `minRole: "admin"` (lib/navigation/registry.ts). Quem
+    // não é admin já vê o aviso de conexão caída no topo de toda tela, então
+    // a SITUAÇÃO é dele; o nome e o final do número, não.
+    if (!papelAoMenos(escopo, "admin")) {
+      return {
+        conexoes: linhas.map((c) => ({ situacao: situacao(c) })),
+        detalhes: semPermissao("Conexões", "admin"),
+      };
+    }
     return {
       conexoes: linhas.map((c) => ({
-        nome: c.display_name ? mascararNumerosLongos(c.display_name) : "Sem nome",
+        nome: c.display_name ? rotuloCurto(c.display_name) : "Sem nome",
         numero: mascararTelefone(c.phone_number),
-        situacao: STATUS_DA_CONEXAO[c.status ?? ""] ?? c.status ?? "desconhecida",
+        situacao: situacao(c),
         desde: dataHoraCurta(escopo.fuso, c.last_status_change_at),
       })),
       onde_ver: "Canais › Conexões",
