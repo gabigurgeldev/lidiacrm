@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:webpack": "next dev",
+    "prebuild": "tsx scripts/agente/gerar-conhecimento.ts",
     "build": "next build",
     "build:webpack": "next build",
     "start": "next start",

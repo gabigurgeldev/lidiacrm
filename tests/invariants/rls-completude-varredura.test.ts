@@ -102,6 +102,15 @@ const PROVA_PROPRIA: readonly Excecao[] = [
       "leitura e o GRANT de escrita é revogado de authenticated — `update pago_ate` pela " +
       "anon key dá permission denied. eventos_asaas não tem policy e é invisível.",
   })),
+  ...(["agente_conversas", "agente_mensagens"] as const).map((tabela) => ({
+    tabela,
+    razao:
+      "tests/invariants/agente-de-suporte-rls.test.ts prova que cada pessoa lê só o PRÓPRIO " +
+      "histórico com a assistente (nem o admin da mesma org, nem membro de outra org lê o " +
+      "alheio) e que o cliente NÃO escreve: GRANT de escrita revogado de authenticated — " +
+      "forjar perguntas no nome de outro (e esgotar o limite dele) dá permission denied. " +
+      "Quem grava é só o servidor (agente/registro.server.ts).",
+  })),
   ...(["backoffice_indicacoes", "backoffice_saida"] as const).map((tabela) => ({
     tabela,
     razao:

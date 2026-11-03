@@ -46,6 +46,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   /** Estado da assinatura quando pede aviso (fim do trial, tolerância). */
   let avisoDeAssinatura: EstadoDeAcesso | null = null;
 
+  /**
+   * A assistente de suporte só existe com organização ativa (de MEMBERSHIP —
+   * `resolveActiveOrg` não inventa organização para platform admin). O nome da
+   * marca é o RESOLVIDO para esta organização, o mesmo que o menu usa.
+   */
+  let agente: { nomeDoAgente: string; nomeDoProduto: string } | null = null;
+
   // EPIC-02: gate /app/* on completed onboarding.
   // EPIC-11: gate /app/* on org not being suspended (S-11.08).
   if (activeOrg) {
@@ -81,6 +88,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       await marcaDaInstalacao(),
       env,
     );
+    agente = { nomeDoAgente: env.AGENTE_NOME, nomeDoProduto: marca.name };
 
     // SÓ quando a cor veio mesmo da organização. Se ela não configurou nada, a
     // resolução devolve a cor da instalação — e reemiti-la aqui, escopada no
@@ -179,7 +187,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     activeOrg?.orgId,
   );
   const shell = (
-    <AppShell sidebarCollapsed={collapsed} gruposAbertosSalvos={gruposAbertos}>
+    <AppShell sidebarCollapsed={collapsed} gruposAbertosSalvos={gruposAbertos} agente={agente}>
       {children}
     </AppShell>
   );

@@ -1,6 +1,7 @@
 "use client";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { AgenteSuporte } from "@/components/agente/AgenteSuporte";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { AppHeader } from "@/components/shell/header/AppHeader";
 import { useInboundMessageAlerts } from "@/hooks/notifications/useInboundMessageAlerts";
@@ -14,10 +15,16 @@ interface AppShellProps {
   sidebarCollapsed: boolean;
   /** O cookie dos grupos, lido no SSR — ver `lib/navigation/grupos-abertos.ts`. */
   gruposAbertosSalvos: NavGroupId[] | null;
+  /**
+   * A assistente de suporte (bolinha no canto). `null` = sem organização ativa:
+   * a assistente fala sobre a conta em que a pessoa está, e sem conta não há
+   * sobre o que falar. Nome e marca vêm resolvidos do servidor.
+   */
+  agente?: { nomeDoAgente: string; nomeDoProduto: string } | null;
   children: ReactNode;
 }
 
-export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, children }: AppShellProps) {
+export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, agente = null, children }: AppShellProps) {
   useInboundMessageAlerts();
   useCrmAlerts();
   useNotifyOpenFromServiceWorker();
@@ -148,6 +155,7 @@ export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, children }: Ap
           )}
         </main>
       </div>
+      {agente && <AgenteSuporte nomeDoAgente={agente.nomeDoAgente} nomeDoProduto={agente.nomeDoProduto} />}
     </div>
   );
 }

@@ -25617,6 +25617,75 @@ comment on function public.fn_agenda_conferir_livre(uuid, uuid[], timestamptz, t
 
 notify pgrst, 'reload schema';
 
+-- ---- agente de suporte in-app: histórico das conversas (migration 0250) ----
+-- A assistente da bolinha no canto lê só a conta de quem pergunta. Estas tabelas
+-- guardam pergunta/resposta com tokens e custo; delas sai o limite diário por
+-- usuário. Lê só o dono (user_id = auth.uid()); escrita revogada de
+-- authenticated (só o servidor grava). Cabeçalho completo em
+-- supabase/migrations/20261103120000_0250_agente_de_suporte.sql.
+create table if not exists public.agente_conversas (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists agente_conversas_user_created_idx
+  on public.agente_conversas (user_id, created_at desc);
+
+create table if not exists public.agente_mensagens (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  conversa_id uuid not null references public.agente_conversas(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  -- Fechado: o histórico guarda só a pergunta e a resposta final. O resultado
+  -- das ferramentas NÃO é gravado (pode trazer nome de cliente); o que fica é
+  -- QUAIS ferramentas rodaram, em `tool_calls`.
+  role text not null,
+  content text not null,
+  tool_calls jsonb,
+  tokens_in integer,
+  tokens_out integer,
+  custo_usd numeric(12, 6),
+  modelo text,
+  created_at timestamptz not null default now(),
+  constraint agente_mensagens_role_check check (role = any (array['user'::text, 'assistant'::text]))
+);
+
+-- O limite diário conta `role='user'` da pessoa desde o início do dia.
+create index if not exists agente_mensagens_user_created_idx
+  on public.agente_mensagens (user_id, created_at);
+
+create index if not exists agente_mensagens_conversa_created_idx
+  on public.agente_mensagens (conversa_id, created_at);
+
+alter table public.agente_conversas enable row level security;
+alter table public.agente_mensagens enable row level security;
+
+drop policy if exists agente_conversas_select on public.agente_conversas;
+create policy agente_conversas_select on public.agente_conversas
+  for select using (user_id = auth.uid());
+
+drop policy if exists agente_mensagens_select on public.agente_mensagens;
+create policy agente_mensagens_select on public.agente_mensagens
+  for select using (user_id = auth.uid());
+
+revoke all on public.agente_conversas from anon;
+revoke all on public.agente_mensagens from anon;
+revoke insert, update, delete, truncate on public.agente_conversas from authenticated;
+revoke insert, update, delete, truncate on public.agente_mensagens from authenticated;
+grant select on public.agente_conversas to authenticated;
+grant select on public.agente_mensagens to authenticated;
+grant all on public.agente_conversas to service_role;
+grant all on public.agente_mensagens to service_role;
+
+comment on table public.agente_conversas is
+  'Agente de suporte (0250): uma conversa de ajuda de um usuário com a assistente in-app. Lê só o dono; escreve só o servidor.';
+comment on table public.agente_mensagens is
+  'Agente de suporte (0250): pergunta (user) e resposta (assistant), com tokens e custo. Base do limite diário por usuário.';
+
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

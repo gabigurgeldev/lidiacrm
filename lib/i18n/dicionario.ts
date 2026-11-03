@@ -8767,6 +8767,24 @@ export const DICIONARIO: Traducoes = {
   "Previsão de fechamento": { es: "Fecha prevista de cierre" },
   "Ganhou": { es: "Ganó" },
   "Perdeu": { es: "Perdió" },
+  // ─── Assistente de suporte in-app (components/agente/AgenteSuporte.tsx) ───
+  "Olá, eu sou a {nome}, assistente do {produto}": { es: "Hola, soy {nome}, asistente de {produto}" },
+  "Posso ajudar com alguma dúvida?": { es: "¿Puedo ayudarte con alguna duda?" },
+  "Abrir assistente {nome}": { es: "Abrir asistente {nome}" },
+  "{x} de {y} perguntas hoje": { es: "{x} de {y} preguntas hoy" },
+  "Assistente do {produto}": { es: "Asistente de {produto}" },
+  "Tiro dúvidas sobre como usar o sistema e consulto dados da sua conta. Não faço alterações: eu explico o passo a passo para você.": { es: "Resuelvo dudas sobre cómo usar el sistema y consulto datos de tu cuenta. No hago cambios: te explico el paso a paso." },
+  "Como conecto meu WhatsApp?": { es: "¿Cómo conecto mi WhatsApp?" },
+  "Onde convido alguém para a equipe?": { es: "¿Dónde invito a alguien al equipo?" },
+  "Quantas conversas estão abertas?": { es: "¿Cuántas conversaciones están abiertas?" },
+  "{nome} está digitando…": { es: "{nome} está escribiendo…" },
+  "A assistente está indisponível nesta instalação. Fale com quem administra o sistema.": { es: "La asistente no está disponible en esta instalación. Habla con quien administra el sistema." },
+  "Limite de hoje atingido": { es: "Límite de hoy alcanzado" },
+  "Escreva sua dúvida…": { es: "Escribe tu duda…" },
+  "Sua pergunta": { es: "Tu pregunta" },
+  "Nova conversa": { es: "Nueva conversación" },
+  "Você atingiu o limite de perguntas de hoje. Amanhã ele renova.": { es: "Alcanzaste el límite de preguntas de hoy. Mañana se renueva." },
+  "Não consegui responder agora. Tente de novo em instantes.": { es: "No pude responder ahora. Inténtalo de nuevo en unos instantes." },
 };
 
 /**

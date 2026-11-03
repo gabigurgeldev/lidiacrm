@@ -596,6 +596,10 @@ export const AUDIT_ACTIONS = [
   "tag.updated",
   "tag.archived",
   "stage.tags_changed",
+  // Agente de suporte in-app (migration 0250): a assistente respondeu uma
+  // pergunta. Metadata: `{ conversa_id, ferramentas, tokens_in, tokens_out,
+  // custo_usd, modelo }` — nunca o texto da pergunta nem o da resposta.
+  "agente.pergunta_respondida",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */
