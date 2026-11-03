@@ -600,6 +600,7 @@ export const AUDIT_ACTIONS = [
   // pergunta. Metadata: `{ conversa_id, ferramentas, tokens_in, tokens_out,
   // custo_usd, modelo }` — nunca o texto da pergunta nem o da resposta.
   "agente.pergunta_respondida",
+  "agente.historico_limpo",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

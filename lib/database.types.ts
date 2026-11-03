@@ -310,6 +310,27 @@ export type Database = {
           },
         ]
       }
+      agente_uso_diario: {
+        Row: {
+          atualizado_em: string
+          dia: string
+          perguntas: number
+          user_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          dia: string
+          perguntas?: number
+          user_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          dia?: string
+          perguntas?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       ai_agent_runs: {
         Row: {
           abort_reason: string | null
@@ -7338,6 +7359,14 @@ export type Database = {
         Returns: undefined
       }
       fn_expurgar_auditoria_vencida: {
+        Args: { p_limite?: number; p_retencao_dias?: number }
+        Returns: number
+      }
+      fn_agente_reservar_pergunta: {
+        Args: { p_dia: string; p_limite: number; p_user_id: string }
+        Returns: number
+      }
+      fn_expurgar_historico_do_agente: {
         Args: { p_limite?: number; p_retencao_dias?: number }
         Returns: number
       }

@@ -28,14 +28,22 @@
  * quem não abre "Uso e orçamento" (manager+) não lê o gasto de IA pela
  * assistente; quem não abre "Assinatura" (admin) não lê a situação do plano.
  */
+import "./so-no-servidor";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { nomeDoContato } from "@/lib/contacts/rotulo-do-contato";
 import { CONVERSATION_TERMINAL_STATUSES } from "@/lib/schemas/messaging";
 
-import { aplicarRecorte, descricaoDoRecorte, papelAoMenos, recorteDeVisibilidade, type EscopoDoAgente } from "./escopo";
-import { mascararNumerosLongos, mascararTelefone } from "./mascara";
+import {
+  aplicarRecorte,
+  descricaoDoRecorte,
+  papelAoMenos,
+  recorteDeVisibilidade,
+  type EscopoDoAgente,
+} from "./escopo";
+import { mascararTelefone, mascararTextoLivre } from "./mascara";
 import { dataCurta, dataHoraCurta, inicioDoDia, inicioDoMes } from "./tempo";
 
 /** Teto de linhas de qualquer lista devolvida ao modelo. */
@@ -47,6 +55,39 @@ export interface ContextoDaFerramenta {
   supabase: SupabaseClient;
   escopo: EscopoDoAgente;
   agora: Date;
+  /** O prazo da pergunta inteira: abortado, as consultas em voo são canceladas. */
+  signal?: AbortSignal;
+}
+
+/**
+ * O client com o prazo embutido: todo `.select()` sai com `.abortSignal(signal)`.
+ * Só `select` é interceptado porque é o único verbo que estas ferramentas usam —
+ * e um proxy que soubesse de `insert` seria um convite para usá-lo.
+ */
+function comPrazo(supabase: SupabaseClient, signal: AbortSignal | undefined): SupabaseClient {
+  if (!signal) return supabase;
+  return new Proxy(supabase, {
+    get(alvo, prop, receptor) {
+      if (prop !== "from") return Reflect.get(alvo, prop, receptor);
+      return (tabela: string) => {
+        const consulta = alvo.from(tabela);
+        return new Proxy(consulta, {
+          get(q, p, r) {
+            const valor = Reflect.get(q, p, r) as unknown;
+            if (p === "select" && typeof valor === "function") {
+              return (...a: unknown[]) =>
+                (valor as (...x: unknown[]) => { abortSignal(s: AbortSignal): unknown })
+                  .apply(q, a)
+                  .abortSignal(signal);
+            }
+            return typeof valor === "function"
+              ? (valor as (...x: unknown[]) => unknown).bind(q)
+              : valor;
+          },
+        });
+      };
+    },
+  });
 }
 
 /** JSON Schema no formato de `tools[].function.parameters` (OpenAI/OpenRouter). */
@@ -98,10 +139,16 @@ const STATUS_DA_ASSINATURA: Record<string, string> = {
   cancelada: "cancelada",
 };
 
-/** Mesmo escape de `app/api/v1/search/_handler.ts`: curinga do LIKE e delimitador do `.or()`. */
+/**
+ * O nome vai dentro de um `.or("name.ilike.%…%,…")`, que é texto do PostgREST:
+ * curinga do LIKE (`%`, `_`) é escapado; o curinga do PostgREST (`*`), a aspa,
+ * a barra invertida e os delimitadores do `.or()` (`,` `(` `)`) somem — nenhum
+ * deles faz parte de um nome que se procura.
+ */
 function paraFiltro(bruto: string): string {
   return bruto
     .trim()
+    .replace(/[\\*"]/g, " ")
     .replace(/[%_]/g, (m) => `\\${m}`)
     .replace(/[,()]/g, " ");
 }
@@ -222,11 +269,14 @@ const leadsPorEtapa: Ferramenta = {
       "Kanbans",
     ) ?? []) as Array<{ id: string; name: string; is_default: boolean }>;
 
-    if (pipelines.length === 0) return { kanban: null, etapas: [], observacao: "A organização ainda não tem Kanban." };
+    if (pipelines.length === 0)
+      return { kanban: null, etapas: [], observacao: "A organização ainda não tem Kanban." };
 
     const procurado = args.kanban?.toLocaleLowerCase("pt-BR");
     const escolhido =
-      (procurado ? pipelines.find((p) => p.name.toLocaleLowerCase("pt-BR").includes(procurado)) : undefined) ??
+      (procurado
+        ? pipelines.find((p) => p.name.toLocaleLowerCase("pt-BR").includes(procurado))
+        : undefined) ??
       pipelines.find((p) => p.is_default) ??
       pipelines[0]!;
 
@@ -264,8 +314,10 @@ const leadsPorEtapa: Ferramenta = {
     );
 
     return {
-      kanban: escolhido.name,
-      outros_kanbans: pipelines.filter((p) => p.id !== escolhido.id).map((p) => p.name),
+      kanban: rotuloCurto(escolhido.name),
+      outros_kanbans: pipelines
+        .filter((p) => p.id !== escolhido.id)
+        .map((p) => rotuloCurto(p.name)),
       contando: descricaoDoRecorte(recorteDeVisibilidade(escopo)),
       etapas: contagens,
     };
@@ -302,7 +354,9 @@ const conversasAbertas: Ferramenta = {
       aplicarRecorte(
         supabase
           .from("conversations")
-          .select("status, assigned_to_user_id, last_message_at, contacts(name, display_name, is_anonymized)")
+          .select(
+            "status, assigned_to_user_id, last_message_at, contacts(name, display_name, is_anonymized)",
+          )
           .eq("organization_id", org)
           .not("status", "in", terminais),
         "assigned_to_user_id",
@@ -312,7 +366,8 @@ const conversasAbertas: Ferramenta = {
         .limit(5),
     ]);
 
-    for (const r of [total, minhas, semDono, comIa]) if (r.error) throw new Error("contagem de conversas falhou");
+    for (const r of [total, minhas, semDono, comIa])
+      if (r.error) throw new Error("contagem de conversas falhou");
     const linhas = (conferir(recentes, "conversas") ?? []) as unknown as Array<{
       status: string;
       assigned_to_user_id: string | null;
@@ -330,14 +385,22 @@ const conversasAbertas: Ferramenta = {
         contato: rotuloDoContato(c.contacts),
         situacao: STATUS_DA_CONVERSA[c.status] ?? c.status,
         responsavel:
-          c.assigned_to_user_id === escopo.userId ? "você" : c.assigned_to_user_id ? "outra pessoa" : "ninguém",
+          c.assigned_to_user_id === escopo.userId
+            ? "você"
+            : c.assigned_to_user_id
+              ? "outra pessoa"
+              : "ninguém",
         ultima_mensagem: dataHoraCurta(escopo.fuso, c.last_message_at),
       })),
     };
   },
 };
 
-type ContatoEmbutido = { name: string | null; display_name: string | null; is_anonymized?: boolean | null };
+type ContatoEmbutido = {
+  name: string | null;
+  display_name: string | null;
+  is_anonymized?: boolean | null;
+};
 
 function rotuloDoContato(c: ContatoEmbutido | ContatoEmbutido[] | null | undefined): string {
   const um = Array.isArray(c) ? c[0] : c;
@@ -354,7 +417,7 @@ const TAMANHO_MAXIMO_DO_ROTULO = 60;
  * formato de quem tenta escrever instrução dentro do próprio nome.
  */
 function rotuloCurto(bruto: string): string {
-  const umaLinha = mascararNumerosLongos(bruto.replace(/\s+/g, " ").trim());
+  const umaLinha = mascararTextoLivre(bruto.replace(/\s+/g, " ").trim());
   return umaLinha.length > TAMANHO_MAXIMO_DO_ROTULO
     ? `${umaLinha.slice(0, TAMANHO_MAXIMO_DO_ROTULO - 1)}…`
     : umaLinha || "—";
@@ -365,7 +428,11 @@ function rotuloCurto(bruto: string): string {
 const PERIODOS = ["hoje", "amanha", "esta_semana", "proximos_7_dias"] as const;
 const argsAgenda = z.object({ periodo: z.enum(PERIODOS).optional() });
 
-function intervaloDoPeriodo(periodo: (typeof PERIODOS)[number], fuso: string, agora: Date): [Date, Date] {
+function intervaloDoPeriodo(
+  periodo: (typeof PERIODOS)[number],
+  fuso: string,
+  agora: Date,
+): [Date, Date] {
   switch (periodo) {
     case "hoje":
       return [inicioDoDia(fuso, agora), inicioDoDia(fuso, agora, 1)];
@@ -381,7 +448,8 @@ function intervaloDoPeriodo(periodo: (typeof PERIODOS)[number], fuso: string, ag
   }
 }
 
-const COLUNAS_DO_AGENDAMENTO = "id, title, starts_at, ends_at, status, contacts(name, display_name, is_anonymized)";
+const COLUNAS_DO_AGENDAMENTO =
+  "id, title, starts_at, ends_at, status, contacts(name, display_name, is_anonymized)";
 
 const minhaAgenda: Ferramenta = {
   nome: "minha_agenda",
@@ -452,7 +520,9 @@ const minhaAgenda: Ferramenta = {
     };
     const proprios = (conferir(comoDona, "agenda") ?? []) as unknown as Linha[];
     const jaTenho = new Set(proprios.map((a) => a.id));
-    const faltam = ((conferir(participacoes, "participações") ?? []) as Array<{ appointment_id: string }>)
+    const faltam = (
+      (conferir(participacoes, "participações") ?? []) as Array<{ appointment_id: string }>
+    )
       .map((p) => p.appointment_id)
       .filter((id) => !jaTenho.has(id));
 
@@ -495,7 +565,9 @@ const buscarContato: Ferramenta = {
     "(só os 4 últimos dígitos). Use para confirmar se um cliente está cadastrado.",
   parametros: {
     type: "object",
-    properties: { nome: { type: "string", description: "Nome ou parte do nome (mínimo 2 letras)." } },
+    properties: {
+      nome: { type: "string", description: "Nome ou parte do nome (mínimo 2 letras)." },
+    },
     required: ["nome"],
     additionalProperties: false,
   },
@@ -526,7 +598,7 @@ const buscarContato: Ferramenta = {
       contatos: linhas.map((c) => ({
         nome: rotuloCurto(nomeDoContato(c) ?? "—"),
         telefone: mascararTelefone(c.phone_number),
-        tags: (c.tags ?? []).slice(0, 5),
+        tags: (c.tags ?? []).slice(0, 5).map(rotuloCurto),
         cadastrado_em: dataCurta(escopo.fuso, c.created_at),
       })),
     };
@@ -542,7 +614,8 @@ const usoIaMes: Ferramenta = {
     "por orçamento e quantas chamadas de IA houve no mês. Só gerente ou admin.",
   parametros: SEM_ARGUMENTOS,
   async executar({ supabase, escopo, agora }) {
-    if (!papelAoMenos(escopo, "manager")) return semPermissao("Uso e orçamento", "gerente ou admin");
+    if (!papelAoMenos(escopo, "manager"))
+      return semPermissao("Uso e orçamento", "gerente ou admin");
     const org = escopo.organizationId;
     const [orcR, chamadasR] = await Promise.all([
       supabase
@@ -668,11 +741,19 @@ export async function executarFerramenta(
     return JSON.stringify({ erro: "argumentos ilegíveis" });
   }
 
+  if (ctx.signal?.aborted) return JSON.stringify({ erro: "tempo esgotado" });
+
   try {
-    const resultado = await ferramenta.executar(ctx, args);
+    const resultado = await ferramenta.executar(
+      { ...ctx, supabase: comPrazo(ctx.supabase, ctx.signal) },
+      args,
+    );
     const texto = JSON.stringify(resultado);
     return texto.length > LIMITE_DE_CARACTERES
-      ? JSON.stringify({ aviso: "resultado cortado", parcial: texto.slice(0, LIMITE_DE_CARACTERES) })
+      ? JSON.stringify({
+          aviso: "resultado cortado",
+          parcial: texto.slice(0, LIMITE_DE_CARACTERES),
+        })
       : texto;
   } catch (e) {
     if (e instanceof z.ZodError) return JSON.stringify({ erro: "argumentos inválidos" });

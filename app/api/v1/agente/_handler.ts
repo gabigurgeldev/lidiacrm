@@ -7,36 +7,48 @@
  *
  * ── A ordem, e por que é esta ───────────────────────────────────────────────
  *
- *  1. Conta as perguntas de hoje ANTES de qualquer custo. No limite, 429 — sem
- *     gravar nada e sem chamar o modelo.
- *  2. Grava a pergunta antes de chamar o modelo e confere se ela ficou entre
- *     as `limite` primeiras do dia. Sem isso, uma rajada de requisições que
- *     passaram juntas pela contagem do passo 1 (todas viram 49) estouraria o
- *     teto; a que ficou de fora apaga a própria pergunta e recebe 429.
+ *  1. RESERVA a pergunta no contador do dia antes de qualquer custo
+ *     (`fn_agente_reservar_pergunta`, atômica: duas requisições juntas não
+ *     passam do teto). No limite, 429 — sem gravar nada e sem chamar o modelo.
+ *  2. A pergunta é mascarada (telefone, CPF, e-mail) ANTES de ir ao banco e ao
+ *     modelo: quem cola o número de um cliente na pergunta não o espalha.
  *  3. Laço de ferramentas no servidor: no máximo `RODADAS` chamadas ao modelo, e
  *     a última sai com `tool_choice: "none"` para forçar a resposta em texto.
- *     O conjunto inteiro corre contra `TEMPO_MAXIMO_MS`.
- *  4. Grava a resposta com tokens, custo e os NOMES das ferramentas usadas.
+ *     Teto de ferramentas por rodada e por pergunta, repetição idêntica
+ *     reaproveitada, e o prazo `TEMPO_MAXIMO_MS` alcança TAMBÉM as consultas
+ *     (o sinal vai ao `.abortSignal()` de cada uma), não só a chamada ao modelo.
+ *  4. Grava a resposta com tokens, custo e os NOMES das ferramentas usadas. Se
+ *     o modelo falhar, grava uma resposta de falha antes de propagar o erro —
+ *     a conversa nunca fica com pergunta sem resposta.
  */
 import { z } from "zod";
 
 import type { EscopoDoAgente } from "@/agente/escopo";
 import { definicoesParaOModelo } from "@/agente/ferramentas";
 import type { ChamarModelo, MensagemDoModelo } from "@/agente/openrouter.server";
+import { mascararTextoLivre } from "@/agente/mascara";
 import { mensagemDeSistema, type Contexto, type Identidade } from "@/agente/prompt";
 import type { RegistroDoAgente } from "@/agente/registro.server";
-import { FUSO_PADRAO, inicioDoDia } from "@/agente/tempo";
+import "@/agente/so-no-servidor";
+import { FUSO_PADRAO } from "@/agente/tempo";
 
 export const TAMANHO_MAXIMO_DA_PERGUNTA = 2000;
 export const MENSAGENS_DE_HISTORICO = 12;
 export const RODADAS = 4;
 export const TEMPO_MAXIMO_MS = 25_000;
 export const MAX_TOKENS = 1000;
+/** Ferramentas por resposta do modelo, e por pergunta inteira. O excedente recebe erro, não roda. */
+export const FERRAMENTAS_POR_RODADA = 4;
+export const FERRAMENTAS_POR_PERGUNTA = 6;
 
 export const corpoDaPergunta = z.object({
-  mensagem: z.string().trim().min(1, "Escreva uma pergunta.").max(TAMANHO_MAXIMO_DA_PERGUNTA, {
-    message: `A pergunta pode ter até ${TAMANHO_MAXIMO_DA_PERGUNTA} caracteres.`,
-  }),
+  mensagem: z
+    .string()
+    .trim()
+    .min(1, "Escreva uma pergunta.")
+    .max(TAMANHO_MAXIMO_DA_PERGUNTA, {
+      message: `A pergunta pode ter até ${TAMANHO_MAXIMO_DA_PERGUNTA} caracteres.`,
+    }),
   conversa_id: z.string().uuid().optional().nullable(),
 });
 export type CorpoDaPergunta = z.infer<typeof corpoDaPergunta>;
@@ -44,7 +56,11 @@ export type CorpoDaPergunta = z.infer<typeof corpoDaPergunta>;
 export interface DepsDaPergunta {
   registro: RegistroDoAgente;
   chamarModelo: ChamarModelo;
-  executarFerramenta: (nome: string, argumentosJson: string) => Promise<string>;
+  executarFerramenta: (
+    nome: string,
+    argumentosJson: string,
+    signal: AbortSignal,
+  ) => Promise<string>;
   modelo: string;
   limiteDiario: number;
   identidade: Identidade;
@@ -67,14 +83,27 @@ export type ResultadoDaPergunta =
     }
   | { tipo: "limite_atingido"; usadas_hoje: number; limite: number };
 
-/** "Hoje" do limite diário: o dia de São Paulo, igual para toda a instalação. */
-export function inicioDoDiaDoLimite(agora: Date): Date {
-  return inicioDoDia(FUSO_PADRAO, agora);
+/**
+ * "Hoje" do limite diário: o dia de São Paulo (AAAA-MM-DD), igual para toda a
+ * instalação — o contador é da pessoa, não da organização.
+ */
+export function diaDoLimite(agora: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: FUSO_PADRAO,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(agora);
 }
 
 const RESPOSTA_DE_TEMPO_ESGOTADO =
   "Desculpe, demorei mais do que devia para consultar isso. Pode tentar de novo, talvez com uma pergunta mais específica?";
 const RESPOSTA_VAZIA = "Não consegui formular uma resposta agora. Pode reformular a pergunta?";
+const RESPOSTA_DE_FALHA =
+  "Não consegui responder agora — o serviço da assistente falhou. Tente de novo em alguns minutos.";
+const ERRO_DE_LIMITE_DE_FERRAMENTAS = JSON.stringify({ erro: "limite de ferramentas" });
+
+class TempoEsgotado extends Error {}
 
 export async function responderPergunta(
   escopo: EscopoDoAgente,
@@ -82,11 +111,11 @@ export async function responderPergunta(
   deps: DepsDaPergunta,
 ): Promise<ResultadoDaPergunta> {
   const { registro } = deps;
-  const desde = inicioDoDiaDoLimite(deps.agora);
+  const limite = deps.limiteDiario;
 
-  const jaUsadas = await registro.contarPerguntas(escopo.userId, desde);
-  if (jaUsadas >= deps.limiteDiario) {
-    return { tipo: "limite_atingido", usadas_hoje: jaUsadas, limite: deps.limiteDiario };
+  const usadas = await registro.reservarPergunta(escopo.userId, diaDoLimite(deps.agora), limite);
+  if (usadas === null) {
+    return { tipo: "limite_atingido", usadas_hoje: limite, limite };
   }
 
   // A conversa do corpo só vale se for desta pessoa nesta organização.
@@ -98,19 +127,17 @@ export async function responderPergunta(
   // O histórico vem do BANCO, nunca do corpo: um "assistant" forjado no corpo
   // seria a forma mais barata de pôr palavras na boca da assistente.
   const historico = await registro.historico(escopo.userId, conversaId, MENSAGENS_DE_HISTORICO);
-  const perguntaId = await registro.gravarPergunta(escopo.userId, escopo.organizationId, conversaId, corpo.mensagem);
-  if (!(await registro.dentroDoLimite(escopo.userId, desde, perguntaId, deps.limiteDiario))) {
-    await registro.descartarPergunta(escopo.userId, perguntaId);
-    return { tipo: "limite_atingido", usadas_hoje: deps.limiteDiario, limite: deps.limiteDiario };
-  }
+  const pergunta = mascararTextoLivre(corpo.mensagem);
+  await registro.gravarPergunta(escopo.userId, escopo.organizationId, conversaId, pergunta);
 
   const mensagens: MensagemDoModelo[] = [
     { role: "system", content: mensagemDeSistema(deps.identidade, deps.contexto) },
     ...historico.map((m) => ({ role: m.role, content: m.content }) as MensagemDoModelo),
-    { role: "user", content: corpo.mensagem },
+    { role: "user", content: pergunta },
   ];
 
   const ferramentasUsadas: string[] = [];
+  const jaExecutadas = new Map<string, string>();
   let tokensIn = 0;
   let tokensOut = 0;
   let custoUsd: number | null = null;
@@ -118,10 +145,17 @@ export async function responderPergunta(
 
   const controle = new AbortController();
   const relogio = setTimeout(
-    () => controle.abort(new Error("tempo esgotado")),
+    () => controle.abort(new TempoEsgotado("tempo esgotado")),
     deps.tempoMaximoMs ?? TEMPO_MAXIMO_MS,
   );
   const tools = definicoesParaOModelo();
+  const consumo = () => ({
+    tokensIn,
+    tokensOut,
+    custoUsd,
+    modelo: deps.modelo,
+    ferramentas: ferramentasUsadas,
+  });
 
   try {
     for (let rodada = 0; rodada < RODADAS; rodada++) {
@@ -146,34 +180,56 @@ export async function responderPergunta(
       }
 
       mensagens.push({ role: "assistant", content: r.texto, tool_calls: r.chamadas });
-      for (const chamada of r.chamadas) {
-        ferramentasUsadas.push(chamada.function.name);
-        const conteudo = await deps.executarFerramenta(chamada.function.name, chamada.function.arguments ?? "");
+      // Todo `tool_call` pedido recebe UMA resposta `tool` (o modelo exige o
+      // par); o que passa do teto recebe erro em vez de rodar, e a repetição
+      // idêntica (mesmo nome, mesmos argumentos) reaproveita o resultado.
+      for (const [i, chamada] of r.chamadas.entries()) {
+        if (controle.signal.aborted) throw new TempoEsgotado("tempo esgotado");
+        const nome = chamada.function.name;
+        const args = chamada.function.arguments ?? "";
+        const chave = JSON.stringify([nome, args]);
+        let conteudo = jaExecutadas.get(chave);
+        if (conteudo === undefined) {
+          if (i >= FERRAMENTAS_POR_RODADA || ferramentasUsadas.length >= FERRAMENTAS_POR_PERGUNTA) {
+            conteudo = ERRO_DE_LIMITE_DE_FERRAMENTAS;
+          } else {
+            ferramentasUsadas.push(nome);
+            conteudo = await deps.executarFerramenta(nome, args, controle.signal);
+            jaExecutadas.set(chave, conteudo);
+          }
+        }
         mensagens.push({ role: "tool", tool_call_id: chamada.id, content: conteudo });
       }
     }
   } catch (e) {
-    if (!controle.signal.aborted) throw e;
+    if (!controle.signal.aborted && !(e instanceof TempoEsgotado)) {
+      // Falha do modelo (ou do banco): a pergunta já está gravada, e a conversa
+      // não pode ficar com ela sem resposta. Grava a falha e propaga.
+      await registro
+        .gravarResposta(
+          escopo.userId,
+          escopo.organizationId,
+          conversaId,
+          RESPOSTA_DE_FALHA,
+          consumo(),
+        )
+        .catch(() => {});
+      throw e;
+    }
     resposta = RESPOSTA_DE_TEMPO_ESGOTADO;
   } finally {
     clearTimeout(relogio);
   }
 
   const texto = resposta?.trim() || RESPOSTA_VAZIA;
-  await registro.gravarResposta(escopo.userId, escopo.organizationId, conversaId, texto, {
-    tokensIn,
-    tokensOut,
-    custoUsd,
-    modelo: deps.modelo,
-    ferramentas: ferramentasUsadas,
-  });
+  await registro.gravarResposta(escopo.userId, escopo.organizationId, conversaId, texto, consumo());
 
   return {
     tipo: "respondida",
     conversa_id: conversaId,
     resposta: texto,
-    usadas_hoje: jaUsadas + 1,
-    limite: deps.limiteDiario,
+    usadas_hoje: usadas,
+    limite,
     ferramentas: ferramentasUsadas,
     tokensIn,
     tokensOut,

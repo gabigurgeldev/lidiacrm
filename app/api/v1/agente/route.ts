@@ -4,6 +4,8 @@
  *   GET  → estado do widget: quantas perguntas hoje, o limite, e a conversa mais
  *          recente para reabrir o painel onde a pessoa parou.
  *   POST → uma pergunta; responde em texto (sem streaming). Lógica em `./_handler.ts`.
+ *   DELETE → apaga o histórico da PRÓPRIA pessoa nesta organização ("limpar
+ *          minha conversa"). Não devolve perguntas ao dia.
  *
  * ── Escopo ───────────────────────────────────────────────────────────────────
  *
@@ -18,8 +20,15 @@
  *
  * ── Limite ───────────────────────────────────────────────────────────────────
  *
- * `AGENTE_LIMITE_DIARIO` perguntas por pessoa por dia (São Paulo), contadas em
- * `agente_mensagens` — 429 `rate_limited` com `Retry-After` até a meia-noite.
+ * `AGENTE_LIMITE_DIARIO` perguntas por pessoa por dia (São Paulo), reservadas
+ * de forma atômica em `agente_uso_diario` — 429 `rate_limited` com
+ * `Retry-After` até a meia-noite.
+ *
+ * ── Corpo ────────────────────────────────────────────────────────────────────
+ *
+ * Só `application/json` e no máximo `TAMANHO_MAXIMO_DO_CORPO`. Self-host não tem
+ * o teto de corpo da Vercel na frente: sem isto, um POST de 50 MB seria lido
+ * inteiro para a memória antes de o Zod recusar a pergunta de 2.000 caracteres.
  *
  * ── Audit ────────────────────────────────────────────────────────────────────
  *
@@ -33,7 +42,7 @@ import { type EscopoDoAgente } from "@/agente/escopo";
 import { executarFerramenta } from "@/agente/ferramentas";
 import { chamarOpenRouter, ModeloIndisponivel } from "@/agente/openrouter.server";
 import { registroNoBanco, type RegistroDoAgente } from "@/agente/registro.server";
-import { fusoOuPadrao } from "@/agente/tempo";
+import { FUSO_PADRAO, fusoOuPadrao, inicioDoDia } from "@/agente/tempo";
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
@@ -45,13 +54,15 @@ import { tagDeIdioma } from "@/lib/i18n/datas";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 
-import { corpoDaPergunta, inicioDoDiaDoLimite, responderPergunta } from "./_handler";
+import { corpoDaPergunta, diaDoLimite, responderPergunta } from "./_handler";
 
 export const dynamic = "force-dynamic";
 // 25s do laço + folga para gravar. A Vercel corta em 10s sem isto.
 export const maxDuration = 30;
 
 const MENSAGENS_NO_PAINEL = 30;
+/** A pergunta tem até 2.000 caracteres; 16 KB cobre isso em qualquer codificação, com folga. */
+const TAMANHO_MAXIMO_DO_CORPO = 16 * 1024;
 
 interface Sessao {
   user: AuthUser;
@@ -73,7 +84,11 @@ async function sessaoDoAgente(
     .select("display_name, timezone, settings")
     .eq("id", check.org.orgId)
     .maybeSingle();
-  const linha = orgRow as { display_name?: string; timezone?: string | null; settings?: unknown } | null;
+  const linha = orgRow as {
+    display_name?: string;
+    timezone?: string | null;
+    settings?: unknown;
+  } | null;
   const settings = (linha?.settings ?? null) as { visibility_mode?: VisibilityMode } | null;
 
   // A marca nunca derruba a rota: o resolvedor degrada para o padrão do produto.
@@ -97,7 +112,7 @@ async function sessaoDoAgente(
 }
 
 function segundosAteAmanha(agora: Date): number {
-  const amanha = inicioDoDiaDoLimite(new Date(agora.getTime() + 24 * 3600_000));
+  const amanha = inicioDoDia(FUSO_PADRAO, agora, 1);
   return Math.max(60, Math.ceil((amanha.getTime() - agora.getTime()) / 1000));
 }
 
@@ -110,7 +125,7 @@ export async function GET(): Promise<Response> {
   try {
     const registro: RegistroDoAgente = registroNoBanco();
     const [usadas, conversaId] = await Promise.all([
-      registro.contarPerguntas(escopo.userId, inicioDoDiaDoLimite(new Date())),
+      registro.usadasNoDia(escopo.userId, diaDoLimite(new Date())),
       registro.ultimaConversa(escopo.userId, escopo.organizationId),
     ]);
     const mensagens = conversaId
@@ -132,7 +147,9 @@ export async function GET(): Promise<Response> {
       organizationId: escopo.organizationId,
       detalhe: err instanceof Error ? err.message : String(err),
     });
-    return fail("internal_error", "Não foi possível carregar a assistente agora.", 500, { requestId });
+    return fail("internal_error", "Não foi possível carregar a assistente agora.", 500, {
+      requestId,
+    });
   }
 }
 
@@ -142,12 +159,9 @@ export async function POST(req: NextRequest): Promise<Response> {
   if (!s.ok) return s.response;
   const { escopo, user, nomeDaOrganizacao, nomeDoProduto } = s.sessao;
 
-  let bruto: unknown;
-  try {
-    bruto = await req.json();
-  } catch {
-    return fail("validation_failed", "Corpo inválido.", 422, { requestId });
-  }
+  const corpo = await lerCorpo(req, requestId);
+  if (!corpo.ok) return corpo.response;
+  const bruto = corpo.json;
   const parsed = corpoDaPergunta.safeParse(bruto);
   if (!parsed.success) {
     return fail("validation_failed", parsed.error.issues[0]?.message ?? "Pergunta inválida.", 422, {
@@ -170,7 +184,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     const resultado = await responderPergunta(escopo, parsed.data, {
       registro: registroNoBanco(),
       chamarModelo: chamarOpenRouter(env.AGENTE_OPENROUTER_API_KEY),
-      executarFerramenta: (nome, args) => executarFerramenta(nome, args, contextoDaFerramenta),
+      executarFerramenta: (nome, args, signal) =>
+        executarFerramenta(nome, args, { ...contextoDaFerramenta, signal }),
       modelo: env.AGENTE_MODEL,
       limiteDiario: env.AGENTE_LIMITE_DIARIO,
       identidade: { nomeDoAgente: env.AGENTE_NOME, nomeDoProduto },
@@ -227,7 +242,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       { requestId },
     );
     res.headers.set("X-RateLimit-Limit", String(resultado.limite));
-    res.headers.set("X-RateLimit-Remaining", String(Math.max(0, resultado.limite - resultado.usadas_hoje)));
+    res.headers.set(
+      "X-RateLimit-Remaining",
+      String(Math.max(0, resultado.limite - resultado.usadas_hoje)),
+    );
     return res;
   } catch (err) {
     const indisponivel = err instanceof ModeloIndisponivel;
@@ -243,5 +261,86 @@ export async function POST(req: NextRequest): Promise<Response> {
       indisponivel ? 503 : 500,
       { requestId },
     );
+  }
+}
+
+export async function DELETE(): Promise<Response> {
+  const requestId = randomUUID();
+  const s = await sessaoDoAgente(requestId);
+  if (!s.ok) return s.response;
+  const { escopo } = s.sessao;
+
+  try {
+    // `userId` e `organizationId` da SESSÃO: só o histórico de quem pede, só
+    // nesta organização. O contador do dia fica — limpar não dá perguntas extras.
+    const apagadas = await registroNoBanco().limparHistorico(escopo.userId, escopo.organizationId);
+    if (apagadas > 0) {
+      void audit({
+        action: "agente.historico_limpo",
+        actorUserId: escopo.userId,
+        organizationId: escopo.organizationId,
+        resourceType: "agente_conversas",
+        resourceId: null,
+        requestId,
+        metadata: { conversas: apagadas },
+      });
+    }
+    return ok({ conversas_apagadas: apagadas }, { requestId });
+  } catch (err) {
+    logger.error("agente: limpeza do histórico falhou", {
+      requestId,
+      organizationId: escopo.organizationId,
+      detalhe: err instanceof Error ? err.message : String(err),
+    });
+    return fail("internal_error", "Não foi possível limpar o histórico agora.", 500, { requestId });
+  }
+}
+
+async function lerCorpo(
+  req: NextRequest,
+  requestId: string,
+): Promise<{ ok: true; json: unknown } | { ok: false; response: Response }> {
+  const tipo = req.headers.get("content-type") ?? "";
+  if (!/^application\/json\b/i.test(tipo)) {
+    return {
+      ok: false,
+      response: fail("unsupported_media_type", "Envie a pergunta como application/json.", 415, {
+        requestId,
+      }),
+    };
+  }
+  const grande = () => ({
+    ok: false as const,
+    response: fail("payload_too_large", "A pergunta é grande demais.", 413, { requestId }),
+  });
+  const declarado = Number(req.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declarado) && declarado > TAMANHO_MAXIMO_DO_CORPO) return grande();
+
+  // O cabeçalho pode mentir (ou faltar, com chunked): lê em pedaços e para no teto.
+  const leitor = req.body?.getReader();
+  if (!leitor)
+    return {
+      ok: false,
+      response: fail("validation_failed", "Corpo inválido.", 422, { requestId }),
+    };
+  const pedacos: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await leitor.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > TAMANHO_MAXIMO_DO_CORPO) {
+      await leitor.cancel().catch(() => {});
+      return grande();
+    }
+    pedacos.push(value);
+  }
+  try {
+    return { ok: true, json: JSON.parse(new TextDecoder().decode(Buffer.concat(pedacos))) };
+  } catch {
+    return {
+      ok: false,
+      response: fail("validation_failed", "Corpo inválido.", 422, { requestId }),
+    };
   }
 }

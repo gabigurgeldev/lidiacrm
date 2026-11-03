@@ -12,6 +12,8 @@
  * Formato OpenAI (`/chat/completions`, `tools`), que o OpenRouter fala para
  * qualquer modelo. Sem streaming na v1: o widget mostra "digitando…".
  */
+import "./so-no-servidor";
+
 const URL_DO_OPENROUTER = "https://openrouter.ai/api/v1/chat/completions";
 
 export interface ChamadaDeFerramenta {
@@ -50,7 +52,10 @@ export interface RespostaDoModelo {
   custoUsd: number | null;
 }
 
-export type ChamarModelo = (pedido: PedidoAoModelo, sinal: AbortSignal) => Promise<RespostaDoModelo>;
+export type ChamarModelo = (
+  pedido: PedidoAoModelo,
+  sinal: AbortSignal,
+) => Promise<RespostaDoModelo>;
 
 export class ModeloIndisponivel extends Error {
   constructor(
@@ -75,6 +80,16 @@ const esperar = (ms: number, sinal: AbortSignal) =>
     );
   });
 
+/**
+ * O corpo enviado ao OpenRouter. `provider.data_collection: "deny"` restringe o
+ * roteamento a provedores que NÃO guardam nem treinam com o pedido — a
+ * conversa leva nome de cliente da empresa, e quem decide para onde vai esse
+ * dado é o controlador, não o provedor mais barato da vez.
+ */
+export function corpoDoPedido(pedido: PedidoAoModelo) {
+  return { ...pedido, usage: { include: true }, provider: { data_collection: "deny" as const } };
+}
+
 export function chamarOpenRouter(apiKey: string): ChamarModelo {
   return async (pedido, sinal) => {
     // Uma nova tentativa em 429/5xx — o limite de 25s do laço é quem manda.
@@ -86,7 +101,7 @@ export function chamarOpenRouter(apiKey: string): ChamarModelo {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ ...pedido, usage: { include: true } }),
+        body: JSON.stringify(corpoDoPedido(pedido)),
       });
 
       if ((resp.status === 429 || resp.status >= 500) && tentativa === 0) {
@@ -99,7 +114,9 @@ export function chamarOpenRouter(apiKey: string): ChamarModelo {
       }
 
       const corpo = (await resp.json()) as {
-        choices?: Array<{ message?: { content?: string | null; tool_calls?: ChamadaDeFerramenta[] } }>;
+        choices?: Array<{
+          message?: { content?: string | null; tool_calls?: ChamadaDeFerramenta[] };
+        }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
       };
       const msg = corpo.choices?.[0]?.message;

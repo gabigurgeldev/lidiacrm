@@ -17,12 +17,17 @@ A Lia:
 - nunca fala de outra conta, e respeita o papel de quem pergunta (atendente vê
   só o que já vê nas telas).
 
-Cada pessoa tem até 50 perguntas por dia. O histórico fica salvo e só a própria
-pessoa o vê.
+Cada pessoa tem até 50 perguntas por dia. O histórico fica salvo por 90 dias
+(apagado pela limpeza diária), só a própria pessoa o vê, e ela pode apagá-lo
+antes em **Limpar histórico**. Telefone, documento e e-mail colados na pergunta
+são mascarados antes de gravar; quando um contato é anonimizado (LGPD), o nome
+dele some também desse histórico. Os pedidos ao OpenRouter saem com
+`data_collection: deny` (só provedores que não guardam o pedido).
 
 Para ligar, quem opera o servidor preenche no `.env` a chave própria da
 assistente na OpenRouter — `AGENTE_OPENROUTER_API_KEY` — e reinicia o app. Sem
 ela a bolinha aparece e avisa que a assistente está indisponível. Opcionais:
 `AGENTE_MODEL` (padrão `anthropic/claude-haiku-5.5`), `AGENTE_LIMITE_DIARIO`
-(padrão 50) e `AGENTE_NOME` (padrão Lia). O banco ganha duas tabelas de
-histórico (migration 0250), aplicadas pelo próprio update.
+(padrão 50) e `AGENTE_NOME` (padrão Lia). O banco ganha as tabelas de
+histórico e do contador diário (migrations 0250 e 0251), aplicadas pelo próprio
+update.

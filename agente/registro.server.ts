@@ -10,13 +10,16 @@
  *  - só toca as duas tabelas `agente_*`;
  *  - `userId` e `organizationId` chegam do chamador, que os tira da SESSÃO
  *    (`requireRole`), nunca do corpo da requisição;
- *  - toda leitura filtra `user_id` (e a conversa, também `organization_id`):
+ *  - toda leitura e toda escrita filtram `user_id` (e a conversa, também
+ *    `organization_id`):
  *    uma `conversa_id` de outra pessoa no corpo devolve "não achei", e a
  *    pergunta abre conversa nova.
  *
  * As ferramentas (`agente/ferramentas.ts`) NUNCA importam este arquivo nem o
  * admin client — `tests/unit/agente-isolamento.test.ts` reprova.
  */
+import "./so-no-servidor";
+
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -38,24 +41,31 @@ export interface ConsumoDaResposta {
 }
 
 export interface RegistroDoAgente {
-  /** Perguntas (`role='user'`) da pessoa desde `desde` — em qualquer organização. */
-  contarPerguntas(userId: string, desde: Date): Promise<number>;
+  /** Perguntas já reservadas pela pessoa no `dia` (AAAA-MM-DD, fuso de São Paulo). */
+  usadasNoDia(userId: string, dia: string): Promise<number>;
+  /**
+   * Reserva UMA pergunta no dia, atômica (`fn_agente_reservar_pergunta`):
+   * devolve quantas a pessoa já usou contando esta, ou `null` se o dia já
+   * estava no limite — e aí nada foi reservado.
+   */
+  reservarPergunta(userId: string, dia: string, limite: number): Promise<number | null>;
   /** A conversa, se for desta pessoa nesta organização; senão `null`. */
-  conversaValida(userId: string, organizationId: string, conversaId: string): Promise<string | null>;
+  conversaValida(
+    userId: string,
+    organizationId: string,
+    conversaId: string,
+  ): Promise<string | null>;
   abrirConversa(userId: string, organizationId: string): Promise<string>;
   /** As últimas `n` mensagens da conversa, da mais antiga para a mais nova. */
   historico(userId: string, conversaId: string, n: number): Promise<MensagemGravada[]>;
   /** A conversa mais recente da pessoa nesta organização. */
   ultimaConversa(userId: string, organizationId: string): Promise<string | null>;
-  /** Grava a pergunta e devolve o id dela. */
-  gravarPergunta(userId: string, organizationId: string, conversaId: string, texto: string): Promise<string>;
-  /**
-   * A pergunta `perguntaId` está entre as `limite` primeiras do dia da pessoa?
-   * Ordem por `created_at, id` — a mesma para todas as requisições que olham.
-   */
-  dentroDoLimite(userId: string, desde: Date, perguntaId: string, limite: number): Promise<boolean>;
-  /** Apaga a pergunta que estourou o limite (só dela, só desta pessoa). */
-  descartarPergunta(userId: string, perguntaId: string): Promise<void>;
+  gravarPergunta(
+    userId: string,
+    organizationId: string,
+    conversaId: string,
+    texto: string,
+  ): Promise<void>;
   gravarResposta(
     userId: string,
     organizationId: string,
@@ -63,19 +73,34 @@ export interface RegistroDoAgente {
     texto: string,
     consumo: ConsumoDaResposta,
   ): Promise<void>;
+  /**
+   * Apaga TODAS as conversas da pessoa nesta organização (as mensagens vão em
+   * cascata). Não devolve perguntas ao dia: o contador é outra tabela.
+   */
+  limparHistorico(userId: string, organizationId: string): Promise<number>;
 }
 
 export function registroNoBanco(admin: SupabaseClient = createAdminClient()): RegistroDoAgente {
   return {
-    async contarPerguntas(userId, desde) {
-      const { count, error } = await admin
-        .from("agente_mensagens")
-        .select("id", { count: "exact", head: true })
+    async usadasNoDia(userId, dia) {
+      const { data, error } = await admin
+        .from("agente_uso_diario")
+        .select("perguntas")
         .eq("user_id", userId)
-        .eq("role", "user")
-        .gte("created_at", desde.toISOString());
-      if (error) throw new Error(`agente_mensagens (contagem): ${error.message}`);
-      return count ?? 0;
+        .eq("dia", dia)
+        .maybeSingle();
+      if (error) throw new Error(`agente_uso_diario (leitura): ${error.message}`);
+      return (data as { perguntas: number } | null)?.perguntas ?? 0;
+    },
+
+    async reservarPergunta(userId, dia, limite) {
+      const { data, error } = await admin.rpc("fn_agente_reservar_pergunta", {
+        p_user_id: userId,
+        p_dia: dia,
+        p_limite: limite,
+      });
+      if (error) throw new Error(`fn_agente_reservar_pergunta: ${error.message}`);
+      return typeof data === "number" ? data : null;
     },
 
     async conversaValida(userId, organizationId, conversaId) {
@@ -96,7 +121,8 @@ export function registroNoBanco(admin: SupabaseClient = createAdminClient()): Re
         .insert({ user_id: userId, organization_id: organizationId })
         .select("id")
         .single();
-      if (error || !data) throw new Error(`agente_conversas (criação): ${error?.message ?? "sem linha"}`);
+      if (error || !data)
+        throw new Error(`agente_conversas (criação): ${error?.message ?? "sem linha"}`);
       return (data as { id: string }).id;
     },
 
@@ -126,43 +152,14 @@ export function registroNoBanco(admin: SupabaseClient = createAdminClient()): Re
     },
 
     async gravarPergunta(userId, organizationId, conversaId, texto) {
-      const { data, error } = await admin
-        .from("agente_mensagens")
-        .insert({
-          user_id: userId,
-          organization_id: organizationId,
-          conversa_id: conversaId,
-          role: "user",
-          content: texto,
-        })
-        .select("id")
-        .single();
-      if (error || !data) throw new Error(`agente_mensagens (pergunta): ${error?.message ?? "sem linha"}`);
-      return (data as { id: string }).id;
-    },
-
-    async dentroDoLimite(userId, desde, perguntaId, limite) {
-      const { data, error } = await admin
-        .from("agente_mensagens")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("role", "user")
-        .gte("created_at", desde.toISOString())
-        .order("created_at", { ascending: true })
-        .order("id", { ascending: true })
-        .limit(limite);
-      if (error) throw new Error(`agente_mensagens (limite): ${error.message}`);
-      return ((data ?? []) as Array<{ id: string }>).some((m) => m.id === perguntaId);
-    },
-
-    async descartarPergunta(userId, perguntaId) {
-      const { error } = await admin
-        .from("agente_mensagens")
-        .delete()
-        .eq("id", perguntaId)
-        .eq("user_id", userId)
-        .eq("role", "user");
-      if (error) throw new Error(`agente_mensagens (descarte): ${error.message}`);
+      const { error } = await admin.from("agente_mensagens").insert({
+        user_id: userId,
+        organization_id: organizationId,
+        conversa_id: conversaId,
+        role: "user",
+        content: texto,
+      });
+      if (error) throw new Error(`agente_mensagens (pergunta): ${error.message}`);
     },
 
     async gravarResposta(userId, organizationId, conversaId, texto, consumo) {
@@ -182,6 +179,17 @@ export function registroNoBanco(admin: SupabaseClient = createAdminClient()): Re
         modelo: consumo.modelo,
       });
       if (error) throw new Error(`agente_mensagens (resposta): ${error.message}`);
+    },
+
+    async limparHistorico(userId, organizationId) {
+      const { data, error } = await admin
+        .from("agente_conversas")
+        .delete()
+        .eq("user_id", userId)
+        .eq("organization_id", organizationId)
+        .select("id");
+      if (error) throw new Error(`agente_conversas (limpeza): ${error.message}`);
+      return (data ?? []).length;
     },
   };
 }

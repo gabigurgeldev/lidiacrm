@@ -80,8 +80,18 @@ describe("0250 · histórico da assistente de suporte: cada um lê o seu, ningu�
   });
 
   it("membro de outra organização não lê nada da A", () => {
-    expect(countAs(PESSOA_B, `select count(*) from public.agente_mensagens where organization_id = '${ORG_A}';`)).toBe(0);
-    expect(countAs(PESSOA_B, `select count(*) from public.agente_conversas where organization_id = '${ORG_A}';`)).toBe(0);
+    expect(
+      countAs(
+        PESSOA_B,
+        `select count(*) from public.agente_mensagens where organization_id = '${ORG_A}';`,
+      ),
+    ).toBe(0);
+    expect(
+      countAs(
+        PESSOA_B,
+        `select count(*) from public.agente_conversas where organization_id = '${ORG_A}';`,
+      ),
+    ).toBe(0);
   });
 
   it("nem o admin da MESMA organização lê a conversa de ajuda de outra pessoa", () => {
@@ -106,13 +116,98 @@ describe("0250 · histórico da assistente de suporte: cada um lê o seu, ningu�
   });
 
   it("o cliente NÃO apaga nem edita o próprio histórico — permission denied", () => {
-    expect(erroComo(PESSOA_A, `delete from public.agente_mensagens where conversa_id = '${CONV_A}'`)).toMatch(
+    expect(
+      erroComo(PESSOA_A, `delete from public.agente_mensagens where conversa_id = '${CONV_A}'`),
+    ).toMatch(/permission denied/);
+    expect(
+      erroComo(
+        PESSOA_A,
+        `update public.agente_mensagens set content = 'x' where conversa_id = '${CONV_A}'`,
+      ),
+    ).toMatch(/permission denied/);
+    expect(
+      sql(`select count(*) from public.agente_mensagens where conversa_id = '${CONV_A}'`),
+    ).toBe("1");
+  });
+
+  it("0251 · quem saiu da organização não segue lendo o que perguntou lá", () => {
+    sql(`update public.user_organizations set revoked_at = now()
+          where user_id = '${PESSOA_A}' and organization_id = '${ORG_A}'`);
+    try {
+      expect(countAs(PESSOA_A, `select count(*) from public.agente_mensagens;`)).toBe(0);
+      expect(countAs(PESSOA_A, `select count(*) from public.agente_conversas;`)).toBe(0);
+    } finally {
+      sql(`update public.user_organizations set revoked_at = null
+            where user_id = '${PESSOA_A}' and organization_id = '${ORG_A}'`);
+    }
+    expect(countAs(PESSOA_A, `select count(*) from public.agente_mensagens;`)).toBe(1);
+  });
+
+  it("0251 · a reserva diária para no teto, e o cliente não a alcança", () => {
+    sql(`delete from public.agente_uso_diario where user_id = '${PESSOA_B}'`);
+    const reservar = () =>
+      sql(
+        `select coalesce(public.fn_agente_reservar_pergunta('${PESSOA_B}', '2026-11-03', 2)::text, 'null')`,
+      );
+    expect([reservar(), reservar(), reservar()]).toEqual(["1", "2", "null"]);
+    expect(
+      sql(
+        `select perguntas from public.agente_uso_diario where user_id = '${PESSOA_B}' and dia = '2026-11-03'`,
+      ),
+    ).toBe("2");
+
+    expect(
+      erroComo(
+        PESSOA_B,
+        `select public.fn_agente_reservar_pergunta('${PESSOA_B}', '2026-11-04', 50)`,
+      ),
+    ).toMatch(/permission denied/);
+    expect(erroComo(PESSOA_B, `select * from public.agente_uso_diario`)).toMatch(
       /permission denied/,
     );
+  });
+
+  it("0251 · contato anonimizado some também do histórico da assistente da organização (e só dela)", () => {
+    const CONTATO = "0250aaaa-3333-4000-8000-000000000001";
+    sql(`
+      insert into public.contacts (id, organization_id, name, display_name)
+        values ('${CONTATO}', '${ORG_A}', 'Joaquina Prado', 'Joaquina') on conflict do nothing;
+      insert into public.agente_mensagens (organization_id, conversa_id, user_id, role, content)
+        values ('${ORG_A}', '${CONV_A}', '${PESSOA_A}', 'assistant', 'A conversa com JOAQUINA PRADO está aberta.'),
+               ('${ORG_B}', '${CONV_B}', '${PESSOA_B}', 'assistant', 'Joaquina Prado é de outra empresa.');
+      update public.contacts set name = 'Cliente Anonimizado #1', display_name = 'Cliente Anonimizado #1',
+             is_anonymized = true, anonymized_at = now() where id = '${CONTATO}';
+    `);
     expect(
-      erroComo(PESSOA_A, `update public.agente_mensagens set content = 'x' where conversa_id = '${CONV_A}'`),
-    ).toMatch(/permission denied/);
-    expect(sql(`select count(*) from public.agente_mensagens where conversa_id = '${CONV_A}'`)).toBe("1");
+      sql(
+        `select count(*) from public.agente_mensagens where organization_id = '${ORG_A}' and content ilike '%joaquina%'`,
+      ),
+    ).toBe("0");
+    expect(
+      sql(
+        `select count(*) from public.agente_mensagens where content = 'A conversa com Cliente anonimizado está aberta.'`,
+      ),
+    ).toBe("1");
+    // A outra organização tem outro contato com o mesmo nome — não é o anonimizado.
+    expect(
+      sql(
+        `select count(*) from public.agente_mensagens where organization_id = '${ORG_B}' and content ilike '%joaquina%'`,
+      ),
+    ).toBe("1");
+  });
+
+  it("0251 · o expurgo respeita o piso de 30 dias no corpo da função", () => {
+    sql(`
+      insert into public.agente_mensagens (organization_id, conversa_id, user_id, role, content, created_at)
+        values ('${ORG_A}', '${CONV_A}', '${PESSOA_A}', 'user', 'velha', now() - interval '200 days'),
+               ('${ORG_A}', '${CONV_A}', '${PESSOA_A}', 'user', 'de vinte dias', now() - interval '20 days');
+    `);
+    // Pedir 1 dia vira 30: a de vinte dias fica.
+    sql(`select public.fn_expurgar_historico_do_agente(1, 1000)`);
+    expect(sql(`select count(*) from public.agente_mensagens where content = 'velha'`)).toBe("0");
+    expect(
+      sql(`select count(*) from public.agente_mensagens where content = 'de vinte dias'`),
+    ).toBe("1");
   });
 
   it("role fora do vocabulário é recusado pelo CHECK", () => {

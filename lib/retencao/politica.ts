@@ -101,6 +101,16 @@ export const RETENCAO_CAPTACAO_DIAS_PISO = 30;
 export const RETENCAO_INTEGRACOES_API_DIAS_PADRAO = 90;
 export const RETENCAO_INTEGRACOES_API_DIAS_PISO = 30;
 
+/**
+ * Histórico de conversa com a assistente de suporte (migration 0251).
+ *
+ * É ajuda de uso, não registro: a pergunta "onde fica X" de três meses atrás
+ * não serve a ninguém, e a resposta pode ter citado cliente pelo nome. Sem knob
+ * de ambiente: o piso e o padrão moram em `fn_expurgar_historico_do_agente`.
+ */
+export const RETENCAO_HISTORICO_AGENTE_DIAS_PADRAO = 90;
+export const RETENCAO_HISTORICO_AGENTE_DIAS_PISO = 30;
+
 export interface RetencaoInterpretada {
   /** Dias a pedir ao banco. Nunca abaixo do piso, nunca `NaN`. */
   readonly dias: number;

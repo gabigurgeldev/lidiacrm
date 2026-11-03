@@ -18,24 +18,47 @@ process.env.AGENTE_LIMITE_DIARIO = "50";
 
 const estado = {
   cookieOrg: ORG_B as string | undefined,
-  memberships: [] as Array<{ organization_id: string; role: string; accepted_at: string; organizations: { display_name: string; locale: null } }>,
+  memberships: [] as Array<{
+    organization_id: string;
+    role: string;
+    accepted_at: string;
+    organizations: { display_name: string; locale: null };
+  }>,
   perguntasHoje: 0,
 };
 const consultasDoAdmin: Array<{ tabela: string; filtros: unknown[][] }> = [];
+const rpcsDoAdmin: Array<{ fn: string; args: Record<string, unknown> }> = [];
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({
-    get: (nome: string) => (nome === "active_org" && estado.cookieOrg ? { value: estado.cookieOrg } : undefined),
+    get: (nome: string) =>
+      nome === "active_org" && estado.cookieOrg ? { value: estado.cookieOrg } : undefined,
     getAll: () => [],
     set: () => {},
   }),
 }));
-vi.mock("next/navigation", () => ({ redirect: () => { throw new Error("redirect"); } }));
+vi.mock("next/navigation", () => ({
+  redirect: () => {
+    throw new Error("redirect");
+  },
+}));
 
 /** Cadeia thenable mínima: registra filtros e devolve `resultado()` no fim. */
 function cadeia(resultado: () => unknown, filtros: unknown[][] = []) {
   const c: Record<string, unknown> = {};
-  for (const m of ["select", "eq", "is", "order", "limit", "gte", "in", "or", "not", "lt"]) {
+  for (const m of [
+    "select",
+    "eq",
+    "is",
+    "order",
+    "limit",
+    "gte",
+    "in",
+    "or",
+    "not",
+    "lt",
+    "delete",
+  ]) {
     c[m] = (...args: unknown[]) => {
       filtros.push([m, ...args]);
       return c;
@@ -43,14 +66,18 @@ function cadeia(resultado: () => unknown, filtros: unknown[][] = []) {
   }
   c.maybeSingle = async () => resultado();
   c.single = async () => resultado();
-  c.then = (ok: (v: unknown) => unknown, erro?: (e: unknown) => unknown) => Promise.resolve(resultado()).then(ok, erro);
+  c.then = (ok: (v: unknown) => unknown, erro?: (e: unknown) => unknown) =>
+    Promise.resolve(resultado()).then(ok, erro);
   return c;
 }
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: {
-      getUser: async () => ({ data: { user: { id: ADMIN, email: "adm@x.y", user_metadata: {} } }, error: null }),
+      getUser: async () => ({
+        data: { user: { id: ADMIN, email: "adm@x.y", user_metadata: {} } },
+        error: null,
+      }),
     },
     rpc: async (_fn: string, args: { p_org: string }) => ({
       data: estado.memberships.find((m) => m.organization_id === args.p_org)?.role ?? null,
@@ -58,9 +85,11 @@ vi.mock("@/lib/supabase/server", () => ({
     }),
     from: (tabela: string) =>
       cadeia(() => {
-        if (tabela === "platform_admins") return { data: { user_id: ADMIN, revoked_at: null }, error: null };
+        if (tabela === "platform_admins")
+          return { data: { user_id: ADMIN, revoked_at: null }, error: null };
         if (tabela === "user_organizations") return { data: estado.memberships, error: null };
-        if (tabela === "organizations") return { data: { display_name: "Empresa A", timezone: null, settings: {} }, error: null };
+        if (tabela === "organizations")
+          return { data: { display_name: "Empresa A", timezone: null, settings: {} }, error: null };
         return { data: null, error: null };
       }),
   }),
@@ -71,20 +100,31 @@ const createAdminClient = vi.fn(() => ({
     const filtros: unknown[][] = [];
     consultasDoAdmin.push({ tabela, filtros });
     return cadeia(() => {
-      if (tabela === "agente_mensagens") return { data: [], error: null, count: estado.perguntasHoje };
+      if (tabela === "agente_uso_diario")
+        return { data: { perguntas: estado.perguntasHoje }, error: null };
+      if (tabela === "agente_conversas") return { data: [{ id: "c1" }], error: null };
       return { data: null, error: null };
     }, filtros);
   },
+  // Imita `fn_agente_reservar_pergunta`: null no limite, senão o contador novo.
+  rpc: async (fn: string, args: { p_limite: number }) => {
+    rpcsDoAdmin.push({ fn, args });
+    if (estado.perguntasHoje >= args.p_limite) return { data: null, error: null };
+    estado.perguntasHoje += 1;
+    return { data: estado.perguntasHoje, error: null };
+  },
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient }));
-vi.mock("@/lib/billing/servico", () => ({ acessoDaOrganizacao: async () => ({ estado: { liberado: true } }) }));
+vi.mock("@/lib/billing/servico", () => ({
+  acessoDaOrganizacao: async () => ({ estado: { liberado: true } }),
+}));
 vi.mock("@/lib/branding/instalacao", () => ({ marcaDaInstalacao: async () => null }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => {}) }));
 
 const fetchEspiao = vi.fn(async () => new Response("{}", { status: 500 }));
 vi.stubGlobal("fetch", fetchEspiao);
 
-const { GET, POST } = await import("@/app/api/v1/agente/route");
+const { DELETE, GET, POST } = await import("@/app/api/v1/agente/route");
 
 function postar(corpo: unknown) {
   return POST(
@@ -101,6 +141,7 @@ beforeEach(() => {
   estado.memberships = [];
   estado.perguntasHoje = 0;
   consultasDoAdmin.length = 0;
+  rpcsDoAdmin.length = 0;
   createAdminClient.mockClear();
   fetchEspiao.mockClear();
 });
@@ -119,7 +160,12 @@ describe("rota da assistente · escopo vem da membership, nunca do admin de plat
 
   it("platform admin membro só da A, cookie na B → o escopo é a A", async () => {
     estado.memberships = [
-      { organization_id: ORG_A, role: "agent", accepted_at: "2026-01-01", organizations: { display_name: "Empresa A", locale: null } },
+      {
+        organization_id: ORG_A,
+        role: "agent",
+        accepted_at: "2026-01-01",
+        organizations: { display_name: "Empresa A", locale: null },
+      },
     ];
     const r = await GET();
     expect(r.status).toBe(200);
@@ -127,7 +173,11 @@ describe("rota da assistente · escopo vem da membership, nunca do admin de plat
     expect(filtros).toContain(ORG_A);
     expect(filtros).not.toContain(ORG_B);
     // E o histórico é sempre do próprio usuário.
-    expect(consultasDoAdmin.every((c) => c.filtros.some(([m, col, v]) => m === "eq" && col === "user_id" && v === ADMIN))).toBe(true);
+    expect(
+      consultasDoAdmin.every((c) =>
+        c.filtros.some(([m, col, v]) => m === "eq" && col === "user_id" && v === ADMIN),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -135,7 +185,12 @@ describe("rota da assistente · limite e entrada", () => {
   beforeEach(() => {
     estado.cookieOrg = ORG_A;
     estado.memberships = [
-      { organization_id: ORG_A, role: "viewer", accepted_at: "2026-01-01", organizations: { display_name: "Empresa A", locale: null } },
+      {
+        organization_id: ORG_A,
+        role: "viewer",
+        accepted_at: "2026-01-01",
+        organizations: { display_name: "Empresa A", locale: null },
+      },
     ];
   });
 
@@ -153,6 +208,51 @@ describe("rota da assistente · limite e entrada", () => {
     const r = await postar({ mensagem: "x".repeat(2001) });
     expect(r.status).toBe(422);
     expect(consultasDoAdmin).toHaveLength(0);
+    expect(rpcsDoAdmin).toHaveLength(0);
     expect(fetchEspiao).not.toHaveBeenCalled();
+  });
+
+  it("corpo que não é application/json → 415, sem ler nada", async () => {
+    const r = await POST(
+      new Request("http://localhost/api/v1/agente", {
+        method: "POST",
+        headers: { "content-type": "text/plain" },
+        body: JSON.stringify({ mensagem: "oi" }),
+      }) as never,
+    );
+    expect(r.status).toBe(415);
+    expect(rpcsDoAdmin).toHaveLength(0);
+  });
+
+  it("corpo acima de 16 KB → 413 — mesmo sem content-length (chunked) o teto vale", async () => {
+    const enorme = JSON.stringify({ mensagem: "x".repeat(20_000) });
+    const fluxo = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(enorme));
+        c.close();
+      },
+    });
+    const r = await POST(
+      new Request("http://localhost/api/v1/agente", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: fluxo,
+        duplex: "half",
+      } as RequestInit) as never,
+    );
+    expect(r.status).toBe(413);
+    expect(rpcsDoAdmin).toHaveLength(0);
+    expect(fetchEspiao).not.toHaveBeenCalled();
+  });
+
+  it("DELETE apaga só o histórico da própria pessoa, nesta organização — e o contador do dia fica", async () => {
+    estado.perguntasHoje = 12;
+    const r = await DELETE();
+    expect(r.status).toBe(200);
+    const limpeza = consultasDoAdmin.find((c) => c.tabela === "agente_conversas")!;
+    expect(limpeza.filtros).toContainEqual(["eq", "user_id", ADMIN]);
+    expect(limpeza.filtros).toContainEqual(["eq", "organization_id", ORG_A]);
+    expect(consultasDoAdmin.some((c) => c.tabela === "agente_uso_diario")).toBe(false);
+    expect(estado.perguntasHoje).toBe(12);
   });
 });

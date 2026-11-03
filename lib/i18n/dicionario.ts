@@ -8783,6 +8783,11 @@ export const DICIONARIO: Traducoes = {
   "Escreva sua dúvida…": { es: "Escribe tu duda…" },
   "Sua pergunta": { es: "Tu pregunta" },
   "Nova conversa": { es: "Nueva conversación" },
+  "Limpar histórico": { es: "Borrar historial" },
+  "Apagar todo o seu histórico de conversas com a assistente? As perguntas de hoje continuam contando.": {
+    es: "¿Borrar todo tu historial de conversaciones con la asistente? Las preguntas de hoy siguen contando.",
+  },
+  "Não consegui apagar o histórico agora. Tente de novo.": { es: "No pude borrar el historial ahora. Inténtalo de nuevo." },
   "Você atingiu o limite de perguntas de hoje. Amanhã ele renova.": { es: "Alcanzaste el límite de preguntas de hoy. Mañana se renueva." },
   "Não consegui responder agora. Tente de novo em instantes.": { es: "No pude responder ahora. Inténtalo de nuevo en unos instantes." },
 };

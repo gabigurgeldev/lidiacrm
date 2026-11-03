@@ -1,11 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { EscopoDoAgente } from "@/agente/escopo";
-import type { PedidoAoModelo, RespostaDoModelo } from "@/agente/openrouter.server";
+import {
+  corpoDoPedido,
+  ModeloIndisponivel,
+  type PedidoAoModelo,
+  type RespostaDoModelo,
+} from "@/agente/openrouter.server";
 import type { MensagemGravada, RegistroDoAgente } from "@/agente/registro.server";
 import {
   corpoDaPergunta,
-  inicioDoDiaDoLimite,
+  diaDoLimite,
+  FERRAMENTAS_POR_PERGUNTA,
+  FERRAMENTAS_POR_RODADA,
   responderPergunta,
   RODADAS,
   TAMANHO_MAXIMO_DA_PERGUNTA,
@@ -28,33 +35,66 @@ const ESCOPO: EscopoDoAgente = {
   fuso: "America/Sao_Paulo",
 };
 
+/**
+ * `usadas` = quantas o dia já tinha ANTES desta pergunta. A reserva imita
+ * `fn_agente_reservar_pergunta`: devolve usadas+1, ou `null` no limite.
+ */
 function registroFalso(
-  opts: { usadas?: number; conversaValida?: string | null; historico?: MensagemGravada[]; perdeuARajada?: boolean } = {},
+  opts: { usadas?: number; conversaValida?: string | null; historico?: MensagemGravada[] } = {},
 ) {
+  let usadas = opts.usadas ?? 0;
   const r = {
-    contarPerguntas: vi.fn(async () => opts.usadas ?? 0),
+    usadasNoDia: vi.fn(async () => usadas),
+    reservarPergunta: vi.fn(async (_u: string, _d: string, limite: number) =>
+      usadas >= limite ? null : ++usadas,
+    ),
     conversaValida: vi.fn(async () => opts.conversaValida ?? null),
     abrirConversa: vi.fn(async () => CONVERSA),
     historico: vi.fn(async () => opts.historico ?? []),
     ultimaConversa: vi.fn(async () => null),
-    gravarPergunta: vi.fn(async () => "pergunta-1"),
-    dentroDoLimite: vi.fn(async () => !opts.perdeuARajada),
-    descartarPergunta: vi.fn(async () => {}),
+    gravarPergunta: vi.fn(async () => {}),
     gravarResposta: vi.fn(async () => {}),
+    limparHistorico: vi.fn(async () => 0),
   } satisfies RegistroDoAgente;
   return r;
 }
 
-const RESPOSTA_TEXTO: RespostaDoModelo = { texto: "Pronto.", chamadas: [], tokensIn: 10, tokensOut: 5, custoUsd: 0.001 };
+function pedeFerramentas(...chamadas: Array<[string, string]>): RespostaDoModelo {
+  return {
+    texto: null,
+    chamadas: chamadas.map(([name, args], i) => ({
+      id: `c${i}`,
+      type: "function" as const,
+      function: { name, arguments: args },
+    })),
+    tokensIn: 1,
+    tokensOut: 1,
+    custoUsd: null,
+  };
+}
+
+const RESPOSTA_TEXTO: RespostaDoModelo = {
+  texto: "Pronto.",
+  chamadas: [],
+  tokensIn: 10,
+  tokensOut: 5,
+  custoUsd: 0.001,
+};
 const PEDE_FERRAMENTA: RespostaDoModelo = {
   texto: null,
-  chamadas: [{ id: "c1", type: "function", function: { name: "status_conexoes", arguments: "{}" } }],
+  chamadas: [
+    { id: "c1", type: "function", function: { name: "status_conexoes", arguments: "{}" } },
+  ],
   tokensIn: 10,
   tokensOut: 5,
   custoUsd: 0.001,
 };
 
-function deps(registro: RegistroDoAgente, respostas: RespostaDoModelo[], extra: Partial<DepsDaPergunta> = {}) {
+function deps(
+  registro: RegistroDoAgente,
+  respostas: RespostaDoModelo[],
+  extra: Partial<DepsDaPergunta> = {},
+) {
   const pedidos: PedidoAoModelo[] = [];
   const chamarModelo = vi.fn(async (p: PedidoAoModelo) => {
     pedidos.push(structuredClone(p));
@@ -68,7 +108,13 @@ function deps(registro: RegistroDoAgente, respostas: RespostaDoModelo[], extra: 
     modelo: "anthropic/claude-haiku-5.5",
     limiteDiario: 50,
     identidade: { nomeDoAgente: "Lia", nomeDoProduto: "Marca X" },
-    contexto: { primeiroNome: "Ana", papel: "agent", organizacao: "Empresa A", agoraLocal: "hoje", idioma: "pt-BR" },
+    contexto: {
+      primeiroNome: "Ana",
+      papel: "agent",
+      organizacao: "Empresa A",
+      agoraLocal: "hoje",
+      idioma: "pt-BR",
+    },
     agora: new Date("2026-11-03T15:00:00.000Z"),
     ...extra,
   };
@@ -86,15 +132,16 @@ describe("assistente · limite diário", () => {
     expect(registro.abrirConversa).not.toHaveBeenCalled();
   });
 
-  it("rajada: passou pela contagem, mas outra requisição gravou antes — apaga a própria pergunta e recusa", async () => {
-    const registro = registroFalso({ usadas: 49, perdeuARajada: true });
-    const { d, chamarModelo } = deps(registro, [RESPOSTA_TEXTO]);
-    const r = await responderPergunta(ESCOPO, { mensagem: "oi" }, d);
-    expect(r).toEqual({ tipo: "limite_atingido", usadas_hoje: 50, limite: 50 });
-    expect(registro.dentroDoLimite).toHaveBeenCalledWith(USER, expect.any(Date), "pergunta-1", 50);
-    expect(registro.descartarPergunta).toHaveBeenCalledWith(USER, "pergunta-1");
-    expect(chamarModelo).not.toHaveBeenCalled();
-    expect(registro.gravarResposta).not.toHaveBeenCalled();
+  it("rajada: 3 perguntas simultâneas com 49 usadas — só UMA passa (a reserva é atômica)", async () => {
+    const registro = registroFalso({ usadas: 49 });
+    const rodadas = await Promise.all(
+      [1, 2, 3].map(() =>
+        responderPergunta(ESCOPO, { mensagem: "oi" }, deps(registro, [RESPOSTA_TEXTO]).d),
+      ),
+    );
+    expect(rodadas.filter((r) => r.tipo === "respondida")).toHaveLength(1);
+    expect(rodadas.filter((r) => r.tipo === "limite_atingido")).toHaveLength(2);
+    expect(registro.gravarPergunta).toHaveBeenCalledTimes(1);
   });
 
   it("a 50ª passa, e o contador volta 50", async () => {
@@ -104,25 +151,36 @@ describe("assistente · limite diário", () => {
     expect(r).toMatchObject({ tipo: "respondida", usadas_hoje: 50, limite: 50 });
   });
 
-  it("conta as perguntas do dia de São Paulo, por usuário da sessão", async () => {
-    const registro = registroFalso();
+  it("reserva no dia de São Paulo, por usuário da sessão, e devolve o contador REAL da reserva", async () => {
+    const registro = registroFalso({ usadas: 7 });
     const { d } = deps(registro, [RESPOSTA_TEXTO]);
-    await responderPergunta(ESCOPO, { mensagem: "oi" }, d);
-    // 15:00 UTC = 12:00 em São Paulo → o dia começou às 03:00 UTC.
-    expect(registro.contarPerguntas).toHaveBeenCalledWith(USER, new Date("2026-11-03T03:00:00.000Z"));
-    expect(inicioDoDiaDoLimite(new Date("2026-11-04T02:30:00.000Z")).toISOString()).toBe("2026-11-03T03:00:00.000Z");
+    const r = await responderPergunta(ESCOPO, { mensagem: "oi" }, d);
+    expect(registro.reservarPergunta).toHaveBeenCalledWith(USER, "2026-11-03", 50);
+    expect(r).toMatchObject({ usadas_hoje: 8 });
+    // 02:30 UTC do dia 4 ainda é 23:30 do dia 3 em São Paulo.
+    expect(diaDoLimite(new Date("2026-11-04T02:30:00.000Z"))).toBe("2026-11-03");
+    expect(diaDoLimite(new Date("2026-11-04T03:00:00.000Z"))).toBe("2026-11-04");
   });
 });
 
 describe("assistente · entrada", () => {
   it("pergunta acima de 2000 caracteres é rejeitada pelo schema", () => {
-    expect(corpoDaPergunta.safeParse({ mensagem: "a".repeat(TAMANHO_MAXIMO_DA_PERGUNTA) }).success).toBe(true);
-    expect(corpoDaPergunta.safeParse({ mensagem: "a".repeat(TAMANHO_MAXIMO_DA_PERGUNTA + 1) }).success).toBe(false);
+    expect(
+      corpoDaPergunta.safeParse({ mensagem: "a".repeat(TAMANHO_MAXIMO_DA_PERGUNTA) }).success,
+    ).toBe(true);
+    expect(
+      corpoDaPergunta.safeParse({ mensagem: "a".repeat(TAMANHO_MAXIMO_DA_PERGUNTA + 1) }).success,
+    ).toBe(false);
     expect(corpoDaPergunta.safeParse({ mensagem: "   " }).success).toBe(false);
   });
 
   it("chaves de escopo no corpo são descartadas (não existem no schema)", () => {
-    const r = corpoDaPergunta.parse({ mensagem: "oi", organization_id: "x", user_id: "y", historico: [] });
+    const r = corpoDaPergunta.parse({
+      mensagem: "oi",
+      organization_id: "x",
+      user_id: "y",
+      historico: [],
+    });
     expect(r).toEqual({ mensagem: "oi" });
   });
 
@@ -151,9 +209,22 @@ describe("assistente · laço de ferramentas", () => {
     const registro = registroFalso();
     const { d, pedidos, executarFerramenta } = deps(registro, [PEDE_FERRAMENTA, RESPOSTA_TEXTO]);
     const r = await responderPergunta(ESCOPO, { mensagem: "meu zap está conectado?" }, d);
-    expect(executarFerramenta).toHaveBeenCalledWith("status_conexoes", "{}");
-    expect(pedidos[1]!.messages.at(-1)).toEqual({ role: "tool", tool_call_id: "c1", content: '{"conexoes":[]}' });
-    expect(r).toMatchObject({ tipo: "respondida", resposta: "Pronto.", ferramentas: ["status_conexoes"], tokensIn: 20 });
+    expect(executarFerramenta).toHaveBeenCalledWith(
+      "status_conexoes",
+      "{}",
+      expect.any(AbortSignal),
+    );
+    expect(pedidos[1]!.messages.at(-1)).toEqual({
+      role: "tool",
+      tool_call_id: "c1",
+      content: '{"conexoes":[]}',
+    });
+    expect(r).toMatchObject({
+      tipo: "respondida",
+      resposta: "Pronto.",
+      ferramentas: ["status_conexoes"],
+      tokensIn: 20,
+    });
     expect(registro.gravarResposta).toHaveBeenCalledWith(USER, ORG, CONVERSA, "Pronto.", {
       tokensIn: 20,
       tokensOut: 10,
@@ -178,7 +249,9 @@ describe("assistente · laço de ferramentas", () => {
     const { d } = deps(registro, [], {
       tempoMaximoMs: 10,
       chamarModelo: (_p, sinal) =>
-        new Promise((_, rejeitar) => sinal.addEventListener("abort", () => rejeitar(new Error("abort")))),
+        new Promise((_, rejeitar) =>
+          sinal.addEventListener("abort", () => rejeitar(new Error("abort"))),
+        ),
     });
     const r = await responderPergunta(ESCOPO, { mensagem: "demora" }, d);
     expect(r).toMatchObject({ tipo: "respondida" });
@@ -199,5 +272,128 @@ describe("assistente · laço de ferramentas", () => {
     expect(blocos[0]!.text).toContain("Mapa do menu");
     expect(blocos[1]!.cache_control).toBeUndefined();
     expect(blocos[1]!.text).toContain("Empresa A");
+  });
+});
+
+describe("assistente · teto de ferramentas e prazo", () => {
+  it(`no máximo ${FERRAMENTAS_POR_RODADA} ferramentas por rodada; o excedente recebe erro e não roda`, async () => {
+    const registro = registroFalso();
+    const seis = pedeFerramentas(
+      ...Array.from({ length: 6 }, (_, i) => ["status_conexoes", `{"i":${i}}`] as [string, string]),
+    );
+    const { d, pedidos, executarFerramenta } = deps(registro, [seis, RESPOSTA_TEXTO]);
+    await responderPergunta(ESCOPO, { mensagem: "x" }, d);
+    expect(executarFerramenta).toHaveBeenCalledTimes(FERRAMENTAS_POR_RODADA);
+    const respostas = pedidos[1]!.messages.filter((m) => m.role === "tool");
+    // Todo tool_call recebe resposta — o modelo exige o par.
+    expect(respostas).toHaveLength(6);
+    expect(respostas.slice(FERRAMENTAS_POR_RODADA).map((m) => m.content)).toEqual([
+      '{"erro":"limite de ferramentas"}',
+      '{"erro":"limite de ferramentas"}',
+    ]);
+  });
+
+  it(`no máximo ${FERRAMENTAS_POR_PERGUNTA} ferramentas na pergunta inteira`, async () => {
+    const registro = registroFalso();
+    const rodada = (n: number) =>
+      pedeFerramentas(
+        ...Array.from(
+          { length: 4 },
+          (_, i) => ["status_conexoes", `{"r":${n},"i":${i}}`] as [string, string],
+        ),
+      );
+    const { d, executarFerramenta } = deps(registro, [rodada(1), rodada(2), rodada(3)]);
+    const r = await responderPergunta(ESCOPO, { mensagem: "x" }, d);
+    expect(executarFerramenta).toHaveBeenCalledTimes(FERRAMENTAS_POR_PERGUNTA);
+    expect(r.tipo === "respondida" && r.ferramentas).toHaveLength(FERRAMENTAS_POR_PERGUNTA);
+  });
+
+  it("chamada repetida (mesmo nome e argumentos) reaproveita o resultado em vez de consultar de novo", async () => {
+    const registro = registroFalso();
+    const dupla = pedeFerramentas(["status_conexoes", "{}"], ["status_conexoes", "{}"]);
+    const { d, executarFerramenta, pedidos } = deps(registro, [dupla, RESPOSTA_TEXTO]);
+    await responderPergunta(ESCOPO, { mensagem: "x" }, d);
+    expect(executarFerramenta).toHaveBeenCalledTimes(1);
+    expect(pedidos[1]!.messages.filter((m) => m.role === "tool")).toHaveLength(2);
+  });
+
+  it("prazo estourado DURANTE a ferramenta: o sinal chega a ela e a próxima nem roda", async () => {
+    const registro = registroFalso();
+    const sinais: AbortSignal[] = [];
+    const lenta = vi.fn(
+      (_n: string, _a: string, sinal: AbortSignal) =>
+        new Promise<string>((resolver) => {
+          sinais.push(sinal);
+          sinal.addEventListener("abort", () => resolver('{"erro":"tempo esgotado"}'));
+        }),
+    );
+    const { d } = deps(
+      registro,
+      [pedeFerramentas(["status_conexoes", "{}"], ["resumo_conta", "{}"])],
+      {
+        tempoMaximoMs: 10,
+        executarFerramenta: lenta,
+      },
+    );
+    const r = await responderPergunta(ESCOPO, { mensagem: "x" }, d);
+    expect(lenta).toHaveBeenCalledTimes(1);
+    expect(sinais[0]!.aborted).toBe(true);
+    expect(r.tipo === "respondida" && r.resposta).toMatch(/demorei/);
+    expect(registro.gravarResposta).toHaveBeenCalledTimes(1);
+  });
+
+  it("modelo fora do ar: a falha é gravada como resposta antes de o erro subir", async () => {
+    const registro = registroFalso();
+    const { d } = deps(registro, [], {
+      chamarModelo: async () => {
+        throw new ModeloIndisponivel("OpenRouter respondeu 502", 502);
+      },
+    });
+    await expect(responderPergunta(ESCOPO, { mensagem: "x" }, d)).rejects.toBeInstanceOf(
+      ModeloIndisponivel,
+    );
+    expect(registro.gravarPergunta).toHaveBeenCalledTimes(1);
+    expect(registro.gravarResposta).toHaveBeenCalledWith(
+      USER,
+      ORG,
+      CONVERSA,
+      expect.stringMatching(/falhou/),
+      expect.any(Object),
+    );
+  });
+});
+
+describe("assistente · dado pessoal na pergunta", () => {
+  it("telefone, CPF e e-mail colados na pergunta são mascarados antes de gravar E de ir ao modelo", async () => {
+    const registro = registroFalso();
+    const { d, pedidos } = deps(registro, [RESPOSTA_TEXTO]);
+    await responderPergunta(
+      ESCOPO,
+      {
+        mensagem: "o cliente 11 98765-4321, CPF 123.456.789-09, joana.silva@gmail.com, não recebe",
+      },
+      d,
+    );
+    const gravada = (registro.gravarPergunta.mock.calls[0] as unknown[])[3] as string;
+    const enviada = pedidos[0]!.messages.at(-1)!.content as string;
+    for (const texto of [gravada, enviada]) {
+      expect(texto).not.toContain("98765-4321");
+      expect(texto).not.toContain("123.456.789");
+      expect(texto).not.toContain("joana.silva");
+      expect(texto).toContain("•••• 4321");
+      expect(texto).toContain("j•••@gmail.com");
+    }
+  });
+});
+
+describe("assistente · OpenRouter", () => {
+  it("todo pedido sai com data_collection: deny e com o custo pedido de volta", () => {
+    const corpo = corpoDoPedido({
+      model: "m",
+      messages: [],
+      max_tokens: 10,
+    } as unknown as PedidoAoModelo);
+    expect(corpo.provider).toEqual({ data_collection: "deny" });
+    expect(corpo.usage).toEqual({ include: true });
   });
 });

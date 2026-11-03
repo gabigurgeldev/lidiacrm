@@ -61,6 +61,7 @@ import {
   RETENCAO_ESPELHO_AGENDA_DIAS_PISO,
   RETENCAO_FILA_DIAS_PADRAO,
   RETENCAO_FILA_DIAS_PISO,
+  RETENCAO_HISTORICO_AGENTE_DIAS_PADRAO,
   RETENCAO_INTEGRACOES_API_DIAS_PADRAO,
   interpretarRetencao,
 } from "@/lib/retencao/politica";
@@ -95,6 +96,8 @@ export interface ResultadoDaRetencao {
   nonces_apagados: number;
   /** Log de chamadas e verificações vencidas das Integrações via API (migration 0225). */
   integracoes_api_apagadas: number;
+  /** Histórico da assistente de suporte vencido: mensagens + conversas vazias (migration 0251). */
+  historico_agente_apagado: number;
   /** O espelho da agenda conectada — cache com prazo (migration 0187). */
   espelho_apagado: number;
   lotes_espelho: number;
@@ -109,14 +112,14 @@ export interface ResultadoDaRetencao {
 /** Só a superfície que este cron usa — o teste injeta uma implementação. */
 export interface PodaDb {
   rpc(
-    nome: "fn_podar_fila_de_jobs" | "fn_expurgar_auditoria_vencida" | "fn_expurgar_espelho_da_agenda" | "fn_expurgar_nonces_de_oauth" | "fn_expurgar_integracoes_api",
+    nome: "fn_podar_fila_de_jobs" | "fn_expurgar_auditoria_vencida" | "fn_expurgar_espelho_da_agenda" | "fn_expurgar_nonces_de_oauth" | "fn_expurgar_integracoes_api" | "fn_expurgar_historico_do_agente",
     args: { p_retencao_dias: number; p_limite: number },
   ): Promise<{ data: number | null; error: { message: string } | null }>;
 }
 
 async function drenar(
   db: PodaDb,
-  nome: "fn_podar_fila_de_jobs" | "fn_expurgar_auditoria_vencida" | "fn_expurgar_espelho_da_agenda" | "fn_expurgar_nonces_de_oauth" | "fn_expurgar_integracoes_api",
+  nome: "fn_podar_fila_de_jobs" | "fn_expurgar_auditoria_vencida" | "fn_expurgar_espelho_da_agenda" | "fn_expurgar_nonces_de_oauth" | "fn_expurgar_integracoes_api" | "fn_expurgar_historico_do_agente",
   dias: number,
 ): Promise<{ apagadas: number; lotes: number; temResto: boolean }> {
   let apagadas = 0;
@@ -177,6 +180,8 @@ export async function podarHistorico(
   const nonces = await drenar(db, "fn_expurgar_nonces_de_oauth", 1);
   // Sem knob: padrão e piso moram no corpo de fn_expurgar_integracoes_api.
   const integracoes = await drenar(db, "fn_expurgar_integracoes_api", RETENCAO_INTEGRACOES_API_DIAS_PADRAO);
+  // Sem knob, pela mesma razão: padrão e piso no corpo da função.
+  const historicoAgente = await drenar(db, "fn_expurgar_historico_do_agente", RETENCAO_HISTORICO_AGENTE_DIAS_PADRAO);
 
   return {
     jobs_apagados: jobs.apagadas,
@@ -184,6 +189,7 @@ export async function podarHistorico(
     espelho_apagado: eventos.apagadas,
     nonces_apagados: nonces.apagadas,
     integracoes_api_apagadas: integracoes.apagadas,
+    historico_agente_apagado: historicoAgente.apagadas,
     lotes_fila: jobs.lotes,
     lotes_auditoria: linhas.lotes,
     lotes_espelho: eventos.lotes,
@@ -217,7 +223,9 @@ export function houveEfeito(resultado: ResultadoDaRetencao): boolean {
     // descrevia exatamente o defeito que eu estava criando um parágrafo abaixo.
     resultado.nonces_apagados > 0 ||
     // A quinta (migration 0225), pela mesma razão das quatro acima.
-    resultado.integracoes_api_apagadas > 0
+    resultado.integracoes_api_apagadas > 0 ||
+    // A sexta (migration 0251): histórico da assistente de suporte.
+    resultado.historico_agente_apagado > 0
   );
 }
 

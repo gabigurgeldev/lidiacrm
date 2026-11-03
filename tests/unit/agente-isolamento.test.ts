@@ -43,8 +43,20 @@ function banco(): Record<string, Linha[]> {
       { id: ORG_B, display_name: `${SEGREDO} Empresa` },
     ],
     assinaturas: [
-      { organization_id: ORG_A, status: "ativa", isenta: false, trial_termina_em: null, pago_ate: daqui(240) },
-      { organization_id: ORG_B, status: `${SEGREDO}`, isenta: false, trial_termina_em: null, pago_ate: null },
+      {
+        organization_id: ORG_A,
+        status: "ativa",
+        isenta: false,
+        trial_termina_em: null,
+        pago_ate: daqui(240),
+      },
+      {
+        organization_id: ORG_B,
+        status: `${SEGREDO}`,
+        isenta: false,
+        trial_termina_em: null,
+        pago_ate: null,
+      },
     ],
     user_organizations: [
       { organization_id: ORG_A, user_id: USER_A, revoked_at: null },
@@ -54,30 +66,120 @@ function banco(): Record<string, Linha[]> {
       { organization_id: ORG_B, user_id: "b3", revoked_at: null },
     ],
     channel_sessions: [
-      { organization_id: ORG_A, display_name: "Zap A", phone_number: "5511911112222", status: "WORKING", archived_at: null, last_status_change_at: daqui(-5) },
-      { organization_id: ORG_B, display_name: `${SEGREDO} Zap`, phone_number: "5521999998888", status: "WORKING", archived_at: null, last_status_change_at: daqui(-5) },
+      {
+        organization_id: ORG_A,
+        display_name: "Zap A",
+        phone_number: "5511911112222",
+        status: "WORKING",
+        archived_at: null,
+        last_status_change_at: daqui(-5),
+      },
+      {
+        organization_id: ORG_B,
+        display_name: `${SEGREDO} Zap`,
+        phone_number: "5521999998888",
+        status: "WORKING",
+        archived_at: null,
+        last_status_change_at: daqui(-5),
+      },
     ],
     crm_pipelines: [
       { id: "pa", organization_id: ORG_A, name: "Vendas A", is_default: true, is_archived: false },
-      { id: "pb", organization_id: ORG_B, name: `${SEGREDO} Funil`, is_default: true, is_archived: false },
+      {
+        id: "pb",
+        organization_id: ORG_B,
+        name: `${SEGREDO} Funil`,
+        is_default: true,
+        is_archived: false,
+      },
     ],
     crm_stages: [
-      { id: "sa1", organization_id: ORG_A, pipeline_id: "pa", name: "Novo", is_won: false, is_lost: false, is_archived: false },
-      { id: "sb1", organization_id: ORG_B, pipeline_id: "pb", name: `${SEGREDO} Etapa`, is_won: false, is_lost: false, is_archived: false },
+      {
+        id: "sa1",
+        organization_id: ORG_A,
+        pipeline_id: "pa",
+        name: "Novo",
+        is_won: false,
+        is_lost: false,
+        is_archived: false,
+      },
+      {
+        id: "sb1",
+        organization_id: ORG_B,
+        pipeline_id: "pb",
+        name: `${SEGREDO} Etapa`,
+        is_won: false,
+        is_lost: false,
+        is_archived: false,
+      },
     ],
     crm_leads: [
-      { id: "la1", organization_id: ORG_A, pipeline_id: "pa", stage_id: "sa1", owner_user_id: USER_A },
-      { id: "la2", organization_id: ORG_A, pipeline_id: "pa", stage_id: "sa1", owner_user_id: null },
-      { id: "la3", organization_id: ORG_A, pipeline_id: "pa", stage_id: "sa1", owner_user_id: OUTRO_A },
+      {
+        id: "la1",
+        organization_id: ORG_A,
+        pipeline_id: "pa",
+        stage_id: "sa1",
+        owner_user_id: USER_A,
+      },
+      {
+        id: "la2",
+        organization_id: ORG_A,
+        pipeline_id: "pa",
+        stage_id: "sa1",
+        owner_user_id: null,
+      },
+      {
+        id: "la3",
+        organization_id: ORG_A,
+        pipeline_id: "pa",
+        stage_id: "sa1",
+        owner_user_id: OUTRO_A,
+      },
       // Lead da B apontando para a etapa da A: só o filtro de organização o barra.
-      { id: "lb1", organization_id: ORG_B, pipeline_id: "pa", stage_id: "sa1", owner_user_id: USER_B },
+      {
+        id: "lb1",
+        organization_id: ORG_B,
+        pipeline_id: "pa",
+        stage_id: "sa1",
+        owner_user_id: USER_B,
+      },
     ],
     conversations: [
-      { organization_id: ORG_A, status: "open", assigned_to_user_id: USER_A, last_message_at: daqui(-1), contacts: contatoA },
-      { organization_id: ORG_A, status: "ai_handling", assigned_to_user_id: null, last_message_at: daqui(-2), contacts: contatoA },
-      { organization_id: ORG_A, status: "claimed", assigned_to_user_id: OUTRO_A, last_message_at: daqui(-3), contacts: contatoA },
-      { organization_id: ORG_A, status: "closed", assigned_to_user_id: USER_A, last_message_at: daqui(-4), contacts: contatoA },
-      { organization_id: ORG_B, status: "open", assigned_to_user_id: USER_B, last_message_at: daqui(-1), contacts: contatoB },
+      {
+        organization_id: ORG_A,
+        status: "open",
+        assigned_to_user_id: USER_A,
+        last_message_at: daqui(-1),
+        contacts: contatoA,
+      },
+      {
+        organization_id: ORG_A,
+        status: "ai_handling",
+        assigned_to_user_id: null,
+        last_message_at: daqui(-2),
+        contacts: contatoA,
+      },
+      {
+        organization_id: ORG_A,
+        status: "claimed",
+        assigned_to_user_id: OUTRO_A,
+        last_message_at: daqui(-3),
+        contacts: contatoA,
+      },
+      {
+        organization_id: ORG_A,
+        status: "closed",
+        assigned_to_user_id: USER_A,
+        last_message_at: daqui(-4),
+        contacts: contatoA,
+      },
+      {
+        organization_id: ORG_B,
+        status: "open",
+        assigned_to_user_id: USER_B,
+        last_message_at: daqui(-1),
+        contacts: contatoB,
+      },
     ],
     calendar_professionals: [
       { id: "prof-a", organization_id: ORG_A, user_id: USER_A },
@@ -87,22 +189,96 @@ function banco(): Record<string, Linha[]> {
       { id: "prof-b-a", organization_id: ORG_B, user_id: USER_A },
     ],
     calendar_appointment_professionals: [
-      { organization_id: ORG_A, appointment_id: "ap-apoio", professional_id: "prof-a", starts_at: daqui(48) },
-      { organization_id: ORG_B, appointment_id: "ap-b", professional_id: "prof-b-a", starts_at: daqui(30) },
+      {
+        organization_id: ORG_A,
+        appointment_id: "ap-apoio",
+        professional_id: "prof-a",
+        starts_at: daqui(48),
+      },
+      {
+        organization_id: ORG_B,
+        appointment_id: "ap-b",
+        professional_id: "prof-b-a",
+        starts_at: daqui(30),
+      },
     ],
     calendar_appointments: [
-      { id: "ap-dona", organization_id: ORG_A, owner_user_id: USER_A, title: "Consulta Maria", starts_at: daqui(24), ends_at: daqui(25), status: "confirmed", contacts: contatoA },
-      { id: "ap-apoio", organization_id: ORG_A, owner_user_id: OUTRO_A, title: "Apoio", starts_at: daqui(48), ends_at: daqui(49), status: "pending", contacts: contatoA },
-      { id: "ap-colega", organization_id: ORG_A, owner_user_id: OUTRO_A, title: "Agenda do colega", starts_at: daqui(26), ends_at: daqui(27), status: "confirmed", contacts: contatoA },
-      { id: "ap-b", organization_id: ORG_B, owner_user_id: USER_A, title: `${SEGREDO} Compromisso`, starts_at: daqui(30), ends_at: daqui(31), status: "confirmed", contacts: contatoB },
+      {
+        id: "ap-dona",
+        organization_id: ORG_A,
+        owner_user_id: USER_A,
+        title: "Consulta Maria",
+        starts_at: daqui(24),
+        ends_at: daqui(25),
+        status: "confirmed",
+        contacts: contatoA,
+      },
+      {
+        id: "ap-apoio",
+        organization_id: ORG_A,
+        owner_user_id: OUTRO_A,
+        title: "Apoio",
+        starts_at: daqui(48),
+        ends_at: daqui(49),
+        status: "pending",
+        contacts: contatoA,
+      },
+      {
+        id: "ap-colega",
+        organization_id: ORG_A,
+        owner_user_id: OUTRO_A,
+        title: "Agenda do colega",
+        starts_at: daqui(26),
+        ends_at: daqui(27),
+        status: "confirmed",
+        contacts: contatoA,
+      },
+      {
+        id: "ap-b",
+        organization_id: ORG_B,
+        owner_user_id: USER_A,
+        title: `${SEGREDO} Compromisso`,
+        starts_at: daqui(30),
+        ends_at: daqui(31),
+        status: "confirmed",
+        contacts: contatoB,
+      },
     ],
     contacts: [
-      { organization_id: ORG_A, name: "Maria Cliente", display_name: null, phone_number: "5511987651234", tags: ["vip"], is_anonymized: false, created_at: daqui(-100) },
-      { organization_id: ORG_B, name: `Maria ${SEGREDO}`, display_name: null, phone_number: "5521900009999", tags: [SEGREDO], is_anonymized: false, created_at: daqui(-100) },
+      {
+        organization_id: ORG_A,
+        name: "Maria Cliente",
+        display_name: null,
+        phone_number: "5511987651234",
+        tags: ["vip"],
+        is_anonymized: false,
+        created_at: daqui(-100),
+      },
+      {
+        organization_id: ORG_B,
+        name: `Maria ${SEGREDO}`,
+        display_name: null,
+        phone_number: "5521900009999",
+        tags: [SEGREDO],
+        is_anonymized: false,
+        created_at: daqui(-100),
+      },
     ],
     ai_budgets: [
-      { organization_id: ORG_A, current_month_consumed_cents: 1234, monthly_limit_cents: 5000, is_throttled: false, is_disabled: false },
-      { organization_id: ORG_B, current_month_consumed_cents: 999999, monthly_limit_cents: 1, is_throttled: true, is_disabled: true },
+      {
+        organization_id: ORG_A,
+        current_month_consumed_cents: 1234,
+        monthly_limit_cents: 5000,
+        is_throttled: false,
+        is_disabled: false,
+      },
+      {
+        organization_id: ORG_B,
+        current_month_consumed_cents: 999999,
+        monthly_limit_cents: 1,
+        is_throttled: true,
+        is_disabled: true,
+      },
     ],
     llm_calls: [
       { organization_id: ORG_A, created_at: daqui(-24) },
@@ -126,9 +302,15 @@ class Consulta {
     private readonly linhas: Linha[],
   ) {}
 
+  sinal: AbortSignal | undefined;
+
   select(_colunas?: string, opts?: { count?: string; head?: boolean }) {
     this.contar = !!opts?.count;
     this.cabeca = !!opts?.head;
+    return this;
+  }
+  abortSignal(s: AbortSignal) {
+    this.sinal = s;
     return this;
   }
   eq(c: string, v: unknown) {
@@ -184,7 +366,10 @@ class Consulta {
   delete(): never {
     throw new Error("ESCRITA PROIBIDA: delete");
   }
-  then<T1, T2>(ok?: ((v: { data: unknown; error: null; count: number | null }) => T1) | null, erro?: ((e: unknown) => T2) | null) {
+  then<T1, T2>(
+    ok?: ((v: { data: unknown; error: null; count: number | null }) => T1) | null,
+    erro?: ((e: unknown) => T2) | null,
+  ) {
     return this.executar().then(ok, erro);
   }
 
@@ -192,7 +377,11 @@ class Consulta {
     let rs = this.linhas.filter((l) => this.filtros.every((f) => passa(l, f)));
     const total = rs.length;
     if (this.teto !== undefined) rs = rs.slice(0, this.teto);
-    return Promise.resolve({ data: this.cabeca ? null : rs, error: null, count: this.contar ? total : null });
+    return Promise.resolve({
+      data: this.cabeca ? null : rs,
+      error: null,
+      count: this.contar ? total : null,
+    });
   }
 }
 
@@ -204,7 +393,9 @@ function condicaoSimples(l: Linha, cond: string): boolean {
   if (op === "is") return valor === "null" ? atual == null : String(atual) === valor;
   if (op === "ilike") {
     const padrao = valor.replace(/\\([%_])/g, "$1").replace(/%/g, "");
-    return String(atual ?? "").toLowerCase().includes(padrao.toLowerCase());
+    return String(atual ?? "")
+      .toLowerCase()
+      .includes(padrao.toLowerCase());
   }
   throw new Error(`condição não suportada pelo dublê: ${cond}`);
 }
@@ -248,7 +439,10 @@ function dubleDoBanco() {
   return { cliente: cliente as unknown as SupabaseClient, log };
 }
 
-function escopo(role: EscopoDoAgente["role"], visibilityMode: EscopoDoAgente["visibilityMode"] = "own_and_unassigned"): EscopoDoAgente {
+function escopo(
+  role: EscopoDoAgente["role"],
+  visibilityMode: EscopoDoAgente["visibilityMode"] = "own_and_unassigned",
+): EscopoDoAgente {
   return { organizationId: ORG_A, userId: USER_A, role, visibilityMode, fuso: "America/Sao_Paulo" };
 }
 
@@ -264,43 +458,69 @@ const ARGUMENTOS_ENVENENADOS = {
   periodo: "proximos_7_dias",
 };
 
-async function rodar(nome: string, e: EscopoDoAgente, args: unknown = ARGUMENTOS_ENVENENADOS) {
+async function rodar(
+  nome: string,
+  e: EscopoDoAgente,
+  args: unknown = ARGUMENTOS_ENVENENADOS,
+  signal?: AbortSignal,
+) {
   const { cliente, log } = dubleDoBanco();
-  const texto = await executarFerramenta(nome, JSON.stringify(args), { supabase: cliente, escopo: e, agora: AGORA });
+  const texto = await executarFerramenta(nome, JSON.stringify(args), {
+    supabase: cliente,
+    escopo: e,
+    agora: AGORA,
+    signal,
+  });
   return { texto, json: JSON.parse(texto) as Record<string, unknown>, log };
 }
 
 const TODAS = FERRAMENTAS.map((f) => f.nome);
 
 describe("assistente de suporte · isolamento entre organizações (RLS como a de platform admin)", () => {
-  it.each(TODAS)("%s: nada da organização B volta, mesmo com o id da B nos argumentos", async (nome) => {
-    for (const papel of ["viewer", "agent", "manager", "admin"] as const) {
-      const { texto, json } = await rodar(nome, escopo(papel));
-      expect(json.erro, `${nome}/${papel}: ${texto}`).toBeUndefined();
-      expect(texto).not.toContain(SEGREDO);
-      expect(texto).not.toContain(ORG_B);
-      expect(texto).not.toContain(USER_B);
-    }
-  });
+  it.each(TODAS)(
+    "%s: nada da organização B volta, mesmo com o id da B nos argumentos",
+    async (nome) => {
+      for (const papel of ["viewer", "agent", "manager", "admin"] as const) {
+        const { texto, json } = await rodar(nome, escopo(papel));
+        expect(json.erro, `${nome}/${papel}: ${texto}`).toBeUndefined();
+        expect(texto).not.toContain(SEGREDO);
+        expect(texto).not.toContain(ORG_B);
+        expect(texto).not.toContain(USER_B);
+      }
+    },
+  );
 
-  it.each(TODAS)("%s: TODA consulta é presa à organização da sessão, e nenhuma cita a B", async (nome) => {
-    const { log } = await rodar(nome, escopo("admin"));
-    expect(log.length).toBeGreaterThan(0);
-    for (const q of log) {
-      const presa = q.filtros.some(
-        ([op, c, v]) => op === "eq" && v === ORG_A && (c === "organization_id" || (q.tabela === "organizations" && c === "id")),
-      );
-      expect(presa, `${nome}: consulta em ${q.tabela} sem filtro de organização`).toBe(true);
-      const valores = JSON.stringify(q.filtros);
-      expect(valores).not.toContain(ORG_B);
-      expect(valores).not.toContain(USER_B);
-    }
-  });
+  it.each(TODAS)(
+    "%s: TODA consulta é presa à organização da sessão, e nenhuma cita a B",
+    async (nome) => {
+      const { log } = await rodar(nome, escopo("admin"));
+      expect(log.length).toBeGreaterThan(0);
+      for (const q of log) {
+        const presa = q.filtros.some(
+          ([op, c, v]) =>
+            op === "eq" &&
+            v === ORG_A &&
+            (c === "organization_id" || (q.tabela === "organizations" && c === "id")),
+        );
+        expect(presa, `${nome}: consulta em ${q.tabela} sem filtro de organização`).toBe(true);
+        const valores = JSON.stringify(q.filtros);
+        expect(valores).not.toContain(ORG_B);
+        expect(valores).not.toContain(USER_B);
+      }
+    },
+  );
 
   it("os dados da PRÓPRIA conta continuam chegando (o isolamento não é uma resposta vazia por acidente)", async () => {
     const contato = await rodar("buscar_contato", escopo("agent"));
     expect(contato.json).toEqual({
-      contatos: [{ nome: "Maria Cliente", telefone: "•••• 1234", tags: ["vip"], cadastrado_em: expect.any(String) }],
+      contatos: [
+        {
+          nome: "Maria Cliente",
+          telefone: "•••• 1234",
+          tags: ["vip"],
+          cadastrado_em: expect.any(String),
+        },
+      ],
     });
 
     const conexoes = await rodar("status_conexoes", escopo("admin"));
@@ -317,7 +537,11 @@ describe("assistente de suporte · isolamento entre organizações (RLS como a d
     });
 
     const uso = await rodar("uso_ia_mes", escopo("manager"));
-    expect(uso.json).toMatchObject({ gasto_no_mes: "US$ 12.34", chamadas_de_ia_no_mes: 1, ia_pausada_por_orcamento: false });
+    expect(uso.json).toMatchObject({
+      gasto_no_mes: "US$ 12.34",
+      chamadas_de_ia_no_mes: 1,
+      ia_pausada_por_orcamento: false,
+    });
   });
 
   it("telefone de terceiro sai mascarado — nunca o número inteiro", async () => {
@@ -328,7 +552,12 @@ describe("assistente de suporte · isolamento entre organizações (RLS como a d
 
   it("agent vê só as conversas e leads dele e os sem responsável (o bypass de admin não vaza visibilidade)", async () => {
     const conversas = await rodar("conversas_abertas", escopo("agent", "own_and_unassigned"));
-    expect(conversas.json).toMatchObject({ em_aberto: 2, atribuidas_a_voce: 1, sem_responsavel: 1, com_a_ia: 1 });
+    expect(conversas.json).toMatchObject({
+      em_aberto: 2,
+      atribuidas_a_voce: 1,
+      sem_responsavel: 1,
+      com_a_ia: 1,
+    });
 
     const so = await rodar("conversas_abertas", escopo("agent", "own"));
     expect(so.json).toMatchObject({ em_aberto: 1, atribuidas_a_voce: 1, sem_responsavel: 0 });
@@ -367,10 +596,42 @@ describe("assistente de suporte · isolamento entre organizações (RLS como a d
     expect(conexoes.texto).not.toContain("Zap A");
   });
 
+  it.each(TODAS)(
+    "%s: com prazo, TODA consulta leva o sinal (o cancelamento alcança o banco)",
+    async (nome) => {
+      const controle = new AbortController();
+      const { log } = await rodar(nome, escopo("admin"), ARGUMENTOS_ENVENENADOS, controle.signal);
+      expect(log.length).toBeGreaterThan(0);
+      for (const q of log)
+        expect(q.sinal, `${nome} → ${q.tabela} sem abortSignal`).toBe(controle.signal);
+    },
+  );
+
+  it("prazo já estourado: a ferramenta nem consulta", async () => {
+    const controle = new AbortController();
+    controle.abort();
+    const { json, log } = await rodar("resumo_conta", escopo("admin"), {}, controle.signal);
+    expect(json).toEqual({ erro: "tempo esgotado" });
+    expect(log).toHaveLength(0);
+  });
+
+  it("buscar_contato: curinga e aspas do PostgREST no nome não viram filtro", async () => {
+    const { log } = await rodar("buscar_contato", escopo("admin"), { nome: 'Ma*ri"a\\x,(y)' });
+    const ou = JSON.stringify(log.flatMap((q) => q.filtros).filter(([op]) => op === "or"));
+    expect(ou).not.toMatch(/\*|\\"|\\\\/);
+    expect(ou).toContain("Ma ri a");
+  });
+
   it("ferramenta desconhecida e argumento ilegível viram erro curto, sem lançar", async () => {
-    expect((await rodar("apagar_lead", escopo("admin"))).json).toEqual({ erro: "ferramenta inexistente" });
+    expect((await rodar("apagar_lead", escopo("admin"))).json).toEqual({
+      erro: "ferramenta inexistente",
+    });
     const { cliente } = dubleDoBanco();
-    const texto = await executarFerramenta("buscar_contato", "{nao é json", { supabase: cliente, escopo: escopo("admin"), agora: AGORA });
+    const texto = await executarFerramenta("buscar_contato", "{nao é json", {
+      supabase: cliente,
+      escopo: escopo("admin"),
+      agora: AGORA,
+    });
     expect(JSON.parse(texto)).toEqual({ erro: "argumentos ilegíveis" });
   });
 });
@@ -383,30 +644,54 @@ describe("assistente de suporte · só leitura, por construção", () => {
 
   it("a lista de ferramentas é a fixa, e nenhum nome sugere escrita", () => {
     expect([...TODAS].sort()).toEqual(
-      ["buscar_contato", "conversas_abertas", "leads_por_etapa", "minha_agenda", "resumo_conta", "status_conexoes", "uso_ia_mes"].sort(),
+      [
+        "buscar_contato",
+        "conversas_abertas",
+        "leads_por_etapa",
+        "minha_agenda",
+        "resumo_conta",
+        "status_conexoes",
+        "uso_ia_mes",
+      ].sort(),
     );
     for (const nome of TODAS) {
-      expect(nome).not.toMatch(/criar|crie|alterar|atualizar|apagar|excluir|deletar|enviar|mover|editar|salvar|gravar|set_|update|delete|insert|send/i);
+      expect(nome).not.toMatch(
+        /criar|crie|alterar|atualizar|apagar|excluir|deletar|enviar|mover|editar|salvar|gravar|set_|update|delete|insert|send/i,
+      );
     }
   });
 
   it("o código das ferramentas não tem chamada de escrita nem RPC", () => {
     const fonte = readFileSync(join(RAIZ, "agente/ferramentas.ts"), "utf8");
-    for (const proibido of [".insert(", ".update(", ".upsert(", ".delete(", ".rpc(", "storage.", "auth.admin"]) {
+    for (const proibido of [
+      ".insert(",
+      ".update(",
+      ".upsert(",
+      ".delete(",
+      ".rpc(",
+      "storage.",
+      "auth.admin",
+    ]) {
       expect(fonte, `agente/ferramentas.ts contém ${proibido}`).not.toContain(proibido);
     }
   });
 
   it("só agente/registro.server.ts importa o client de service role (e nunca as ferramentas)", () => {
-    const importaAdmin = /from\s+["']@\/lib\/supabase\/admin["']|createAdminClient|SUPABASE_SERVICE_ROLE/;
+    const importaAdmin =
+      /from\s+["']@\/lib\/supabase\/admin["']|createAdminClient|SUPABASE_SERVICE_ROLE/;
     const comAdmin = doAgente.filter((f) => importaAdmin.test(readFileSync(join(RAIZ, f), "utf8")));
     expect(comAdmin).toEqual(["agente/registro.server.ts"]);
 
-    for (const f of [...doAgente.filter((x) => x !== "agente/registro.server.ts"), "app/api/v1/agente/_handler.ts"]) {
+    for (const f of [
+      ...doAgente.filter((x) => x !== "agente/registro.server.ts"),
+      "app/api/v1/agente/_handler.ts",
+    ]) {
       const fonte = readFileSync(join(RAIZ, f), "utf8");
       expect(fonte, `${f} importa o client de service role`).not.toMatch(importaAdmin);
     }
     // As ferramentas também não alcançam o registro (que tem o admin) por tabela.
-    expect(readFileSync(join(RAIZ, "agente/ferramentas.ts"), "utf8")).not.toMatch(/registro\.server|agente_mensagens|agente_conversas/);
+    expect(readFileSync(join(RAIZ, "agente/ferramentas.ts"), "utf8")).not.toMatch(
+      /registro\.server|agente_mensagens|agente_conversas/,
+    );
   });
 });
