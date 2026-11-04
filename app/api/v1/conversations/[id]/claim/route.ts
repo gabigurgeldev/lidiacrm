@@ -18,6 +18,7 @@ import { type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit";
 import { registrarTrocaDeComando } from "@/lib/inbox/atividade-de-comando";
+import { conversaForaDeAlcance } from "@/lib/inbox/conversa-fora-de-alcance";
 import { ApiError } from "@/lib/api/types";
 import { ok, fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
@@ -66,6 +67,11 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   });
 
   if (error) {
+    // Agente tentando assumir conversa de colega que não enxerga (0252) —
+    // inclusive com `expected_assignee` = dono atual. 404, como o GET.
+    if (conversaForaDeAlcance(error)) {
+      return fail("not_found", "Conversa não encontrada.", 404, { requestId });
+    }
     return fail("internal_error", error.message, 500, { requestId });
   }
   const row = data?.[0];

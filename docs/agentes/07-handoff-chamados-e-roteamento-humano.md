@@ -154,6 +154,8 @@ A **mesma** regra alimenta: o roteamento de conversas, os blocos de distribuiç�
 
 Gerente e administrador continuam vendo tudo. A regra é aplicada no banco (RLS), não só na tela.
 
+**A mesma régua vale para MEXER no dono** (migration 0252). Um atendente só assume, transfere ou libera conversa que ele pode ver: nos modos "Os seus, mais os sem dono" e "Só os seus" ele não toma a conversa de um colega, nem sabendo o id. A recusa sai como 404 "Conversa não encontrada", a mesma resposta de quem tenta abri-la. No modo "Todos veem tudo" nada muda. O rodízio, os fluxos e as ferramentas do agente rodam pelo sistema e não são afetados.
+
 ---
 
 ## Notas técnicas

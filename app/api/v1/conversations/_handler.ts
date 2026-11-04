@@ -8,6 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiError } from "@/lib/api/types";
 import type { Actor, HandlerCtx } from "@/lib/api/handlers/types";
 import { audit } from "@/lib/audit";
+import { conversaForaDeAlcance } from "@/lib/inbox/conversa-fora-de-alcance";
 import { CONVERSATION_TERMINAL_STATUSES } from "@/lib/schemas";
 import type {
   ListConversationsQuery,
@@ -275,6 +276,10 @@ export async function patchConversationHandler(
       p_enforce_expected: false,
     });
     if (erroRpc) {
+      // Agente assumindo conversa de colega que não enxerga (0252): 404, como o GET.
+      if (conversaForaDeAlcance(erroRpc)) {
+        throw new ApiError(404, "not_found", undefined, ctx.requestId, "Conversa não encontrada.");
+      }
       throw new ApiError(500, "internal_error", undefined, ctx.requestId, erroRpc.message);
     }
   }
