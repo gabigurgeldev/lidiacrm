@@ -44,6 +44,7 @@
     { "id": "fila_bo", "lane": "dados", "col": 5, "type": "table", "label": "backoffice_saida + backoffice_indicacoes", "sublabel": "event_id UNIQUE · invisível ao cliente" },
     { "id": "cron_bo", "lane": "borda", "col": 5, "type": "route", "label": "cron backoffice-saida (5 min)", "sublabel": "reenvia com espera crescente, 7 dias" },
     { "id": "backoffice", "lane": "retorno", "col": 4, "type": "service", "label": "Back Office de afiliados", "sublabel": "receita · comissão · aviso ao afiliado · aviso de cobrança ao cliente (WhatsApp)" },
+    { "id": "sync_bo", "lane": "borda", "col": 7, "type": "route", "label": "POST /backoffice/billing/sync", "sublabel": "o Back Office pede o histórico: cobrancas → invoice.updated, assinaturas → subscription.updated (crm_sync_…, nunca payment.succeeded)" },
     { "id": "script_notif", "lane": "borda", "col": 6, "type": "module", "label": "scripts/asaas-desligar-notificacoes.ts", "sublabel": "uma vez: cala o Asaas nos clientes antigos (simulação por padrão, --aplicar)" }
   ],
   "edges": [
@@ -90,6 +91,11 @@
     { "id": "e41", "from": "rota_checkout", "to": "asaas", "label": "cliente com notificationDisabled quando o Back Office está ligado" },
     { "id": "e42", "from": "assinaturas", "to": "script_notif", "label": "asaas_customer_id" },
     { "id": "e43", "from": "script_notif", "to": "asaas", "label": "notificationDisabled: true" },
-    { "id": "e44", "from": "script_notif", "to": "audit", "label": "billing.notificacoes_asaas_desligadas" }
+    { "id": "e44", "from": "script_notif", "to": "audit", "label": "billing.notificacoes_asaas_desligadas" },
+    { "id": "e45", "from": "backoffice", "to": "sync_bo", "label": "botão em /admin/cobrancas, em laço até next_cursor nulo" },
+    { "id": "e46", "from": "cobrancas", "to": "sync_bo", "label": "página de 200 por (created_at, id)" },
+    { "id": "e47", "from": "assinaturas", "to": "sync_bo", "label": "estado de cada organização, na última página" },
+    { "id": "e48", "from": "sync_bo", "to": "fila_bo", "label": "enfileira e manda até o prazo; o resto vai pelo cron" },
+    { "id": "e49", "from": "sync_bo", "to": "audit", "label": "backoffice.sincronizacao_run (só com efeito)" }
   ]
 }

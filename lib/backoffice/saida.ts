@@ -17,6 +17,10 @@
  *      `subscription.updated` (status e fim do teste) e `customer.phone` (o
  *      WhatsApp do dono). O Asaas foi calado (`notificationDisabled`) para o
  *      cliente não receber o mesmo aviso duas vezes.
+ *   4. **Histórico sob pedido.** `POST /backoffice/billing/sync` reenvia, em
+ *      páginas, toda `cobrancas` como `invoice.updated` e toda `assinaturas`
+ *      como `subscription.updated` (`event_id` `crm_sync_…`) — nunca
+ *      `payment.succeeded`, que viraria comissão de pagamento antigo.
  *
  * ═══ Autenticação ═══
  * `Authorization: Bearer <BACKOFFICE_API_KEY>`, `X-Timestamp` (unix) e
@@ -233,8 +237,21 @@ export interface EventoParaBackoffice {
     payment_url?: string | null;
     status: StatusDaFatura;
     method?: MetodoDoBackoffice;
+    /**
+     * Só em `paid`: instante ISO-8601 (com fuso) do pagamento — o MESMO
+     * `paid_at` do `payment.succeeded` dela. Opcional no contrato.
+     */
+    paid_at?: string;
   };
 }
+
+/**
+ * Prefixo do `event_id` dos eventos que o Back Office pediu de novo
+ * (`POST /backoffice/billing/sync`). É outro prefixo de propósito: o
+ * `crm_pay_…`/`crm_org_…` de uma fatura antiga já está em `backoffice_saida`
+ * (enviado ou `falhou`), e o UNIQUE engoliria o reenvio.
+ */
+export const PREFIXO_DA_SINCRONIZACAO = "crm_sync_";
 
 const METODOS: Record<string, "pix" | "boleto" | "credit_card"> = {
   PIX: "pix",
@@ -304,27 +321,105 @@ function statusDaFatura(status: string): StatusDaFatura | null {
  * nasceria em aberto e o cliente seria cobrado de uma fatura paga. Com o `paid`
  * explícito, qualquer ordem de chegada termina em paga (o Back Office não
  * reabre fatura baixada).
+ *
+ * Paga leva `paid_at` — o mesmo instante do `payment.succeeded` dela.
  */
 function eventoDaFatura(p: PagamentoAsaas, agora: Date): EventoParaBackoffice | null {
-  const status = statusDaFatura(p.status);
-  const vencimento = (p.dueDate ?? "").slice(0, 10);
+  const dataPaga = p.confirmedDate ?? p.paymentDate ?? null;
+  return montarEventoDaFatura(
+    {
+      id: p.id,
+      status: p.status,
+      valorCentavos: Math.round(p.value * 100),
+      vencimento: p.dueDate,
+      metodo: p.billingType,
+      url: p.invoiceUrl,
+      assinatura: p.subscription,
+      pagaEm: STATUS_PAGOS.has(p.status) ? instanteDoPagamento(dataPaga, agora) : null,
+    },
+    agora,
+    "crm_pay_",
+  );
+}
+
+/** O que a fatura precisa, venha do Asaas (webhook, conciliação) ou de `cobrancas` (sincronização). */
+interface DadosDaFatura {
+  id: string;
+  status: string;
+  valorCentavos: number;
+  vencimento: string | null | undefined;
+  metodo: string | null | undefined;
+  url: string | null | undefined;
+  assinatura: string | null | undefined;
+  /** Instante ISO do pagamento; só vai quando a fatura está paga. */
+  pagaEm: string | null;
+}
+
+function montarEventoDaFatura(d: DadosDaFatura, agora: Date, prefixo: string): EventoParaBackoffice | null {
+  const status = statusDaFatura(d.status);
+  const vencimento = (d.vencimento ?? "").slice(0, 10);
   if (!status || !/^\d{4}-\d{2}-\d{2}$/.test(vencimento)) return null;
-  const metodo = METODOS[p.billingType ?? ""];
+  const metodo = METODOS[d.metodo ?? ""];
   const sufixo = status === "pending" || status === "overdue" ? `${status}_${vencimento}` : status;
   return {
-    event_id: `crm_pay_${p.id}_${sufixo}`,
+    event_id: `${prefixo}${d.id}_${sufixo}`,
     type: "invoice.updated",
     occurred_at: agora.toISOString(),
     invoice: {
-      external_id: p.id,
-      amount_cents: Math.round(p.value * 100),
+      external_id: d.id,
+      amount_cents: d.valorCentavos,
       due_date: vencimento,
-      payment_url: linkSeguro(p.invoiceUrl),
+      payment_url: linkSeguro(d.url),
       status,
       ...(metodo ? { method: metodo } : {}),
+      ...(status === "paid" && d.pagaEm ? { paid_at: d.pagaEm } : {}),
     },
-    ...(p.subscription ? { subscription: { external_id: p.subscription } } : {}),
+    ...(d.assinatura ? { subscription: { external_id: d.assinatura } } : {}),
   };
+}
+
+/** A linha de `cobrancas` que a sincronização lê (o que `gravarCobranca` grava). */
+export interface CobrancaGravada {
+  organization_id: string;
+  asaas_payment_id: string;
+  asaas_subscription_id: string | null;
+  valor_centavos: number;
+  metodo: string | null;
+  status: string;
+  vencimento: string | null;
+  pago_em: string | null;
+  url_fatura: string | null;
+}
+
+/**
+ * `invoice.updated` de uma cobrança JÁ GRAVADA, para o Back Office reconstruir o
+ * histórico. `event_id` = `crm_sync_<paymentId>_<estado>` (ver
+ * `PREFIXO_DA_SINCRONIZACAO`).
+ *
+ * Nunca `payment.succeeded`: no Back Office ele gera comissão, e pagamento
+ * antigo reenviado por aqui viraria comissão que ninguém pediu.
+ *
+ * `pago_em` é o dia do Asaas gravado à meia-noite UTC (`gravarCobranca` faz
+ * `new Date("YYYY-MM-DD")`); o `paid_at` sai da mesma regra do
+ * `payment.succeeded` (`instanteDoPagamento`), e não da meia-noite UTC — que é
+ * a noite do dia ANTERIOR em São Paulo.
+ */
+export function eventoDaCobrancaGravada(c: CobrancaGravada, agora: Date = new Date()): EventoParaBackoffice | null {
+  const diaPago = (c.pago_em ?? "").slice(0, 10);
+  return montarEventoDaFatura(
+    {
+      id: c.asaas_payment_id,
+      status: c.status,
+      valorCentavos: c.valor_centavos,
+      vencimento: c.vencimento,
+      metodo: c.metodo,
+      url: c.url_fatura,
+      assinatura: c.asaas_subscription_id,
+      pagaEm: /^\d{4}-\d{2}-\d{2}$/.test(diaPago) ? instanteDoPagamento(diaPago, agora) : null,
+    },
+    agora,
+    PREFIXO_DA_SINCRONIZACAO,
+  );
 }
 
 /**
@@ -428,11 +523,15 @@ function urlDeAssinar(): string | null {
  * teste (estender o teste é estado novo, e o aviso tem de acompanhar a data
  * nova), `pago_ate` para ativa/inadimplente (cada renovação ou atraso é outro
  * estado) e o dia do cancelamento. Repetir o mesmo estado não reenvia nada.
+ *
+ * `prefixo` muda só o começo do `event_id`: a sincronização pedida pelo Back
+ * Office passa `PREFIXO_DA_SINCRONIZACAO`.
  */
 export function eventoDaAssinatura(
   organizationId: string,
   a: AssinaturaParaBackoffice,
   agora: Date = new Date(),
+  prefixo = "crm_",
 ): EventoParaBackoffice | null {
   if (a.isenta) return null;
   const status = STATUS_NO_BACKOFFICE[a.status];
@@ -445,7 +544,7 @@ export function eventoDaAssinatura(
         ? (diaEmSaoPaulo(a.cancelada_em) ?? diaEmSaoPaulo(a.pago_ate) ?? "sem_data")
         : (diaEmSaoPaulo(a.pago_ate) ?? "nunca_pagou");
   return {
-    event_id: `crm_org_${organizationId}_sub_${status}_${marca}`,
+    event_id: `${prefixo}org_${organizationId}_sub_${status}_${marca}`,
     type: "subscription.updated",
     occurred_at: agora.toISOString(),
     subscription: {
@@ -499,6 +598,57 @@ async function clienteDaOrganizacao(admin: Admin, organizationId: string): Promi
   return cliente;
 }
 
+/** Em fatias: a lista vai na URL do PostgREST, e centenas de ids não cabem nela. */
+const FATIA_DA_CONSULTA = 50;
+
+function emFatias<T>(lista: T[], tamanho = FATIA_DA_CONSULTA): T[][] {
+  const fatias: T[][] = [];
+  for (let i = 0; i < lista.length; i += tamanho) fatias.push(lista.slice(i, i + tamanho));
+  return fatias;
+}
+
+/** Quais destes `event_id` já estão em `backoffice_saida` (em qualquer status). Lança se a consulta falhar. */
+async function idsJaNaFila(admin: Admin, ids: string[]): Promise<Set<string>> {
+  const ja = new Set<string>();
+  for (const fatia of emFatias(ids)) {
+    const { data, error } = await admin.from("backoffice_saida").select("event_id").in("event_id", fatia);
+    if (error) throw new Error(error.message);
+    for (const r of (data ?? []) as Array<{ event_id: string }>) ja.add(r.event_id);
+  }
+  return ja;
+}
+
+/**
+ * Grava na fila eventos de UMA organização, com o cliente e a indicação dela no
+ * payload. Devolve os `event_id` gravados. Lança se o upsert falhar.
+ */
+async function gravarNaFila(
+  admin: Admin,
+  organizationId: string,
+  novos: EventoParaBackoffice[],
+): Promise<string[]> {
+  const [cliente, indicacao] = await Promise.all([
+    clienteDaOrganizacao(admin, organizationId),
+    lerIndicacao(admin, organizationId),
+  ]);
+  const linhas = novos.map((e) => ({
+    event_id: e.event_id,
+    organization_id: organizationId,
+    tipo: e.type,
+    payload: {
+      ...e,
+      product: PRODUTO,
+      customer: cliente,
+      ...(indicacao ? { affiliate_code: indicacao.affiliate_code } : {}),
+    },
+  }));
+  const { error } = await admin
+    .from("backoffice_saida")
+    .upsert(linhas, { onConflict: "event_id", ignoreDuplicates: true });
+  if (error) throw new Error(error.message);
+  return linhas.map((l) => l.event_id);
+}
+
 /**
  * Põe os eventos na fila e agenda o envio para depois da resposta. Nunca lança:
  * falhar aqui não pode derrubar o webhook do Asaas nem o cadastro — a cobrança
@@ -514,33 +664,15 @@ export async function emitirParaBackoffice(
 ): Promise<number> {
   if (!backofficeLigado() || eventos.length === 0) return 0;
   try {
-    const ids = eventos.map((e) => e.event_id);
-    const { data: existentes } = await admin.from("backoffice_saida").select("event_id").in("event_id", ids);
-    const ja = new Set(((existentes ?? []) as Array<{ event_id: string }>).map((r) => r.event_id));
+    // Consulta que falhou = "nenhum está lá": o upsert abaixo ignora repetido.
+    const ja = await idsJaNaFila(
+      admin,
+      eventos.map((e) => e.event_id),
+    ).catch(() => new Set<string>());
     const novos = eventos.filter((e) => !ja.has(e.event_id));
     if (novos.length === 0) return 0;
 
-    const [cliente, indicacao] = await Promise.all([
-      clienteDaOrganizacao(admin, organizationId),
-      lerIndicacao(admin, organizationId),
-    ]);
-    const linhas = novos.map((e) => ({
-      event_id: e.event_id,
-      organization_id: organizationId,
-      tipo: e.type,
-      payload: {
-        ...e,
-        product: PRODUTO,
-        customer: cliente,
-        ...(indicacao ? { affiliate_code: indicacao.affiliate_code } : {}),
-      },
-    }));
-    const { error } = await admin
-      .from("backoffice_saida")
-      .upsert(linhas, { onConflict: "event_id", ignoreDuplicates: true });
-    if (error) throw new Error(error.message);
-
-    const enfileirados = linhas.map((l) => l.event_id);
+    const enfileirados = await gravarNaFila(admin, organizationId, novos);
     await depoisDaResposta("backoffice", async () => {
       await enviarPendentes(admin, { eventIds: enfileirados });
     });
@@ -573,7 +705,6 @@ export async function emitirAssinatura(
 
 /** Teto da passada de conciliação. Teste dura dias, então isto é folga, não fila. */
 const LOTE_DE_TESTES = 500;
-const FATIA_DA_CONSULTA = 50;
 
 /**
  * A passada da conciliação horária (`billing-conciliar`): todo teste grátis em
@@ -609,17 +740,10 @@ export async function conciliarTestesNoBackoffice(admin: Admin, agora: Date = ne
       .filter((c): c is { organizationId: string; evento: EventoParaBackoffice } => c.evento !== null);
     if (candidatos.length === 0) return 0;
 
-    // Em fatias: a lista vai na URL do PostgREST, e 500 ids não cabem nela.
-    const ja = new Set<string>();
-    const ids = candidatos.map((c) => c.evento.event_id);
-    for (let i = 0; i < ids.length; i += FATIA_DA_CONSULTA) {
-      const { data: existentes, error: erroFila } = await admin
-        .from("backoffice_saida")
-        .select("event_id")
-        .in("event_id", ids.slice(i, i + FATIA_DA_CONSULTA));
-      if (erroFila) throw new Error(erroFila.message);
-      for (const r of (existentes ?? []) as Array<{ event_id: string }>) ja.add(r.event_id);
-    }
+    const ja = await idsJaNaFila(
+      admin,
+      candidatos.map((c) => c.evento.event_id),
+    );
 
     let enfileirados = 0;
     for (const c of candidatos) {
@@ -682,7 +806,11 @@ export interface ResumoDoEnvio {
 
 export async function enviarPendentes(
   admin: Admin,
-  opts: { eventIds?: string[]; limite?: number; agora?: Date } = {},
+  /**
+   * `prazo` (epoch ms, relógio real): passou dele, para de mandar e deixa o
+   * resto `pendente` para o cron. É o que segura uma rota com tempo contado.
+   */
+  opts: { eventIds?: string[]; limite?: number; agora?: Date; prazo?: number } = {},
 ): Promise<ResumoDoEnvio> {
   const resumo: ResumoDoEnvio = { enviados: 0, reagendados: 0, falharam: 0 };
   if (!backofficeLigado()) return resumo;
@@ -700,6 +828,7 @@ export async function enviarPendentes(
   if (error) throw new Error(`backoffice_saida: ${error.message}`);
 
   for (const linha of (data ?? []) as LinhaDaSaida[]) {
+    if (opts.prazo !== undefined && Date.now() >= opts.prazo) break;
     const tentativas = linha.tentativas + 1;
     let classe: Classificacao;
     let erro: string | null = null;
@@ -737,4 +866,202 @@ export async function enviarPendentes(
     } else resumo.reagendados += 1;
   }
   return resumo;
+}
+
+// ---------------------------------------------------------------------------
+// Sincronização pedida pelo Back Office (`POST /backoffice/billing/sync`)
+// ---------------------------------------------------------------------------
+
+/**
+ * Linhas por chamada. O Back Office chama em laço até `next_cursor` nulo, com
+ * 60 s de limite por chamada.
+ */
+export const PAGINA_DA_SINCRONIZACAO = 200;
+/** Quanto da chamada pode ir em envio. O que não couber fica para o cron (5 min). */
+export const PRAZO_DE_ENVIO_DA_SINCRONIZACAO_MS = 40_000;
+
+/**
+ * Onde a sincronização parou. Primeiro `cobrancas` em ordem de
+ * `(created_at, id)`; quando elas acabam, `assinaturas` em ordem de
+ * `organization_id` — a página curta de cobranças já traz a primeira de
+ * assinaturas, e as seguintes (se houver) vêm em chamadas próprias.
+ */
+export type CursorDaSincronizacao =
+  | { fase: "cobrancas"; criadaEm: string; id: string }
+  | { fase: "assinaturas"; organizacao: string };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// O formato que o PostgREST devolve para `timestamptz`. Estrito porque o valor
+// vai, entre aspas, para dentro de um filtro `or=(…)`.
+const INSTANTE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}(:?\d{2})?)$/;
+
+const cursorSchema = z.discriminatedUnion("f", [
+  z.object({ f: z.literal("c"), t: z.string().regex(INSTANTE), i: z.string().regex(UUID) }),
+  z.object({ f: z.literal("a"), o: z.string().regex(UUID) }),
+]);
+
+/** Opaco para o Back Office: base64url de um JSON curto. */
+export function codificarCursor(c: CursorDaSincronizacao): string {
+  const bruto = c.fase === "cobrancas" ? { f: "c", t: c.criadaEm, i: c.id } : { f: "a", o: c.organizacao };
+  return Buffer.from(JSON.stringify(bruto), "utf8").toString("base64url");
+}
+
+/** null quando o cursor não é um que este CRM emitiu. */
+export function decodificarCursor(bruto: string): CursorDaSincronizacao | null {
+  let json: unknown;
+  try {
+    json = JSON.parse(Buffer.from(bruto, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+  const r = cursorSchema.safeParse(json);
+  if (!r.success) return null;
+  return r.data.f === "c"
+    ? { fase: "cobrancas", criadaEm: r.data.t, id: r.data.i }
+    : { fase: "assinaturas", organizacao: r.data.o };
+}
+
+/** O corpo da resposta (contrato do Back Office, snake_case). */
+export interface ResultadoDaSincronizacao {
+  /** `invoice.updated` montados a partir desta página de `cobrancas`. */
+  invoices: number;
+  /** `subscription.updated` montados a partir de `assinaturas`. */
+  subscriptions: number;
+  /** Quantos desses entraram AGORA na fila (o resto já estava lá). */
+  enqueued: number;
+  /** Quantos o Back Office aceitou nesta chamada (200/201/202/409). */
+  sent: number;
+  next_cursor: string | null;
+}
+
+interface Pendente {
+  organizationId: string;
+  evento: EventoParaBackoffice;
+}
+
+type LinhaDeCobranca = CobrancaGravada & { id: string; created_at: string };
+type LinhaDeAssinatura = AssinaturaParaBackoffice & { organization_id: string };
+
+async function paginaDeCobrancas(
+  admin: Admin,
+  depois: { criadaEm: string; id: string } | null,
+): Promise<LinhaDeCobranca[]> {
+  let q = admin
+    .from("cobrancas")
+    .select(
+      "id, created_at, organization_id, asaas_payment_id, asaas_subscription_id, valor_centavos, metodo, status, vencimento, pago_em, url_fatura",
+    )
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(PAGINA_DA_SINCRONIZACAO);
+  if (depois) {
+    // Keyset: (created_at, id) > (t, i). Os dois valores passaram pela regex do cursor.
+    q = q.or(`created_at.gt."${depois.criadaEm}",and(created_at.eq."${depois.criadaEm}",id.gt.${depois.id})`);
+  }
+  const { data, error } = await q;
+  if (error) throw new Error(`cobrancas: ${error.message}`);
+  return (data ?? []) as LinhaDeCobranca[];
+}
+
+async function paginaDeAssinaturas(admin: Admin, depoisDe: string | null): Promise<LinhaDeAssinatura[]> {
+  let q = admin
+    .from("assinaturas")
+    .select("organization_id, status, isenta, trial_termina_em, pago_ate, cancelada_em, valor_centavos, asaas_subscription_id")
+    .eq("isenta", false)
+    .order("organization_id", { ascending: true })
+    .limit(PAGINA_DA_SINCRONIZACAO);
+  if (depoisDe) q = q.gt("organization_id", depoisDe);
+  const { data, error } = await q;
+  if (error) throw new Error(`assinaturas: ${error.message}`);
+  return (data ?? []) as LinhaDeAssinatura[];
+}
+
+/**
+ * Uma página da sincronização: monta os eventos, enfileira o que ainda não está
+ * na fila e manda já, até o prazo. O que não couber no prazo fica `pendente`, e
+ * o cron `backoffice-saida` manda em até 5 min — `sent` conta só o que o Back
+ * Office aceitou NESTA chamada.
+ *
+ * - Só `invoice.updated` e `subscription.updated`, nunca `payment.succeeded`
+ *   (comissão de pagamento antigo).
+ * - A organização de cada evento vem da LINHA do banco — o corpo da chamada só
+ *   traz o cursor.
+ * - `event_id` com `PREFIXO_DA_SINCRONIZACAO` e estável: chamar de novo não
+ *   duplica nada na fila (e evento `crm_sync_` que já foi não volta a ir).
+ *
+ * Lança se uma consulta ou gravação falhar: a página não foi sincronizada, e o
+ * Back Office pode repetir o mesmo cursor sem duplicar nada.
+ */
+export async function sincronizarComBackoffice(
+  admin: Admin,
+  cursor: CursorDaSincronizacao | null,
+  opts: { agora?: Date; prazo?: number } = {},
+): Promise<ResultadoDaSincronizacao> {
+  const agora = opts.agora ?? new Date();
+  const prazo = opts.prazo ?? Date.now() + PRAZO_DE_ENVIO_DA_SINCRONIZACAO_MS;
+  const pendentes: Pendente[] = [];
+  let invoices = 0;
+  let subscriptions = 0;
+  let proximo: CursorDaSincronizacao | null = null;
+  // `undefined` = esta chamada não chega às assinaturas.
+  let assinaturasDepoisDe: string | null | undefined;
+
+  if (!cursor || cursor.fase === "cobrancas") {
+    const linhas = await paginaDeCobrancas(admin, cursor);
+    for (const c of linhas) {
+      const evento = eventoDaCobrancaGravada(c, agora);
+      if (!evento) continue;
+      invoices += 1;
+      pendentes.push({ organizationId: c.organization_id, evento });
+    }
+    const ultima = linhas[linhas.length - 1];
+    if (linhas.length === PAGINA_DA_SINCRONIZACAO && ultima) {
+      proximo = { fase: "cobrancas", criadaEm: ultima.created_at, id: ultima.id };
+    } else {
+      assinaturasDepoisDe = null; // última página de cobranças: começa as assinaturas
+    }
+  } else {
+    assinaturasDepoisDe = cursor.organizacao;
+  }
+
+  if (assinaturasDepoisDe !== undefined) {
+    const linhas = await paginaDeAssinaturas(admin, assinaturasDepoisDe);
+    for (const a of linhas) {
+      const evento = eventoDaAssinatura(a.organization_id, a, agora, PREFIXO_DA_SINCRONIZACAO);
+      if (!evento) continue;
+      subscriptions += 1;
+      pendentes.push({ organizationId: a.organization_id, evento });
+    }
+    const ultima = linhas[linhas.length - 1];
+    if (linhas.length === PAGINA_DA_SINCRONIZACAO && ultima) {
+      proximo = { fase: "assinaturas", organizacao: ultima.organization_id };
+    }
+  }
+
+  // Enfileira só o que ainda não está lá: uma consulta por fatia, e um upsert
+  // (com uma busca do cliente) por organização.
+  const ids = pendentes.map((p) => p.evento.event_id);
+  const ja = await idsJaNaFila(admin, ids);
+  const porOrganizacao = new Map<string, EventoParaBackoffice[]>();
+  for (const p of pendentes) {
+    if (ja.has(p.evento.event_id)) continue;
+    const lista = porOrganizacao.get(p.organizationId) ?? [];
+    lista.push(p.evento);
+    porOrganizacao.set(p.organizationId, lista);
+  }
+  let enqueued = 0;
+  for (const [organizationId, eventos] of porOrganizacao) {
+    enqueued += (await gravarNaFila(admin, organizationId, eventos)).length;
+  }
+
+  // Manda agora o que está pendente desta página — inclusive o que uma chamada
+  // anterior enfileirou e não chegou a mandar —, até o prazo.
+  let sent = 0;
+  for (const fatia of emFatias(ids)) {
+    if (Date.now() >= prazo) break;
+    const r = await enviarPendentes(admin, { eventIds: fatia, limite: fatia.length, prazo });
+    sent += r.enviados;
+  }
+
+  return { invoices, subscriptions, enqueued, sent, next_cursor: proximo ? codificarCursor(proximo) : null };
 }

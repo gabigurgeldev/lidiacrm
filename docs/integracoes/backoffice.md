@@ -27,6 +27,7 @@ As respostas são JSON cru (sem o envelope `{ data }` da `/api/v1`): o contrato 
 | `POST /backoffice/tenants/{id}/suspend` | `organizations.status = suspended` |
 | `POST /backoffice/tenants/{id}/reactivate` | Volta para `active` |
 | `PATCH /backoffice/tenants/{id}` | `{ plan, amount_cents }` — plano cobrado pelo CRM; o valor novo vale enquanto a assinatura ainda não foi ao Asaas |
+| `POST /backoffice/billing/sync` | `{ cursor? }` → reenvia o histórico de cobrança pela fila de eventos; responde `{ invoices, subscriptions, enqueued, sent, next_cursor }` (ver "Sincronizar o histórico" abaixo) |
 
 `POST /backoffice/tenants` recebe
 `{ request_id, company_name, document, owner: { name, email, whatsapp }, plan, amount_cents, affiliate_code?, extra }`
@@ -76,12 +77,14 @@ Código em `lib/backoffice/saida.ts`; tabelas `backoffice_indicacoes` e `backoff
    | Cobrança excluída (`DELETED`) | `invoice.updated` `canceled` | `crm_pay_<paymentId>_canceled` |
    | Assinatura aberta, status mudou, teste estendido | `subscription.updated` | `crm_org_<orgId>_sub_<status>_<data>` |
 
-   `invoice` = `{ external_id, amount_cents, due_date, payment_url, status, method }`, com
+   `invoice` = `{ external_id, amount_cents, due_date, payment_url, status, method, paid_at? }`, com
    `external_id` = id da cobrança no Asaas — o **mesmo** `payment.external_id` do `payment.succeeded`,
    que é como o Back Office baixa a fatura espelhada. `payment_url` é a `invoiceUrl` do Asaas (só
    `https`). O vencimento entra no `event_id` de pendente/vencida porque o Asaas pode mudar a data de
    uma cobrança em aberto. A fatura paga vai além do `payment.succeeded` para que um `pending`
-   atrasado na fila nunca reabra, no Back Office, uma fatura já paga.
+   atrasado na fila nunca reabra, no Back Office, uma fatura já paga. Só em `paid` vai `paid_at`
+   (ISO-8601 com fuso): o **mesmo** instante do `payment.succeeded` — hora real se o pagamento é de
+   hoje, 15:00Z (meio da tarde em São Paulo) se é de outro dia.
 
    `subscription` = `{ status, trial_ends_at, subscribe_url, amount_cents, external_id? }`. Status no
    vocabulário do Back Office: `trial`→`trial`, `ativa`→`active`, `inadimplente`→`past_due`,
@@ -114,6 +117,30 @@ Código em `lib/backoffice/saida.ts`; tabelas `backoffice_indicacoes` e `backoff
    `gravarCobranca` (que enfileira o `invoice.updated`), e todo teste grátis em andamento que ainda não
    foi ao Back Office entra na fila com a data de fim — inclusive os que começaram antes disto. O resumo
    do cron traz `testes_avisados`.
+
+5. **Sincronizar o histórico** (`POST /backoffice/billing/sync`, assinada como as outras rotas
+   `/backoffice/*`). O botão de `/admin/cobrancas` do Back Office chama em laço, com o `next_cursor`
+   da resposta anterior, até ele vir `null` (60 s por chamada). Corpo `{ cursor?: string | null }`
+   — e só isso: a organização de cada evento vem da linha do banco, nunca do corpo.
+
+   - Cada chamada lê **200** linhas de `cobrancas` em ordem de `(created_at, id)` e manda cada uma
+     como `invoice.updated`, com `event_id` `crm_sync_<paymentId>_<estado>` (mesma regra de estado e
+     de vencimento da tabela acima; `paid_at` a partir de `pago_em`). Página curta = fim das
+     cobranças: a mesma chamada manda as primeiras 200 `assinaturas` (não isentas) como
+     `subscription.updated` `crm_sync_org_<orgId>_sub_<status>_<data>`; se houver mais, o cursor
+     segue por elas. `next_cursor` é opaco (base64url); cursor que o CRM não emitiu = `422 invalid_cursor`.
+   - **Nunca `payment.succeeded`**: no Back Office ele gera comissão, e pagamento antigo reenviado
+     viraria comissão nova.
+   - O prefixo `crm_sync_` existe porque o `crm_pay_…` de uma fatura antiga já está na fila
+     (enviado ou `falhou`) e o UNIQUE engoliria o reenvio. Ele é estável: chamar de novo não duplica
+     nada — e evento `crm_sync_` que já foi (ou que ficou `falhou`) **não** volta a ir.
+   - Resposta `{ invoices, subscriptions, enqueued, sent, next_cursor }`: eventos montados nesta
+     página, quantos entraram agora na fila, e quantos o Back Office aceitou **nesta chamada**. O
+     envio para em ~40 s; o que não coube fica `pendente` e o cron `backoffice-saida` manda em até
+     5 min — por isso `sent` pode ser menor que `enqueued`.
+   - Sem `BACKOFFICE_URL`/`BACKOFFICE_API_KEY` responde `503 backoffice_outbound_not_configured`;
+     erro de banco no meio = `500 sync_failed` (repetir o mesmo cursor é seguro). Chamada que
+     enfileirou ou entregou algo fica no audit como `backoffice.sincronizacao_run` (só contagens).
 
 Estorno parcial (`PAYMENT_PARTIALLY_REFUNDED`) não é enviado: o Asaas não informa o total estornado no
 evento. Faça o ajuste pelo Back Office (lançamento manual) se acontecer.
