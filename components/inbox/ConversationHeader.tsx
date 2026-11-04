@@ -11,6 +11,7 @@ import { useChannelSessions } from "@/hooks/channels/useChannelSessions";
 import {
   ArrowBendUpLeft,
   ArrowCounterClockwise,
+  ArrowLeft,
   CalendarCheck,
   CalendarPlus,
   CaretDown,
@@ -20,6 +21,7 @@ import {
   FilePdf,
   FileXls,
   FlowArrow,
+  IdentificationCard,
   Pause,
   Robot,
   UserCircle,
@@ -66,6 +68,13 @@ interface Props {
    * ela não saberia onde encontrá-la de novo.
    */
   onIrParaAba?: (aba: InboxTab) => void;
+  /**
+   * O ← do celular. Mora NA MESMA linha do rosto e do nome, como no WhatsApp:
+   * antes era uma barra própria ("‹ Conversas") em cima deste cabeçalho, e o
+   * telefone empilhava quatro barras antes da primeira mensagem. Só aparece
+   * abaixo do `md` — no desktop a lista está sempre ao lado.
+   */
+  onVoltar?: () => void;
 }
 
 /** Para onde a conversa reaberta vai, e em qual aba ela aparece. */
@@ -98,7 +107,7 @@ function lembreteVigente(snoozeUntil: string | null): boolean {
   return snoozeUntil != null && new Date(snoozeUntil).getTime() > Date.now();
 }
 
-export function ConversationHeader({ conversation, onAbrirPerfil, onIrParaAba }: Props) {
+export function ConversationHeader({ conversation, onAbrirPerfil, onIrParaAba, onVoltar }: Props) {
   const t = useT();
   const { user } = useAuth();
   const claim = useClaimConversation();
@@ -220,7 +229,28 @@ export function ConversationHeader({ conversation, onAbrirPerfil, onIrParaAba }:
     // `flex-wrap` e a barra de ações `min-w-0` + `flex-wrap` (sem `shrink-0`)
     // FICAM: é o que impede o header de impor largura mínima à coluna do meio —
     // ver `inbox-header-nao-trava.test.tsx`.
-    <div className="inbox-barra border-border/60 flex min-h-[60px] flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b px-4 py-2">
+    // NO CELULAR, UMA LINHA SÓ: ← · rosto · nome · ação · ⋮ — o desenho do
+    // WhatsApp. `px-1` e altura 56px abaixo do `md`; o resto é o desktop de antes.
+    <div
+      className="inbox-barra border-border/60 flex min-h-14 flex-wrap items-center justify-between gap-x-1 gap-y-1 border-b px-1 py-1.5 md:min-h-[60px] md:gap-x-3 md:px-4 md:py-2"
+      data-testid="cabecalho-da-conversa"
+    >
+      {/* O 1º filho é o lado ESQUERDO inteiro (← + porta do perfil), e o 2º, as
+          ações — `inbox-header-nao-trava.test.tsx` mede essa ordem. */}
+      <div className="flex min-w-0 flex-1 items-center gap-0.5">
+        {onVoltar && (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-10 shrink-0 rounded-full md:hidden"
+            aria-label={t("Voltar para as conversas")}
+            data-testid="voltar-para-conversas"
+            onClick={onVoltar}
+          >
+            <ArrowLeft size={22} aria-hidden />
+          </Button>
+        )}
       {/* O rosto e o nome são a PORTA do perfil, como no WhatsApp: um clique abre
           "Dados do contato". `role="button"` num div (e não <button>) porque
           dentro dele há selos com tooltip, e botão dentro de botão é HTML
@@ -237,14 +267,14 @@ export function ConversationHeader({ conversation, onAbrirPerfil, onIrParaAba }:
         }}
         title={t("Dados do contato")}
         data-testid="abrir-perfil-do-contato"
-        className="-my-1 -ml-2 flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg py-1 pl-2 transition-colors hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg py-1 pl-1 transition-colors hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:-my-1 md:-ml-2 md:gap-3 md:pl-2"
       >
         <AvatarDoContato
           contactId={c?.id}
           temFoto={Boolean(c?.avatar_storage_path)}
           anonimizado={c?.is_anonymized}
           nome={displayName}
-          className="h-10 w-10 shrink-0"
+          className="h-9 w-9 shrink-0 md:h-10 md:w-10"
         />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-base font-medium leading-5 text-foreground">
@@ -264,15 +294,17 @@ export function ConversationHeader({ conversation, onAbrirPerfil, onIrParaAba }:
                 <OwnerBadge ownerKind={null} ownerName={null} />
               )}
             </span>
+            {/* No celular a sub-linha fica com quem responde e a janela — o que
+                decide ação. Telefone e canal estão a um toque, na ficha. */}
             {phone && (
-              <span className="flex shrink-0 items-center gap-1">
+              <span className="hidden shrink-0 items-center gap-1 sm:flex">
                 <span aria-hidden>·</span>
                 {phone}
               </span>
             )}
             {rotuloDoCanal && (
               <span
-                className="flex shrink-0 items-center gap-1"
+                className="hidden shrink-0 items-center gap-1 sm:flex"
                 data-testid="canal-da-conversa"
                 title={`${t("por")} ${rotuloDoCanal}`}
               >
@@ -308,8 +340,9 @@ export function ConversationHeader({ conversation, onAbrirPerfil, onIrParaAba }:
           </div>
         </div>
       </div>
+      </div>
 
-      <div className="flex min-w-0 flex-wrap items-center gap-1">
+      <div className="flex min-w-0 flex-wrap items-center gap-0.5 md:gap-1">
         {/* A AÇÃO PRINCIPAL — a que a conversa pede agora. Uma de cada vez: sem
             dono, "Assumir"; com o automático travado, "Devolver ao automático".
             O rótulo e o `data-testid` são contrato das specs de ponta a ponta.
@@ -383,7 +416,13 @@ export function ConversationHeader({ conversation, onAbrirPerfil, onIrParaAba }:
             }
             onClick={() => retomar.mutate({ conversation_id: conversation.id })}
           >
-            {retomar.isPending ? t("Devolvendo...") : t("Devolver ao automático")}
+            {/* No celular o rótulo comprido empurrava o nome do cliente para fora
+                da linha: fica o ícone, e o rótulo vira `sr-only` (o leitor de tela
+                segue ouvindo o nome, e o rótulo continua UM `t()` só). */}
+            <Robot size={16} aria-hidden className="md:mr-1.5" />
+            <span className="sr-only md:not-sr-only">
+              {retomar.isPending ? t("Devolvendo...") : t("Devolver ao automático")}
+            </span>
           </Button>
         ) : null}
 
@@ -419,6 +458,18 @@ export function ConversationHeader({ conversation, onAbrirPerfil, onIrParaAba }:
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-72">
+            {/* No celular a ficha não tem coluna ao lado: o caminho óbvio é o ⋮,
+                além do toque no nome (que também abre). */}
+            {onAbrirPerfil && (
+              <DropdownMenuItem
+                className="md:hidden"
+                data-testid="acao-dados-do-contato"
+                onSelect={() => onAbrirPerfil()}
+              >
+                <IdentificationCard size={16} aria-hidden className="mr-2" />
+                {t("Dados do contato")}
+              </DropdownMenuItem>
+            )}
             {isMineAssigned && (
               <DropdownMenuItem
                 disabled={release.isPending}

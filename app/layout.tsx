@@ -132,6 +132,15 @@ export async function generateMetadata(): Promise<Metadata> {
  */
 export const viewport: Viewport = {
   themeColor: coresDaBarraDoNavegador(REGUA_DO_PRODUTO),
+  // `cover`: sem isto `env(safe-area-inset-*)` vale sempre 0 no iPhone, e o
+  // campo de mensagem e a barra de abas do celular nasciam embaixo da barrinha
+  // de gesto. Com `cover` a página vai até a borda e QUEM PRECISA (composer,
+  // `BarraInferior`) pede o recuo explicitamente.
+  viewportFit: "cover",
+  // `resizes-content`: com o teclado aberto, o Chrome do Android encolhe a
+  // página (o `h-dvh` acompanha) em vez de só deslizá-la por baixo do teclado —
+  // é o que mantém o cabeçalho da conversa e o campo de escrever à vista.
+  interactiveWidget: "resizes-content",
 };
 
 /**

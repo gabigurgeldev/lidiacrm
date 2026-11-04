@@ -17,7 +17,7 @@ No Inbox, a lista de conversas tem as abas **Fila**, **Minhas**, **Todas**, **Fe
 ### Responder uma conversa
 1. Abra **Atendimento › Inbox** e clique numa conversa da lista à esquerda.
 2. Se ela ainda não tem responsável, clique em **Assumir** no topo da conversa. Ao assumir, o atendimento automático para nessa conversa.
-3. Escreva no campo **Digite uma mensagem** e aperte **Enter** para enviar (**Shift + Enter** quebra a linha).
+3. Escreva no campo **Digite uma mensagem** e aperte **Enter** para enviar (**Shift + Enter** quebra a linha). No celular, **Enter** quebra a linha e quem envia é o botão de enviar.
 4. Para anexar foto, vídeo, documento, áudio, contato ou uma enquete, use o botão de opções ao lado do campo de texto. Para gravar áudio, use **Gravar áudio**.
 
 ### Usar uma resposta rápida no atendimento
@@ -54,6 +54,12 @@ No menu **Mais ações** da conversa:
 3. Para mudar o contato de coluna, escolha a nova coluna ali mesmo. Se ele não está em nenhum Kanban, use **Colocar em um Kanban**.
 4. Para exportar a conversa, use **Exportar conversa** (PDF ou Excel).
 
+### Atender pelo celular
+1. No celular, o Inbox funciona como o WhatsApp: a lista de conversas ocupa a tela inteira e, ao tocar numa conversa, ela abre em tela cheia.
+2. Para voltar à lista, toque na seta **Voltar para as conversas** no canto do topo, ou use o voltar do próprio aparelho.
+3. Os dados do cliente ficam em **Mais ações** (os três pontos no topo da conversa) › **Dados do contato**.
+4. Na parte de baixo da tela fica a barra com **Conversas**, **Kanban**, **Contatos** e **Agenda**. As outras telas do sistema estão em **Mais**, no fim dessa barra. A barra some enquanto uma conversa está aberta ou o teclado está na tela.
+
 ### Usar o Radar
 1. Abra **Atendimento › Radar** (título "Radar de risco").
 2. A lista mostra demandas abertas que esfriaram, separadas em **Crítico**, **Em risco** e **Em voo** (em voo = o assistente já agendou um retorno).
@@ -70,6 +76,7 @@ No menu **Mais ações** da conversa:
 
 ## Dúvidas comuns
 - **Por que não vejo todas as conversas?** Depende da configuração em **Configurações › Distribuição de atendimento**. Se ela estiver em "Os seus, mais os que ainda não têm dono", o atendente vê só as conversas dele e a Fila; em "Só os seus", vê apenas as que foram direcionadas a ele. Nesses casos a aba **Todas** some para quem tem papel de Atendente. Gerente e administrador sempre veem tudo.
+- **Consigo assumir ou transferir para mim a conversa de uma colega?** Quando a distribuição esconde as conversas das colegas ("Os seus, mais os que ainda não têm dono" ou "Só os seus"), não: o atendente só assume ou transfere as conversas que ele consegue ver. Para passar uma conversa de uma atendente para outra, a dona dela usa **Transferir**, ou um gerente ou administrador faz a troca.
 - **Qual a diferença entre Fila, Minhas e Todas?** **Fila** são conversas sem responsável (as que esperam há mais tempo aparecem primeiro). **Minhas** são as que você assumiu. **Todas** mostra tudo o que você pode ver. **IA** mostra as que o atendimento automático está conduzindo.
 - **Por que só consigo mandar "modelo aprovado"?** Em números da API oficial do WhatsApp, passadas 24 horas da última mensagem do cliente, a plataforma só aceita modelos aprovados. Escolha um modelo em **Enviar modelo**; quando o cliente responder, a janela reabre.
 - **A IA está respondendo por cima de mim. Como paro?** Clique em **Assumir** ou, em **Mais ações**, em **Pausar o automático**. Para devolver, use **Devolver ao automático**.

@@ -45,7 +45,12 @@ import { AppShell } from "@/app/app/_components/AppShell";
 import type { ActiveOrg, AuthUser } from "@/lib/auth/types";
 
 let rota = "/app/inbox";
-vi.mock("next/navigation", () => ({ usePathname: () => rota }));
+// `useSearchParams`: a barra de abas do celular (`BarraInferior`) lê o `?id=`
+// da conversa aberta para sair da frente do campo de escrever.
+vi.mock("next/navigation", () => ({
+  usePathname: () => rota,
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 const authRef: { user: Pick<AuthUser, "is_platform_admin">; activeOrg: ActiveOrg | null } = {
   user: { is_platform_admin: false },
@@ -156,8 +161,24 @@ describe("a casca", () => {
     montar("/app/inbox");
     expect(screen.getByTestId("cabecalho-do-app")).toHaveAttribute("data-some-em-md", "true");
     expect(screen.getByTestId("avisos-na-barra")).toBeInTheDocument();
-    // E o cabeçalho segue MONTADO — é ele quem carrega o ☰ no celular.
+    // E o cabeçalho segue MONTADO (escondido por CSS, sem piscar na hidratação).
     expect(cabecalho()).toBeInTheDocument();
+  });
+
+  it("no Inbox o cabeçalho some TAMBÉM no celular — e a navegação fica na barra de abas", () => {
+    // Desde 04/11/2026 a porta da navegação no celular é o "Mais" da barra
+    // inferior. Esconder o cabeçalho sem ela deixaria o produto sem navegação
+    // no telefone; por isso as duas coisas são medidas JUNTAS.
+    montar("/app/inbox");
+    expect(screen.getByTestId("cabecalho-do-app")).toHaveAttribute("data-some-no-celular", "true");
+    expect(screen.getByTestId("barra-inferior")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /abrir navegação/i })).toBeInTheDocument();
+  });
+
+  it("fora do Inbox o cabeçalho fica no celular, com a barra de abas embaixo", () => {
+    montar("/app/kanban");
+    expect(screen.getByTestId("cabecalho-do-app")).not.toHaveAttribute("data-some-no-celular");
+    expect(screen.getByTestId("barra-inferior")).toBeInTheDocument();
   });
 
   it("fora do Inbox o cabeçalho fica, e o rodapé não adota os avisos", () => {

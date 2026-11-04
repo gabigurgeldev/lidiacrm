@@ -247,8 +247,14 @@ export function AgenteSuporte({ nomeDoAgente, nomeDoProduto }: Props) {
       {!aberto && (
         <div
           className={cn(
-            "fixed right-4 z-40 flex flex-col items-end gap-2 md:right-6",
-            subir ? "bottom-24" : "bottom-4 md:bottom-6",
+            "fixed right-4 z-40 flex-col items-end gap-2 md:right-6",
+            // No celular: fora do Inbox a bolinha sobe acima da barra de abas
+            // (`BarraInferior`, 56px + área segura); no Inbox ela SAI — a tela
+            // é a conversa, e uma bolha flutuando sobre as mensagens e o botão
+            // de enviar é o oposto de um mensageiro. No desktop, como antes.
+            subir
+              ? "bottom-24 hidden md:flex"
+              : "bottom-[calc(5rem+env(safe-area-inset-bottom))] flex md:bottom-6",
           )}
         >
           {saudacao && (
