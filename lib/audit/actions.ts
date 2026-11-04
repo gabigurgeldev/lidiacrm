@@ -601,6 +601,11 @@ export const AUDIT_ACTIONS = [
   // custo_usd, modelo }` — nunca o texto da pergunta nem o da resposta.
   "agente.pergunta_respondida",
   "agente.historico_limpo",
+  // ── Back Office: sincronização do histórico de cobrança ──
+  // `POST /backoffice/billing/sync` enfileirou ou entregou algo. Metadata: só
+  // contagens (`invoices`, `subscriptions`, `enqueued`, `sent`), a fase do
+  // cursor e se foi a última página — nenhum dado do titular.
+  "backoffice.sincronizacao_run",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

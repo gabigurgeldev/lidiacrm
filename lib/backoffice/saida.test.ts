@@ -10,15 +10,21 @@ const envMock = vi.hoisted(() => ({
 vi.mock("@/lib/env", () => ({ env: envMock }));
 
 import {
+  type CobrancaGravada,
   classificar,
+  codificarCursor,
   conciliarTestesNoBackoffice,
+  decodificarCursor,
   enviarPendentes,
   esperaDaTentativa,
   eventoDaAssinatura,
+  eventoDaCobrancaGravada,
   eventosDaCobranca,
   instanteDoPagamento,
   normalizarCodigo,
+  PAGINA_DA_SINCRONIZACAO,
   precoComDesconto,
+  sincronizarComBackoffice,
   telefoneDoDono,
   validarCodigo,
 } from "./saida";
@@ -102,6 +108,17 @@ describe("cobrança do Asaas → eventos", () => {
     expect(ev.map((e) => e.type)).toEqual(["payment.succeeded", "invoice.updated"]);
     expect(ev[1]).toMatchObject({ event_id: "crm_pay_pay_1_paid", invoice: { status: "paid" } });
     expect(ev[1]!.invoice!.external_id).toBe(ev[0]!.payment!.external_id);
+  });
+
+  it("fatura paga leva paid_at — o MESMO instante do payment.succeeded; em aberto não leva", () => {
+    const ev = eventosDaCobranca({ ...fatura, status: "RECEIVED", paymentDate: "2026-09-10" }, AGORA);
+    expect(ev[1]!.invoice!.paid_at).toBe("2026-09-10T15:00:00.000Z");
+    expect(ev[1]!.invoice!.paid_at).toBe(ev[0]!.payment!.paid_at);
+    // Pago hoje: hora real, nos dois.
+    const hoje = eventosDaCobranca({ ...fatura, status: "CONFIRMED", confirmedDate: "2026-09-30" }, AGORA);
+    expect(hoje[1]!.invoice!.paid_at).toBe(AGORA.toISOString());
+    const [aberta] = eventosDaCobranca({ ...fatura, status: "PENDING" }, AGORA);
+    expect(aberta!.invoice).not.toHaveProperty("paid_at");
   });
 
   it("cartão leva method credit_card; link não-https e método desconhecido não vão", () => {
@@ -424,5 +441,275 @@ describe("conciliarTestesNoBackoffice", () => {
     );
     expect(await conciliarTestesNoBackoffice(admin, AGORA)).toBe(0);
     expect(gravados).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sincronização pedida pelo Back Office (`POST /backoffice/billing/sync`)
+// ---------------------------------------------------------------------------
+
+const ORG_X = "11111111-1111-4111-8111-111111111111";
+const ORG_Y = "33333333-3333-4333-8333-333333333333";
+
+/** Linha de `cobrancas` como o PostgREST devolve. */
+function cobranca(
+  n: number,
+  org: string,
+  status: string,
+  extra: Partial<CobrancaGravada> = {},
+): CobrancaGravada & { id: string; created_at: string } {
+  return {
+    id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+    created_at: `2026-0${1 + (n % 9)}-01T12:00:00.${String(n).padStart(6, "0")}+00:00`,
+    organization_id: org,
+    asaas_payment_id: `pay_${n}`,
+    asaas_subscription_id: "sub_1",
+    valor_centavos: 60000,
+    metodo: "PIX",
+    status,
+    vencimento: "2026-09-10",
+    pago_em: null,
+    url_fatura: "https://www.asaas.com/i/abc",
+    ...extra,
+  };
+}
+
+describe("cobrança gravada → invoice.updated da sincronização", () => {
+  it("em aberto: prefixo crm_sync_, sem paid_at, mesmo contrato da fatura ao vivo", () => {
+    expect(eventoDaCobrancaGravada(cobranca(1, ORG_X, "PENDING"), AGORA)).toEqual({
+      event_id: "crm_sync_pay_1_pending_2026-09-10",
+      type: "invoice.updated",
+      occurred_at: AGORA.toISOString(),
+      invoice: {
+        external_id: "pay_1",
+        amount_cents: 60000,
+        due_date: "2026-09-10",
+        payment_url: "https://www.asaas.com/i/abc",
+        status: "pending",
+        method: "pix",
+      },
+      subscription: { external_id: "sub_1" },
+    });
+  });
+
+  it("paga: paid_at pela mesma regra do payment.succeeded, não a meia-noite UTC gravada", () => {
+    const ev = eventoDaCobrancaGravada(
+      cobranca(2, ORG_X, "RECEIVED", { pago_em: "2026-09-10T00:00:00+00:00" }),
+      AGORA,
+    )!;
+    expect(ev.event_id).toBe("crm_sync_pay_2_paid");
+    expect(ev.type).toBe("invoice.updated");
+    expect(ev.invoice).toMatchObject({ status: "paid", paid_at: "2026-09-10T15:00:00.000Z" });
+    // Bate com o paid_at que o webhook mandou para a mesma cobrança.
+    const [aoVivo] = eventosDaCobranca(
+      { id: "pay_2", value: 600, status: "RECEIVED", paymentDate: "2026-09-10", dueDate: "2026-09-10" },
+      AGORA,
+    );
+    expect(ev.invoice!.paid_at).toBe(aoVivo!.payment!.paid_at);
+    // Paga sem data gravada: paid_at é opcional e não é inventado.
+    expect(eventoDaCobrancaGravada(cobranca(3, ORG_X, "CONFIRMED"), AGORA)!.invoice).not.toHaveProperty("paid_at");
+  });
+
+  it("estado que não é de fatura não sai — e nada aqui vira payment.*", () => {
+    expect(eventoDaCobrancaGravada(cobranca(4, ORG_X, "REFUNDED", { pago_em: "2026-09-10T00:00:00+00:00" }), AGORA)).toBeNull();
+    expect(eventoDaCobrancaGravada(cobranca(5, ORG_X, "PENDING", { vencimento: null }), AGORA)).toBeNull();
+    expect(eventoDaCobrancaGravada(cobranca(6, ORG_X, "DELETED"), AGORA)!.invoice!.status).toBe("canceled");
+  });
+
+  it("assinatura da sincronização: mesmo evento, prefixo crm_sync_", () => {
+    const a = {
+      status: "trial",
+      isenta: false,
+      trial_termina_em: "2026-10-07T21:30:00.000Z",
+      pago_ate: null,
+      valor_centavos: 120000,
+      asaas_subscription_id: null,
+    };
+    const aoVivo = eventoDaAssinatura(ORG_X, a, AGORA)!;
+    const sync = eventoDaAssinatura(ORG_X, a, AGORA, "crm_sync_")!;
+    expect(sync.event_id).toBe(`crm_sync_org_${ORG_X}_sub_trial_2026-10-07`);
+    expect({ ...sync, event_id: aoVivo.event_id }).toEqual(aoVivo);
+  });
+});
+
+describe("cursor da sincronização", () => {
+  it("ida e volta, nas duas fases", () => {
+    const c = { fase: "cobrancas" as const, criadaEm: "2026-10-31T12:34:56.123456+00:00", id: ORG_X };
+    expect(decodificarCursor(codificarCursor(c))).toEqual(c);
+    const a = { fase: "assinaturas" as const, organizacao: ORG_Y };
+    expect(decodificarCursor(codificarCursor(a))).toEqual(a);
+  });
+
+  it("recusa o que não emitiu — inclusive tentativa de escapar do filtro", () => {
+    const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString("base64url");
+    expect(decodificarCursor("lixo")).toBeNull();
+    expect(decodificarCursor(b64({ f: "c", t: "2026-10-31", i: ORG_X }))).toBeNull();
+    expect(decodificarCursor(b64({ f: "c", t: '2026-10-31T12:00:00Z",id.gt.0', i: ORG_X }))).toBeNull();
+    expect(decodificarCursor(b64({ f: "c", t: "2026-10-31T12:00:00Z", i: "1),or(true" }))).toBeNull();
+    expect(decodificarCursor(b64({ f: "a", o: "não-uuid" }))).toBeNull();
+  });
+});
+
+describe("sincronizarComBackoffice", () => {
+  type Linha = Record<string, unknown>;
+
+  /**
+   * Admin falso com uma fila de verdade: `backoffice_saida` guarda o que foi
+   * gravado, responde "já está lá?" e o envio, e aceita a baixa do envio.
+   */
+  function adminDaSincronizacao(dados: { cobrancas: object[]; assinaturas?: object[]; naFila?: string[] }) {
+    const fila = new Map<string, Linha>();
+    for (const id of dados.naFila ?? []) fila.set(id, { id, event_id: id, status: "enviado" });
+    const chamadas: Array<{ tabela: string; ops: Array<[string, unknown[]]> }> = [];
+    const admin = {
+      from: (tabela: string) => {
+        const ops: Array<[string, unknown[]]> = [];
+        chamadas.push({ tabela, ops });
+        const arg = (m: string) => ops.find((o) => o[0] === m)?.[1];
+        const resolver = () => {
+          if (tabela === "cobrancas") return { data: dados.cobrancas, error: null };
+          if (tabela === "assinaturas") return { data: dados.assinaturas ?? [], error: null };
+          if (tabela === "backoffice_saida") {
+            const ids = (arg("in")?.[1] as string[] | undefined) ?? [];
+            if (arg("select")?.[0] === "event_id") {
+              return { data: ids.filter((id) => fila.has(id)).map((event_id) => ({ event_id })), error: null };
+            }
+            const pendentes = ids.map((id) => fila.get(id)).filter((l) => l?.status === "pendente");
+            return { data: pendentes, error: null };
+          }
+          throw new Error(`tabela inesperada: ${tabela}`);
+        };
+        const q: Record<string, unknown> = {};
+        for (const m of ["select", "eq", "lte", "gt", "order", "limit", "or", "in"]) {
+          q[m] = (...a: unknown[]) => {
+            ops.push([m, a]);
+            return q;
+          };
+        }
+        q.maybeSingle = async () => ({ data: null, error: null });
+        q.then = (r: (v: unknown) => unknown, j?: (e: unknown) => unknown) => Promise.resolve().then(resolver).then(r, j);
+        q.upsert = async (linhas: Linha[]) => {
+          for (const l of linhas) {
+            const id = l.event_id as string;
+            // `created_at` do relógio real: é contra ele que o envio mede a janela de 7 dias.
+            if (!fila.has(id)) fila.set(id, { ...l, id, status: "pendente", tentativas: 0, created_at: new Date().toISOString() });
+          }
+          return { error: null };
+        };
+        q.update = (mudanca: Linha) => ({
+          eq: (_c: string, id: string) => ({
+            eq: async () => {
+              const l = fila.get(id);
+              if (l?.status === "pendente") Object.assign(l, mudanca);
+              return { error: null };
+            },
+          }),
+        });
+        return q;
+      },
+    };
+    return { admin: admin as never, fila, chamadas };
+  }
+
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const assinatura = (org: string) => ({
+    organization_id: org,
+    status: "ativa",
+    isenta: false,
+    trial_termina_em: null,
+    pago_ate: "2026-10-10T00:00:00.000Z",
+    cancelada_em: null,
+    valor_centavos: 120000,
+    asaas_subscription_id: "sub_1",
+  });
+
+  it("última página: faturas + assinaturas, organização da LINHA, entregue agora, cursor nulo", async () => {
+    const { admin, fila } = adminDaSincronizacao({
+      cobrancas: [
+        cobranca(1, ORG_X, "RECEIVED", { pago_em: "2026-09-10T00:00:00+00:00" }),
+        cobranca(2, ORG_Y, "OVERDUE"),
+        cobranca(3, ORG_X, "REFUNDED", { pago_em: "2026-08-10T00:00:00+00:00" }),
+      ],
+      assinaturas: [assinatura(ORG_X), assinatura(ORG_Y)],
+    });
+    const r = await sincronizarComBackoffice(admin, null, { agora: AGORA });
+    expect(r).toEqual({ invoices: 2, subscriptions: 2, enqueued: 4, sent: 4, next_cursor: null });
+
+    const linhas = [...fila.values()];
+    expect(linhas.map((l) => [l.event_id, l.organization_id, l.status])).toEqual([
+      ["crm_sync_pay_1_paid", ORG_X, "enviado"],
+      [`crm_sync_org_${ORG_X}_sub_active_2026-10-09`, ORG_X, "enviado"],
+      ["crm_sync_pay_2_overdue_2026-09-10", ORG_Y, "enviado"],
+      [`crm_sync_org_${ORG_Y}_sub_active_2026-10-09`, ORG_Y, "enviado"],
+    ]);
+    // Nunca payment.* — comissão de pagamento antigo.
+    expect(new Set(linhas.map((l) => l.tipo))).toEqual(new Set(["invoice.updated", "subscription.updated"]));
+    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body).type)).not.toContain("payment.succeeded");
+    expect(linhas[0]!.payload).toMatchObject({ product: "gestalt-crm", customer: { external_id: ORG_X } });
+  });
+
+  it("chamar de novo não duplica nada: o que já foi não entra nem sai outra vez", async () => {
+    const cobrancas = [cobranca(1, ORG_X, "PENDING")];
+    const { admin } = adminDaSincronizacao({ cobrancas, naFila: ["crm_sync_pay_1_pending_2026-09-10"] });
+    const r = await sincronizarComBackoffice(admin, null, { agora: AGORA });
+    expect(r).toEqual({ invoices: 1, subscriptions: 0, enqueued: 0, sent: 0, next_cursor: null });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("página cheia: só cobranças, e o cursor aponta para a última (created_at, id)", async () => {
+    const cobrancas = Array.from({ length: PAGINA_DA_SINCRONIZACAO }, (_, i) => cobranca(i + 1, ORG_X, "PENDING"));
+    const { admin, chamadas } = adminDaSincronizacao({ cobrancas });
+    const r = await sincronizarComBackoffice(admin, null, { agora: AGORA });
+    expect(r.invoices).toBe(PAGINA_DA_SINCRONIZACAO);
+    expect(r.subscriptions).toBe(0);
+    expect(r.enqueued).toBe(PAGINA_DA_SINCRONIZACAO);
+    const ultima = cobrancas[cobrancas.length - 1]!;
+    expect(decodificarCursor(r.next_cursor!)).toEqual({ fase: "cobrancas", criadaEm: ultima.created_at, id: ultima.id });
+    expect(chamadas.some((c) => c.tabela === "assinaturas")).toBe(false);
+    // A pergunta "já está na fila?" vai em fatias que cabem na URL.
+    const fatias = chamadas.filter((c) => c.tabela === "backoffice_saida" && c.ops[0]?.[1][0] === "event_id");
+    expect(Math.max(...fatias.map((c) => (c.ops.find((o) => o[0] === "in")![1][1] as string[]).length))).toBe(50);
+  });
+
+  it("com cursor: keyset (created_at, id) no filtro", async () => {
+    const { admin, chamadas } = adminDaSincronizacao({ cobrancas: [] });
+    const cursor = { fase: "cobrancas" as const, criadaEm: "2026-10-31T12:34:56.123456+00:00", id: ORG_X };
+    await sincronizarComBackoffice(admin, cursor, { agora: AGORA });
+    const ops = chamadas.find((c) => c.tabela === "cobrancas")!.ops;
+    expect(ops.find((o) => o[0] === "or")![1][0]).toBe(
+      `created_at.gt."${cursor.criadaEm}",and(created_at.eq."${cursor.criadaEm}",id.gt.${ORG_X})`,
+    );
+  });
+
+  it("fase de assinaturas: não relê cobranças e continua depois da última organização", async () => {
+    const { admin, chamadas } = adminDaSincronizacao({ cobrancas: [], assinaturas: [assinatura(ORG_Y)] });
+    const r = await sincronizarComBackoffice(admin, { fase: "assinaturas", organizacao: ORG_X }, { agora: AGORA });
+    expect(r).toMatchObject({ invoices: 0, subscriptions: 1, enqueued: 1, sent: 1, next_cursor: null });
+    expect(chamadas.some((c) => c.tabela === "cobrancas")).toBe(false);
+    const ops = chamadas.find((c) => c.tabela === "assinaturas")!.ops;
+    expect(ops).toEqual(expect.arrayContaining([["gt", ["organization_id", ORG_X]], ["eq", ["isenta", false]]]));
+  });
+
+  it("prazo estourado: enfileira e deixa pendente para o cron, e sent diz 0", async () => {
+    const { admin, fila } = adminDaSincronizacao({ cobrancas: [cobranca(1, ORG_X, "PENDING")] });
+    const r = await sincronizarComBackoffice(admin, null, { agora: AGORA, prazo: Date.now() - 1 });
+    expect(r).toMatchObject({ enqueued: 1, sent: 0 });
+    expect(fila.get("crm_sync_pay_1_pending_2026-09-10")!.status).toBe("pendente");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("Back Office recusando: sent conta só o aceito", async () => {
+    fetchMock.mockResolvedValue(new Response("fora", { status: 503 }));
+    const { admin, fila } = adminDaSincronizacao({ cobrancas: [cobranca(1, ORG_X, "PENDING")] });
+    const r = await sincronizarComBackoffice(admin, null, { agora: AGORA });
+    expect(r).toMatchObject({ enqueued: 1, sent: 0 });
+    expect(fila.get("crm_sync_pay_1_pending_2026-09-10")!.status).toBe("pendente");
   });
 });
