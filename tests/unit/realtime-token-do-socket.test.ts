@@ -62,10 +62,14 @@ describe("o token que o socket do Realtime usa", () => {
     expect(FONTE, "a callback `accessToken` do realtime sumiu do client").toMatch(
       /realtime:\s*\{\s*accessToken:/,
     );
+    // `setAuth()` VAZIO é permitido, e só ele: sem argumento o socket consulta
+    // a callback, que segue sendo a fonte única — é o que `socketTemTokenDoUsuario`
+    // faz antes do primeiro join. O proibido é o token MANUAL, a segunda fonte
+    // que o realtime-js 2.112.x passou a ignorar.
     expect(
       FONTE,
-      "voltou a usar setAuth — a callback vence o token manual desde o realtime-js 2.112.x",
-    ).not.toMatch(/realtime\.setAuth\(/);
+      "voltou a passar token ao setAuth — a callback vence o token manual desde o realtime-js 2.112.x",
+    ).not.toMatch(/realtime\.setAuth\(\s*[^)\s]/);
   });
 
   it("o hook do canal NÃO autentica por conta própria — fonte única", () => {
@@ -130,13 +134,17 @@ describe("a callback do token", () => {
     await expect(cb()).resolves.toBe("jwt-do-usuario");
   });
 
-  it("401 devolve null, e a PRÓXIMA tentativa refaz a requisição", async () => {
+  it("401 LANÇA — nunca null —, e a PRÓXIMA tentativa refaz a requisição", async () => {
+    // Lançar e não devolver null: para o realtime-js, null é token NOVO (ele
+    // grava e rebaixa os canais a anônimo); exceção é falha da callback (ele
+    // mantém o token que já tinha). Ver o contrato da biblioteca, mais abaixo.
+    //
     // Falha não se guarda. Um 401 transitório (sessão estabelecendo, cookie em
     // renovação) condenaria todos os canais criados depois se a promessa
     // ficasse memoizada — foi um defeito real deste caminho, na versão anterior.
     const cb = await callbackInstalada();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 401 }));
-    await expect(cb()).resolves.toBeNull();
+    await expect(cb()).rejects.toThrow("realtime_token_indisponivel");
 
     const bom = vi.fn().mockResolvedValue({
       ok: true,
@@ -152,7 +160,41 @@ describe("a callback do token", () => {
     // assim não há token. Guardar isto é guardar sucesso parcial.
     const cb = await callbackInstalada();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: {} }) }));
-    await expect(cb()).resolves.toBeNull();
+    await expect(cb()).rejects.toThrow("realtime_token_indisponivel");
+  });
+
+  it("renovação que falha devolve o token que AINDA vale — a margem é para renovar antes, não para descartar", async () => {
+    // O caso medido em produção: CPU saturada, a renovação estoura o tempo
+    // dentro da margem de 60s. O token tinha mais de 30s de vida e foi trocado
+    // por null — e o socket, por anônimo.
+    const cb = await callbackInstalada();
+    const vence30s = Math.floor(Date.now() / 1000) + 30;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { access_token: "jwt-ainda-valido", expires_at: vence30s } }),
+      }),
+    );
+    await expect(cb()).resolves.toBe("jwt-ainda-valido");
+
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("timeout")));
+    await expect(cb()).resolves.toBe("jwt-ainda-valido");
+  });
+
+  it("token já VENCIDO não é servido quando a renovação falha", async () => {
+    const cb = await callbackInstalada();
+    const venceu = Math.floor(Date.now() / 1000) - 5;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { access_token: "jwt-morto", expires_at: venceu } }),
+      }),
+    );
+    await cb();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 504 }));
+    await expect(cb()).rejects.toThrow("realtime_token_indisponivel");
   });
 
   it("N canais assinando juntos fazem UMA requisição", async () => {
@@ -193,5 +235,70 @@ describe("a callback do token", () => {
     await cb();
     await cb();
     expect(segundo, "token perto de vencer deveria ser renovado").toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * O CONTRATO DA BIBLIOTECA, medido no RealtimeClient DE VERDADE — não num fake.
+   *
+   * Toda a correção se apoia numa diferença de comportamento do realtime-js:
+   * callback que lança mantém o token; callback que devolve null o apaga. Um
+   * bump de dependência já virou este arquivo do avesso uma vez sem nenhuma
+   * linha nossa mudar. Se a biblioteca mudar de novo, é aqui que fica vermelho.
+   */
+  describe("contra o RealtimeClient real", () => {
+    async function socketReal(cb: () => Promise<string | null>) {
+      const { RealtimeClient } = await import("@supabase/supabase-js");
+      return new RealtimeClient("ws://127.0.0.1:9/realtime/v1", {
+        params: { apikey: "anon-key-de-teste" },
+        accessToken: cb,
+      });
+    }
+
+    it("callback que LANÇA mantém o token que o socket já tinha", async () => {
+      let falhar = false;
+      const rt = await socketReal(async () => {
+        if (falhar) throw new Error("realtime_token_indisponivel");
+        return "jwt-do-usuario";
+      });
+      await rt.setAuth();
+      expect(rt.accessTokenValue).toBe("jwt-do-usuario");
+
+      falhar = true;
+      await rt.setAuth();
+      expect(rt.accessTokenValue, "exceção da callback não pode apagar o token").toBe("jwt-do-usuario");
+    });
+
+    it("callback que devolve NULL apaga o token — o join seguinte sai anônimo", async () => {
+      // O porquê de a callback nunca devolver null. Se este caso deixar de valer
+      // (a biblioteca passar a ignorar null), a correção segue certa, mas a
+      // justificativa no cabeçalho de `tokenDoRealtime` precisa ser revista.
+      let token: string | null = "jwt-do-usuario";
+      const rt = await socketReal(async () => token);
+      await rt.setAuth();
+      token = null;
+      await rt.setAuth();
+      expect(rt.accessTokenValue).toBeNull();
+    });
+
+    it("socketTemTokenDoUsuario: sem token NÃO libera a assinatura; com token, libera", async () => {
+      const { socketTemTokenDoUsuario } = await import("@/lib/supabase/browser");
+      const cb = await callbackInstalada();
+      const rt = await socketReal(cb);
+      const client = { realtime: rt } as unknown as Parameters<typeof socketTemTokenDoUsuario>[0];
+
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 504 }));
+      await expect(socketTemTokenDoUsuario(client)).resolves.toBe(false);
+      expect(rt.accessTokenValue, "assinar agora sairia com a anon key").toBeNull();
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ data: { access_token: "jwt-do-usuario", expires_at: null } }),
+        }),
+      );
+      await expect(socketTemTokenDoUsuario(client)).resolves.toBe(true);
+      expect(rt.accessTokenValue).toBe("jwt-do-usuario");
+    });
   });
 });

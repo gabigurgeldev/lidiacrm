@@ -1,7 +1,14 @@
 "use client";
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
-import { createClient } from "@/lib/supabase/browser";
+import { createClient, socketTemTokenDoUsuario } from "@/lib/supabase/browser";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+
+/**
+ * Quanto tempo o canal precisa ficar SUBSCRIBED, sem cair, para o recuo voltar
+ * a 1s. Igual ao teto do recuo: um canal que oscila mais rápido que isto nunca
+ * zera a espera.
+ */
+export const ESTABILIDADE_DO_CANAL_MS = 30_000;
 
 export type RealtimeStatus =
   | "connecting"
@@ -124,7 +131,56 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
     let cancelado = false;
     let tentativas = 0;
     let retomada: ReturnType<typeof setTimeout> | null = null;
+    let estavel: ReturnType<typeof setTimeout> | null = null;
     setStatus("connecting");
+
+    /**
+     * Agenda a próxima montagem, com recuo exponencial e teto de 30s.
+     *
+     * Reconectar em rajada contra um socket que caiu por sobrecarga piora a
+     * sobrecarga, e o teto evita que uma queda longa deixe a espera em minutos.
+     * Quem desfaz o recuo é o timer de estabilidade (ver o SUBSCRIBED), nunca a
+     * simples volta do canal.
+     */
+    const agendarRetomada = () => {
+      if (estavel) {
+        clearTimeout(estavel);
+        estavel = null;
+      }
+      const espera = Math.min(30_000, 1_000 * 2 ** tentativas);
+      tentativas++;
+      if (retomada) clearTimeout(retomada);
+      retomada = setTimeout(() => {
+        if (cancelado) return;
+        if (active) supabase.removeChannel(active);
+        montar();
+      }, espera);
+    };
+
+    /**
+     * Garante o token do usuário no socket e só então assina.
+     *
+     * Sem token, o join sai com a anon key: o canal responde SUBSCRIBED e não
+     * entrega nada — e, numa tabela cuja policy chama função que anon não
+     * executa, derruba o `realtime.list_changes` das outras organizações. Medido
+     * em produção. Então sem token NÃO se assina: a tentativa conta como queda,
+     * com o mesmo recuo, e a rede de segurança da tela segue relendo enquanto o
+     * status não é `subscribed`.
+     */
+    const montar = () => {
+      if (cancelado) return;
+      void socketTemTokenDoUsuario(supabase)
+        .catch(() => false)
+        .then((temToken) => {
+          if (cancelado) return;
+          if (!temToken) {
+            setStatus("channel_error");
+            agendarRetomada();
+            return;
+          }
+          assinar();
+        });
+    };
 
     /**
      * Monta o canal do zero e assina.
@@ -134,7 +190,7 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
      * mesmo objeto devolve SUBSCRIBED sem nunca mais entregar. Morte silenciosa,
      * a mesma classe de defeito que a memo de auth já tinha aqui.
      */
-    const montar = () => {
+    const assinar = () => {
       if (cancelado) return;
 
       let novo: RealtimeChannel = supabase.channel(`${channelName}#${tentativas}`);
@@ -153,9 +209,9 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
       if (broadcast) novo = novo.on("broadcast", { event: broadcast.event }, handler);
       active = novo;
 
-      // Sem espera por token: quem o entrega é a callback `accessToken` do
-      // client, e o socket a resolve ANTES de emitir o join. Este hook cuida
-      // só do que é dele — topologia, recuperação e o carimbo de entrega.
+      // O token já está no socket (`montar` conferiu) e quem o renova é a
+      // callback `accessToken` do client, a cada heartbeat. Este hook cuida só
+      // do que é dele — topologia, recuperação e o carimbo de entrega.
       novo.subscribe((s) => {
         if (cancelado || active !== novo) return;
         // s is one of "SUBSCRIBED" | "CHANNEL_ERROR" | "TIMED_OUT" | "CLOSED"
@@ -174,8 +230,20 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
           // e é ela que fecha o buraco de verdade: sem isso o canal volta a
           // funcionar para o PRÓXIMO evento e a tela segue sem o anterior.
           if (tentativas > 0) {
-            tentativas = 0;
             handler({ tipo: "reassinado" });
+            // ⚠️ O RECUO SÓ ZERA DEPOIS DE O CANAL FICAR DE PÉ, não quando ele
+            // volta. Zerar aqui, como era, transforma canal que oscila em laço:
+            // SUBSCRIBED zera, a queda seguinte espera 1s, volta, a entrega
+            // sintética relê a tela inteira, cai de novo — uma releitura
+            // completa do inbox por segundo, sem fim. Medido em produção: uma
+            // aba sozinha triplicou as requisições da VPS e saturou a CPU. Com
+            // o zero adiado, a oscilação sobe a espera até o teto e a entrega
+            // sintética cai para no máximo uma a cada 30s.
+            if (estavel) clearTimeout(estavel);
+            estavel = setTimeout(() => {
+              estavel = null;
+              tentativas = 0;
+            }, ESTABILIDADE_DO_CANAL_MS);
           }
           return;
         }
@@ -184,18 +252,7 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
           // Antes daqui não havia NADA: o estado era anotado e o canal ficava
           // morto até a pessoa recarregar a página. Foi o sintoma relatado —
           // "às vezes preciso atualizar para a mensagem aparecer".
-          //
-          // Recuo exponencial com teto de 30s: reconectar em rajada contra um
-          // socket que caiu por sobrecarga piora a sobrecarga, e o teto evita
-          // que uma queda longa deixe a espera em minutos.
-          const espera = Math.min(30_000, 1_000 * 2 ** tentativas);
-          tentativas++;
-          if (retomada) clearTimeout(retomada);
-          retomada = setTimeout(() => {
-            if (cancelado) return;
-            if (active) supabase.removeChannel(active);
-            montar();
-          }, espera);
+          agendarRetomada();
         }
       });
     };
@@ -205,6 +262,7 @@ export function useRealtimeChannel(opts: UseRealtimeChannelOpts): {
     return () => {
       cancelado = true;
       if (retomada) clearTimeout(retomada);
+      if (estavel) clearTimeout(estavel);
       if (active) {
         supabase.removeChannel(active);
         active = null;
