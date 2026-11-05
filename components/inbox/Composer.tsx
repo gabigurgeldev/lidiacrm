@@ -6,8 +6,10 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
+  type DragEvent,
   type KeyboardEvent,
 } from "react";
+import { toast } from "sonner";
 import { PaperPlaneTilt, X } from "@/lib/ui/icons";
 import { MenuDeOpcoes } from "@/components/inbox/composer/MenuDeOpcoes";
 import { AttachmentPreviewDialog } from "@/components/inbox/composer/AttachmentPreviewDialog";
@@ -23,7 +25,8 @@ import { useCreateNote } from "@/hooks/inbox/useCreateNote";
 import { useMessageTemplates, type MessageTemplate } from "@/hooks/inbox/useMessageTemplates";
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
 import { useUploadMedia } from "@/hooks/inbox/useUploadMedia";
-import { imagemDoClipboard } from "@/lib/inbox/clipboard-image";
+import { imagensDoClipboard } from "@/lib/inbox/clipboard-image";
+import { enviarEmLote, juntarAoLote, LIMITE_DO_LOTE } from "@/lib/inbox/enviar-lote";
 import { interpolateTemplate } from "@/lib/inbox/template-vars";
 import { cn } from "@/lib/utils";
 
@@ -80,7 +83,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const [assinaturaSalva, setAssinaturaSalva] = useState<AssinaturaDoAtendente | null>(null);
   const assinatura = assinaturaSalva ?? usuario?.assinatura ?? null;
   const [text, setText] = useState("");
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  // Anexos no preview. Fotos e vídeos vêm em lote (até LIMITE_DO_LOTE);
+  // documento, um por vez — o menu decide.
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [enviandoLote, setEnviandoLote] = useState(false);
+  const [progresso, setProgresso] = useState<{ feitos: number; total: number } | null>(null);
+  const [arrastando, setArrastando] = useState(false);
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const [opcoesOpen, setOpcoesOpen] = useState(false);
   const [menuDismissed, setMenuDismissed] = useState(false);
@@ -100,7 +108,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
   // send/createNote fora do disable: o texto some na hora do envio; travar o campo
   // até a API voltar impedia digitar a próxima mensagem com o campo ainda cheio.
-  const isDisabled = disabled || !!blockedReason || upload.isPending;
+  const isDisabled = disabled || !!blockedReason || upload.isPending || enviandoLote;
   // A janela só alcança o que SAI. Em modo nota o composer segue liberado: a
   // nota interna nunca chega ao cliente, e é onde o atendente registra por que
   // a conversa esfriou — barrá-la tira exatamente o que ainda dá para fazer.
@@ -187,11 +195,86 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
    * Ctrl+V precisa continuar sendo o Ctrl+V de sempre.
    */
   function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
-    if (mode !== "reply" || respostaBarrada || pendingFile) return;
-    const imagem = imagemDoClipboard(e.clipboardData, new Date());
-    if (!imagem) return; // colagem de texto segue o caminho normal do browser
+    if (mode !== "reply" || respostaBarrada || pendingFiles.length > 0) return;
+    const imagens = imagensDoClipboard(e.clipboardData, new Date());
+    if (imagens.length === 0) return; // colagem de texto segue o caminho normal do browser
     e.preventDefault();
-    setPendingFile(imagem);
+    adicionarAoLote(imagens);
+  }
+
+  /**
+   * Junta ao preview respeitando o teto do lote. O que passa do teto é avisado
+   * e fica de fora — descartar calado faria a atendente achar que mandou a
+   * foto 11 quando ela nunca saiu.
+   */
+  function adicionarAoLote(novos: File[], base: File[] = pendingFiles) {
+    const { arquivos, descartados } = juntarAoLote(base, novos);
+    setPendingFiles(arquivos);
+    if (descartados > 0) {
+      toast.warning(
+        t("Dá para enviar até {n} arquivos por vez. {d} ficaram de fora.")
+          .replace("{n}", String(LIMITE_DO_LOTE))
+          .replace("{d}", String(descartados)),
+      );
+    }
+  }
+
+  /** Escolha pelo menu "+": documento vai sozinho; foto/vídeo entra no lote. */
+  function aoEscolherArquivos(files: File[]) {
+    const ehMidia = (f: File) => /^(image|video)\//.test(f.type);
+    if (files.every(ehMidia)) {
+      // Um documento já no preview não se mistura com fotos: o lote é de mídia.
+      adicionarAoLote(files, pendingFiles.every(ehMidia) ? pendingFiles : []);
+    } else {
+      setPendingFiles(files.slice(0, 1));
+    }
+  }
+
+  // Arrastar e soltar fotos no composer — o gesto natural no computador.
+  const podeSoltar = mode === "reply" && !respostaBarrada;
+  function onDragOver(e: DragEvent<HTMLDivElement>) {
+    if (!podeSoltar || !Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    setArrastando(true);
+  }
+  function onDrop(e: DragEvent<HTMLDivElement>) {
+    setArrastando(false);
+    if (!podeSoltar) return;
+    const imagens = imagensDoClipboard(e.dataTransfer, new Date());
+    if (imagens.length === 0) return;
+    e.preventDefault();
+    adicionarAoLote(imagens);
+  }
+
+  async function enviarAnexos(caption: string): Promise<{ legendaUsada: boolean }> {
+    const fila = pendingFiles;
+    if (fila.length === 0 || enviandoLote) return { legendaUsada: false };
+    setEnviandoLote(true);
+    try {
+      const r = await enviarEmLote(
+        fila,
+        async (file, i) => {
+          const uploaded = await upload.mutateAsync({ conversationId, file });
+          await send.mutateAsync({
+            conversation_id: conversationId,
+            type: uploaded.kind,
+            // Legenda só na primeira, como no WhatsApp.
+            body: i === 0 ? caption || undefined : undefined,
+            media_storage_path: uploaded.storage_path,
+            media_mime: uploaded.media_mime,
+            media_size_bytes: uploaded.media_size_bytes,
+          });
+        },
+        { onProgresso: (feitos, total) => setProgresso({ feitos, total }) },
+      );
+      // O que saiu sai do preview; o que falhou fica para tentar de novo. O
+      // toast do erro já é do hook (upload ou envio).
+      setPendingFiles(fila.slice(r.enviados));
+      return { legendaUsada: r.enviados > 0 };
+    } finally {
+      setEnviandoLote(false);
+      setProgresso(null);
+    }
   }
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -216,7 +299,19 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
   return (
     <>
-      <div className={cn("inbox-barra relative px-3 py-2.5", mode === "note" && "bg-warning-bg")}>
+      <div
+        className={cn(
+          "inbox-barra relative px-3 py-2.5",
+          mode === "note" && "bg-warning-bg",
+          arrastando && "ring-2 ring-inset ring-primary",
+        )}
+        onDragOver={onDragOver}
+        onDragLeave={(e) => {
+          // Passar por cima de um filho também dispara dragleave; só sai de verdade fora da barra.
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setArrastando(false);
+        }}
+        onDrop={onDrop}
+      >
         <TemplateMenu
           open={menuOpen}
           query={slash.query}
@@ -290,8 +385,8 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                 conversationId={conversationId}
                 modo={mode}
                 respostaBarrada={respostaBarrada}
-                desabilitado={!!disabled || upload.isPending}
-                onArquivo={setPendingFile}
+                desabilitado={!!disabled || upload.isPending || enviandoLote}
+                onArquivos={aoEscolherArquivos}
                 onContato={() => setContactPickerOpen(true)}
                 onOpcoes={() => setOpcoesOpen(true)}
                 onMensagensProntas={() => {
@@ -384,29 +479,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         </div>
       </div>
       <AttachmentPreviewDialog
-        file={pendingFile}
-        sending={upload.isPending || send.isPending}
-        onCancel={() => setPendingFile(null)}
-        onSend={async (caption) => {
-          if (!pendingFile) return;
-          try {
-            const uploaded = await upload.mutateAsync({ conversationId, file: pendingFile });
-            send.mutate(
-              {
-                conversation_id: conversationId,
-                type: uploaded.kind,
-                body: caption || undefined,
-                media_storage_path: uploaded.storage_path,
-                media_mime: uploaded.media_mime,
-                media_size_bytes: uploaded.media_size_bytes,
-              },
-              { onSuccess: () => setPendingFile(null) },
-            );
-          } catch {
-            // toast já disparado pelo onError de useUploadMedia; dialog fica aberto p/ retry
-            return;
-          }
-        }}
+        files={pendingFiles}
+        sending={enviandoLote}
+        progresso={progresso}
+        onCancel={() => setPendingFiles([])}
+        onRemover={(i) => setPendingFiles((atuais) => atuais.filter((_, j) => j !== i))}
+        onAdicionar={adicionarAoLote}
+        onSend={enviarAnexos}
       />
       <ContactPickerDialog
         open={contactPickerOpen}

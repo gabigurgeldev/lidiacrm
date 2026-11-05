@@ -20,6 +20,13 @@ No Inbox, a lista de conversas tem as abas **Fila**, **Minhas**, **Todas**, **Fe
 3. Escreva no campo **Digite uma mensagem** e aperte **Enter** para enviar (**Shift + Enter** quebra a linha).
 4. Para anexar foto, vídeo, documento, áudio, contato ou uma enquete, use o botão de opções ao lado do campo de texto. Para gravar áudio, use **Gravar áudio**.
 
+### Enviar várias fotos de uma vez
+1. No botão de opções ao lado do campo de texto, escolha **Fotos e vídeos** e selecione várias (até 10). No celular, a galeria deixa marcar mais de uma.
+2. Também dá para colar (**Ctrl + V**) ou arrastar várias imagens para o campo de mensagem.
+3. Na janela que abre, confira as fotos: o **x** tira uma, e **Adicionar** põe mais.
+4. A legenda é opcional e vai junto da primeira foto. Clique em **Enviar**.
+5. As fotos saem uma de cada vez, na ordem em que aparecem. Se uma não sair, o envio para ali e as que faltam continuam na janela para você tentar de novo.
+
 ### Usar uma resposta rápida no atendimento
 1. No campo de mensagem, digite **/** (barra). Aparece a lista de respostas salvas.
 2. Continue digitando para filtrar e escolha a resposta. Ela entra no campo para você revisar antes de enviar.
