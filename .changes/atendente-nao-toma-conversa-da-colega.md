@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: Atendente não consegue mais assumir nem transferir a conversa de um colega
+titulo: Atendente não assume nem transfere mais a conversa de um colega
 ---
 
 Nos modos **"Os seus, mais os que ainda não têm dono"** e **"Só os seus"**

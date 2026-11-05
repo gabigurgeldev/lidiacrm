@@ -1,7 +1,7 @@
 ---
 impacto: capacidade_nova
 secao: alterado
-titulo: Inbox no celular parecido com o WhatsApp, com barra de abas embaixo
+titulo: Inbox no celular com cara de WhatsApp e abas embaixo
 ---
 
 No celular, o sistema ganhou uma **barra de abas no rodapé**: Conversas, Kanban,
