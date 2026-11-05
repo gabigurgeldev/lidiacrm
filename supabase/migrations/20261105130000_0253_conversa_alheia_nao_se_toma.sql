@@ -77,6 +77,22 @@ begin
     return;
   end if;
 
+  -- O lock otimista vem ANTES da checagem de visibilidade. Na ordem inversa,
+  -- quem perde a corrida de "assumir" numa conversa sem dono (o outro clicou
+  -- primeiro) já não enxerga a conversa — ela agora é do colega — e levava
+  -- `conversation_not_visible` (404, "Conversa não encontrada") em vez de 0
+  -- linhas (409, "Outro atendente já assumiu"). Vigiado pelo invariante
+  -- gov-3-assignment-events, caso "claim duplicado".
+  --
+  -- A ordem não abre caminho de escrita: perder o lock não muda nada. Quem
+  -- passa no lock (esperado = dono atual, ou sem lock) é conferido abaixo.
+  -- Custo declarado: um claim com esperado errado sobre conversa que o agente
+  -- não vê responde 409, não 404 — confirma que o id existe, para quem já
+  -- tem o UUID dela.
+  if p_enforce_expected and v_from is distinct from p_expected_assignee then
+    return;
+  end if;
+
   -- Agente só mexe no dono do que pode ver (migration 0253). Mesma função da
   -- RLS de SELECT, com o dono ATUAL travado acima. Sem auth.uid() (service
   -- role: rodízio, fluxos, MCP) não há papel a conferir.
@@ -86,10 +102,6 @@ begin
     raise exception 'conversation_not_visible'
       using errcode = '42501',
             hint = 'an agent can only change the assignee of a conversation it can see (visibility_mode)';
-  end if;
-
-  if p_enforce_expected and v_from is distinct from p_expected_assignee then
-    return;
   end if;
 
   update public.conversations

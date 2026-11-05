@@ -41,6 +41,9 @@ const CONVERSAS: Array<{ modo: Modo; rotulo: string; dono: string | null }> = [
   { modo: "own", rotulo: "sem-dono", dono: null },
   { modo: "own", rotulo: "sem-dono-rodizio", dono: null },
   { modo: "all", rotulo: "de-B", dono: GOV_AGENT_B },
+  // No FIM de propósito: o id sai do índice, e inserir no meio trocaria o id
+  // das conversas acima.
+  { modo: "own_and_unassigned", rotulo: "corrida", dono: null },
 ];
 
 function idDe(modo: Modo, rotulo: string): string {
@@ -176,6 +179,21 @@ describe("0253 — agente só mexe no dono da conversa que pode ver", () => {
           exigirEsperado: true,
         }),
       ).toEqual({ linhas: 1 });
+      expect(donoAtual(conversa)).toBe(GOV_AGENT_A);
+    });
+
+    it("corrida: quem perde o 'assumir' recebe 0 linhas (409), não conversation_not_visible (404)", () => {
+      // A e B veem a mesma conversa sem dono e clicam juntos. A chega primeiro.
+      // B chega com o esperado de quando olhou (ninguém) — e, agora que a
+      // conversa é de A, B já não a enxerga. Se a checagem de visibilidade
+      // viesse antes do lock, B levaria "Conversa não encontrada" sobre uma
+      // conversa que estava na tela dele um segundo antes.
+      const conversa = idDe("own_and_unassigned", "corrida");
+      const comoQuemClica = (quem: string) =>
+        atribuirComo(quem, { org, conversa, para: quem, reason: "claim", exigirEsperado: true });
+
+      expect(comoQuemClica(GOV_AGENT_A)).toEqual({ linhas: 1 });
+      expect(comoQuemClica(GOV_AGENT_B)).toEqual({ linhas: 0 });
       expect(donoAtual(conversa)).toBe(GOV_AGENT_A);
     });
 

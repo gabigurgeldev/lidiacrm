@@ -25960,6 +25960,15 @@ begin
     return;
   end if;
 
+  -- O lock otimista vem ANTES da checagem de visibilidade: quem perde a
+  -- corrida de "assumir" já não enxerga a conversa (agora é do colega) e deve
+  -- receber 0 linhas (409), não `conversation_not_visible` (404). Perder o
+  -- lock não muda nada; quem passa nele é conferido abaixo. Racional inteiro
+  -- na migration 0253.
+  if p_enforce_expected and v_from is distinct from p_expected_assignee then
+    return;
+  end if;
+
   -- Agente só mexe no dono do que pode ver (migration 0253). Mesma função da
   -- RLS de SELECT, com o dono ATUAL travado acima. Sem auth.uid() (service
   -- role: rodízio, fluxos, MCP) não há papel a conferir.
@@ -25969,10 +25978,6 @@ begin
     raise exception 'conversation_not_visible'
       using errcode = '42501',
             hint = 'an agent can only change the assignee of a conversation it can see (visibility_mode)';
-  end if;
-
-  if p_enforce_expected and v_from is distinct from p_expected_assignee then
-    return;
   end if;
 
   update public.conversations
