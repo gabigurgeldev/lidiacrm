@@ -25987,4 +25987,42 @@ grant execute on function public.fn_encrypt_oauth(text) to service_role;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 grant execute on function public.fn_update_budget_consumption() to service_role;
 
+-- regra 3 (migration 0252): policy de tabela publicada no Realtime não vale para
+-- anon. Toda policy dessas tabelas chama uma definer de que a varredura acima
+-- tira o EXECUTE de anon — então, valendo para PUBLIC, anon recebe ERRO em vez
+-- de zero linhas. E o `realtime.list_changes` avalia a policy de TODAS as
+-- assinaturas numa consulta só: uma assinatura anônima derruba o tempo real de
+-- todas as organizações. Mora aqui, no bloco final, pelo mesmo motivo da
+-- varredura de funções: um apêndice futuro que recriar policy sem `to
+-- authenticated` é curado no mesmo run. Idempotente.
+do $$
+declare
+  p record;
+begin
+  if to_regrole('authenticated') is null then
+    return;
+  end if;
+
+  for p in
+    select n.nspname as esquema, c.relname as tabela, pol.polname as policy
+      from pg_policy pol
+      join pg_class c on c.oid = pol.polrelid
+      join pg_namespace n on n.oid = c.relnamespace
+      join pg_publication_tables t
+        on t.pubname = 'supabase_realtime'
+       and t.schemaname = n.nspname
+       and t.tablename = c.relname
+     where n.nspname = 'public'
+       and (
+         0::oid = any (pol.polroles)
+         or (to_regrole('anon') is not null and to_regrole('anon')::oid = any (pol.polroles))
+       )
+  loop
+    execute format(
+      'alter policy %I on %I.%I to authenticated',
+      p.policy, p.esquema, p.tabela
+    );
+  end loop;
+end $$;
+
 notify pgrst, 'reload schema';

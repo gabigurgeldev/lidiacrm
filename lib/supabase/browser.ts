@@ -59,12 +59,46 @@ export function __resetTokenDoRealtime(): void {
   buscaEmVoo = null;
 }
 
-async function tokenDoRealtime(): Promise<string | null> {
+/**
+ * A callback que o socket consulta. NUNCA devolve vazio — ou tem token do
+ * usuário, ou LANÇA.
+ *
+ * ⚠️ POR QUE LANÇAR E NÃO DEVOLVER `null`. O realtime-js trata os dois de forma
+ * oposta (`RealtimeClient._performAuth`):
+ *
+ *   - `null` é um token NOVO. Ele grava `null`, reescreve o join de todo canal
+ *     e empurra `access_token: null` aos canais já de pé. Join sem token sai
+ *     com a anon key: o canal vira ANÔNIMO.
+ *   - exceção é falha da callback. Ele registra e segue com o token que já
+ *     tinha, sem tocar em canal nenhum.
+ *
+ * Medido em produção: com a CPU saturada, a busca deste token estourou o tempo,
+ * a callback devolveu `null` no heartbeat e os canais de uma aba viraram
+ * anônimos. A policy de `conversations` chama uma função que anon não pode
+ * executar, então o `realtime.list_changes` passou a falhar para TODAS as
+ * organizações — e a aba entrou em laço de reassinar e reler o inbox inteiro,
+ * ~1×/s, sobre a mesma VPS que já estava sem CPU.
+ *
+ * Lançar também não serve no PRIMEIRO join, quando o socket ainda não tem
+ * token nenhum para manter: o join sairia vazio do mesmo jeito. Quem cobre
+ * esse caso é `socketTemTokenDoUsuario`, que o hook do canal consulta antes de
+ * assinar.
+ */
+async function tokenDoRealtime(): Promise<string> {
   // Válido e longe de expirar: serve o cache. Sem isto seria uma requisição a
   // cada heartbeat — ~2/min por aba aberta, para um token que vale uma hora.
   if (tokenEmCache && Date.now() < tokenEmCache.expiraEm - MARGEM_DE_RENOVACAO_MS) {
     return tokenEmCache.valor;
   }
+  const novo = await buscarTokenDoRealtime();
+  if (novo) return novo;
+  // A renovação falhou, mas o token que temos pode ainda não ter vencido — a
+  // margem existe para renovar ANTES, não para jogar fora um token válido.
+  if (tokenEmCache && Date.now() < tokenEmCache.expiraEm) return tokenEmCache.valor;
+  throw new Error("realtime_token_indisponivel");
+}
+
+function buscarTokenDoRealtime(): Promise<string | null> {
   // Coalesce: N canais assinando juntos fazem UMA requisição, não N.
   buscaEmVoo ??= (async () => {
     try {
@@ -81,9 +115,8 @@ async function tokenDoRealtime(): Promise<string | null> {
       tokenEmCache = { valor: token, expiraEm };
       return token;
     } catch {
-      // Devolver null aqui degrada o canal para anônimo — ele responde
-      // SUBSCRIBED e não entrega. É por isso que o inbox NÃO depende só dele:
-      // a rede de segurança (useRefetchDeSeguranca) cura e denuncia a perda.
+      // `null` aqui é só "esta busca falhou". Quem decide o que o socket
+      // recebe é `tokenDoRealtime`, que nunca repassa o vazio — ver acima.
       return null;
     } finally {
       // ⚠️ NUNCA memoizar a promessa além da requisição: uma falha transitória
@@ -95,6 +128,29 @@ async function tokenDoRealtime(): Promise<string | null> {
     }
   })();
   return buscaEmVoo;
+}
+
+/**
+ * O SOCKET JÁ TEM O TOKEN DO USUÁRIO? Pergunta que o hook do canal faz antes de
+ * cada assinatura.
+ *
+ * O join leva o token que o socket tem NAQUELE instante
+ * (`RealtimeChannel.subscribe` lê `socket.accessTokenValue`). Sem nenhum, sai
+ * com a anon key — e lançar na callback não evita isso, porque não há token
+ * anterior para manter. Assinar assim é pior que não assinar: o canal responde
+ * SUBSCRIBED, não entrega nada, e numa tabela cuja policy chama função que anon
+ * não executa ainda envenena o Realtime das outras organizações.
+ *
+ * `setAuth()` SEM argumento não é token manual: ele só manda o socket consultar
+ * a callback acima, que segue sendo a fonte única. Passar um token ali é que
+ * seria a segunda fonte — a que o realtime-js 2.112.x passou a ignorar.
+ */
+export async function socketTemTokenDoUsuario(
+  client: ReturnType<typeof createBrowserClient>,
+): Promise<boolean> {
+  if (client.realtime.accessTokenValue) return true;
+  await client.realtime.setAuth();
+  return Boolean(client.realtime.accessTokenValue);
 }
 
 export function createClient() {

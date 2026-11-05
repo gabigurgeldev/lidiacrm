@@ -1913,6 +1913,58 @@ script do repo o cria). E o primeiro build parecia ter passado porque
 ([[feedback-pipe-tail-mascara-exit]]). Confira `.next/BUILD_ID`, nunca o exit de
 um pipe.
 
+### O canal anônimo não calava — ele derrubava o tempo real de todos (2026-11-05)
+
+**Sintoma relatado:** "o CRM está travando". Medido na VPS de produção: load 23 em
+2 vCPU por 17 minutos, todas as telas lentas para todas as organizações.
+
+**O que a medição mostrou, nesta ordem:**
+
+1. O tráfego no gateway foi de ~800 para ~3.000 requisições/min, e ~70% vinha de **uma**
+   aba do inbox relendo a MESMA conversa (lista, conversa, mensagens, notas) ~1×/s —
+   sem nenhuma escrita no banco que justificasse.
+2. No mesmo intervalo, minuto a minuto, o Realtime registrava `PoolingReplicationError:
+   permission denied for function fn_can_view_conversation` dentro de
+   `realtime.list_changes`.
+3. Como `anon` (no Postgres de produção): `select count(*) from conversations` → **erro**, não
+   zero linhas.
+
+**A frase de cima ("canal anônimo responde `SUBSCRIBED`, a RLS filtra do outro lado") só
+valia até a varredura da 0116.** Toda policy das tabelas publicadas valia para PUBLIC e chama
+uma definer; a 0116 tirou o EXECUTE de anon de toda definer. Desde então a assinatura anônima
+não recebe vazio: ela faz o `list_changes` — que avalia TODAS as assinaturas numa consulta só
+— falhar, e o tempo real para em todas as organizações enquanto ela existir.
+
+**Por que havia assinatura anônima:** com a CPU saturada, `/api/v1/auth/realtime-token`
+estourava o tempo e a callback do token devolvia `null`. Para o realtime-js, `null` é token
+novo: ele apaga o do usuário e o join sai com a anon key. **E por que virava laço:**
+`useRealtimeChannel` zerava o recuo a cada `SUBSCRIBED` e disparava a entrega sintética
+"reassinado" — o canal oscilava a cada ~1s, e cada volta relia a tela inteira. O laço gerava
+a carga que fazia a busca do token falhar.
+
+**Conserto, nas três pontas:**
+
+- banco (migration 0252): policy de tabela publicada vale só para `authenticated` — anon
+  passa a ler zero linhas, sem erro, e nenhuma função é chamada;
+- `lib/supabase/browser.ts`: a callback nunca devolve vazio — serve o token que ainda vale ou
+  LANÇA (o realtime-js mantém o token anterior quando a callback lança);
+  `socketTemTokenDoUsuario` impede o primeiro join sem token;
+- `useRealtimeChannel`: o recuo só zera depois de 30s de canal de pé.
+
+| # | Caso | Prova |
+|---|------|-------|
+| JR.7 | Nenhuma policy de tabela publicada vale para PUBLIC/anon; anon lê zero linhas sem erro; o bloco do baseline cura policy recriada sem `to` | `tests/invariants/realtime-policy-nao-vale-para-anon.test.ts` |
+| JR.8 | Falha ao renovar o token nunca rebaixa o socket a anônimo (contrato medido no `RealtimeClient` real) | `tests/unit/realtime-token-do-socket.test.ts` |
+| JR.9 | Canal que oscila não vira laço: recuo cresce até 30s, releitura sintética fica rara | `tests/unit/realtime-canal-oscilante.test.tsx` |
+| JR.10 | Sem token do usuário o hook não assina — conta como queda, com recuo | idem |
+
+**Sabotagens** (2026-11-05): zerar o recuo na volta, assinar sem token e devolver `null` na
+falha do token — 7 reprovações em JR.8–JR.10.
+
+**Não medido:** o laço do navegador em si (não havia acesso à aba afetada; a cadeia acima é
+inferida da correlação de horários e do código do realtime-js); o JR.7 roda só no job
+`invariants` do CI (o Docker local desta máquina não sobe).
+
 ### Vai escrever uma spec que depende de tempo real? Leia isto primeiro
 
 **No CI, o Realtime sobe ANTES de as tabelas entrarem na publication.** O `e2e.yml` faz
