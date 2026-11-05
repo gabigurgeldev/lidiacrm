@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { GOV_AGENT_A, GOV_AGENT_B, GOV_MANAGER, lastLine, seedGov, sql } from "./gov-helpers";
 
 /**
- * Migration 0252 — agente não toma conversa que não pode ver.
+ * Migration 0253 — agente não toma conversa que não pode ver.
  *
  * A leitura sempre respeitou `visibility_mode` (fn_can_view_conversation, 0035).
  * A escrita de dono não: `fn_conversation_assign` é SECURITY DEFINER e só
@@ -135,7 +135,7 @@ beforeAll(() => {
   sql(`${orgs}\n${conversas}`);
 });
 
-describe("0252 — agente só mexe no dono da conversa que pode ver", () => {
+describe("0253 — agente só mexe no dono da conversa que pode ver", () => {
   describe("modo own_and_unassigned (o padrão)", () => {
     const org = ORG.own_and_unassigned;
 

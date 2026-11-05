@@ -25913,9 +25913,9 @@ create trigger trg_contacts_agente_redigir_delete
   when (old.is_anonymized is distinct from true)
   execute function public.fn_agente_redigir_contato();
 
--- ---- agente não toma conversa que não pode ver (migration 0252) ----
+-- ---- agente não toma conversa que não pode ver (migration 0253) ----
 -- Racional completo no cabeçalho de
--- `supabase/migrations/20261104120000_0252_conversa_alheia_nao_se_toma.sql`.
+-- `supabase/migrations/20261105130000_0253_conversa_alheia_nao_se_toma.sql`.
 -- Em uma frase: `fn_conversation_assign` (SECURITY DEFINER) deixava um `agent`
 -- transferir/assumir a conversa de um colega que a RLS nem o deixava ver; agora
 -- a escrita de dono usa a mesma régua da leitura (fn_can_view_conversation com o
@@ -25960,7 +25960,7 @@ begin
     return;
   end if;
 
-  -- Agente só mexe no dono do que pode ver (migration 0252). Mesma função da
+  -- Agente só mexe no dono do que pode ver (migration 0253). Mesma função da
   -- RLS de SELECT, com o dono ATUAL travado acima. Sem auth.uid() (service
   -- role: rodízio, fluxos, MCP) não há papel a conferir.
   if auth.uid() is not null
@@ -26090,5 +26090,43 @@ grant execute on function public.fn_decrypt_oauth(bytea) to service_role;
 grant execute on function public.fn_encrypt_oauth(text) to service_role;
 grant execute on function public.fn_lgpd_cascade_redact_contact(uuid, uuid, uuid) to service_role;
 grant execute on function public.fn_update_budget_consumption() to service_role;
+
+-- regra 3 (migration 0252): policy de tabela publicada no Realtime não vale para
+-- anon. Toda policy dessas tabelas chama uma definer de que a varredura acima
+-- tira o EXECUTE de anon — então, valendo para PUBLIC, anon recebe ERRO em vez
+-- de zero linhas. E o `realtime.list_changes` avalia a policy de TODAS as
+-- assinaturas numa consulta só: uma assinatura anônima derruba o tempo real de
+-- todas as organizações. Mora aqui, no bloco final, pelo mesmo motivo da
+-- varredura de funções: um apêndice futuro que recriar policy sem `to
+-- authenticated` é curado no mesmo run. Idempotente.
+do $$
+declare
+  p record;
+begin
+  if to_regrole('authenticated') is null then
+    return;
+  end if;
+
+  for p in
+    select n.nspname as esquema, c.relname as tabela, pol.polname as policy
+      from pg_policy pol
+      join pg_class c on c.oid = pol.polrelid
+      join pg_namespace n on n.oid = c.relnamespace
+      join pg_publication_tables t
+        on t.pubname = 'supabase_realtime'
+       and t.schemaname = n.nspname
+       and t.tablename = c.relname
+     where n.nspname = 'public'
+       and (
+         0::oid = any (pol.polroles)
+         or (to_regrole('anon') is not null and to_regrole('anon')::oid = any (pol.polroles))
+       )
+  loop
+    execute format(
+      'alter policy %I on %I.%I to authenticated',
+      p.policy, p.esquema, p.tabela
+    );
+  end loop;
+end $$;
 
 notify pgrst, 'reload schema';

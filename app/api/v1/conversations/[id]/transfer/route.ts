@@ -84,7 +84,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   });
 
   if (error) {
-    // Agente tentando transferir conversa de colega que não enxerga (0252):
+    // Agente tentando transferir conversa de colega que não enxerga (0253):
     // mesma resposta de "não existe", para não confirmar o id.
     if (conversaForaDeAlcance(error)) {
       return fail("not_found", "Conversa não encontrada.", 404, { requestId });

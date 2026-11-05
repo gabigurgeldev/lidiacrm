@@ -1,6 +1,6 @@
 /**
  * A recusa de `fn_conversation_assign` quando um `agent` tenta mexer no dono de
- * uma conversa que não pode ver (migration 0252).
+ * uma conversa que não pode ver (migration 0253).
  *
  * A função levanta SQLSTATE 42501 com a mensagem `conversation_not_visible`.
  * As rotas que trocam dono (transfer, claim, PATCH claimed) respondem 404

@@ -276,7 +276,7 @@ export async function patchConversationHandler(
       p_enforce_expected: false,
     });
     if (erroRpc) {
-      // Agente assumindo conversa de colega que não enxerga (0252): 404, como o GET.
+      // Agente assumindo conversa de colega que não enxerga (0253): 404, como o GET.
       if (conversaForaDeAlcance(erroRpc)) {
         throw new ApiError(404, "not_found", undefined, ctx.requestId, "Conversa não encontrada.");
       }

@@ -25,6 +25,7 @@ vi.mock("@/lib/supabase/browser", () => ({
     channel: () => ({ on: () => ({ subscribe: () => ({}) }), subscribe: () => ({}) }),
     removeChannel: () => {},
   }),
+  socketTemTokenDoUsuario: async () => true,
 }));
 
 import { useConversationsRealtime } from "@/hooks/inbox/useConversationsRealtime";

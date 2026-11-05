@@ -77,7 +77,7 @@ begin
     return;
   end if;
 
-  -- Agente só mexe no dono do que pode ver (migration 0252). Mesma função da
+  -- Agente só mexe no dono do que pode ver (migration 0253). Mesma função da
   -- RLS de SELECT, com o dono ATUAL travado acima. Sem auth.uid() (service
   -- role: rodízio, fluxos, MCP) não há papel a conferir.
   if auth.uid() is not null

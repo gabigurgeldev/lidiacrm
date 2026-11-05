@@ -67,7 +67,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
   });
 
   if (error) {
-    // Agente tentando assumir conversa de colega que não enxerga (0252) —
+    // Agente tentando assumir conversa de colega que não enxerga (0253) —
     // inclusive com `expected_assignee` = dono atual. 404, como o GET.
     if (conversaForaDeAlcance(error)) {
       return fail("not_found", "Conversa não encontrada.", 404, { requestId });

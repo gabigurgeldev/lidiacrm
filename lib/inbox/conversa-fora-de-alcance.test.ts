@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { conversaForaDeAlcance } from "./conversa-fora-de-alcance";
 
-describe("conversaForaDeAlcance — recusa da 0252 vira 404, o resto não", () => {
+describe("conversaForaDeAlcance — recusa da 0253 vira 404, o resto não", () => {
   it("reconhece a recusa da fn_conversation_assign (42501 + conversation_not_visible)", () => {
     expect(conversaForaDeAlcance({ code: "42501", message: "conversation_not_visible" })).toBe(true);
   });
