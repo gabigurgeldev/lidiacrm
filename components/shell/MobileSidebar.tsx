@@ -1,12 +1,16 @@
 "use client";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useT } from "@/hooks/i18n/useT";
 import { SidebarContent } from "@/components/shell/Sidebar";
 import { List } from "@/lib/ui/icons";
 import type { NavGroupId } from "@/lib/navigation/registry";
+import {
+  CLASSE_ABA,
+  CLASSE_ICONE_DA_ABA,
+  CLASSE_ROTULO_DA_ABA,
+} from "@/lib/navigation/barra-inferior";
 
 /**
  * Navegação mobile do app autenticado.
@@ -23,6 +27,13 @@ import type { NavGroupId } from "@/lib/navigation/registry";
  * Os grupos abertos, esses SIM são os mesmos: é a mesma pessoa, o mesmo cookie,
  * e o arranjo que ela deixou no celular é o que ela espera encontrar de volta.
  */
+/*
+ * A PORTA da gaveta é o "Mais" da barra de abas do celular
+ * (`components/shell/BarraInferior.tsx`). Até 04/11/2026 era um ☰ no cabeçalho;
+ * ele saiu porque no Inbox o cabeçalho some, e a navegação sumia junto. O nome
+ * acessível contém "abrir navegação" — é por ele que `navegacao.spec.ts` (390px)
+ * encontra a gaveta.
+ */
 export function MobileSidebar({
   gruposAbertosSalvos = null,
 }: {
@@ -34,15 +45,18 @@ export function MobileSidebar({
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button
+        <button
           type="button"
-          variant="ghost"
-          size="icon"
-          className="h-10 w-10 md:hidden"
-          aria-label={t("Abrir navegação")}
+          className={CLASSE_ABA}
+          data-ativa={open ? "true" : undefined}
+          aria-label={t("Mais: abrir navegação")}
+          data-testid="barra-inferior-mais"
         >
-          <List size={20} aria-hidden />
-        </Button>
+          <span className={CLASSE_ICONE_DA_ABA}>
+            <List size={22} aria-hidden />
+          </span>
+          <span className={CLASSE_ROTULO_DA_ABA}>{t("Mais")}</span>
+        </button>
       </SheetTrigger>
       <SheetContent
         side="left"

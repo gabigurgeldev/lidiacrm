@@ -1,7 +1,8 @@
 "use client";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { AgenteSuporte } from "@/components/agente/AgenteSuporte";
+import { BarraInferior } from "@/components/shell/BarraInferior";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { AppHeader } from "@/components/shell/header/AppHeader";
 import { useInboundMessageAlerts } from "@/hooks/notifications/useInboundMessageAlerts";
@@ -95,24 +96,27 @@ export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, agente = null,
       */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {/*
-          ⚠️ `md:hidden` E NÃO REMOVER O CABEÇALHO: no celular ele FICA, mesmo no
-          Inbox. O botão ☰ que abre a gaveta de navegação mora dentro dele, e a
-          barra lateral é `hidden md:block` — tirá-lo ali deixaria as vinte telas
-          do produto alcançáveis só digitando a URL.
+          No Inbox o cabeçalho some em TODA largura. Até 04/11/2026 ele ficava
+          no celular porque carregava o ☰ — a única porta da navegação abaixo do
+          `md`. Essa porta agora é o "Mais" da barra inferior (`BarraInferior`),
+          que existe também no Inbox; o cabeçalho deixou de ser necessário ali e
+          era uma das quatro barras empilhadas antes da primeira mensagem. A
+          lista de conversas desenha o próprio topo, como o WhatsApp.
 
-          O corte é de CSS, não de JavaScript: `matchMedia` só responde depois da
-          hidratação, e estrutura decidida assim pisca no primeiro render.
+          O cabeçalho segue MONTADO (só escondido): o corte é de CSS, não de
+          JavaScript — `matchMedia` só responde depois da hidratação, e estrutura
+          decidida assim pisca no primeiro render.
         */}
         <div
           data-testid="cabecalho-do-app"
           // O atributo existe para o TESTE poder perguntar "esta tela manda o
           // cabeçalho sumir?" sem depender de CSS — o jsdom não aplica folha de
-          // estilo, então `md:hidden` é invisível para ele. A classe é quem
-          // esconde; isto só declara a intenção, no mesmo lugar.
+          // estilo. A classe é quem esconde; isto só declara a intenção.
           data-some-em-md={semCabecalho ? "true" : undefined}
-          className={cn(semCabecalho && "md:hidden")}
+          data-some-no-celular={semCabecalho ? "true" : undefined}
+          className={cn(semCabecalho && "hidden")}
         >
-          <AppHeader gruposAbertosSalvos={gruposAbertosSalvos} />
+          <AppHeader />
         </div>
         <main
           className={cn(
@@ -154,6 +158,11 @@ export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, agente = null,
             </div>
           )}
         </main>
+        {/* Abas do celular. Some com conversa aberta e com o teclado aberto;
+            `Suspense` porque lê `useSearchParams` (o `?id=` da conversa). */}
+        <Suspense fallback={null}>
+          <BarraInferior gruposAbertosSalvos={gruposAbertosSalvos} />
+        </Suspense>
       </div>
       {agente && <AgenteSuporte nomeDoAgente={agente.nomeDoAgente} nomeDoProduto={agente.nomeDoProduto} />}
     </div>

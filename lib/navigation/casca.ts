@@ -22,14 +22,12 @@
 const SEM_CABECALHO = ["/app/inbox"] as const;
 
 /**
- * ⚠️ ESTA RESPOSTA VALE SÓ A PARTIR DE `md`. No celular o cabeçalho FICA, e não
- * é exceção cosmética: o botão ☰ que abre a gaveta de navegação mora dentro
- * dele, e a barra lateral é `hidden md:block`. Escondê-lo lá deixaria as vinte
- * telas do produto alcançáveis só digitando a URL.
- *
- * Quem aplica o corte por largura é o CSS (`md:hidden` no invólucro do
- * cabeçalho), não esta função: medida de largura em JavaScript só existe depois
- * da hidratação, e estrutura decidida assim pisca no primeiro render.
+ * Vale em TODA largura desde 04/11/2026. Antes valia só a partir de `md`: no
+ * celular o cabeçalho carregava o ☰, a única porta da navegação. Essa porta
+ * agora é o "Mais" da barra inferior (`components/shell/BarraInferior.tsx`),
+ * que também existe no Inbox — sem ela, esconder o cabeçalho aqui deixaria as
+ * vinte telas do produto alcançáveis só digitando a URL. Quem tirar a barra
+ * inferior do Inbox precisa devolver esta regra ao `md`.
  */
 export function cabecalhoEscondidoEm(pathname: string): boolean {
   return SEM_CABECALHO.some((rota) => pathname === rota || pathname.startsWith(rota + "/"));

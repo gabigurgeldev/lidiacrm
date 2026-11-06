@@ -1,14 +1,12 @@
 "use client";
 import { GlobalSearch } from "@/components/shell/header/GlobalSearch";
 import { HeaderActions } from "@/components/shell/header/HeaderActions";
-import { MobileSidebar } from "@/components/shell/MobileSidebar";
 import { TenantSwitcher } from "@/components/shell/TenantSwitcher";
-import type { NavGroupId } from "@/lib/navigation/registry";
 
 /**
  * A barra superior — três zonas, no modelo das toolbars do macOS.
  *
- *   [☰ celular] [organização?]   ·   [busca]   ·   [avisos]
+ *   [organização?]   ·   [busca]   ·   [avisos]
  *
  * ⚠️ A ALTURA É `h-14` (56px) E É CONTRATO, não estética. Duas telas calculam a
  * própria altura subtraindo este valor: `components/inbox/InboxLayout.tsx:259` e
@@ -34,11 +32,7 @@ import type { NavGroupId } from "@/lib/navigation/registry";
  * o campo de busca mudava de posição conforme o que houvesse à esquerda, e a
  * mesma tecla ⌘K abria um campo que estava num lugar diferente a cada rota.
  */
-export function AppHeader({
-  gruposAbertosSalvos = null,
-}: {
-  gruposAbertosSalvos?: NavGroupId[] | null;
-}) {
+export function AppHeader() {
   return (
     /*
       `casca-escura` é o escopo de token da moldura preta — a mesma classe da
@@ -47,9 +41,10 @@ export function AppHeader({
     */
     <header className="app-header casca-escura sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 px-3 md:gap-4 md:px-6">
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <MobileSidebar gruposAbertosSalvos={gruposAbertosSalvos} />
-        {/* Os dois devolvem `null` no caso comum — o ☰ some a partir de `md`, e o
-            seletor de empresa só existe para quem tem mais de uma. Numa
+        {/* O ☰ SAIU DAQUI no celular: a porta da gaveta agora é o "Mais" da
+            barra inferior (`components/shell/BarraInferior.tsx`), que fica à
+            mão do polegar e existe também no Inbox, onde este cabeçalho some.
+            O seletor de empresa devolve `null` para quem tem uma só — numa
             instalação de um cliente só, em laptop, esta zona fica vazia de
             propósito: é o que centra a busca na tela. */}
         <TenantSwitcher />

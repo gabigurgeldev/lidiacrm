@@ -30,9 +30,9 @@ import { CONVERSATION_QUEUE_STATUSES } from "@/lib/schemas";
 import { ShortcutsHelpDialog } from "./ShortcutsHelpDialog";
 import { OpenConversationProvider } from "@/hooks/notifications/OpenConversationContext";
 // ADR-05: ícone de feature sai do mapa canônico, nunca do pacote direto.
-import { CaretLeft, ChatCircleText, IdentificationCard } from "@/lib/ui/icons";
+import { ArrowLeft, ChatCircleText } from "@/lib/ui/icons";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 /**
@@ -132,7 +132,28 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
     [tab, searchParams, router, pathname],
   );
 
-  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
+  /**
+   * A CONVERSA ABERTA VIVE NA URL (`?id=`), e o estado local só a espelha.
+   *
+   * Antes só o `?id=` da PRIMEIRA carga contava; depois era estado local. Dois
+   * defeitos saíam daí, os dois no telefone:
+   *
+   *   1. o voltar do Android (e o gesto de voltar do iPhone) SAÍA do inbox em
+   *      vez de devolver a lista — não havia entrada de histórico para desfazer;
+   *   2. o toque numa notificação (`router.push('/app/inbox?id=X')`) com o
+   *      inbox já aberto mudava a URL e não abria conversa nenhuma.
+   *
+   * Agora: URL → estado no efeito abaixo; estado → URL em `handleSelect`, com
+   * `history.pushState` (o Next sincroniza `useSearchParams` com ele, sem ida ao
+   * servidor). Abrir a partir da lista EMPILHA uma entrada, para o voltar do
+   * aparelho cair na lista; trocar de uma conversa para outra SUBSTITUI, para o
+   * histórico não virar uma pilha de conversas.
+   */
+  const idNaUrl = searchParams.get("id");
+  const [selectedId, setSelectedId] = useState<string | null>(idNaUrl ?? initialSelectedId);
+  const ultimoIdDaUrl = useRef<string | null>(idNaUrl);
+  /** A conversa aberta entrou por um toque na lista (há entrada de histórico a desfazer). */
+  const abriuPelaLista = useRef(false);
   const [visibleIds, setVisibleIds] = useState<string[]>([]);
   const [helpOpen, setHelpOpen] = useState(false);
   /** A ficha do contato como painel deslizante — só existe abaixo do `xl`. */
@@ -215,20 +236,48 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
     selectedConversation?.unread_count_for_assignee ?? 0,
   );
 
-  // Aceita `null`: é o VOLTAR do celular, que limpa a seleção e devolve a lista.
-  // É um SUPERCONJUNTO do `handleSelect` do upstream — o tipo dele não aceita
-  // `null`, e sem isso o botão de voltar não teria o que chamar.
-  //
-  // A seleção NÃO vive na URL (só o `?filter=` vive) — então este voltar é
-  // estado local, e o botão de voltar do navegador não desfaz a seleção. É a
-  // limitação conhecida deste caminho; trocar por URL mudaria o deep-link de
-  // conversa, que hoje entra por `initialSelectedId` vindo da rota.
-  const handleSelect = useCallback((id: string | null) => {
-    setSelectedId(id);
-    // Sem isto, escolher "responder" numa conversa e trocar para outra levaria
-    // a citação junto — e a resposta sairia citando mensagem de outro cliente.
+  // URL → estado: o voltar do aparelho/navegador e o link de notificação.
+  useEffect(() => {
+    if (idNaUrl === ultimoIdDaUrl.current) return;
+    ultimoIdDaUrl.current = idNaUrl;
+    if (idNaUrl === null) abriuPelaLista.current = false;
+    setSelectedId(idNaUrl);
+    // Sem isto, a citação escolhida numa conversa iria junto para a outra.
     setRespondendo(null);
-  }, []);
+  }, [idNaUrl]);
+
+  // Aceita `null`: é o VOLTAR do celular, que limpa a seleção e devolve a lista.
+  const handleSelect = useCallback(
+    (id: string | null) => {
+      setSelectedId(id);
+      // Sem isto, escolher "responder" numa conversa e trocar para outra levaria
+      // a citação junto — e a resposta sairia citando mensagem de outro cliente.
+      setRespondendo(null);
+      if (typeof window === "undefined") return;
+
+      const atual = ultimoIdDaUrl.current;
+      ultimoIdDaUrl.current = id;
+      if (id === null && abriuPelaLista.current) {
+        // Desfaz a entrada que o toque na lista empilhou: o histórico fica
+        // como estava antes de abrir, e o voltar do aparelho não "reabre" nada.
+        abriuPelaLista.current = false;
+        window.history.back();
+        return;
+      }
+      const params = new URLSearchParams(window.location.search);
+      if (id) params.set("id", id);
+      else params.delete("id");
+      const qs = params.toString();
+      const url = `${pathname}${qs ? `?${qs}` : ""}`;
+      if (id !== null && atual === null) {
+        abriuPelaLista.current = true;
+        window.history.pushState(null, "", url);
+      } else {
+        window.history.replaceState(null, "", url);
+      }
+    },
+    [pathname],
+  );
   const handleVisibleChange = useCallback((ids: string[]) => setVisibleIds(ids), []);
   const handleFocusReply = useCallback(() => composerRef.current?.focus(), []);
   const handleClaim = useCallback(() => {
@@ -396,6 +445,12 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
           colunas.lista,
         )}
       >
+        {/* O topo da lista no celular, no lugar do cabeçalho do app (que some
+            no Inbox): o título, como no WhatsApp. A navegação está na barra
+            de abas embaixo. */}
+        <div className="flex h-14 shrink-0 items-center bg-background px-4 md:hidden">
+          <h1 className="text-xl font-semibold tracking-tight text-foreground">{t("Conversas")}</h1>
+        </div>
         <InboxFilters value={filterValue} onChange={setFilterValue} />
         <div className="min-h-0 flex-1 overflow-hidden">
           <ConversationList
@@ -428,38 +483,34 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
         )}
       >
         {/*
-          A barra do celular vive FORA do ramo da conversa carregada: o caminho
-          de volta tem de existir inclusive quando não há o que mostrar — é aí
-          que ele é a única saída. A porta da ficha, essa sim, depende da
-          conversa, e só aparece quando há uma.
+          O ← do celular mora DENTRO do cabeçalho da conversa (uma linha só, como
+          no WhatsApp). Enquanto a conversa não carregou — ou quando ela está
+          fora do acesso, que é estado permanente — não há cabeçalho, e esta
+          barra mínima é a única saída. Nunca as duas ao mesmo tempo.
         */}
-        {selectedId && (
-          <div className="flex items-center gap-1 border-b border-border px-1 py-1 md:hidden">
+        {selectedId && !selectedConversation && (
+          <div className="flex min-h-14 items-center border-b border-border px-1 md:hidden">
             <Button
               variant="ghost"
-              size="sm"
-              className="h-9 gap-1 px-2"
+              size="icon"
+              className="size-10 rounded-full"
+              aria-label={t("Voltar para as conversas")}
+              data-testid="voltar-para-conversas"
               onClick={() => handleSelect(null)}
             >
-              <CaretLeft size={16} />
-              {t("Conversas")}
+              <ArrowLeft size={22} aria-hidden />
             </Button>
-            <div className="flex-1" />
-            {selectedConversation && (
-              <Sheet open={fichaAberta} onOpenChange={setFichaAberta}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-9 gap-1 px-2 xl:hidden">
-                    <IdentificationCard size={16} />
-                    {t("Ficha")}
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="right" className="w-[min(26rem,94vw)] overflow-y-auto p-0">
-                  <SheetTitle className="sr-only">{t("Ficha do contato")}</SheetTitle>
-                  <CRMSidePanel conversation={selectedConversation} onFechar={() => setFichaAberta(false)} />
-                </SheetContent>
-              </Sheet>
-            )}
           </div>
+        )}
+        {/* A ficha do contato por cima (abaixo de 1536px). Controlada: quem abre
+            é o toque no nome ou o item "Dados do contato" do ⋮. */}
+        {selectedConversation && (
+          <Sheet open={fichaAberta} onOpenChange={setFichaAberta}>
+            <SheetContent side="right" className="w-[min(26rem,100vw)] overflow-y-auto p-0">
+              <SheetTitle className="sr-only">{t("Ficha do contato")}</SheetTitle>
+              <CRMSidePanel conversation={selectedConversation} onFechar={() => setFichaAberta(false)} />
+            </SheetContent>
+          </Sheet>
         )}
         {selectedConversation ? (
           <>
@@ -467,6 +518,7 @@ export function InboxLayout({ initialSelectedId = null }: InboxLayoutProps = {})
               conversation={selectedConversation}
               onAbrirPerfil={abrirPerfil}
               onIrParaAba={(aba) => setFilterValue({ ...filterValue, tab: aba })}
+              onVoltar={() => handleSelect(null)}
             />
             <div className="min-h-0 flex-1 overflow-hidden">
               <ChatThread

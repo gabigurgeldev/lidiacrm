@@ -8790,6 +8790,11 @@ export const DICIONARIO: Traducoes = {
   "Não consegui apagar o histórico agora. Tente de novo.": { es: "No pude borrar el historial ahora. Inténtalo de nuevo." },
   "Você atingiu o limite de perguntas de hoje. Amanhã ele renova.": { es: "Alcanzaste el límite de preguntas de hoy. Mañana se renueva." },
   "Não consegui responder agora. Tente de novo em instantes.": { es: "No pude responder ahora. Inténtalo de nuevo en unos instantes." },
+  // Celular estilo WhatsApp: barra de abas e voltar da conversa (04/11/2026).
+  "Voltar para as conversas": { es: "Volver a las conversaciones" },
+  "Mais: abrir navegação": { es: "Más: abrir navegación" },
+  Mais: { es: "Más" },
+  "Navegação rápida": { es: "Navegación rápida" },
 };
 
 /**

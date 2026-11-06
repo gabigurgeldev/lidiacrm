@@ -158,7 +158,7 @@ export function InboxFilters({ value, onChange }: Props) {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder={t("Pesquisar conversa")}
-            className="h-10 rounded-lg border-transparent bg-surface-elevated pl-11 text-[15px] focus-visible:border-border"
+            className="h-10 rounded-lg border-transparent bg-surface-elevated pl-11 text-base focus-visible:border-border md:text-[15px]"
             aria-label={t("Buscar conversas")}
           />
         </div>

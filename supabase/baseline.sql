@@ -25913,6 +25913,115 @@ create trigger trg_contacts_agente_redigir_delete
   when (old.is_anonymized is distinct from true)
   execute function public.fn_agente_redigir_contato();
 
+-- ---- agente não toma conversa que não pode ver (migration 0253) ----
+-- Racional completo no cabeçalho de
+-- `supabase/migrations/20261105130000_0253_conversa_alheia_nao_se_toma.sql`.
+-- Em uma frase: `fn_conversation_assign` (SECURITY DEFINER) deixava um `agent`
+-- transferir/assumir a conversa de um colega que a RLS nem o deixava ver; agora
+-- a escrita de dono usa a mesma régua da leitura (fn_can_view_conversation com o
+-- dono atual), e falha com 42501 `conversation_not_visible`. Service role
+-- (rodízio, fluxos, MCP), manager/admin e o modo `all` não mudam. Idempotente.
+create or replace function public.fn_conversation_assign(
+  p_organization_id uuid,
+  p_conversation_id uuid,
+  p_to_user_id uuid,
+  p_reason text,
+  p_expected_assignee uuid default null,
+  p_enforce_expected boolean default false
+) returns setof public.conversations
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  v_from uuid;
+  v_conv public.conversations%rowtype;
+begin
+  if auth.uid() is not null
+     and not public.fn_role_at_least(p_organization_id, 'agent') then
+    raise exception 'caller_not_authorized_for_org'
+      using hint = 'caller must be an active agent+ member of the organization';
+  end if;
+
+  if p_to_user_id is not null then
+    if coalesce(public.fn_member_role_in_org(p_to_user_id, p_organization_id), 'none')
+         not in ('agent','manager','admin') then
+      raise exception 'assignee_not_eligible_member'
+        using hint = 'target must be an active agent+ member of the organization';
+    end if;
+  end if;
+
+  select assigned_to_user_id into v_from
+    from public.conversations
+   where id = p_conversation_id
+     and organization_id = p_organization_id
+   for update;
+
+  if not found then
+    return;
+  end if;
+
+  -- O lock otimista vem ANTES da checagem de visibilidade: quem perde a
+  -- corrida de "assumir" já não enxerga a conversa (agora é do colega) e deve
+  -- receber 0 linhas (409), não `conversation_not_visible` (404). Perder o
+  -- lock não muda nada; quem passa nele é conferido abaixo. Racional inteiro
+  -- na migration 0253.
+  if p_enforce_expected and v_from is distinct from p_expected_assignee then
+    return;
+  end if;
+
+  -- Agente só mexe no dono do que pode ver (migration 0253). Mesma função da
+  -- RLS de SELECT, com o dono ATUAL travado acima. Sem auth.uid() (service
+  -- role: rodízio, fluxos, MCP) não há papel a conferir.
+  if auth.uid() is not null
+     and public.fn_user_role_in_org(p_organization_id) = 'agent'
+     and not public.fn_can_view_conversation(p_organization_id, v_from) then
+    raise exception 'conversation_not_visible'
+      using errcode = '42501',
+            hint = 'an agent can only change the assignee of a conversation it can see (visibility_mode)';
+  end if;
+
+  update public.conversations
+     set assigned_to_user_id = p_to_user_id,
+         -- Desnormalizado JUNTO com o dono, na mesma transação: nunca existe
+         -- uma janela em que id e nome discordam. NULL junto com o id quando
+         -- a atribuição é removida (release) — nunca sobra um nome órfão de
+         -- dono nenhum. Lido de auth.users porque quem chama esta função
+         -- (RPC) não necessariamente tem acesso ao Admin API — a definer
+         -- resolve por dentro.
+         assigned_to_user_name = case
+           when p_to_user_id is null then null
+           else (select raw_user_meta_data ->> 'full_name' from auth.users where id = p_to_user_id)
+         end,
+         assigned_at = case when p_to_user_id is null then null else now() end,
+         assignee_kind = case when p_to_user_id is null then null else 'user' end,
+         status = case when p_to_user_id is null then 'open' else 'claimed' end,
+         status_changed_at = now(),
+         unread_count_for_assignee = 0,
+         bot_silenced_until = case
+           when p_reason = 'routing'  then bot_silenced_until
+           when p_to_user_id is null  then (case when last_handoff_at is null
+                                                 then null
+                                                 else bot_silenced_until end)
+           else 'infinity'::timestamptz
+         end,
+         updated_at = now()
+   where id = p_conversation_id
+   returning * into v_conv;
+
+  insert into public.conversation_assignment_events
+    (organization_id, conversation_id, from_user_id, to_user_id, changed_by, reason)
+  values
+    (p_organization_id, p_conversation_id, v_from, p_to_user_id, auth.uid(), p_reason);
+
+  return next v_conv;
+end;
+$$;
+
+revoke all     on function public.fn_conversation_assign(uuid, uuid, uuid, text, uuid, boolean) from public;
+revoke execute on function public.fn_conversation_assign(uuid, uuid, uuid, text, uuid, boolean) from anon;
+grant  execute on function public.fn_conversation_assign(uuid, uuid, uuid, text, uuid, boolean)
+  to authenticated, service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

@@ -24,6 +24,7 @@ import { useMessageTemplates, type MessageTemplate } from "@/hooks/inbox/useMess
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
 import { useUploadMedia } from "@/hooks/inbox/useUploadMedia";
 import { imagemDoClipboard } from "@/lib/inbox/clipboard-image";
+import { enterEnvia, ponteiroDeToque } from "@/lib/inbox/enter-no-composer";
 import { interpolateTemplate } from "@/lib/inbox/template-vars";
 import { cn } from "@/lib/utils";
 
@@ -199,9 +200,16 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       setMenuDismissed(true);
       return;
     }
-    if (e.key === "Enter" && !e.shiftKey) {
+    // Com o menu de respostas prontas aberto, o Enter é DO MENU (escolhe o
+    // item) em qualquer teclado — e nunca envia o "/query" como mensagem.
+    if (e.key === "Enter" && !e.shiftKey && menuOpen) {
       e.preventDefault();
-      if (menuOpen) return; // deixa o Enter pro menu; não envia /query como mensagem
+      return;
+    }
+    // No celular o Enter quebra linha e quem envia é o botão — ver o porquê
+    // em `lib/inbox/enter-no-composer.ts`.
+    if (enterEnvia(e, ponteiroDeToque())) {
+      e.preventDefault();
       handleSubmit();
     }
   }
@@ -216,7 +224,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
   return (
     <>
-      <div className={cn("inbox-barra relative px-3 py-2.5", mode === "note" && "bg-warning-bg")}>
+      {/* `env(safe-area-inset-bottom)`: no iPhone sem botão o campo nascia
+          embaixo da barrinha de gesto. Some (vale 0) onde não há área segura. */}
+      <div
+        className={cn(
+          "inbox-barra relative px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 md:px-3 md:py-2.5",
+          mode === "note" && "bg-warning-bg",
+        )}
+      >
         <TemplateMenu
           open={menuOpen}
           query={slash.query}
@@ -302,6 +317,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                 onRascunho={applyDraft}
                 onAlternarNota={() => setMode((m) => (m === "note" ? "reply" : "note"))}
               />
+              {/* No celular o teclado já traz os emojis — o botão só roubava
+                  40px do campo de escrever, que é o que importa ali. */}
+              <div className="hidden md:flex">
               <EmojiButton
                 disabled={isDisabled}
                 onPick={(emoji) => {
@@ -321,6 +339,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                   });
                 }}
               />
+              </div>
               {/* Nota interna nunca chega ao cliente — não há o que assinar. */}
               {mode === "reply" && (
                 <AssinaturaDoAtendenteButton
@@ -355,8 +374,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                     ? t("Enter salva a nota · Shift+Enter quebra linha")
                     : t("Enter envia · Shift+Enter quebra linha")
                 }
+                // `enterKeyHint`: a tecla do teclado virtual diz o que faz —
+                // no celular o Enter quebra linha (ver `enterEnvia`).
+                enterKeyHint="enter"
+                // `text-base` (16px) abaixo do `md`: com fonte menor que 16px o
+                // Safari do iPhone dá zoom na página ao focar o campo, e a tela
+                // fica torta até o usuário desfazer o zoom com os dedos.
                 className={cn(
-                  "max-h-40 min-h-10 min-w-0 flex-1 resize-none rounded-lg border-0 bg-background px-3.5 py-2.5 text-[15px] leading-5 shadow-[0_1px_0.5px_rgb(11_20_26/0.06)]",
+                  "max-h-40 min-h-10 min-w-0 flex-1 resize-none rounded-3xl border-0 bg-background px-4 py-2.5 text-base leading-5 shadow-[0_1px_0.5px_rgb(11_20_26/0.06)] md:rounded-lg md:px-3.5 md:text-[15px]",
                   "placeholder:text-muted-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-ring",
                 )}
                 disabled={mode === "note" ? isDisabled : respostaBarrada}

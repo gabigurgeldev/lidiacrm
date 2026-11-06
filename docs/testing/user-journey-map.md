@@ -1303,6 +1303,45 @@ client admin (org do cookie), e a reconferência sob trava virou definer.
 
 ---
 
+## J40 — Atender pelo celular como no WhatsApp, e não pegar o cliente da colega `[P0]` (2026-11-04)
+
+Reclamação real de uma cliente: as duas atendentes viam as conversas uma da outra
+e podiam pegar o contato da colega; e a navegação pelo celular era "ruim demais".
+
+**O que era cada sintoma.** A leitura já respeitava o modo de visibilidade (RLS,
+0035): o que ela via eram as **conversas sem dono** do modo padrão "os
+seus + a fila" — respondidas pelo celular, nunca assumidas. Resolveu-se na
+**configuração** da org ("Só os seus" + rodízio). Já a **escrita** de dono era
+furo de código: `fn_conversation_assign` (definer) deixava um `agent` transferir
+ou assumir a conversa de um colega que ele nem enxergava — fechado na 0253.
+
+| # | Caso | Expectativa | Resultado |
+|---|------|-------------|-----------|
+| J40.1 | Agente assume a conversa de colega com `expected` = dono (own_and_unassigned) | recusa `conversation_not_visible`, dono intacto | invariante `conversa-alheia-nao-se-toma` (CI) |
+| J40.2 | Agente transfere para si a conversa de colega | recusa, dono intacto | mesmo invariante (CI) |
+| J40.3 | Agente assume sem dono (own_and_unassigned) / transfere a própria | passa | mesmo invariante (CI) |
+| J40.4 | Modo `own`: agente assume sem dono; rodízio (service role) atribui | recusa / passa | mesmo invariante (CI) |
+| J40.5 | Modo `all` e manager | comportamento antigo | mesmo invariante (CI) |
+| J40.6 | Rotas transfer/claim/PATCH com a recusa | 404, não 500 nem 403 | **PASS** (unit `conversa-fora-de-alcance`) |
+| J40.7 | 390px: lista com título + barra de abas, sem cabeçalho do app | visível, sem rolagem lateral | spec `inbox-celular` (CI) |
+| J40.8 | 390px: conversa aberta — ← + nome numa linha (≤ 64px), sem barra de abas, campo na tela | medido por `boundingBox` | spec `inbox-celular` (CI) |
+| J40.9 | Voltar do aparelho com a conversa aberta | volta à lista, fica no Inbox | spec `inbox-celular` (CI) |
+| J40.10 | Enter no toque | quebra linha, não envia | spec `inbox-celular` (CI) + unit `enter-no-composer` |
+| J40.11 | Abas por papel; some com conversa aberta | regra pura | **PASS** (unit `barra-inferior-do-celular`, `casca-esconde-o-cabecalho`) |
+
+### O que ficou NÃO MEDIDO, e por quê
+
+- **A tela, aqui.** O E2E local não sobe nesta máquina; a spec roda só no CI, e
+  o job `e2e` costuma cancelar por tempo — se cancelar, J40.7–J40.10 continuam
+  não medidos e é preciso olhar num telefone de verdade depois do deploy.
+- **Teclado real do iPhone/Android** (`interactiveWidget`, área segura): o
+  Playwright emula toque e largura, não o teclado virtual.
+- **O rodízio com as atendentes fora do CRM**: a elegibilidade exige
+  `is_available`; quem atende só pelo celular precisa de "Sempre disponível"
+  (0246), senão a conversa nova fica sem dono e só a admin a vê.
+
+---
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,
