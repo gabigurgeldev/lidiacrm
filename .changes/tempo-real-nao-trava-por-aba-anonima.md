@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: Uma aba sem sessão no tempo real não trava mais o CRM de todos
+titulo: Aba sem sessão não trava mais o tempo real de todos
 ---
 
 Com o servidor lento, uma aba podia ficar conectada ao tempo real sem sessão.
