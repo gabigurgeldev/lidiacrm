@@ -37,27 +37,42 @@ function ehImagem(tipo: string | undefined): boolean {
  *   anexo rastreável depois, na lista de mídia da conversa.
  */
 export function imagemDoClipboard(dados: DataTransfer | null, carimbo: Date): File | null {
-  if (!dados) return null;
+  return imagensDoClipboard(dados, carimbo)[0] ?? null;
+}
 
-  const daLista = Array.from(dados.files ?? []).find((f) => ehImagem(f.type));
-  const dosItens = daLista
-    ? null
-    : Array.from(dados.items ?? [])
-        .filter((i) => i.kind === "file" && ehImagem(i.type))
-        .map((i) => i.getAsFile())
-        .find((f): f is File => f !== null);
+/**
+ * TODAS as imagens de um clipboard (ou de um arrastar e soltar — o
+ * `DataTransfer` é o mesmo), na ordem em que vieram. Lista vazia = não havia
+ * imagem, e o Ctrl+V de texto segue o caminho normal.
+ *
+ * Copiar vários arquivos de uma pasta e colar no campo é o jeito de quem
+ * atende pelo computador mandar várias opções de uma vez; ler só a primeira
+ * descartava as outras sem aviso.
+ */
+export function imagensDoClipboard(dados: DataTransfer | null, carimbo: Date): File[] {
+  if (!dados) return [];
 
-  const arquivo = daLista ?? dosItens ?? null;
+  const daLista = Array.from(dados.files ?? []).filter((f) => ehImagem(f.type));
+  const arquivos =
+    daLista.length > 0
+      ? daLista
+      : Array.from(dados.items ?? [])
+          .filter((i) => i.kind === "file" && ehImagem(i.type))
+          .map((i) => i.getAsFile())
+          .filter((f): f is File => f !== null);
+
   // Arquivo de 0 byte existe (colagem de uma referência que o browser não
   // conseguiu materializar) e subiria só para o servidor recusar com
   // "Arquivo vazio" — melhor tratar como "não havia imagem" e deixar o
   // Ctrl+V seguir seu caminho normal.
-  if (!arquivo || arquivo.size <= 0) return null;
-
-  return new File([arquivo], nomeDaColagem(arquivo, carimbo), {
-    type: arquivo.type,
-    lastModified: arquivo.lastModified,
-  });
+  const reais = arquivos.filter((a) => a.size > 0);
+  return reais.map(
+    (arquivo, i) =>
+      new File([arquivo], nomeDaColagem(arquivo, carimbo, reais.length > 1 ? i + 1 : null), {
+        type: arquivo.type,
+        lastModified: arquivo.lastModified,
+      }),
+  );
 }
 
 /**
@@ -65,13 +80,14 @@ export function imagemDoClipboard(dados: DataTransfer | null, carimbo: Date): Fi
  *
  * Preserva o nome quando ele existe e é real (arrastar/copiar um arquivo do
  * sistema traz "orcamento.png"); só inventa quando o browser entregou o nome
- * genérico de print de tela, que é o caso de toda colagem de captura.
+ * genérico de print de tela, que é o caso de toda colagem de captura. Numa
+ * colagem de várias, o número de ordem impede nomes repetidos no mesmo segundo.
  */
-function nomeDaColagem(arquivo: File, carimbo: Date): string {
+function nomeDaColagem(arquivo: File, carimbo: Date, ordem: number | null): string {
   const generico = !arquivo.name || /^image\.[a-z0-9]+$/i.test(arquivo.name);
   if (!generico) return arquivo.name;
 
   const ext = EXT_POR_MIME[arquivo.type.split(";")[0]!.trim().toLowerCase()] ?? "png";
   const iso = carimbo.toISOString().slice(0, 19).replace(/[:T]/g, "-");
-  return `imagem-colada-${iso}.${ext}`;
+  return `imagem-colada-${iso}${ordem ? `-${ordem}` : ""}.${ext}`;
 }
