@@ -15,7 +15,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logger } from "@/lib/logger";
 import { decideRouting } from "@/lib/routing/decide";
-import { loadEligibleAttendants } from "@/lib/routing/eligibles";
+import { OPEN_LOAD_STATUSES } from "@/lib/routing/eligibility";
+import { loadRoutingPool } from "@/lib/routing/eligibles";
 import { routingConfigSchema } from "@/lib/schemas/routing";
 
 export const ROUTING_WORKER_KEY = "worker.routing.v1";
@@ -23,14 +24,17 @@ export const ROUTING_EVENT_TYPE = "conversation.routing_requested";
 
 const DEFAULT_BATCH_SIZE = 100;
 
+
 export type RoutingOutcome =
   | "assigned"
   | "skipped_manual"
   | "skipped_already_assigned"
   | "skipped_unsupported_mode"
   | "requeued_no_eligible"
+  | "requeued_outside_schedule"
   | "dead_no_eligible"
   | "skipped_conv_missing"
+  | "skipped_not_queued"
   | "skipped_invalid_payload"
   | "assign_lost_race"
   | "error";
@@ -56,8 +60,10 @@ const EMPTY_OUTCOMES = (): Record<RoutingOutcome, number> => ({
   skipped_already_assigned: 0,
   skipped_unsupported_mode: 0,
   requeued_no_eligible: 0,
+  requeued_outside_schedule: 0,
   dead_no_eligible: 0,
   skipped_conv_missing: 0,
+  skipped_not_queued: 0,
   skipped_invalid_payload: 0,
   assign_lost_race: 0,
   error: 0,
@@ -149,18 +155,31 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
   const config = routingConfigSchema.parse(settings.routing ?? {});
 
   const alreadyAssigned = Boolean(conv.assigned_to_user_id);
-  const eligibles =
+
+  // Conversa encerrada sem dono (resolved/closed/archived) não é distribuída.
+  // Antes isto era raro — o evento morria em minutos —, mas agora um evento pode
+  // esperar a abertura do horário por uma noite inteira, e atribuir na manhã
+  // seguinte uma conversa que alguém fechou de madrugada reabriria trabalho.
+  // "Viva" é a mesma lista que conta como carga: `ai_handling` segue
+  // distribuível, como sempre foi.
+  if (!alreadyAssigned && !(OPEN_LOAD_STATUSES as readonly string[]).includes(String(conv.status))) {
+    await markDone(event, "skipped_not_queued");
+    return "skipped_not_queued";
+  }
+
+  const pool =
     !alreadyAssigned && config.mode === "round_robin"
-      ? await loadEligibleAttendants(createAdminClient(), orgId, now)
-      : [];
+      ? await loadRoutingPool(createAdminClient(), orgId, now)
+      : { eligibles: [], nextOpeningAt: null };
 
   const action = decideRouting({
     mode: config.mode,
     alreadyAssigned,
-    eligibles,
+    eligibles: pool.eligibles,
     config,
     attempts: event.attempts,
     now,
+    nextOpeningAt: pool.nextOpeningAt,
   });
 
   switch (action.kind) {
@@ -210,6 +229,10 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
       return outcome;
     }
     case "requeue": {
+      if (action.aguardandoHorario) {
+        await requeueEvent(event, now, action.attempts, { reason: "outside_schedule" }, action.nextAttemptAt);
+        return "requeued_outside_schedule";
+      }
       await requeueEvent(event, now, action.attempts, { reason: "no_eligible" }, action.nextAttemptAt);
       return "requeued_no_eligible";
     }

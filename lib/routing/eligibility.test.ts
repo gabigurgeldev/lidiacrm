@@ -5,6 +5,7 @@ import {
   isAttendantEligible,
   isHeartbeatStale,
   isWithinSchedule,
+  nextScheduleOpening,
 } from "./eligibility";
 import { availabilityScheduleSchema } from "@/lib/schemas/routing";
 
@@ -89,5 +90,60 @@ describe("isHeartbeatStale (AT-08 auto-offline, clock mockado)", () => {
 
   it("sem heartbeat (null) ⇒ velho ⇒ auto-offline", () => {
     expect(isHeartbeatStale(null, now)).toBe(true);
+  });
+});
+
+/**
+ * A jornada que derrubou o rodízio em produção (America/Belem, UTC-03, sem
+ * horário de verão): seg–sex 08–12 e 14–18, sáb 08–12. Fora dela o evento
+ * morria em 5 min; agora ele volta na abertura.
+ */
+describe("nextScheduleOpening", () => {
+  const jornada = availabilityScheduleSchema.parse({
+    timezone: "America/Belem",
+    windows: [
+      ...[1, 2, 3, 4, 5].flatMap((dow) => [
+        { dow, start: "08:00", end: "12:00" },
+        { dow, start: "14:00", end: "18:00" },
+      ]),
+      { dow: 6, start: "08:00", end: "12:00" },
+    ],
+  });
+
+  it("no almoço (ter 12:32) ⇒ abre às 14:00 do mesmo dia", () => {
+    // Ter 2026-10-27 12:32:40 Belém == 15:32:40Z.
+    const abre = nextScheduleOpening(jornada, new Date("2026-10-27T15:32:40Z"));
+    expect(abre?.toISOString()).toBe("2026-10-27T17:00:40.000Z");
+    expect(isWithinSchedule(jornada, abre!)).toBe(true);
+  });
+
+  it("à noite (ter 22:10) ⇒ abre às 08:00 de quarta", () => {
+    const abre = nextScheduleOpening(jornada, new Date("2026-10-28T01:10:00Z"));
+    expect(abre?.toISOString()).toBe("2026-10-28T11:00:00.000Z");
+  });
+
+  it("sábado depois do meio-dia ⇒ só segunda às 08:00 (domingo não tem janela)", () => {
+    // Sáb 2026-10-31 12:00 Belém == 15:00Z — fim exclusivo, já fora.
+    const abre = nextScheduleOpening(jornada, new Date("2026-10-31T15:00:00Z"));
+    expect(abre?.toISOString()).toBe("2026-11-02T11:00:00.000Z");
+  });
+
+  it("dentro da janela ⇒ agora", () => {
+    const agora = new Date("2026-10-27T14:00:00Z"); // ter 11:00 Belém
+    expect(nextScheduleOpening(jornada, agora)).toBe(agora);
+  });
+
+  it("sem janelas (24/7) ⇒ null: não há abertura a esperar", () => {
+    expect(nextScheduleOpening(availabilityScheduleSchema.parse({}), new Date())).toBeNull();
+  });
+
+  it("janela que abre daqui a 1 semana menos 1 minuto (passou 1 min do início e já fechou)", () => {
+    const so = availabilityScheduleSchema.parse({
+      timezone: "America/Sao_Paulo",
+      windows: [{ dow: 1, start: "08:00", end: "08:01" }],
+    });
+    // Seg 2026-07-13 08:01 BRT == 11:01Z — janela [08:00, 08:01) acabou.
+    const abre = nextScheduleOpening(so, new Date("2026-07-13T11:01:00Z"));
+    expect(abre?.toISOString()).toBe("2026-07-20T11:00:00.000Z");
   });
 });
