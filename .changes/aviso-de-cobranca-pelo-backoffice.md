@@ -1,7 +1,7 @@
 ---
 impacto: exige_acao
 secao: alterado
-titulo: Com o Back Office de afiliados ligado, o aviso de cobrança ao cliente sai pelo WhatsApp do Back Office, e o Asaas deixa de avisar
+titulo: Aviso de cobrança sai pelo WhatsApp do Back Office, e o Asaas deixa de avisar
 ---
 
 Com `BACKOFFICE_URL` e `BACKOFFICE_API_KEY` preenchidos, o CRM manda ao Back

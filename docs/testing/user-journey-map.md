@@ -1267,7 +1267,7 @@ rota respondendo 2xx. Sem a volta, o menu espera para sempre e ninguém vê erro
 
 ---
 
-## J36 — Cada atendente na sua agenda, e marcar horário pela conversa `[P0]` (2026-10-30)
+## J41 — Cada atendente na sua agenda, e marcar horário pela conversa `[P0]` (2026-10-30)
 
 Até aqui qualquer membro lia a agenda inteira da organização — o filtro por
 pessoa era só visual, e o banco entregava tudo a quem perguntasse pela chave
@@ -1282,23 +1282,23 @@ client admin (org do cookie), e a reconferência sob trava virou definer.
 
 | # | Caso | Expectativa | Resultado |
 |---|------|-------------|-----------|
-| J36.1 | Atendente lê a agenda pela chave pública | só o que é dona, apoio ou criou | **PASS** (invariante `agenda-cada-um-ve-a-sua`, no CI) |
-| J36.2 | Gerente e admin | veem a organização inteira | **PASS** (mesmo invariante) |
-| J36.3 | Viewer | vê só o próprio; não altera | **PASS** (mesmo invariante + `agenda-rbac`) |
-| J36.4 | Atendente altera agendamento da colega | 0 linhas | **PASS** (invariante) |
-| J36.5 | Título do evento pessoal do Google | só o dono da conexão e a gerência | **PASS** (invariante; sonda `ocupacao-do-google-nao-expoe-titulo` cobre a rota nova) |
-| J36.6 | Marcar para a colega com legado dela no horário | 23505 → 409 | **PASS** (invariante, `fn_agenda_conferir_livre` como agent) |
-| J36.7 | Listagem da rota recorta abaixo de gerente | `restritoA` + `meta.escopo` | **PASS** (unit `agenda-cada-um-ve-a-sua`) |
-| J36.8 | IA marca sem escolher pessoa | atendente da conversa na frente; ocupado cai na 1ª livre | **PASS** (unit `mcp-agendamento-tools`, `agenda-marcar-com-profissionais`) |
-| J36.9 | Inbox: ⋮ → "Marcar horário na agenda…" → confirmar | aparece em "Próximos horários" do painel | **NÃO MEDIDO** pela tela |
-| J36.10 | Agenda de agent: "Minha agenda", sem filtro de pessoas | título e controles certos | **NÃO MEDIDO** pela tela |
-| J36.11 | Mês → clicar no dia | abre a visão de dia | **NÃO MEDIDO** pela tela |
+| J41.1 | Atendente lê a agenda pela chave pública | só o que é dona, apoio ou criou | **PASS** (invariante `agenda-cada-um-ve-a-sua`, no CI) |
+| J41.2 | Gerente e admin | veem a organização inteira | **PASS** (mesmo invariante) |
+| J41.3 | Viewer | vê só o próprio; não altera | **PASS** (mesmo invariante + `agenda-rbac`) |
+| J41.4 | Atendente altera agendamento da colega | 0 linhas | **PASS** (invariante) |
+| J41.5 | Título do evento pessoal do Google | só o dono da conexão e a gerência | **PASS** (invariante; sonda `ocupacao-do-google-nao-expoe-titulo` cobre a rota nova) |
+| J41.6 | Marcar para a colega com legado dela no horário | 23505 → 409 | **PASS** (invariante, `fn_agenda_conferir_livre` como agent) |
+| J41.7 | Listagem da rota recorta abaixo de gerente | `restritoA` + `meta.escopo` | **PASS** (unit `agenda-cada-um-ve-a-sua`) |
+| J41.8 | IA marca sem escolher pessoa | atendente da conversa na frente; ocupado cai na 1ª livre | **PASS** (unit `mcp-agendamento-tools`, `agenda-marcar-com-profissionais`) |
+| J41.9 | Inbox: ⋮ → "Marcar horário na agenda…" → confirmar | aparece em "Próximos horários" do painel | **NÃO MEDIDO** pela tela |
+| J41.10 | Agenda de agent: "Minha agenda", sem filtro de pessoas | título e controles certos | **NÃO MEDIDO** pela tela |
+| J41.11 | Mês → clicar no dia | abre a visão de dia | **NÃO MEDIDO** pela tela |
 
 ### O que ficou NÃO MEDIDO, e por quê
 
 - **A tela.** O E2E local não sobe nesta máquina (sem CLI do Supabase nem Docker
   de pé); typecheck, lint e testes de componente cobrem a montagem, não o clique.
-  Spec Playwright para J36.9–J36.11 é o primeiro passo de quem retomar.
+  Spec Playwright para J41.9–J41.11 é o primeiro passo de quem retomar.
 - **Os invariantes** rodam no `pnpm test:db`, que precisa de Docker — aqui só no CI.
 
 ---
