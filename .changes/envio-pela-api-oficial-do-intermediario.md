@@ -40,14 +40,8 @@ isso em vez de um erro genérico.
 ## Requer atenção
 
 Uma vez por número da API Oficial: em Canais, no cartão do número, cole o
-**token de envio** no campo novo. Esse valor é o único que a chave da conta não
-descobre sozinha — ele só aparece no painel do seu provedor, dentro da
-instância. O CRM valida o token contra o provedor antes de gravar: se estiver
-errado, ele diz na hora, em vez de deixar o canal mudo até a próxima mensagem
-falhar.
+**token de envio** no campo novo. Ele só aparece no painel do seu provedor,
+dentro da instância; o CRM o valida antes de gravar e avisa se estiver errado.
 
-Enquanto o token não for colado, o número continua recebendo e continua sem
-enviar — que é exatamente o estado de hoje. Nada regride por não fazer nada;
-o envio é que não passa a funcionar sozinho.
-
-Números ligados por QR não têm esse campo e não precisam de nenhuma ação.
+Sem o token, o número segue recebendo e sem enviar, como hoje. Números ligados
+por QR não precisam de nenhuma ação.
