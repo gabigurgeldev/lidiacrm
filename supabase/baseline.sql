@@ -25913,6 +25913,85 @@ create trigger trg_contacts_agente_redigir_delete
   when (old.is_anonymized is distinct from true)
   execute function public.fn_agente_redigir_contato();
 
+-- ---- RLS de escopo sem função por linha (migration 0253) ----
+-- conversations_select / crm_leads_select / messages_select deixam de chamar uma
+-- definer por linha: o que depende só de quem consulta vira InitPlan `(select f())`.
+-- Mesma regra de fn_can_view_conversation, ramo a ramo. Racional completo no
+-- cabeçalho da migration 0253. Idempotente.
+
+-- Organizações em que quem consulta vê TODAS as conversas e leads.
+create or replace function public.fn_orgs_com_visao_total()
+returns uuid[]
+language sql stable security definer
+set search_path = public
+as $$
+  select coalesce(array_agg(uo.organization_id), '{}'::uuid[])
+    from public.user_organizations uo
+    join public.organizations o on o.id = uo.organization_id
+   where uo.user_id = auth.uid()
+     and uo.revoked_at is null
+     and (
+       uo.role in ('viewer', 'manager', 'admin')
+       or coalesce(o.settings->>'visibility_mode', 'own_and_unassigned') = 'all'
+     );
+$$;
+
+-- Organizações em que quem consulta vê, além do que é seu, o que não tem dono.
+create or replace function public.fn_orgs_com_visao_sem_dono()
+returns uuid[]
+language sql stable security definer
+set search_path = public
+as $$
+  select coalesce(array_agg(uo.organization_id), '{}'::uuid[])
+    from public.user_organizations uo
+    join public.organizations o on o.id = uo.organization_id
+   where uo.user_id = auth.uid()
+     and uo.revoked_at is null
+     and uo.role not in ('viewer', 'manager', 'admin')
+     and coalesce(o.settings->>'visibility_mode', 'own_and_unassigned') = 'own_and_unassigned';
+$$;
+
+revoke execute on function public.fn_orgs_com_visao_total() from public, anon;
+revoke execute on function public.fn_orgs_com_visao_sem_dono() from public, anon;
+grant execute on function public.fn_orgs_com_visao_total() to authenticated, service_role;
+grant execute on function public.fn_orgs_com_visao_sem_dono() to authenticated, service_role;
+
+drop policy if exists "conversations_select" on public.conversations;
+create policy "conversations_select" on public.conversations
+  for select to authenticated using (
+    (select public.fn_is_platform_admin())
+    or organization_id = any ((select public.fn_orgs_com_visao_total())::uuid[])
+    or (assigned_to_user_id = (select auth.uid())
+        and organization_id in (select public.fn_user_org_ids()))
+    or (assigned_to_user_id is null
+        and organization_id = any ((select public.fn_orgs_com_visao_sem_dono())::uuid[]))
+  );
+
+drop policy if exists "crm_leads_select" on public.crm_leads;
+create policy "crm_leads_select" on public.crm_leads
+  for select to authenticated using (
+    (select public.fn_is_platform_admin())
+    or organization_id = any ((select public.fn_orgs_com_visao_total())::uuid[])
+    or (owner_user_id = (select auth.uid())
+        and organization_id in (select public.fn_user_org_ids()))
+    or (owner_user_id is null
+        and organization_id = any ((select public.fn_orgs_com_visao_sem_dono())::uuid[]))
+  );
+
+-- O hilo herda o escopo da conversa. Só o platform admin sai da linha: era
+-- avaliado por mensagem.
+drop policy if exists "messages_select" on public.messages;
+create policy "messages_select" on public.messages
+  for select to authenticated using (
+    (select public.fn_is_platform_admin())
+    or exists (
+      select 1 from public.conversations c
+       where c.id = messages.conversation_id
+    )
+  );
+
+notify pgrst, 'reload schema';
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
