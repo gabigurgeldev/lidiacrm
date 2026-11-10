@@ -23,7 +23,8 @@ interface Props {
   respostaBarrada: boolean;
   /** Tudo travado (contato bloqueado, upload em curso). */
   desabilitado: boolean;
-  onArquivo: (file: File) => void;
+  /** Fotos e vídeos chegam em lote (várias de uma vez); documento, um por vez. */
+  onArquivos: (files: File[]) => void;
   onContato: () => void;
   /** Enquete ou lista — a pergunta com opções para o cliente tocar. */
   onOpcoes: () => void;
@@ -63,7 +64,7 @@ export function MenuDeOpcoes({
   modo,
   respostaBarrada,
   desabilitado,
-  onArquivo,
+  onArquivos,
   onContato,
   onOpcoes,
   onMensagensProntas,
@@ -169,8 +170,8 @@ export function MenuDeOpcoes({
   });
 
   const aoEscolherArquivo = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) onArquivo(file);
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > 0) onArquivos(files);
     e.target.value = ""; // permite escolher o mesmo arquivo de novo
   };
 
@@ -254,10 +255,15 @@ export function MenuDeOpcoes({
         </div>
       )}
 
+      {/*
+        `multiple`: quem vende manda várias opções de uma vez. No celular, é o
+        que faz a galeria abrir em seleção múltipla, como no WhatsApp.
+      */}
       <input
         id={idMidia}
         type="file"
         accept="image/*,video/*"
+        multiple
         className="hidden"
         onChange={aoEscolherArquivo}
       />

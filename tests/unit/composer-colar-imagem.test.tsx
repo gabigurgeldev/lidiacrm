@@ -19,17 +19,21 @@ const uploadResult = {
   kind: "image" as const,
 };
 const uploadMock = vi.fn(async () => uploadResult);
-const sendMock = vi.fn();
+const sendMock = vi.fn(async (..._args: unknown[]) => ({ data: {} }));
 
 vi.mock("@/hooks/inbox/useUploadMedia", () => ({
   useUploadMedia: () => ({ mutateAsync: uploadMock, isPending: false }),
 }));
 vi.mock("@/hooks/inbox/useSendMessage", () => ({
-  useSendMessage: () => ({ mutate: sendMock, isPending: false }),
+  useSendMessage: () => ({ mutate: vi.fn(), mutateAsync: sendMock, isPending: false }),
 }));
+vi.mock("@/lib/agent-engine/pacing/defaults", async (orig) => {
+  const real = (await orig()) as { PACING_DEFAULTS: Record<string, unknown> };
+  return { ...real, PACING_DEFAULTS: { ...real.PACING_DEFAULTS, throttleMs: 0, jitterMaxMs: 0 } };
+});
 
 import { Composer } from "@/components/inbox/Composer";
-import { imagemDoClipboard } from "@/lib/inbox/clipboard-image";
+import { imagemDoClipboard, imagensDoClipboard } from "@/lib/inbox/clipboard-image";
 
 const CARIMBO = new Date("2026-08-07T19:26:03.000Z");
 
@@ -104,6 +108,29 @@ describe("imagemDoClipboard", () => {
   });
 });
 
+describe("imagensDoClipboard — várias de uma vez", () => {
+  it("devolve TODAS as imagens, na ordem, e ignora o que não é imagem", () => {
+    const pdf = new File([new Uint8Array([1])], "contrato.pdf", { type: "application/pdf" });
+    const r = imagensDoClipboard(
+      clipboard({ files: [png("opcao-1.png"), pdf, png("opcao-2.png")] }),
+      CARIMBO,
+    );
+    expect(r.map((f) => f.name)).toEqual(["opcao-1.png", "opcao-2.png"]);
+  });
+
+  it("prints genéricos ganham número de ordem — nada de dois nomes iguais", () => {
+    const r = imagensDoClipboard(clipboard({ files: [png("image.png"), png("image.png")] }), CARIMBO);
+    expect(r.map((f) => f.name)).toEqual([
+      "imagem-colada-2026-08-07-19-26-03-1.png",
+      "imagem-colada-2026-08-07-19-26-03-2.png",
+    ]);
+  });
+
+  it("texto devolve lista vazia", () => {
+    expect(imagensDoClipboard(clipboard({ texto: "oi" }), CARIMBO)).toEqual([]);
+  });
+});
+
 describe("Composer — colar imagem", () => {
   beforeEach(() => {
     uploadMock.mockClear();
@@ -122,9 +149,17 @@ describe("Composer — colar imagem", () => {
     await waitFor(() =>
       expect(sendMock).toHaveBeenCalledWith(
         expect.objectContaining({ conversation_id: "conv-1", type: "image", body: "mirá esto" }),
-        expect.anything(),
       ),
     );
+  });
+
+  it("colar várias imagens abre o preview com todas", async () => {
+    renderComposer();
+    fireEvent.paste(campo(), {
+      clipboardData: clipboard({ files: [png("opcao-1.png"), png("opcao-2.png")] }),
+    });
+
+    expect(await screen.findByText("Enviar 2 anexos")).toBeInTheDocument();
   });
 
   it("colar TEXTO não abre preview e não cancela o paste do browser", () => {
