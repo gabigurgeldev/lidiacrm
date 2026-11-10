@@ -7405,6 +7405,8 @@ export type Database = {
         Args: { p_org: string; p_user: string }
         Returns: string
       }
+      fn_orgs_com_visao_sem_dono: { Args: never; Returns: string[] }
+      fn_orgs_com_visao_total: { Args: never; Returns: string[] }
       fn_podar_fila_de_jobs: {
         Args: { p_limite?: number; p_retencao_dias?: number }
         Returns: number
