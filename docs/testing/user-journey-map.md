@@ -1303,7 +1303,7 @@ client admin (org do cookie), e a reconferência sob trava virou definer.
 
 ---
 
-## J41 — Mandar várias fotos de uma vez pelo inbox `[P0]` (2026-11-05)
+## J42 — Mandar várias fotos de uma vez pelo inbox `[P0]` (2026-11-05)
 
 Uma loja que vende por foto ("opção 1, opção 2, opção 3") só conseguia mandar
 **uma** imagem por vez pelo CRM. O seletor não tinha `multiple`, o composer
@@ -1319,14 +1319,14 @@ aleatório). O lote sai em sequência, espaçado com `PACING_DEFAULTS`
 
 | # | Caso | Prova |
 |---|---|---|
-| J41.1 | "Fotos e vídeos" aceita várias; documento continua um por vez | **PASS** unit (`tests/unit/composer-attach.test.tsx`) |
-| J41.2 | Três fotos viram três mensagens **em ordem**, legenda só na primeira | **PASS** unit (`composer-attach.test.tsx`) |
-| J41.3 | Falha na 2ª foto: para, e só a 2ª e a 3ª ficam no preview para tentar de novo (nada reenviado) | **PASS** unit (`composer-attach.test.tsx`, `lib/inbox/enviar-lote.test.ts`) |
-| J41.4 | Mais de 10: entram 10 e o excedente é avisado | **PASS** unit |
-| J41.5 | Colar várias imagens abre o preview com todas; nomes de print não repetem | **PASS** unit (`tests/unit/composer-colar-imagem.test.tsx`) |
-| J41.6 | Espaçamento entre envios = piso anti-ban + jitter, nunca antes do 1º | **PASS** unit (`enviar-lote.test.ts`) |
-| J41.7 | Pela tela: escolher 3, ver 3 miniaturas, tirar uma, cancelar | spec `tests/e2e/inbox-varias-fotos.spec.ts` · **NÃO MEDIDO**: o E2E local não sobe nesta máquina e o job `e2e` do CI falha antes das specs |
-| J41.8 | Arrastar e soltar imagens no composer | **NÃO MEDIDO** — sem teste; o `DataTransfer` é lido pela mesma `imagensDoClipboard` do J41.5 |
+| J42.1 | "Fotos e vídeos" aceita várias; documento continua um por vez | **PASS** unit (`tests/unit/composer-attach.test.tsx`) |
+| J42.2 | Três fotos viram três mensagens **em ordem**, legenda só na primeira | **PASS** unit (`composer-attach.test.tsx`) |
+| J42.3 | Falha na 2ª foto: para, e só a 2ª e a 3ª ficam no preview para tentar de novo (nada reenviado) | **PASS** unit (`composer-attach.test.tsx`, `lib/inbox/enviar-lote.test.ts`) |
+| J42.4 | Mais de 10: entram 10 e o excedente é avisado | **PASS** unit |
+| J42.5 | Colar várias imagens abre o preview com todas; nomes de print não repetem | **PASS** unit (`tests/unit/composer-colar-imagem.test.tsx`) |
+| J42.6 | Espaçamento entre envios = piso anti-ban + jitter, nunca antes do 1º | **PASS** unit (`enviar-lote.test.ts`) |
+| J42.7 | Pela tela: escolher 3, ver 3 miniaturas, tirar uma, cancelar | spec `tests/e2e/inbox-varias-fotos.spec.ts` · **NÃO MEDIDO**: o E2E local não sobe nesta máquina e o job `e2e` do CI falha antes das specs |
+| J42.8 | Arrastar e soltar imagens no composer | **NÃO MEDIDO** — sem teste; o `DataTransfer` é lido pela mesma `imagensDoClipboard` do J42.5 |
 
 ---
 
