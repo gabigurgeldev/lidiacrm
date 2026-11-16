@@ -264,8 +264,12 @@ export function OrgMemoryClient({ initialState }: Props) {
             <div key={entry.id} className="ios-linha flex-col items-stretch gap-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium">{entry.title}</span>
-                <Badge variant={entry.source === "flywheel" ? "info" : "neutral"} className="text-[10px]">
-                  {entry.source === "flywheel" ? t("aprendido automaticamente") : t("manual")}
+                {/* Só o que uma pessoa escreveu é "manual". 'flywheel' (proposta
+                    aprovada) e 'agent' (o agente anotou com crm_save_org_memory)
+                    são aprendidos automaticamente — perguntar pelo "manual" e não
+                    pelo "flywheel" impede que uma origem nova vire "manual" calada. */}
+                <Badge variant={entry.source === "manual" ? "neutral" : "info"} className="text-[10px]">
+                  {entry.source === "manual" ? t("manual") : t("aprendido automaticamente")}
                 </Badge>
                 <span className="ml-auto text-xs text-muted-foreground">{formatDate(entry.created_at, tagDoIdioma)}</span>
               </div>

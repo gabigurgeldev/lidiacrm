@@ -25992,6 +25992,17 @@ create policy "messages_select" on public.messages
 
 notify pgrst, 'reload schema';
 
+-- ---- memória da organização aceita a origem 'agent' (migration 0254) ----
+-- `crm_save_org_memory` grava source='agent' e o CHECK da 0067 só aceitava
+-- 'manual'/'flywheel': toda chamada morria com 23514. Nenhuma linha existente
+-- tem 'agent' (o CHECK recusava), então não há dado a corrigir antes.
+-- Idempotente.
+alter table public.org_memory_entries
+  drop constraint if exists org_memory_entries_source_check;
+alter table public.org_memory_entries
+  add constraint org_memory_entries_source_check
+  check (source in ('manual', 'flywheel', 'agent'));
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
