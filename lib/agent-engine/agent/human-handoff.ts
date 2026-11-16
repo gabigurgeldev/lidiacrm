@@ -228,38 +228,22 @@ export async function performHumanHandoff(
   },
 ): Promise<void> {
   // (0) O estado ANTES desta chamada decide se a passagem é um episódio novo — e
-  // portanto se o dono é avisado (ver `deveAnunciarPassagem`). Lido antes de (a),
-  // que é justamente o que o muda.
+  // portanto se o dono é avisado (ver `deveAnunciarPassagem`). Lido antes de (b)/(a),
+  // que são justamente o que o mudam.
   const anterior = await lerEstadoAnteriorDaPassagem(db, ids.tenantId, ids.leadId);
 
-  // (a) FONTE DA VERDADE: force_human no contato — irrevogável pelo agente (regra dura 2).
-  await db.query(`update contacts set force_human = true where organization_id = $1 and id = $2`, [
-    ids.tenantId,
-    ids.leadId,
-  ]);
-
-  // (b) Conversa: silencia o bot para sempre e devolve à fila humana. O status SÓ
-  // transiciona 'ai_handling'→'pending' — conversa já claimed/closed/pending fica como
-  // está (nunca rouba do humano nem reabre encerrada). Fase 3: junto, zera a aderência
-  // ao agente do router — se o bot for reativado, o router decide de novo (não reassume
-  // o mesmo agente por inércia).
-  await db.query(
-    `update conversations
-        set status = case when status = 'ai_handling' then 'pending' else status end,
-            bot_silenced_until = $3,
-            last_handoff_at = now(),
-            last_handoff_reason = $4,
-            active_ai_agent_id = null,
-            active_intent = null,
-            active_agent_set_at = null
-      where organization_id = $1 and id = $2`,
-    [ids.tenantId, ids.conversationId, SILENCE_INFINITY, opts.reason],
-  );
-
-  // (c) Cancela os crons PENDENTES do lead (follow-ups agendados — F3-01/02). Idempotente,
-  // via o cancel compartilhado (mesma garantia que o opt-out irrevogável usa — F4-07).
-  await cancelPendingCronsForLead(db, ids.tenantId, ids.leadId);
-
+  // ORDEM DOS PASSOS (d → c → b → a): o que AVISA vem antes do que CALA.
+  // Esta função é at-least-once sem transação (recebe um pg.Pool, e o retry é do
+  // job). Na ordem antiga, `force_human` era o 1º passo e o aviso da Central o
+  // último: se o turno caísse no meio, a re-execução via `isLeadInHandoff` = true
+  // e saía ANTES de criar o aviso — o cliente ficava calado e ninguém era avisado.
+  // Agora o silêncio só existe depois do aviso. Queda antes de (b): nada calou,
+  // `isLeadInHandoff` segue false e a re-execução refaz tudo — o item aberto da
+  // tentativa anterior é encerrado e recriado, então não sobra cartão em dobro.
+  // Queda entre (b) e (a): a conversa já está calada, mas aviso e cancelamento dos
+  // follow-ups já aconteceram; só falta o `force_human`, que a conversa calada
+  // cobre até alguém assumir.
+  //
   // (d) inbox de escalação com o resumo da conversa. Dedup por episódio ABERTO (mesmo padrão
   // do escalateJailbreakPromise): 2× no mesmo handoff aberto → 1 item.
   //
@@ -289,6 +273,34 @@ export async function performHumanHandoff(
       ids.leadId,
     ],
   );
+
+  // (c) Cancela os crons PENDENTES do lead (follow-ups agendados — F3-01/02). Idempotente,
+  // via o cancel compartilhado (mesma garantia que o opt-out irrevogável usa — F4-07).
+  await cancelPendingCronsForLead(db, ids.tenantId, ids.leadId);
+
+  // (b) Conversa: silencia o bot para sempre e devolve à fila humana. O status SÓ
+  // transiciona 'ai_handling'→'pending' — conversa já claimed/closed/pending fica como
+  // está (nunca rouba do humano nem reabre encerrada). Fase 3: junto, zera a aderência
+  // ao agente do router — se o bot for reativado, o router decide de novo (não reassume
+  // o mesmo agente por inércia).
+  await db.query(
+    `update conversations
+        set status = case when status = 'ai_handling' then 'pending' else status end,
+            bot_silenced_until = $3,
+            last_handoff_at = now(),
+            last_handoff_reason = $4,
+            active_ai_agent_id = null,
+            active_intent = null,
+            active_agent_set_at = null
+      where organization_id = $1 and id = $2`,
+    [ids.tenantId, ids.conversationId, SILENCE_INFINITY, opts.reason],
+  );
+
+  // (a) FONTE DA VERDADE: force_human no contato — irrevogável pelo agente (regra dura 2).
+  await db.query(`update contacts set force_human = true where organization_id = $1 and id = $2`, [
+    ids.tenantId,
+    ids.leadId,
+  ]);
 
   // (e) A IDA na linha do tempo do NEGÓCIO. `triggerHandoff` (o caminho do CRM)
   // já gravava `handoff_triggered`; este caminho — o do harness e o do "Assumir
