@@ -100,11 +100,39 @@ async function acharPresas(db: Consulta): Promise<{ organization_id: string; con
     channel_session_id: string | null;
     dono_tipo: string;
   }>(
+    // O LOTE só pode ter candidatas de verdade. Antes ele pegava 50 linhas sem
+    // ordem e filtrava DEPOIS: conversa que já tinha aviso aberto e conversa de
+    // número em `shadow` (onde nada é admitido, então toda conversa "parece
+    // presa") ocupavam o lote em toda rodada — e a conversa realmente presa de
+    // um número `active` podia nunca entrar. Agora as duas saem no SQL, e a mais
+    // antiga vem primeiro.
+    //
+    // O `lateral` repete a escolha de ponteiro de `carregarPoliticaEfetiva`
+    // (o do número vence o da organização). Ele só RECORTA o lote: a decisão
+    // continua sendo a do resolver, conferida abaixo em `vigiarCoordenador`.
     `select s.organization_id, s.conversation_id, c.channel_session_id, s.dono_tipo
        from public.coord_estado_conversa s
        join public.conversations c on c.id = s.conversation_id and c.organization_id = s.organization_id
+       join lateral (
+         select v.modo
+           from public.coord_politica_ponteiros p
+           join public.coord_politica_versoes v
+             on v.id = p.versao_id and v.organization_id = p.organization_id
+          where p.organization_id = s.organization_id
+            and (p.channel_session_id = c.channel_session_id or p.channel_session_id is null)
+          order by (p.channel_session_id is null) asc
+          limit 1
+       ) politica on politica.modo = 'active'
       where s.dono_tipo in ('nenhum', 'agente')
         and s.situacao <> 'bloqueado'
+        and not exists (
+          select 1 from public.agent_inbox_items i
+           where i.organization_id = s.organization_id
+             and i.kind = 'coordenador_preso'
+             and i.ref_kind = 'conversation'
+             and i.ref_id = s.conversation_id
+             and i.status = 'open'
+        )
         and exists (
           select 1 from public.messages m
            where m.organization_id = s.organization_id and m.conversation_id = s.conversation_id
@@ -121,6 +149,7 @@ async function acharPresas(db: Consulta): Promise<{ organization_id: string; con
                 where a.organization_id = m.organization_id and a.message_id = m.id
              )
         )
+      order by s.updated_at asc
       limit ${LOTE}`,
   );
   return rows;

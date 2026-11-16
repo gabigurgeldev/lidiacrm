@@ -360,6 +360,46 @@ describe("0230 · chamada agente → fluxo e retorno", () => {
     expect(rows[0]?.n).toBe("1");
   });
 
+  it("vigia: conversas já avisadas não ocupam o lote — a presa nova é achada mesmo atrás de 50 avisadas", async () => {
+    // O lote do vigia é de 50. Antes ele pegava 50 linhas SEM ordem e filtrava
+    // depois: conversa que já tinha aviso aberto voltava em toda rodada e podia
+    // empurrar para fora, para sempre, a conversa realmente presa. Aqui 51
+    // conversas presas e já avisadas, mais antigas, ficam na frente da nova.
+    const avisadas: string[] = [];
+    for (let i = 0; i < 51; i += 1) avisadas.push((await conversaComOComercial()).conversationId);
+    await pool.query(
+      `update messages set created_at = now() - interval '30 minutes', sent_at = now() - interval '30 minutes'
+        where conversation_id = any($1::uuid[])`,
+      [avisadas],
+    );
+    await pool.query(
+      `update coord_estado_conversa set updated_at = now() - interval '1 hour' where conversation_id = any($1::uuid[])`,
+      [avisadas],
+    );
+    await pool.query(
+      `insert into agent_inbox_items (organization_id, kind, severity, title, ref_kind, ref_id)
+       select $1, 'coordenador_preso', 'warn', 'já avisada', 'conversation', x
+         from unnest($2::uuid[]) x`,
+      [ORG, avisadas],
+    );
+
+    const nova = await conversaComOComercial();
+    await pool.query(
+      `update messages set created_at = now() - interval '20 minutes', sent_at = now() - interval '20 minutes'
+        where conversation_id = $1`,
+      [nova.conversationId],
+    );
+
+    const avisadasNestaRodada: string[] = [];
+    await vigiarCoordenador(pool, async (_org, aviso) => {
+      avisadasNestaRodada.push(aviso.conversationId);
+      return true;
+    });
+
+    expect(avisadasNestaRodada, "a conversa presa nova ficou fora do lote").toContain(nova.conversationId);
+    expect(avisadasNestaRodada.filter((c) => avisadas.includes(c))).toEqual([]);
+  });
+
   it("ferramenta do agente: destino fora da permissão é recusado; transferência permitida despacha o novo agente", async () => {
     const politica = await carregarPoliticaEfetiva(pool, ORG, SESSAO);
     if (!politica) throw new Error("política não carregada");
