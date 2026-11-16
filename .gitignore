@@ -118,3 +118,8 @@ evidence/.sonda-score-residuo.json
 # Docker de todo self-hoster (`Dockerfile:79`). A origem fica no disco de quem
 # trabalha; só a saída comprimida é commitada e distribuída.
 assets-fonte/
+
+# Near-misses de skill gravados pelo runtime (GOLDEN_CANDIDATES_DIR). Carregam
+# tenant_id, lead_id e trecho da mensagem do cliente: dado de produção, nunca
+# versionado. O env.ts já dizia "gitignored" — esta linha faz valer.
+lib/agent-engine/golden-candidates/
