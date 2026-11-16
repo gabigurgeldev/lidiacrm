@@ -770,7 +770,7 @@
       "id": "e64",
       "from": "celularDaLoja",
       "to": "conversas",
-      "label": "mensagem digitada no celular grava bot_silenced_until=infinity (eco do próprio envio não pausa)"
+      "label": "mensagem digitada no celular grava bot_silenced_until=infinity (eco do próprio envio e saudação automática do WhatsApp Business não pausam)"
     },
     {
       "id": "e65",

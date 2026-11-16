@@ -39,6 +39,31 @@
  * quando a conversa tem um envio do CRM ainda sem id há pouco tempo: perder uma
  * pausa (a próxima mensagem do celular pausa) é muito mais barato que um agente
  * que se cala sozinho.
+ *
+ * ## A resposta automática do WhatsApp Business também NÃO pode pausar
+ *
+ * A saudação e a mensagem de ausência que a loja configura no app do WhatsApp
+ * Business saem do PRÓPRIO aparelho, e o webhook as entrega exatamente como uma
+ * mensagem digitada no celular — o payload não traz marca nenhuma que as
+ * distinga (conferido no `_data` cru). Medido numa instalação real (nov/2026):
+ * a saudação saía ~1 s depois de TODA cliente nova, pausava a conversa antes
+ * de o agente responder, e o agente passou 13 dias sem falar com ninguém — com
+ * a passagem para a dona e o aviso no WhatsApp dela configurados e nunca
+ * disparados.
+ *
+ * O que separa a resposta automática da resposta pronta que a atendente manda
+ * à mão é a PROPORÇÃO de vezes em que o mesmo texto saiu segundos depois da
+ * cliente: a saudação, em 179 de 193 conversas; a ausência, em 138 de 162; a
+ * resposta pronta de sinal ("Para agendarmos…"), em 7 de 54. Então: texto do
+ * aparelho que chega até 15 s depois da cliente E que, nos últimos 30 dias, já
+ * saiu assim em pelo menos 5 OUTRAS conversas, em ao menos 70% das vezes, é
+ * automático — fica no histórico, mas não pausa. Atraso sozinho não serve: a
+ * atendente que está no papo responde em 1 a 5 s com frequência.
+ *
+ * O preço conhecido: as primeiras 5 conversas depois de a loja ligar uma
+ * saudação nova ainda pausam (a régua precisa ver o texto se repetir). Errar
+ * para o lado da pausa é o lado barato — o oposto é o agente falando por cima
+ * de uma pessoa.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -58,6 +83,104 @@ const MOTIVO_DA_PAUSA = "Atendente respondeu pelo celular da loja";
  * sem engolir a resposta humana seguinte.
  */
 export const JANELA_DO_ECO_MS = 2 * 60 * 1000;
+
+/** Até quantos segundos depois da cliente uma mensagem do aparelho pode ser automática. */
+export const JANELA_DA_RESPOSTA_AUTOMATICA_S = 15;
+/** Em quantas OUTRAS conversas o mesmo texto precisa ter saído rápido. */
+export const MIN_CONVERSAS_DA_AUTOMATICA = 5;
+/** Fração mínima das conversas com aquele texto em que ele saiu rápido. */
+export const PROPORCAO_DA_AUTOMATICA = 0.7;
+const HISTORICO_DA_AUTOMATICA_DIAS = 30;
+/** Teto da leitura do histórico: a saudação de uma loja movimentada se repete muito. */
+const LIMITE_DO_HISTORICO = 500;
+
+export interface EnvioAnteriorDoMesmoTexto {
+  conversation_id: string;
+  segundos_apos_cliente: number | null;
+}
+
+function rapida(segundos: number | null | undefined): boolean {
+  return typeof segundos === "number" && segundos >= 0 && segundos <= JANELA_DA_RESPOSTA_AUTOMATICA_S;
+}
+
+/**
+ * Decisão pura: a mensagem do aparelho é a resposta automática do WhatsApp
+ * Business? Conta CONVERSAS distintas, não mensagens — a mesma saudação
+ * repetida num chat só não diz nada sobre a loja.
+ */
+export function pareceRespostaAutomatica(p: {
+  segundosAposCliente: number | null;
+  anteriores: readonly EnvioAnteriorDoMesmoTexto[];
+}): boolean {
+  if (!rapida(p.segundosAposCliente)) return false;
+  const conversas = new Map<string, boolean>();
+  for (const a of p.anteriores) {
+    conversas.set(a.conversation_id, (conversas.get(a.conversation_id) ?? false) || rapida(a.segundos_apos_cliente));
+  }
+  let rapidas = 0;
+  for (const r of conversas.values()) if (r) rapidas += 1;
+  return rapidas >= MIN_CONVERSAS_DA_AUTOMATICA && rapidas / conversas.size >= PROPORCAO_DA_AUTOMATICA;
+}
+
+/**
+ * Segundos entre a última mensagem da cliente nesta conversa e `agora`. O
+ * ingest grava o valor em `messages.metadata.segundos_apos_cliente` de toda
+ * mensagem do aparelho — é o histórico que `pareceRespostaAutomatica` lê.
+ * `null` quando não há mensagem da cliente ou a leitura falhou.
+ */
+export async function segundosDesdeACliente(
+  admin: SupabaseClient,
+  organizationId: string,
+  conversationId: string,
+  agora: Date = new Date(),
+): Promise<number | null> {
+  const { data, error } = await admin
+    .from("messages")
+    .select("created_at")
+    .eq("organization_id", organizationId)
+    .eq("conversation_id", conversationId)
+    .eq("direction", "inbound")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  const desde = new Date((data as { created_at: string }).created_at).getTime();
+  if (Number.isNaN(desde)) return null;
+  return Math.max(0, Math.round((agora.getTime() - desde) / 100) / 10);
+}
+
+async function ehRespostaAutomatica(admin: SupabaseClient, c: ConversaDoCelular, agora: Date): Promise<boolean> {
+  const corpo = c.corpo?.trim() ? c.corpo : null;
+  const segundos = c.segundosAposCliente ?? null;
+  // Só consulta o histórico quando a mensagem PODE ser automática.
+  if (corpo === null || !rapida(segundos)) return false;
+  const desde = new Date(agora.getTime() - HISTORICO_DA_AUTOMATICA_DIAS * 86_400_000).toISOString();
+  const { data, error } = await admin
+    .from("messages")
+    .select("conversation_id, metadata")
+    .eq("organization_id", c.organizationId)
+    .eq("direction", "outbound")
+    .eq("sent_via", "external_device")
+    .eq("body", corpo)
+    .neq("conversation_id", c.conversationId)
+    .gte("created_at", desde)
+    .limit(LIMITE_DO_HISTORICO);
+  if (error) {
+    logger.warn("[escalacao.celular] histórico do texto indisponível; pauso", {
+      conversation_id: c.conversationId,
+      error: error.message,
+    });
+    return false;
+  }
+  const anteriores = ((data ?? []) as Array<{ conversation_id: string; metadata: unknown }>).map((m) => {
+    const meta = (m.metadata ?? {}) as { segundos_apos_cliente?: unknown };
+    return {
+      conversation_id: m.conversation_id,
+      segundos_apos_cliente: typeof meta.segundos_apos_cliente === "number" ? meta.segundos_apos_cliente : null,
+    };
+  });
+  return pareceRespostaAutomatica({ segundosAposCliente: segundos, anteriores });
+}
 
 /**
  * Comandos de devolução. Comparados com a mensagem INTEIRA (sem acento, sem
@@ -90,9 +213,13 @@ export interface ConversaDoCelular {
   contactId: string;
   channelSessionId: string;
   requestId: string;
+  /** Texto da mensagem do aparelho — usado só para reconhecer a resposta automática. */
+  corpo?: string | null;
+  /** Ver `segundosDesdeACliente`. */
+  segundosAposCliente?: number | null;
 }
 
-export type ResultadoDaPausa = "pausou" | "ja_pausada" | "eco_provavel" | "falhou";
+export type ResultadoDaPausa = "pausou" | "ja_pausada" | "eco_provavel" | "resposta_automatica" | "falhou";
 
 export async function pausarAutomaticoPeloCelular(
   admin: SupabaseClient,
@@ -120,6 +247,14 @@ export async function pausarAutomaticoPeloCelular(
     return "falhou";
   }
   if (envioEmVoo) return "eco_provavel";
+
+  if (await ehRespostaAutomatica(admin, c, agora)) {
+    logger.info("[escalacao.celular] resposta automática do aparelho; não pauso", {
+      conversation_id: c.conversationId,
+      segundos_apos_cliente: c.segundosAposCliente ?? null,
+    });
+    return "resposta_automatica";
+  }
 
   const { data: atualizada, error: updErr } = await admin
     .from("conversations")

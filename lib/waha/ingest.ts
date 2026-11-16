@@ -18,6 +18,7 @@ import {
   devolverAutomaticoPeloCelular,
   ehComandoDeDevolucao,
   pausarAutomaticoPeloCelular,
+  segundosDesdeACliente,
 } from "@/lib/escalacao/celular-da-loja";
 import { aplicarEfeitosPosEntrada } from "@/lib/channels/pos-entrada";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
@@ -869,7 +870,12 @@ async function handleOutboundFromUserPhone(
     return;
   }
 
-  const now = new Date().toISOString();
+  const agora = new Date();
+  const now = agora.toISOString();
+  // Quanto tempo depois da cliente esta mensagem saiu. Fica no metadata porque
+  // é o histórico que reconhece a resposta automática do WhatsApp Business
+  // (saudação/ausência) — ver lib/escalacao/celular-da-loja.ts.
+  const segundosAposCliente = await segundosDesdeACliente(admin, session.organization_id, conversationId, agora);
   const { data: insertedOutbound, error: insertErr } = await admin
     .from("messages")
     .insert({
@@ -887,7 +893,11 @@ async function handleOutboundFromUserPhone(
       media_mime: mediaMimeOf(p),
       sent_via: "external_device",
       sent_at: p.timestamp ? new Date(p.timestamp * 1000).toISOString() : now,
-      metadata: { raw_type: p.type, fromMe: true },
+      metadata: {
+        raw_type: p.type,
+        fromMe: true,
+        ...(segundosAposCliente === null ? {} : { segundos_apos_cliente: segundosAposCliente }),
+      },
     })
     .select("id")
     .maybeSingle();
@@ -911,7 +921,7 @@ async function handleOutboundFromUserPhone(
   // devolver (tela ou `#ia`). Antes daqui o agente seguia falando por cima do
   // atendente. Só depois do insert bem-sucedido — o 23505 acima já saiu, então
   // a dupla entrega `message` + `message.any` não pausa duas vezes.
-  await pausarAutomaticoPeloCelular(admin, conversaDoCelular);
+  await pausarAutomaticoPeloCelular(admin, { ...conversaDoCelular, corpo: bodyOf(p), segundosAposCliente });
 
   await audit({
     action: "message.sent",

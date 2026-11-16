@@ -81,6 +81,8 @@ Para devolver **pelo próprio celular**, mande na conversa a mensagem **`#ia`** 
 
 O eco das mensagens que o próprio CRM manda (IA, composer, fluxo) não pausa: a regra ignora o webhook quando a conversa tem um envio do CRM ainda sem id há menos de 2 minutos (`lib/escalacao/celular-da-loja.ts`).
 
+A **saudação** e a **mensagem de ausência** do WhatsApp Business também não pausam. Elas saem do celular como qualquer mensagem e o payload não as distingue, então a regra reconhece pelo histórico: texto do celular que chega até 15 s depois da cliente e que a loja já mandou assim, rápido, em pelo menos 5 outras conversas (70% das vezes ou mais) é resposta automática. O atraso de cada mensagem do celular fica em `messages.metadata.segundos_apos_cliente`. A resposta pronta digitada pela atendente continua pausando: ela se repete, mas quase nunca sai em segundos. As primeiras conversas depois de a loja ativar ou trocar a saudação ainda pausam, até a regra ver o texto se repetir. Para ver a régua em vigor: `grep -n "_DA_AUTOMATICA" lib/escalacao/celular-da-loja.ts`.
+
 ---
 
 ## Parte B — Casos ("Pedir ajuda sem sair da conversa")
