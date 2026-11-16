@@ -32,7 +32,7 @@ function origensDoCheckVigente(): string[] {
   ];
   const ultimo = achados.at(-1);
   if (!ultimo) throw new Error("org_memory_entries_source_check não achado no baseline.sql");
-  return [...ultimo[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  return [...(ultimo[1] ?? "").matchAll(/'([^']+)'/g)].map((m) => m[1] ?? "");
 }
 
 function origensGravadas(arquivo: string): string[] {
@@ -40,9 +40,9 @@ function origensGravadas(arquivo: string): string[] {
   // Só o trecho que insere na tabela — `source:` aparece em outros contextos.
   const blocos = fonte.split(/\.from\(\s*["']org_memory_entries["']\s*\)/).slice(1);
   return blocos.flatMap((b) => {
-    const insert = b.split(/\.select\(/)[0];
+    const insert = b.split(/\.select\(/)[0] ?? "";
     if (!/\.insert\(/.test(insert)) return [];
-    return [...insert.matchAll(/source:\s*["']([^"']+)["']/g)].map((m) => m[1]);
+    return [...insert.matchAll(/source:\s*["']([^"']+)["']/g)].map((m) => m[1] ?? "");
   });
 }
 
