@@ -67,19 +67,31 @@ function bancoDeMentira(preexistentes: Array<Partial<LinhaMessage>> = []): Duplo
   const consulta = () => {
     let org: string | null = null;
     let externos: string[] = [];
+    let direcao: string | null = null;
     const q = {
       eq(coluna: string, valor: string) {
         if (coluna === "organization_id") org = valor;
+        if (coluna === "direction") direcao = valor;
         return q;
       },
       in(coluna: string, valores: string[]) {
         if (coluna === "external_id") externos = valores;
         return q;
       },
+      order() {
+        return q;
+      },
       limit() {
         return q;
       },
       async maybeSingle() {
+        // "Quando a cliente escreveu por último?" (segundosDesdeACliente).
+        if (direcao === "inbound") {
+          const ultima = messages
+            .filter((m) => m.organization_id === org && m.direction === "inbound" && m.created_at)
+            .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+          return { data: ultima ? { created_at: ultima.created_at } : null, error: null };
+        }
         const achou = messages.find(
           (m) => m.organization_id === org && m.external_id !== null && externos.includes(m.external_id),
         );
@@ -416,6 +428,33 @@ describe("o celular da loja assume a conversa — a IA para de falar por cima", 
       contactId: "contato-1",
       channelSessionId: "sessao-1",
     });
+  });
+
+  it("grava quantos segundos depois da cliente a mensagem saiu e entrega o texto à regra da pausa", async () => {
+    // É o histórico que reconhece a saudação automática do WhatsApp Business
+    // (lib/escalacao/celular-da-loja.ts). Sem gravar, a régua nunca aprende.
+    const clienteEscreveu = new Date(Date.now() - 2_000).toISOString();
+    const { admin, messages } = bancoDeMentira([
+      { organization_id: "org-1", external_id: "false_cliente_1", direction: "inbound", created_at: clienteEscreveu },
+    ]);
+
+    await dispatchWahaEvent(admin as never, SESSION as never, envelope(CELULAR_NOWEB), "req-1");
+
+    const gravada = messages.find((m) => m.sent_via === "external_device")!;
+    const segundos = (gravada.metadata as { segundos_apos_cliente?: number }).segundos_apos_cliente;
+    expect(segundos).toBeGreaterThanOrEqual(1);
+    expect(segundos).toBeLessThan(15);
+    expect(pausar.mock.calls[0]![1]).toMatchObject({ corpo: "respondi por aqui mesmo", segundosAposCliente: segundos });
+  });
+
+  it("sem mensagem da cliente na conversa, não inventa atraso", async () => {
+    const { admin, messages } = bancoDeMentira();
+
+    await dispatchWahaEvent(admin as never, SESSION as never, envelope(CELULAR_NOWEB), "req-1");
+
+    const gravada = messages.find((m) => m.sent_via === "external_device")!;
+    expect(gravada.metadata).not.toHaveProperty("segundos_apos_cliente");
+    expect(pausar.mock.calls[0]![1]).toMatchObject({ segundosAposCliente: null });
   });
 
   it("eco do próprio envio (já registrado pelo id) NÃO pausa — a IA não se cala sozinha", async () => {

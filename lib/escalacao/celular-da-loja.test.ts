@@ -35,7 +35,15 @@ interface Chamada {
   patch?: Record<string, unknown>;
 }
 
-function admin(opts: { envioEmVoo?: boolean; jaPausada?: boolean; erroNaChecagem?: boolean } = {}) {
+function admin(
+  opts: {
+    envioEmVoo?: boolean;
+    jaPausada?: boolean;
+    erroNaChecagem?: boolean;
+    historico?: Array<{ conversation_id: string; segundos_apos_cliente: number | null }>;
+    erroNoHistorico?: boolean;
+  } = {},
+) {
   const chamadas: Chamada[] = [];
   const consulta = (c: Chamada) => {
     const q: Record<string, unknown> = {};
@@ -45,6 +53,19 @@ function admin(opts: { envioEmVoo?: boolean; jaPausada?: boolean; erroNaChecagem
         return q;
       };
     }
+    // A consulta do histórico do mesmo texto termina em `await ...limit(n)`.
+    q.then = (resolver: (v: unknown) => void) =>
+      resolver(
+        opts.erroNoHistorico
+          ? { data: null, error: { message: "boom" } }
+          : {
+              data: (opts.historico ?? []).map((h) => ({
+                conversation_id: h.conversation_id,
+                metadata: { segundos_apos_cliente: h.segundos_apos_cliente },
+              })),
+              error: null,
+            },
+      );
     q.maybeSingle = async () => {
       if (c.tabela === "messages") {
         if (opts.erroNaChecagem) return { data: null, error: { message: "boom" } };
@@ -150,6 +171,74 @@ describe("pausarAutomaticoPeloCelular", () => {
     expect(upd.filtros).toContainEqual(["or", "bot_silenced_until.is.null,bot_silenced_until.neq.infinity"]);
     expect(audit).not.toHaveBeenCalled();
     expect(registrar).not.toHaveBeenCalled();
+  });
+
+  // Ver lib/escalacao/resposta-automatica.test.ts para a régua da decisão.
+  const SAUDACAO = "Oi, bem-vinda! Já te respondo.";
+  const historicoDaSaudacao = Array.from({ length: 8 }, (_, i) => ({
+    conversation_id: `outra-${i}`,
+    segundos_apos_cliente: 1,
+  }));
+
+  it("RESPOSTA AUTOMÁTICA do aparelho (saudação/ausência) → não pausa, não audita", async () => {
+    const { client, chamadas } = admin({ historico: historicoDaSaudacao });
+
+    const r = await pausarAutomaticoPeloCelular(client, { ...CONVERSA, corpo: SAUDACAO, segundosAposCliente: 1 });
+
+    expect(r).toBe("resposta_automatica");
+    expect(chamadas.some((c) => c.op === "update"), "a saudação calaria a IA antes de ela falar").toBe(false);
+    expect(audit).not.toHaveBeenCalled();
+    expect(registrar).not.toHaveBeenCalled();
+  });
+
+  it("o histórico consultado é o MESMO texto, do aparelho, desta org, em OUTRAS conversas, recente", async () => {
+    const agora = new Date("2026-11-16T15:00:00Z");
+    const { client, chamadas } = admin({ historico: historicoDaSaudacao });
+
+    await pausarAutomaticoPeloCelular(client, { ...CONVERSA, corpo: SAUDACAO, segundosAposCliente: 1 }, agora);
+
+    const f = chamadas.filter((c) => c.tabela === "messages")[1]!.filtros;
+    expect(f).toContainEqual(["eq", "organization_id", "org-1"]);
+    expect(f).toContainEqual(["eq", "direction", "outbound"]);
+    expect(f).toContainEqual(["eq", "sent_via", "external_device"]);
+    expect(f).toContainEqual(["eq", "body", SAUDACAO]);
+    // Sem excluir a própria conversa, a saudação repetida no mesmo chat se
+    // contaria como "várias conversas".
+    expect(f).toContainEqual(["neq", "conversation_id", "conversa-1"]);
+    expect(f).toContainEqual(["gte", "created_at", new Date(agora.getTime() - 30 * 86_400_000).toISOString()]);
+  });
+
+  it("mesmo texto, mas mandado devagar → é gente: pausa, sem nem consultar o histórico", async () => {
+    const { client, chamadas } = admin({ historico: historicoDaSaudacao });
+
+    const r = await pausarAutomaticoPeloCelular(client, { ...CONVERSA, corpo: SAUDACAO, segundosAposCliente: 120 });
+
+    expect(r).toBe("pausou");
+    expect(chamadas.filter((c) => c.tabela === "messages")).toHaveLength(1);
+  });
+
+  it("texto que a loja ainda não repetiu em conversas suficientes → pausa", async () => {
+    const { client } = admin({ historico: historicoDaSaudacao.slice(0, 2) });
+
+    expect(
+      await pausarAutomaticoPeloCelular(client, { ...CONVERSA, corpo: SAUDACAO, segundosAposCliente: 1 }),
+    ).toBe("pausou");
+  });
+
+  it("histórico indisponível → pausa (na dúvida, a IA não fala por cima de gente)", async () => {
+    const { client } = admin({ historico: historicoDaSaudacao, erroNoHistorico: true });
+
+    expect(
+      await pausarAutomaticoPeloCelular(client, { ...CONVERSA, corpo: SAUDACAO, segundosAposCliente: 1 }),
+    ).toBe("pausou");
+  });
+
+  it("mídia sem texto → pausa como sempre", async () => {
+    const { client } = admin({ historico: historicoDaSaudacao });
+
+    expect(await pausarAutomaticoPeloCelular(client, { ...CONVERSA, corpo: null, segundosAposCliente: 1 })).toBe(
+      "pausou",
+    );
   });
 });
 
