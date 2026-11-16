@@ -438,9 +438,17 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Versão EXATA, nunca `latest`. O CLI 3.0.0 (02/11/2026) recusa a seção
+      # `[inbucket]` do `supabase/config.toml` ("no longer supported. Use
+      # local_smtp instead") e o `supabase start` morre em 1 s — o e2e ficou
+      # vermelho em toda a main e em todo PR, sem nenhuma spec rodar, só porque
+      # o CLI publicou versão nova. 2.122.1 é a última da linha 2, a que o
+      # config.toml e o `supabase status -o env` abaixo esperam. Subir para a
+      # 3.x é mudança própria: renomear `[inbucket]` → `[local_smtp]` (mesmas
+      # chaves) e conferir os nomes das variáveis do `status -o env`.
       - uses: supabase/setup-cli@v3
         with:
-          version: latest
+          version: 2.122.1
 
       # Sobe Postgres + Auth (GoTrue) + PostgREST + Storage. Auth de verdade é
       # requisito: os specs de login exercitam o GoTrue, não um mock.
