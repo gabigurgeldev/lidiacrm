@@ -4,6 +4,8 @@ secao: adicionado
 titulo: Parabéns automático pelo WhatsApp no aniversário de cada cliente
 ---
 
+Mensagem de parabéns automática no aniversário, em Configurações › Aniversários.
+
 Em Configurações › Aniversários, a empresa liga a mensagem de parabéns, escolhe
 por qual WhatsApp ela sai (QR code, com texto livre, ou API oficial, com modelo
 aprovado), escreve a mensagem e o horário. Todo dia, nesse horário, quem faz
