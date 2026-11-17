@@ -67,6 +67,7 @@ export interface ToolBreakerOptions {
 export const READ_ONLY_TOOLS = [
   'get_lead_context',
   'get_lead_note',
+  'buscar_notas_do_lead',
   'search_knowledge',
   'read_skill_reference',
 ] as const;

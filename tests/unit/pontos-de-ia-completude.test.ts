@@ -85,6 +85,9 @@ const FORA_DO_SEAM: Record<string, { arquivo: string; marcador: string }> = {
     arquivo: "lib/agent-engine/agent/search-knowledge.ts",
     marcador: "ponto: 'embedding_consultar'",
   },
+  // A reordenação fala com `/rerank` da OpenRouter direto (não é modelo de
+  // conversa, não passa pelo seam). O marcador é a rota: some a chamada, some o ponto.
+  rerank: { arquivo: "lib/ai/rerank/openrouter.ts", marcador: "/rerank`" },
   visao_de_imagem: {
     arquivo: "workers/media-derive-worker.ts",
     marcador: "describeImage",

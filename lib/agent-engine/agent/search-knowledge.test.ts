@@ -123,8 +123,9 @@ describe('searchKnowledge', () => {
     // "quase acertou" do painel para sempre.
     // As seis primeiras posições são o contrato antigo, preservado de propósito:
     // parâmetro novo entra no FIM. As duas últimas são os materiais consultados
-    // e o assistente que perguntou (0181).
-    expect(registro!.params).toEqual(['org-1', 'job-9', 'kb-1', 0, 0.703, 0.72, [], null]);
+    // e o assistente que perguntou (0181). Depois vêm `reordenado` e
+    // `candidatos` (0255) — null no caminho legado, que não é híbrido.
+    expect(registro!.params).toEqual(['org-1', 'job-9', 'kb-1', 0, 0.703, 0.72, [], null, null, null]);
   });
 
   it('o RPC é chamado com o piso da similaridade, não com o limiar do agente', async () => {

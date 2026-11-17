@@ -516,7 +516,7 @@ async function decifrarCredencial(
  * cadastrasse outra. A tela evita o caso oferecendo a escolha; aqui o que
  * importa é não variar.
  */
-async function credencialDaOrganizacao(
+export async function credencialDaOrganizacao(
   organizationId: string,
   provider: ProvedorDeEmbedding,
 ): Promise<{ apiKey: string; rotulo: string; quantas: number } | null> {

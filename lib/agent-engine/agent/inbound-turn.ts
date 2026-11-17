@@ -58,6 +58,7 @@ import { buildNativeMediaParts } from './media-parts';
 import { enqueueJob, rescheduleJob, type JobRow, type Queryable } from '../queue/queue';
 import { applyLeadStateUpdate, getLeadState, type LeadStage, type LeadStateRow } from './lead-state';
 import { applySaveLeadNote, buildNotesIndexBlock, getLeadNoteBody } from './lead-notes';
+import { buscarNotasDoLead } from './notas-do-lead-busca';
 import { emOrdem, novaFilaDeEnvio } from './em-ordem';
 import { resolverFotoDoAgente } from './fotos-do-material';
 import { applyScheduleFollowup, type FollowupWindowKnobs } from './schedule-followup';
@@ -301,6 +302,15 @@ export const AGENT_TOOL_DEFS = {
       'entre colchetes). Use quando a headline no índice não bastar e você precisar do detalhe.',
     inputSchema: z.object({
       note_id: z.string().describe('id da nota (como aparece no índice, entre colchetes)'),
+    }).passthrough(),
+  },
+  buscar_notas_do_lead: {
+    description:
+      'Busca na memória DESTE lead as notas mais ligadas a um assunto e devolve até 5 já com o corpo. ' +
+      'Use quando o índice de memória tiver muitas notas e você não souber qual abrir com get_lead_note ' +
+      '(ex.: "tamanho que ela usa", "pedido com problema", "o que já foi oferecido").',
+    inputSchema: z.object({
+      pergunta: z.string().min(2).describe('o assunto que você quer lembrar sobre este lead, em pt-br'),
     }).passthrough(),
   },
   search_knowledge: {
@@ -1018,7 +1028,7 @@ export function ritualBlocks(
     // Índice da memória durável do lead (F3-05): headlines + id, orçamento fixo. O
     // corpo vem sob demanda (get_lead_note). Injetado AQUI, no SUFIXO — depois do
     // prefixo cacheável (F2-17), como o bloco temporal da F3-03.
-    '## Memória do lead (índice de notas — corpo sob demanda via get_lead_note)',
+    '## Memória do lead (índice de notas — corpo sob demanda via get_lead_note, ou por assunto via buscar_notas_do_lead)',
     notesIndexBlock,
     '',
     '## Contexto do lead (contato)',
@@ -3048,6 +3058,30 @@ async function executarTurnoDoAgente(
           return {
             ok: false,
             error: { code: 'internal_error', message: 'erro interno ao ler a nota — encerre o turno agora.' },
+          };
+        }
+      },
+    }),
+    // READ-ONLY: notas do lead por assunto, com rerank (ponto `notas`). Escopo
+    // (tenant, lead) do closure; o modelo só manda a pergunta.
+    buscar_notas_do_lead: tool({
+      ...AGENT_TOOL_DEFS.buscar_notas_do_lead,
+      execute: async ({ pergunta }) => {
+        try {
+          const { notas, reordenado } = await buscarNotasDoLead(pool, { tenantId, leadId }, pergunta.trim());
+          if (notas.length === 0) {
+            return { ok: true, notas: [], message: 'este lead ainda não tem notas na memória.' };
+          }
+          return {
+            ok: true,
+            notas: notas.map((n) => ({ note_id: n.id, headline: n.headline, body: n.body })),
+            ordem: reordenado ? 'por_relevancia' : 'por_palavras',
+          };
+        } catch (err) {
+          noteRunError(err instanceof Error ? err : new Error(String(err)));
+          return {
+            ok: false,
+            error: { code: 'internal_error', message: 'erro interno ao buscar as notas — encerre o turno agora.' },
           };
         }
       },

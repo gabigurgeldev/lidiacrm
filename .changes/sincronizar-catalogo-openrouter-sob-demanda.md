@@ -4,6 +4,8 @@ secao: adicionado
 titulo: O catálogo de modelos da OpenRouter passa a poder ser sincronizado na hora
 ---
 
+O seletor de modelo da OpenRouter ganhou o botão "Sincronizar catálogo agora".
+
 Quem escolhia OpenRouter num agente e via "Nenhum modelo disponível" — mesmo
 com a chave validada — esbarrava num detalhe invisível: a lista de modelos da
 OpenRouter não vem pronta na instalação, como as de Anthropic, OpenAI e

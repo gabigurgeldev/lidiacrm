@@ -19,7 +19,14 @@ import type pg from 'pg';
 
 import { embedText } from '@/lib/ai/embed';
 import { MODELO_DE_EMBEDDING } from '@/lib/ai/embeddings/chave';
-import { buscarPorMapa, SQL_MAPAS_DAS_FONTES, type DepsDaBusca } from '@/lib/ai/knowledge/buscar-por-mapa';
+import {
+  buscarPorMapa,
+  SQL_BUSCA_HIBRIDA,
+  SQL_MAPAS_DAS_FONTES,
+  type DepsDaBusca,
+  type DiagnosticoDaBusca,
+  type LinhaHibrida,
+} from '@/lib/ai/knowledge/buscar-por-mapa';
 import type { Citation } from '@/lib/ai/citations/types';
 import type { Logger } from '../obs/logger';
 
@@ -34,7 +41,7 @@ export interface KnowledgeHit {
 }
 
 export type SearchKnowledgeResult =
-  | { ok: true; results: KnowledgeHit[] }
+  | { ok: true; results: KnowledgeHit[]; diagnostico?: DiagnosticoDaBusca | null }
   | { ok: false; error: { code: string; message: string } };
 
 /** Piso real da similaridade de cosseno — `1 - distância`, com distância em [0,2]. */
@@ -56,7 +63,12 @@ export async function searchKnowledge(
     /** Só para telemetria: QUAL assistente perguntou. */
     agentId?: string | null;
   },
-  deps?: { embed?: typeof embedText; log?: Logger; chaveDoMapa?: DepsDaBusca['chaveDoMapa'] },
+  deps?: {
+    embed?: typeof embedText;
+    log?: Logger;
+    chaveDoMapa?: DepsDaBusca['chaveDoMapa'];
+    rerank?: DepsDaBusca['rerank'];
+  },
 ): Promise<SearchKnowledgeResult> {
   const embed = deps?.embed ?? embedText;
   const fontes = args.knowledgeSourceIds ?? [];
@@ -87,14 +99,22 @@ export async function searchKnowledge(
     // Caminho por materiais: a pergunta é embedada no MAPA de cada material
     // (`buscarPorMapa`) — durante uma troca de modelo de embedding, parte do
     // acervo ainda está no modelo antigo e precisa continuar sendo achada.
-    const rows: KnowledgeHit[] = usaFontes
-      ? (
-          await buscarPorMapa<KnowledgeHit>({
+    //
+    // Desde a 0255 o caminho por materiais é HÍBRIDO (vetor + texto, fusão RRF
+    // e rerank da OpenRouter) e devolve o conjunto já cortado. O corte por
+    // limiar abaixo só vale no caminho legado.
+    const porMateriais = usaFontes
+      ? await buscarPorMapa<KnowledgeHit>({
             organizationId: args.organizationId,
             fontes,
             query: args.query,
             k: args.topK,
-            deps: { embed, ...(deps?.chaveDoMapa ? { chaveDoMapa: deps.chaveDoMapa } : {}) },
+            limiar: args.threshold,
+            deps: {
+              embed,
+              ...(deps?.chaveDoMapa ? { chaveDoMapa: deps.chaveDoMapa } : {}),
+              ...(deps?.rerank ? { rerank: deps.rerank } : {}),
+            },
             executor: {
               mapasDasFontes: async (ids) => {
                 const r = await pool.query<{ id: string; mapa: string }>(SQL_MAPAS_DAS_FONTES, [
@@ -112,9 +132,23 @@ export async function searchKnowledge(
                     [args.organizationId, ids, vec, k, PISO_SIMILARIDADE, mapa],
                   )
                 ).rows,
+              buscarHibrido: async (ids, vec, termos, k, mapa) =>
+                (
+                  await pool.query<LinhaHibrida<KnowledgeHit>>(SQL_BUSCA_HIBRIDA, [
+                    args.organizationId,
+                    ids,
+                    vec,
+                    termos,
+                    k,
+                    mapa,
+                  ])
+                ).rows,
             },
           })
-        ).hits
+      : null;
+
+    const rows: KnowledgeHit[] = porMateriais
+      ? porMateriais.hits
       : (
           await pool.query<KnowledgeHit>(
             `select chunk_id, knowledge_source_id, content, similarity, metadata
@@ -131,14 +165,20 @@ export async function searchKnowledge(
           )
         ).rows;
 
-    const results = rows.filter((r) => r.similarity >= args.threshold);
+    const cortado = porMateriais?.cortado === true;
+    const results = cortado ? rows : rows.filter((r) => r.similarity >= args.threshold);
     // Sem depender da ordem das linhas. O `filter` descarta o NaN que o pgvector
     // devolve para chunk de embedding zerado — ele contaminaria o `Math.max` e
     // anularia o top_score de linhas BOAS na mesma busca. Sobra o array vazio,
     // cujo `Math.max()` é -Infinity: é o `Number.isFinite` abaixo que o
     // transforma em `null` — `numeric` aceitaria 'NaN' e envenenaria a coluna.
+    // Na busca híbrida o melhor vem de TODOS os candidatos, não só do corte.
     const maiorScore = Math.max(...rows.map((r) => r.similarity).filter(Number.isFinite));
-    const topScore = Number.isFinite(maiorScore) ? maiorScore : null;
+    const topScore = cortado
+      ? (porMateriais?.melhorSimilaridade ?? null)
+      : Number.isFinite(maiorScore)
+        ? maiorScore
+        : null;
 
     // Fire-and-forget: perder telemetria é infinitamente melhor que perder a
     // resposta ao cliente. O `threshold` gravado é o do CHAMADOR, nunca o piso
@@ -152,8 +192,8 @@ export async function searchKnowledge(
       await pool.query(
         `insert into knowledge_searches
            (organization_id, job_id, kb_version_id, hits, top_score, threshold,
-            knowledge_source_ids, agent_id)
-         values ($1, $2, $3, $4, $5, $6, $7::uuid[], $8)`,
+            knowledge_source_ids, agent_id, reordenado, candidatos)
+         values ($1, $2, $3, $4, $5, $6, $7::uuid[], $8, $9, $10)`,
         [
           args.organizationId,
           args.jobId ?? null,
@@ -163,6 +203,8 @@ export async function searchKnowledge(
           args.threshold,
           fontes,
           args.agentId ?? null,
+          porMateriais?.diagnostico?.reordenado ?? null,
+          porMateriais?.diagnostico?.candidatos ?? null,
         ],
       );
     } catch (err) {
@@ -174,7 +216,11 @@ export async function searchKnowledge(
       });
     }
 
-    return { ok: true, results };
+    return {
+      ok: true,
+      results,
+      ...(porMateriais?.diagnostico ? { diagnostico: porMateriais.diagnostico } : {}),
+    };
   } catch (err) {
     // Falta de chave é ESTADO do tenant e merece uma frase própria: "a base caiu"
     // manda o operador procurar um incidente que não existe.

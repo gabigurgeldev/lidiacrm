@@ -111,6 +111,19 @@ export const RETENCAO_INTEGRACOES_API_DIAS_PISO = 30;
 export const RETENCAO_HISTORICO_AGENTE_DIAS_PADRAO = 90;
 export const RETENCAO_HISTORICO_AGENTE_DIAS_PISO = 30;
 
+/**
+ * Trechos de versões ANTIGAS do material (migration 0255).
+ *
+ * Cada reindexação cria uma versão nova e deixava os trechos da anterior para
+ * sempre — o material de uma loja crescia a cada sincronização, na mesma cota de
+ * banco do resto. A poda apaga trechos de versões inativas com mais de N dias,
+ * e NUNCA a ativa nem as duas mais recentes de cada fonte (são o rollback).
+ * Sem knob de ambiente: o piso e o padrão moram em
+ * `fn_expurgar_versoes_do_material`.
+ */
+export const RETENCAO_VERSOES_DO_MATERIAL_DIAS_PADRAO = 7;
+export const RETENCAO_VERSOES_DO_MATERIAL_DIAS_PISO = 1;
+
 export interface RetencaoInterpretada {
   /** Dias a pedir ao banco. Nunca abaixo do piso, nunca `NaN`. */
   readonly dias: number;

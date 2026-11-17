@@ -19,12 +19,13 @@
  * (function arg). Service role bypasses RLS so this MUST be explicit.
  */
 
-import { embedText } from "@/lib/ai/embed";
+import { embedTexts } from "@/lib/ai/embed";
 import { resolverChaveDeEmbedding } from "@/lib/ai/embeddings/chave";
 import { anonymize, detectResidualPii } from "@/lib/ai/anonymize";
 import { chunkText, computeContentHash } from "@/lib/ai/rag/chunker";
 import {
   activateVersion,
+  derivarDaVersaoAtiva,
   createKnowledgeVersion,
   markVersionFailed,
   markVersionReady,
@@ -193,6 +194,28 @@ export async function ingestConversationsBatch(
     return { processed: 0, flaggedReview: 0, skipped: 0, embeddingSkipped: false };
   }
 
+  // 2b. A versão nova parte da ATIVA. Antes ela continha só o lote desta
+  // rodada: cada lote ativado apagava da busca todas as conversas dos lotes
+  // anteriores. Os ids deste lote saem da cópia por segurança (nenhum deveria
+  // estar lá — o filtro é `rag_review_status is null`).
+  let copiados = 0;
+  try {
+    copiados = await derivarDaVersaoAtiva({
+      organizationId,
+      knowledgeSourceId: sourceId,
+      novaVersaoId: versionId,
+      chave: "conversation_id",
+      valores: conversations.map((c) => c.id),
+    });
+  } catch (err) {
+    // Troca de modelo de embedding em curso (ou falha do banco): não ativa nada.
+    // As conversas continuam com `rag_review_status` nulo e entram no próximo lote.
+    const detalhe = err instanceof Error ? err.message : String(err);
+    console.error("[kb-conversations] derivar da versão ativa falhou", detalhe);
+    await markVersionFailed(versionId, organizationId, `derivar: ${detalhe}`).catch(() => undefined);
+    return { processed: 0, flaggedReview: 0, skipped: 0, embeddingSkipped: false };
+  }
+
   let processed = 0;
   let flaggedReview = 0;
   let skipped = 0;
@@ -288,33 +311,31 @@ export async function ingestConversationsBatch(
     // f. Embed + insert.
     let convChunkInserts = 0;
     let convFailed = false;
-    for (let i = 0; i < chunks.length; i++) {
+    // Em lote: todos os trechos da conversa numa chamada (ou poucas).
+    let vetores: number[][] = [];
+    try {
+      ({ embeddings: vetores } = await embedTexts(chunks, { organizationId, chave }));
+    } catch (err) {
+      console.error(
+        "[kb-conversations] embed failed for conv",
+        conv.id,
+        err instanceof Error ? err.message : String(err),
+      );
+      convFailed = true;
+    }
+    for (let i = 0; !convFailed && i < chunks.length; i++) {
       const content = chunks[i] ?? "";
       if (!content) continue;
       const contentHash = computeContentHash(content);
-
-      let embedding: number[];
-      try {
-        const embedded = await embedText(content, { organizationId, chave });
-        embedding = embedded.embedding;
-      } catch (err) {
-        console.error(
-          "[kb-conversations] embed failed for conv",
-          conv.id,
-          "chunk",
-          i,
-          err instanceof Error ? err.message : String(err),
-        );
-        convFailed = true;
-        break;
-      }
+      const embedding = vetores[i] ?? [];
 
       const { error: upsertErr } = await admin.from("ai_chunks").upsert(
         {
           organization_id: organizationId,
           kb_version_id: versionId,
           knowledge_source_id: sourceId,
-          position: totalChunkInserts + i,
+          // Depois dos trechos copiados da versão ativa (posições 0..copiados-1).
+          position: copiados + totalChunkInserts + i,
           content,
           content_hash: contentHash,
           token_count: Math.ceil(content.length / 4),
@@ -377,7 +398,7 @@ export async function ingestConversationsBatch(
   // g. Finalize version.
   try {
     if (totalChunkInserts > 0) {
-      await markVersionReady(versionId, organizationId, totalChunkInserts);
+      await markVersionReady(versionId, organizationId, copiados + totalChunkInserts);
       await activateVersion({ organizationId, knowledgeSourceId: sourceId, versionId });
     } else {
       await markVersionFailed(versionId, organizationId, "no_chunks_ingested");

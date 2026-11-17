@@ -46,6 +46,7 @@ const DONO_NO_SQL: Record<string, string> = {
   ESPELHO_AGENDA: "fn_expurgar_espelho_da_agenda",
   INTEGRACOES_API: "fn_expurgar_integracoes_api",
   HISTORICO_AGENTE: "fn_expurgar_historico_do_agente",
+  VERSOES_DO_MATERIAL: "fn_expurgar_versoes_do_material",
 };
 
 /**
