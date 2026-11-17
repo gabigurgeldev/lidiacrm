@@ -310,3 +310,9 @@ $$;
 
 revoke execute on function public.fn_expurgar_versoes_do_material(int, int) from public, anon, authenticated;
 grant  execute on function public.fn_expurgar_versoes_do_material(int, int) to service_role;
+
+-- ---- 7. telemetria: a busca foi reordenada? quantos candidatos? ----
+-- Sem isto, "o rerank está ligado e ajudando" e "o rerank está falhando e a
+-- busca segue sem ele" são indistinguíveis no painel.
+alter table public.knowledge_searches add column if not exists reordenado boolean;
+alter table public.knowledge_searches add column if not exists candidatos integer;

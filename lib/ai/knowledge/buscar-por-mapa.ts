@@ -21,17 +21,66 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { embedText, SemChaveDeEmbeddingError } from "@/lib/ai/embed";
 import { MAPA_LEGADO } from "@/lib/ai/embeddings/catalogo";
 import { resolverChaveParaMapa } from "@/lib/ai/embeddings/chave";
+import {
+  CANDIDATOS_PARA_O_RERANK,
+  candidatosPorLista,
+  cortar,
+  fundirPorRrf,
+  termosDaBusca,
+} from "@/lib/ai/knowledge/fusao";
+import { reordenarItens, type DepsDoRerank } from "@/lib/ai/rerank/openrouter";
+
+/** A linha que a busca híbrida devolve: a do caminho antigo mais as posições. */
+export type LinhaHibrida<T> = T & {
+  chunk_id: string;
+  content: string;
+  rank_vetor: number | null;
+  rank_texto: number | null;
+};
 
 export interface ExecutorDeBusca<T extends { similarity: number }> {
   /** O mapa da versão ativa de cada material (material sem versão fica de fora). */
   mapasDasFontes(fontes: readonly string[]): Promise<Map<string, string>>;
   /** A RPC `fn_buscar_trechos_das_fontes` restrita a um mapa. */
   buscar(fontes: readonly string[], vetor: string, k: number, mapa: string): Promise<T[]>;
+  /**
+   * A RPC `fn_buscar_trechos_hibrido` (0255): candidatos do vetor E do texto,
+   * com a posição em cada lista. Quando o executor a oferece, a busca é híbrida
+   * — fusão RRF e rerank — e o resultado já sai CORTADO (`cortado: true`).
+   */
+  buscarHibrido?(
+    fontes: readonly string[],
+    vetor: string,
+    termos: readonly string[],
+    k: number,
+    mapa: string,
+  ): Promise<Array<LinhaHibrida<T>>>;
 }
 
 export interface DepsDaBusca {
   embed?: typeof embedText;
   chaveDoMapa?: typeof resolverChaveParaMapa;
+  rerank?: DepsDoRerank;
+}
+
+/** O que a busca híbrida conta a mais, para telemetria e rastro. */
+export interface DiagnosticoDaBusca {
+  /** Candidatos depois da fusão (antes do corte). */
+  candidatos: number;
+  /** O rerank respondeu e a ordem final é a dele. */
+  reordenado: boolean;
+  /** Termos que foram ao tsquery. */
+  termos: string[];
+}
+
+export interface ResultadoDaBuscaPorMapa<T> {
+  hits: T[];
+  mapasSemChave: string[];
+  /** true = `hits` já é o conjunto final (híbrida). false = o chamador corta pelo limiar. */
+  cortado: boolean;
+  /** Melhor similaridade entre TODOS os candidatos (para `top_score`). */
+  melhorSimilaridade: number | null;
+  diagnostico: DiagnosticoDaBusca | null;
 }
 
 /** Materiais por mapa, na ordem em que aparecem. Puro. */
@@ -63,11 +112,18 @@ export async function buscarPorMapa<T extends { similarity: number }>(args: {
   k: number;
   executor: ExecutorDeBusca<T>;
   deps?: DepsDaBusca;
-}): Promise<{ hits: T[]; mapasSemChave: string[] }> {
+  /**
+   * Limiar de similaridade do agente. Só vale na busca híbrida SEM rerank — no
+   * caminho antigo quem corta continua sendo o chamador.
+   */
+  limiar?: number;
+}): Promise<ResultadoDaBuscaPorMapa<T>> {
   const embed = args.deps?.embed ?? embedText;
   const chaveDoMapa = args.deps?.chaveDoMapa ?? resolverChaveParaMapa;
 
   const grupos = agruparPorMapa(args.fontes, await args.executor.mapasDasFontes(args.fontes));
+  const buscarHibrido = args.executor.buscarHibrido?.bind(args.executor);
+  const termos = buscarHibrido ? termosDaBusca(args.query) : [];
   const listas: T[][] = [];
   const mapasSemChave: string[] = [];
 
@@ -82,14 +138,48 @@ export async function buscarPorMapa<T extends { similarity: number }>(args: {
       ponto: "embedding_consultar",
       chave,
     });
-    listas.push(await args.executor.buscar(fontes, `[${embedding.join(",")}]`, args.k, mapa));
+    const vetor = `[${embedding.join(",")}]`;
+    listas.push(
+      buscarHibrido
+        ? await buscarHibrido(fontes, vetor, termos, candidatosPorLista(args.k), mapa)
+        : await args.executor.buscar(fontes, vetor, args.k, mapa),
+    );
   }
 
   // Sem chave para NENHUM mapa é o estado "sem chave" de sempre: quem chama já
   // sabe transformar isso na frase certa para o modelo.
   if (grupos.size > 0 && listas.length === 0) throw new SemChaveDeEmbeddingError(args.organizationId);
 
-  return { hits: fundirResultados(listas, args.k), mapasSemChave };
+  const maior = Math.max(...listas.flat().map((t) => t.similarity).filter(Number.isFinite));
+  const melhorSimilaridade = Number.isFinite(maior) ? maior : null;
+
+  if (!buscarHibrido) {
+    return { hits: fundirResultados(listas, args.k), mapasSemChave, cortado: false, melhorSimilaridade, diagnostico: null };
+  }
+
+  // Busca híbrida: funde pelas posições (RRF), reordena os melhores pela
+  // relevância real (rerank) e corta. Sem rerank (sem chave, timeout), o corte
+  // usa o limiar do agente para o vetor e aceita o que o texto achou no topo.
+  const fundidos = fundirPorRrf(listas.flat() as Array<LinhaHibrida<T>>);
+  const { itens, reordenado } = await reordenarItens(
+    {
+      organizationId: args.organizationId,
+      query: args.query,
+      itens: fundidos.slice(0, CANDIDATOS_PARA_O_RERANK),
+      texto: (l) => l.content,
+      topN: Math.max(args.k, 1),
+      ponto: "material",
+    },
+    args.deps?.rerank,
+  );
+  const hits = cortar(itens, { topK: args.k, limiar: args.limiar ?? -1, reordenado });
+  return {
+    hits: hits as unknown as T[],
+    mapasSemChave,
+    cortado: true,
+    melhorSimilaridade,
+    diagnostico: { candidatos: fundidos.length, reordenado, termos },
+  };
 }
 
 interface LinhaDaRpcDeFontes {
@@ -110,8 +200,9 @@ export function executorSupabase(
   supabase: SupabaseClient,
   organizationId: string,
   piso: number,
+  opcoes?: { hibrida?: boolean },
 ): ExecutorDeBusca<LinhaDaRpcDeFontes> {
-  return {
+  const executor: ExecutorDeBusca<LinhaDaRpcDeFontes> = {
     async mapasDasFontes(fontes) {
       const { data: linhas } = await supabase
         .from("ai_knowledge_sources")
@@ -153,7 +244,27 @@ export function executorSupabase(
       return (data ?? []) as LinhaDaRpcDeFontes[];
     },
   };
+  if (opcoes?.hibrida) {
+    executor.buscarHibrido = async (fontes, vetor, termos, k, mapa) => {
+      const { data, error } = await supabase.rpc("fn_buscar_trechos_hibrido" as never, {
+        p_organization_id: organizationId,
+        p_source_ids: [...fontes],
+        p_embedding: vetor,
+        p_termos: [...termos],
+        p_k: k,
+        p_embedding_model: mapa,
+      } as never);
+      if (error) throw new Error(`busca_de_conhecimento_falhou: ${(error as { message: string }).message}`);
+      return (data ?? []) as Array<LinhaHibrida<LinhaDaRpcDeFontes>>;
+    };
+  }
+  return executor;
 }
+
+/** A consulta da busca híbrida no `pg.Pool` (engine). Mesmas colunas da RPC. */
+export const SQL_BUSCA_HIBRIDA = `select chunk_id, knowledge_source_id, source_name, content, similarity, metadata,
+       rank_vetor, rank_texto
+  from fn_buscar_trechos_hibrido($1, $2::uuid[], $3::vector, $4::text[], $5, $6)`;
 
 /** A consulta que lê o mapa da versão ativa de cada material (SQL do `pg.Pool`). */
 export const SQL_MAPAS_DAS_FONTES = `select s.id, coalesce(v.embedding_model, $3) as mapa

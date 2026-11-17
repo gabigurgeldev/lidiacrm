@@ -74,21 +74,27 @@ export async function buscarConhecimento(
 
   // A pergunta é embedada no MAPA de cada material: durante uma troca de
   // modelo, parte do acervo ainda está no antigo (ver `buscar-por-mapa.ts`).
-  const { hits } = await buscarPorMapa<LinhaDaRpc>({
+  //
+  // Busca HÍBRIDA (0255): vetor + texto, fusão e rerank — a mesma do agente,
+  // para humano e IA continuarem recebendo a mesma resposta sobre o mesmo
+  // acervo. O resultado já vem cortado; o `filter` abaixo só vale no caminho
+  // antigo (`cortado: false`).
+  const { hits, cortado, melhorSimilaridade } = await buscarPorMapa<LinhaDaRpc>({
     organizationId: p.organizationId,
     fontes: p.knowledgeSourceIds,
     query: p.pergunta,
     k: p.topK,
-    executor: executorSupabase(supabase, p.organizationId, PISO),
+    limiar: p.limiar,
+    executor: executorSupabase(supabase, p.organizationId, PISO, { hibrida: true }),
     deps: { ...(deps?.embed ? { embed: deps.embed } : {}), ...(deps?.chaveDoMapa ? { chaveDoMapa: deps.chaveDoMapa } : {}) },
   });
 
   const linhas = hits;
-  const melhor = linhas.length > 0 ? Math.max(...linhas.map((l) => l.similarity)) : null;
+  const melhor = melhorSimilaridade;
 
   return {
     trechos: linhas
-      .filter((l) => l.similarity >= p.limiar)
+      .filter((l) => cortado || l.similarity >= p.limiar)
       .map((l) => ({
         chunk_id: l.chunk_id,
         knowledge_source_id: l.knowledge_source_id,
