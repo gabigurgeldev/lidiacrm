@@ -134,7 +134,7 @@ Se a skill tem *references*, o agente ganha `read_skill_reference` para ler o ar
 | Peça | O que é |
 |---|---|
 | **Notas duráveis** (`lead_notes`) | O agente grava com `save_lead_note` (título curto + corpo). Os **títulos** entram sempre num índice com orçamento fixo (`LEAD_NOTES_INDEX_MAX_TOKENS`, padrão 500); o **corpo** é lido sob demanda (`get_lead_note`). Notas antigas podem ser **consolidadas** (`supersedes`). Estourar o índice faz o agente ser instruído a consolidar. |
-| **Recuperação híbrida** | Busca por palavra exata (bom para "PED-12345"), por significado (embedding), com decaimento temporal (meia-vida 30 dias) e diversidade (MMR). Parâmetros `LEAD_RECALL_*`. |
+| **Recuperação híbrida** | **Escrita, mas não ligada ao turno.** `recallLeadNotes` (palavra exata + significado + decaimento de 30 dias + MMR, parâmetros `LEAD_RECALL_*`) não tem chamador — confira com `grep -rn "recallLeadNotes(" lib workers app`. Hoje o agente vê o índice de títulos das notas e lê o corpo por `get_lead_note`; `lead_notes.embedding` nunca é preenchido. |
 | **Checkpoint** | Compromissos, objeções, próxima ação, resumo acumulado e a declaração do turno. |
 | **Compactação** | Acima de 40 mensagens, notas são gravadas e o histórico vira resumo + cauda recente. |
 
