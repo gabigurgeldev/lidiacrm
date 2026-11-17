@@ -45,6 +45,11 @@ Preparar o material exige uma chave **OpenAI** ou **OpenRouter** (modelo de embe
 - A ferramenta `search_knowledge` só existe no turno se o agente tem material marcado.
 - O agente é instruído a buscar **antes** de responder qualquer dúvida factual (produto, preço, prazo, política) e a dizer que vai confirmar quando não achar — nunca chutar.
 - Parâmetros (por agente em `ai_agents.config`, ou do servidor): **top-K** = 5 trechos, **similaridade mínima** = 0,40 (calibrada: pergunta literal ≈ 0,85, paráfrase 0,49–0,65, irrelevante ≈ 0,27), teto de **2.000 tokens** de trechos (`RAG_MAX_TOKENS`).
+- **A busca é híbrida** (migration 0255, `fn_buscar_trechos_hibrido`): candidatos por significado (vetor, exato sobre o material ativo) **e** por palavra (`ai_chunks.tsv`, sem acento — acha código, SKU e número de pedido que o vetor erra). As duas listas são fundidas por RRF (`lib/ai/knowledge/fusao.ts`).
+- **Rerank da OpenRouter** (`lib/ai/rerank/openrouter.ts`, padrão `voyageai/rerank-2.5-lite`, trocável por `RERANK_MODEL`): os ~30 melhores candidatos são reordenados lendo pergunta × trecho. A chave é a credencial OpenRouter da organização, senão `OPENROUTER_API_KEY` da instalação; sem chave, com erro ou acima de 1,5 s, a busca segue na ordem da fusão. Com rerank, o corte é a relevância ≥ 0,15; sem rerank, a similaridade mínima acima (ou o trecho estar no top-K do texto). Desligar: `RERANK_DESLIGADO=1`. O custo aparece em `llm_calls` com purpose `rerank:<ponto>`, e `knowledge_searches` registra `reordenado` e `candidatos`.
+- O mesmo rerank ordena a busca de produtos (`crm_search_products`, que agora casa qualquer palavra no título **ou** na descrição) e a ferramenta `buscar_notas_do_lead` (seção 4).
+- **Versões do material:** reindexar cria uma versão nova, ativada de uma vez (`fn_ativar_versao_kb`). A sincronização de UM produto ou de um lote de conversas copia a versão ativa menos os itens que mudaram (`fn_derivar_versao_kb`) — antes, ela ativava uma versão só com o lote e o resto do catálogo sumia da busca. Trechos de versões antigas são apagados pelo cron `data-retention` depois de 7 dias, preservando sempre a ativa e as duas mais recentes de cada material.
+- Documentos são cortados respeitando a estrutura (`chunkDocumento`): cada trecho leva o caminho de títulos ("Política de trocas › Prazo"), e tabelas e listas ficam inteiras.
 - As **citações** são anexadas à mensagem enviada e aparecem na Caixa de entrada (botão de citação).
 
 ### 1.5. Dicas de conteúdo
@@ -134,7 +139,7 @@ Se a skill tem *references*, o agente ganha `read_skill_reference` para ler o ar
 | Peça | O que é |
 |---|---|
 | **Notas duráveis** (`lead_notes`) | O agente grava com `save_lead_note` (título curto + corpo). Os **títulos** entram sempre num índice com orçamento fixo (`LEAD_NOTES_INDEX_MAX_TOKENS`, padrão 500); o **corpo** é lido sob demanda (`get_lead_note`). Notas antigas podem ser **consolidadas** (`supersedes`). Estourar o índice faz o agente ser instruído a consolidar. |
-| **Recuperação híbrida** | **Escrita, mas não ligada ao turno.** `recallLeadNotes` (palavra exata + significado + decaimento de 30 dias + MMR, parâmetros `LEAD_RECALL_*`) não tem chamador — confira com `grep -rn "recallLeadNotes(" lib workers app`. Hoje o agente vê o índice de títulos das notas e lê o corpo por `get_lead_note`; `lead_notes.embedding` nunca é preenchido. |
+| **Busca por assunto** | Ferramenta `buscar_notas_do_lead` (`lib/agent-engine/agent/notas-do-lead-busca.ts`): o agente pergunta pelo assunto e recebe até 5 notas com corpo, na ordem do rerank (ponto `notas`) ou, sem chave, do `ts_rank` com a mais recente desempatando. `recallLeadNotes` (com embedding por nota) segue **sem chamador** — confira com `grep -rn "recallLeadNotes(" lib workers app` — e `lead_notes.embedding` nunca é preenchido: para as poucas notas de um lead, o rerank direto é mais preciso e não grava nada. |
 | **Checkpoint** | Compromissos, objeções, próxima ação, resumo acumulado e a declaração do turno. |
 | **Compactação** | Acima de 40 mensagens, notas são gravadas e o histórico vira resumo + cauda recente. |
 
