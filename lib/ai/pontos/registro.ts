@@ -402,6 +402,22 @@ export const PONTOS_DE_IA: readonly PontoDeIa[] = [
       "O agente responde de forma genérica, ignorando o que está escrito nos seus documentos.",
     registraEm: "nenhum",
   },
+  {
+    id: "rerank",
+    rotulo: "Pôr em ordem o que a busca achou",
+    oQueFaz:
+      "Depois da busca, lê a pergunta do cliente junto com cada resultado e coloca primeiro o que de fato responde — no material, nos produtos, nas notas do contato, na memória e nas skills.",
+    papel: "lembrar",
+    exige: {},
+    emissor: "lib/ai/rerank/openrouter.ts",
+    fixo: {
+      razao:
+        "Usa a chave OpenRouter da organização (ou a da instalação) com o modelo de reordenação escolhido na instalação. Modelos de reordenação não são modelos de conversa: escolher um da lista de conversa faria a busca parar de melhorar sem aviso.",
+    },
+    sintomaDeFalha:
+      "Nada para de funcionar: a busca segue achando, só deixa de pôr o resultado mais útil em primeiro lugar.",
+    registraEm: "llm_calls",
+  },
 
   // ───────────────────────────── Ver e ouvir ───────────────────────────────
   {

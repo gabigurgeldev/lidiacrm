@@ -186,6 +186,13 @@ const schema = z.object({
   // `cabecalhosDeAtribuicaoOpenRouter()`, em edge/llm/providers.ts.
   OPENROUTER_APP_URL: z.string().optional().default(""),
   OPENROUTER_APP_TITLE: z.string().optional().default(""),
+  // Reordenação (rerank) das buscas do agente — material, produtos, notas,
+  // memória e skills. A chave é a OpenRouter da organização e, sem ela, a
+  // `OPENROUTER_API_KEY` acima; sem nenhuma, a busca segue sem reordenar.
+  // `RERANK_MODEL` vazio = padrão do produto (`lib/ai/rerank/openrouter.ts`);
+  // `RERANK_DESLIGADO=1` desliga a reordenação na instalação inteira.
+  RERANK_MODEL: z.string().optional().default(""),
+  RERANK_DESLIGADO: z.string().optional().default(""),
   // Agente de SUPORTE in-app (a assistente da bolinha no canto — módulo
   // `agente/`). Chave PRÓPRIA, separada de propósito de `OPENROUTER_API_KEY` e
   // das credenciais por organização: quem paga a ajuda de uso é a instalação,
