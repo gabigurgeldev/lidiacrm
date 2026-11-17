@@ -34,7 +34,7 @@
  * fonte confiável — e nunca de conteúdo de usuário (CLAUDE.md §multi-tenancy).
  */
 
-import { embedText, SemChaveDeEmbeddingError } from "@/lib/ai/embed";
+import { embedTexts, SemChaveDeEmbeddingError } from "@/lib/ai/embed";
 import {
   MODELO_DE_EMBEDDING,
   resolverChaveDeEmbedding,
@@ -42,7 +42,7 @@ import {
 } from "@/lib/ai/embeddings/chave";
 import { MOTIVO_TROCA_DE_MODELO } from "@/lib/ai/embeddings/reindexacao";
 import { acquireDebounce } from "@/lib/ai/rag/debounce";
-import { chunkText, computeContentHash } from "@/lib/ai/rag/chunker";
+import { chunkDocumento, chunkText, computeContentHash } from "@/lib/ai/rag/chunker";
 import { canonizarTipoDeFonte } from "@/lib/ai/rag/tipos-de-fonte";
 import { extrairTextoDoArquivo, ErroDeExtracao } from "@/lib/ai/rag/ingest/documento";
 import { pedacosDeImagem } from "@/lib/ai/rag/ingest/imagem";
@@ -53,6 +53,7 @@ import {
   markVersionReady,
   markVersionFailed,
   activateVersion,
+  derivarDaVersaoAtiva,
 } from "@/lib/ai/rag/version";
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -220,7 +221,8 @@ async function pedacosDeDocumento(fonte: FonteRow): Promise<Pedaco[]> {
   if (!blobPath) throw new ErroDeExtracao("a fonte não aponta para nenhum arquivo");
 
   const { texto, extensao } = await extrairTextoDoArquivo(blobPath, meta.ext);
-  return chunkText(texto, { maxChars: 1600, overlapChars: 200 }).map((c) => ({
+  // Estrutural: respeita títulos, tabelas e listas, e prefixa o assunto.
+  return chunkDocumento(texto, { maxChars: 1600, overlapChars: 200 }).map((c) => ({
     content: c,
     metadata: {
       source_type: "documento",
@@ -373,52 +375,73 @@ async function indexarFonte(
   );
 
   const admin = createAdminClient();
-  let gravados = 0;
 
-  for (let i = 0; i < pedacos.length; i++) {
-    const p = pedacos[i]!;
-    let embedding: number[];
+  // INGESTÃO INCREMENTAL (catálogo): a versão nova parte da ATIVA, sem os
+  // trechos do produto que mudou, e soma os novos. Antes ela continha SÓ o
+  // produto sincronizado — cada sincronização trocava o catálogo inteiro por
+  // um item, e o resto sumia da busca.
+  let copiados = 0;
+  if (tipo === "catalogo" && extra.productId) {
     try {
-      // `chave` já resolvida: sem isto, um documento de 200 trechos decifraria a
-      // credencial 200 vezes.
-      const r = await embedText(p.content, {
+      copiados = await derivarDaVersaoAtiva({
         organizationId: fonte.organization_id,
-        chave,
+        knowledgeSourceId: fonte.id,
+        novaVersaoId: versionId,
+        chave: "product_id",
+        valores: [extra.productId],
       });
-      embedding = r.embedding;
     } catch (err) {
       const detalhe = err instanceof Error ? err.message : String(err);
-      await markVersionFailed(versionId, fonte.organization_id, `embed@${i}: ${detalhe}`);
-      return { tipo: "erro", detalhe: `embedding falhou no trecho ${i}: ${detalhe}` };
+      await markVersionFailed(versionId, fonte.organization_id, `derivar: ${detalhe}`);
+      return { tipo: "erro", detalhe: `não consegui partir da versão ativa: ${detalhe}` };
     }
+  }
 
+  // Embedding EM LOTE (`embedTexts`): um documento de 200 trechos eram 200
+  // chamadas, uma por vez; agora são poucas. A chave já veio resolvida.
+  let embeddings: number[][];
+  try {
+    ({ embeddings } = await embedTexts(
+      pedacos.map((p) => p.content),
+      { organizationId: fonte.organization_id, chave },
+    ));
+  } catch (err) {
+    const detalhe = err instanceof Error ? err.message : String(err);
+    await markVersionFailed(versionId, fonte.organization_id, `embed: ${detalhe}`);
+    return { tipo: "erro", detalhe: `embedding falhou: ${detalhe}` };
+  }
+
+  let gravados = copiados;
+  const LOTE_DE_GRAVACAO = 100;
+  for (let inicio = 0; inicio < pedacos.length; inicio += LOTE_DE_GRAVACAO) {
+    const linhas = pedacos.slice(inicio, inicio + LOTE_DE_GRAVACAO).map((p, j) => ({
+      organization_id: fonte.organization_id,
+      kb_version_id: versionId,
+      knowledge_source_id: fonte.id,
+      // Depois dos copiados: a cópia ocupa as posições 0..copiados-1.
+      position: copiados + inicio + j,
+      content: p.content,
+      content_hash: computeContentHash(p.content),
+      token_count: estimateTokens(p.content),
+      embedding: embeddings[inicio + j] as unknown as string,
+      metadata: p.metadata,
+    }));
     const { error: upErr } = await admin.from("ai_chunks").upsert(
-      {
-        organization_id: fonte.organization_id,
-        kb_version_id: versionId,
-        knowledge_source_id: fonte.id,
-        position: i,
-        content: p.content,
-        content_hash: computeContentHash(p.content),
-        token_count: estimateTokens(p.content),
-        embedding: embedding as unknown as string,
-        metadata: p.metadata,
-      },
+      linhas,
       // A constraint que EXISTE é `ai_chunks_position_unique`
       // (knowledge_source_id, kb_version_id, position). Como cada indexação cria
       // uma versão nova, na prática nunca há conflito — o alvo certo é o que faz
       // o insert passar.
       { onConflict: "knowledge_source_id,kb_version_id,position", ignoreDuplicates: true },
     );
-
     if (upErr) {
-      console.warn(`[rag-indexer] trecho ${i} não gravou:`, upErr.message);
+      console.warn(`[rag-indexer] lote de trechos a partir de ${inicio} não gravou:`, upErr.message);
     } else {
-      gravados++;
+      gravados += linhas.length;
     }
   }
 
-  if (gravados === 0) {
+  if (gravados === copiados) {
     await markVersionFailed(versionId, fonte.organization_id, "nenhum trecho gravado");
     return { tipo: "erro", detalhe: "nenhum_trecho_gravado" };
   }
@@ -556,8 +579,13 @@ export async function processRagIndexer(row: EventRow): Promise<HandlerResult> {
     // A troca de modelo tem debounce PRÓPRIO: uma edição feita segundos antes
     // não pode engolir a reindexação que a troca pediu (e o cron
     // `kb-conversations-batch` ainda reconcilia o que escapar).
+    //
+    // No catálogo a chave inclui o PRODUTO: cada evento é de um item diferente,
+    // e um debounce só por fonte descartava ("debounced", consumido para
+    // sempre) todo produto sincronizado nos 30 s seguintes ao primeiro — uma
+    // sincronização em massa indexava um produto e perdia o resto.
     const trocaDeModelo = row.payload["motivo"] === MOTIVO_TROCA_DE_MODELO;
-    const chaveDebounce = `rag:debounce:${row.organization_id}:${fonte.id}:${row.event_type}${trocaDeModelo ? ":troca" : ""}`;
+    const chaveDebounce = `rag:debounce:${row.organization_id}:${fonte.id}:${row.event_type}${productId ? `:${productId}` : ""}${trocaDeModelo ? ":troca" : ""}`;
     if (!(await acquireDebounce(chaveDebounce, DEBOUNCE_TTL_SEC))) {
       return { consumer_key: consumerKey, status: "skipped", detail: "debounced" };
     }

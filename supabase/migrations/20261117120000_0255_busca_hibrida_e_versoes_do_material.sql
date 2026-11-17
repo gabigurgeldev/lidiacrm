@@ -235,6 +235,20 @@ begin
     return 0;
   end if;
 
+  -- Vetor de um modelo não se compara com vetor de outro. Copiar trechos da
+  -- ativa para uma versão de OUTRO mapa (troca de modelo em curso) faria a
+  -- busca devolver lixo com nota alta. Recusa: quem chama marca a versão nova
+  -- como falha e a ativa continua valendo.
+  if exists (
+    select 1
+      from public.ai_knowledge_versions a, public.ai_knowledge_versions n
+     where a.id = v_ativa and n.id = p_nova_versao
+       and a.embedding_model is not null and n.embedding_model is not null
+       and a.embedding_model <> n.embedding_model
+  ) then
+    raise exception 'mapa_de_embedding_diferente' using hint = 'fn_derivar_versao_kb: a versão ativa está em outro modelo de embedding';
+  end if;
+
   insert into public.ai_chunks
     (organization_id, knowledge_source_id, kb_version_id, position,
      content, content_hash, token_count, embedding, metadata)

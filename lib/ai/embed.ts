@@ -15,7 +15,7 @@
 
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
-import { embed } from "ai";
+import { embed, embedMany } from "ai";
 
 import {
   DIMENSOES_DO_EMBEDDING,
@@ -135,4 +135,56 @@ export async function embedText(content: string, opts: EmbedOptions): Promise<Em
     0;
 
   return { embedding: result.embedding, promptTokens, model: chave.modelo.mapa };
+}
+
+/** Quantos textos por chamada em lote. Os provedores aceitam mais; 64 mantém a requisição pequena. */
+export const TAMANHO_DO_LOTE_DE_EMBEDDING = 64;
+
+/**
+ * Embeda VÁRIOS textos em lotes — a indexação usa isto.
+ *
+ * Antes cada trecho era uma chamada: um documento de 200 trechos eram 200 idas
+ * ao provedor, uma de cada vez. Em lote são 4. A regra de dimensão é a MESMA de
+ * `embedText`, conferida em cada vetor: um provedor que ignore o parâmetro de
+ * corte num único item quebraria o recall daquele trecho em silêncio.
+ *
+ * Devolve os vetores na MESMA ordem dos textos.
+ */
+export async function embedTexts(
+  conteudos: readonly string[],
+  opts: EmbedOptions & { tamanhoDoLote?: number },
+): Promise<{ embeddings: number[][]; promptTokens: number; model: string }> {
+  const chave = opts.chave ?? (await resolverChaveDeEmbedding(opts.organizationId, opts.ponto));
+  if (!chave) {
+    throw new SemChaveDeEmbeddingError(opts.organizationId);
+  }
+  const uso: Uso = opts.ponto === "embedding_consultar" ? "consultar" : "indexar";
+  const { model, providerOptions } = modeloDoSdk(chave, uso);
+  const tamanho = Math.max(1, opts.tamanhoDoLote ?? TAMANHO_DO_LOTE_DE_EMBEDDING);
+
+  const embeddings: number[][] = [];
+  let promptTokens = 0;
+  for (let i = 0; i < conteudos.length; i += tamanho) {
+    const lote = conteudos.slice(i, i + tamanho);
+    const r = await embedMany({
+      model,
+      values: [...lote],
+      ...(providerOptions ? { providerOptions } : {}),
+      headers: chave.viaGateway ? gatewayHeaders({ organizationId: opts.organizationId }) : undefined,
+    });
+    if (r.embeddings.length !== lote.length) {
+      throw new Error(`embedding em lote devolveu ${r.embeddings.length} vetores para ${lote.length} textos`);
+    }
+    for (const v of r.embeddings) {
+      if (v.length !== DIMENSOES_DO_EMBEDDING) {
+        throw new Error(
+          `embedding com ${v.length} dimensões, esperado ${DIMENSOES_DO_EMBEDDING} ` +
+            `(mapa ${chave.modelo.mapa}) — recall quebraria em silêncio`,
+        );
+      }
+      embeddings.push(v);
+    }
+    promptTokens += (r.usage as { tokens?: number } | undefined)?.tokens ?? 0;
+  }
+  return { embeddings, promptTokens, model: chave.modelo.mapa };
 }

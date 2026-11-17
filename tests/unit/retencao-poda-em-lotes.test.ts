@@ -188,6 +188,8 @@ describe("houveEfeito — as duas direções", () => {
     integracoes_api_apagadas: 0,
     // Sexta poda (migration 0251): histórico da assistente de suporte.
     historico_agente_apagado: 0,
+    // Sétima poda (migration 0255): trechos de versões antigas do material.
+    versoes_do_material_apagadas: 0,
     lotes_espelho: 0,
     espelho_tem_resto: false,
     retencao_fila_dias: RETENCAO_FILA_DIAS_PADRAO,
@@ -214,6 +216,10 @@ describe("houveEfeito — as duas direções", () => {
 
   it("apagou histórico da assistente de suporte → audita, pela mesma razão", () => {
     expect(houveEfeito({ ...base, historico_agente_apagado: 1 })).toBe(true);
+  });
+
+  it("apagou trecho de versão antiga do material → audita, pela mesma razão", () => {
+    expect(houveEfeito({ ...base, versoes_do_material_apagadas: 1 })).toBe(true);
   });
 
   it("apagou job → audita; apagou auditoria → audita", () => {
