@@ -15,6 +15,7 @@ import { createPool } from "@/lib/agent-engine/db/pool";
 import type { EventRow, HandlerResult } from "@/lib/event-log/dispatcher";
 import { deriveMediaText, type DeriveDeps } from "@/lib/messaging/media/derive";
 import { TIPOS_DERIVAVEIS } from "@/lib/messaging/media/derivable";
+import { INSTRUCAO_DE_DESCRICAO_DA_IMAGEM } from "@/lib/messaging/media/instrucao-da-imagem";
 import { deriveVideoText } from "@/lib/messaging/media/video-derive";
 import {
   apiTranscriptionProvider,
@@ -325,7 +326,7 @@ function buildDeriveDeps(
         {
           role: "user",
           content: [
-            { type: "text", text: "Descreva objetivamente esta imagem em 1-2 frases, em português, para um atendente de vendas entender o que o cliente enviou." },
+            { type: "text", text: INSTRUCAO_DE_DESCRICAO_DA_IMAGEM },
             // AI SDK v7: file part com mediaType (o antigo image part é deprecated).
             { type: "file", data: buffer, mediaType: mime.split(";")[0]! },
           ],
