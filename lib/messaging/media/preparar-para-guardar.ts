@@ -5,21 +5,21 @@
  *
  * Vídeo pelo inbox não saía: "dá erro", de 30 segundos ou de 14 minutos, e
  * tentar de novo também dava erro. O upload guardava o vídeo como chegou, e o
- * envio pedia `convert: true` ao WAHA (`lib/waha/media-send.ts`) — que atende
- * reencodando o vídeo INTEIRO em H.264 antes de mandar. Numa VPS de 2 núcleos
- * isso leva de dezenas de segundos a vários minutos, a tela desistia antes, e
- * cada "tentar de novo" subia o arquivo outra vez e empilhava OUTRO reencode
- * no WAHA — o mesmo empilhamento que derrubou o WhatsApp de todas as
- * organizações num disparo com vídeo (2026-10-01, ver `video-whatsapp.ts`).
+ * envio pedia conversão ao transporte de QR — que atende reencodando o vídeo
+ * INTEIRO em H.264 antes de mandar. Numa VPS de 2 núcleos isso leva de dezenas
+ * de segundos a vários minutos, a tela desistia antes, e cada "tentar de novo"
+ * subia o arquivo outra vez e empilhava OUTRO reencode no transporte — o mesmo
+ * empilhamento que derrubou o WhatsApp de todas as organizações num disparo
+ * com vídeo (2026-10-01, ver `video-whatsapp.ts`).
  *
- * O disparo já normalizava no upload desde então; o inbox ficou de fora, e o
- * teste de `wahaSendPlanFor` registrava isso como "comportamento de antes".
+ * O disparo já normalizava no upload desde então; o inbox ficou de fora.
  *
  * ─── O conserto ─────────────────────────────────────────────────────────────
  *
- * O mesmo do disparo: vídeo vira `.wa.mp4` UMA vez, aqui, e o envio sai com
- * `convert: false`. Vídeo de celular comum (H.264 + AAC) só troca o contêiner,
- * instantâneo; só o que não é (HEVC de iPhone…) é reencodado — uma vez.
+ * O mesmo do disparo: vídeo vira `.wa.mp4` UMA vez, aqui, e o envio sai sem
+ * pedir conversão (`videoJaPronto`). Vídeo de celular comum (H.264 + AAC) só
+ * troca o contêiner, instantâneo; só o que não é (HEVC de iPhone…) é
+ * reencodado — uma vez.
  *
  * Não normalizou (ffmpeg ausente, arquivo estranho, resultado acima do teto)?
  * Guarda o original, como antes: o envio dele segue pedindo conversão. Pior
