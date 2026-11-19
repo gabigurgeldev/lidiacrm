@@ -9,13 +9,16 @@ import { type NextRequest } from "next/server";
 import { fail, ok } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
-import { extFromMime, MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
+import { logger } from "@/lib/logger";
+import { prepararParaGuardar } from "@/lib/messaging/media/preparar-para-guardar";
+import { MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
 import { validateOutboundMedia } from "@/lib/messaging/media/upload-validation";
-import { transcodificarNotaDeVoz } from "@/lib/messaging/media/voice-transcode";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+// ffmpeg (vídeo e nota de voz) roda por `spawn`: precisa do runtime Node.
+export const runtime = "nodejs";
 
 interface RouteCtx {
   params: Promise<{ id: string }>;
@@ -71,23 +74,32 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<Response> {
 
   const bruto = Buffer.from(await file.arrayBuffer());
 
-  // Nota de voz gravada no browser sai em `webm` (o Chrome não grava ogg), e o
-  // canal oficial recusa depois de aceitar — `131053 Media upload error`, que
-  // culpa a URL quando o problema é o container. Converter AQUI faz todo canal
-  // receber um arquivo válido, e o mesmo áudio poder ser reenviado depois sem
-  // repetir o trabalho. Falha devolve o original: o canal que converte sozinho
-  // continua funcionando como sempre.
-  const audio = await transcodificarNotaDeVoz({ buffer: bruto, mime });
-  const mimeFinal = audio.mime;
-  const buffer = audio.buffer;
+  // O formato que o canal toca, UMA vez, aqui — e não a cada envio:
+  //   - vídeo vira `.wa.mp4` e sai sem pedir ao WAHA que o reencode inteiro
+  //     (era o que fazia vídeo do inbox "dar erro" e duplicar na repetição);
+  //   - nota de voz `webm` vira `ogg`, que todo canal aceita.
+  // Falha devolve o original: o canal que converte sozinho segue como sempre.
+  // Ver o cabeçalho de `lib/messaging/media/preparar-para-guardar.ts`.
+  const preparado = await prepararParaGuardar(
+    { buffer: bruto, mime, kind: verdict.kind },
+    {
+      aoNaoNormalizarVideo: (motivo) =>
+        logger.warn("[conversations.media] não normalizei o vídeo; guardo o original", {
+          detail: motivo,
+          requestId,
+        }),
+    },
+  );
+  const mimeFinal = preparado.mime;
+  const buffer = preparado.buffer;
 
-  const storagePath = `${activeOrg.orgId}/${conversationId}/out-${randomUUID()}.${extFromMime(mimeFinal)}`;
+  const storagePath = `${activeOrg.orgId}/${conversationId}/out-${randomUUID()}${preparado.extensao}`;
   const admin = createAdminClient();
   const { error: upErr } = await admin.storage
     .from("whatsapp-media")
     .upload(storagePath, buffer, { contentType: mimeFinal, upsert: false });
   if (upErr) {
-    console.error("[conversations.media] upload failed", upErr.message);
+    logger.error("[conversations.media] upload failed", { detail: upErr.message, requestId });
     return fail("internal_error", "Erro ao subir o arquivo.", 500, { requestId });
   }
 

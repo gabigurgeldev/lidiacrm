@@ -66,7 +66,7 @@ import type { FetchedMedia } from "@/lib/messaging/media/types";
  * envio abortado que na verdade saiu pode virar mensagem em dobro na nova
  * tentativa, então o corte é só para o provedor que de fato não responde.
  */
-const PRAZO_DE_ENVIO_MS = 60_000;
+export const PRAZO_DE_ENVIO_MS = 60_000;
 
 /** E.164 em dígitos, sem `+` e sem sufixo de domínio — é o que o `to` espera. */
 function digitos(bruto: string): string {

@@ -112,9 +112,15 @@ describe("o elo que some sem barulho", () => {
   it("a rota de upload converte ANTES de guardar", () => {
     // Converter no envio faria a mesma gravação ser transcodificada por
     // destinatário, e deixaria guardado um formato que só um canal aceita.
+    //
+    // A conversão mora em `prepararParaGuardar` desde que o vídeo do inbox
+    // passou a ser normalizado no mesmo ponto — o elo agora tem dois trechos,
+    // e os dois são conferidos.
     const fonte = readFileSync("app/api/v1/conversations/[id]/media/route.ts", "utf8");
-    expect(fonte).toContain("transcodificarNotaDeVoz");
+    expect(fonte).toContain("prepararParaGuardar(");
     expect(fonte).toMatch(/upload\(storagePath,\s*buffer,\s*\{\s*contentType:\s*mimeFinal/);
+    const preparo = readFileSync("lib/messaging/media/preparar-para-guardar.ts", "utf8");
+    expect(preparo).toContain("transcodificarNotaDeVoz");
   });
 
   it("devolve o mime do arquivo GUARDADO, não o que chegou", () => {

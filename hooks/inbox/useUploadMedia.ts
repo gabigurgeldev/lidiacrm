@@ -20,10 +20,20 @@ export function useUploadMedia() {
         method: "POST",
         body: form,
       });
-      const json = (await res.json()) as Partial<ApiErrorBody> & { data?: UploadedMedia };
+      // O corpo pode não ser nosso: um proxy na frente responde 413 ou 502/504
+      // com uma PÁGINA. `res.json()` cru estourava ali, e a tela mostrava
+      // "Erro inesperado" sem dizer que o arquivo era grande demais.
+      const json = (await res.json().catch(() => ({}))) as Partial<ApiErrorBody> & { data?: UploadedMedia };
       if (!res.ok || !json.data) {
         const e = json.error;
-        throw new ApiError(res.status, e?.code ?? "upload_failed", e?.details, e?.request_id ?? "", e?.message);
+        const grandeDemais = res.status === 413;
+        throw new ApiError(
+          res.status,
+          e?.code ?? (grandeDemais ? "payload_too_large" : "upload_failed"),
+          e?.details,
+          e?.request_id ?? "",
+          e?.message ?? (grandeDemais ? "Arquivo acima de 50MB." : "Erro ao subir o arquivo."),
+        );
       }
       return json.data;
     },

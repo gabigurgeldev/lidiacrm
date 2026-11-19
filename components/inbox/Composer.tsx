@@ -26,7 +26,14 @@ import { useMessageTemplates, type MessageTemplate } from "@/hooks/inbox/useMess
 import { useSendMessage } from "@/hooks/inbox/useSendMessage";
 import { useUploadMedia } from "@/hooks/inbox/useUploadMedia";
 import { imagensDoClipboard } from "@/lib/inbox/clipboard-image";
-import { enviarEmLote, juntarAoLote, LIMITE_DO_LOTE } from "@/lib/inbox/enviar-lote";
+import {
+  emMegabytes,
+  enviarEmLote,
+  juntarAoLote,
+  LIMITE_DO_LOTE,
+  separarPeloTamanho,
+} from "@/lib/inbox/enviar-lote";
+import { MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
 import { interpolateTemplate } from "@/lib/inbox/template-vars";
 import { cn } from "@/lib/utils";
 
@@ -219,8 +226,35 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     }
   }
 
+  /**
+   * Tira o que passa do teto por arquivo, avisando na hora. Sem isto, um vídeo
+   * longo ia para a janela, a tela subia o arquivo inteiro, e só no fim o
+   * servidor recusava.
+   */
+  function semOsGrandes(files: File[]): File[] {
+    const { cabem, grandes } = separarPeloTamanho(files);
+    const limite = String(emMegabytes(MAX_MEDIA_BYTES));
+    if (grandes.length === 1) {
+      toast.warning(
+        t("“{nome}” tem {mb} MB, e o limite por arquivo é {limite} MB. Para vídeo, envie um trecho mais curto ou uma versão comprimida.")
+          .replace("{nome}", grandes[0]!.name)
+          .replace("{mb}", String(emMegabytes(grandes[0]!.size)))
+          .replace("{limite}", limite),
+      );
+    } else if (grandes.length > 1) {
+      toast.warning(
+        t("{d} arquivos passam do limite de {limite} MB por arquivo e ficaram de fora.")
+          .replace("{d}", String(grandes.length))
+          .replace("{limite}", limite),
+      );
+    }
+    return cabem;
+  }
+
   /** Escolha pelo menu "+": documento vai sozinho; foto/vídeo entra no lote. */
-  function aoEscolherArquivos(files: File[]) {
+  function aoEscolherArquivos(escolhidos: File[]) {
+    const files = semOsGrandes(escolhidos);
+    if (files.length === 0) return;
     const ehMidia = (f: File) => /^(image|video)\//.test(f.type);
     if (files.every(ehMidia)) {
       // Um documento já no preview não se mistura com fotos: o lote é de mídia.

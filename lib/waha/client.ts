@@ -81,6 +81,17 @@ function comStoreLigado(config: Record<string, unknown>): Record<string, unknown
   return { ...config, noweb: { ...noweb, store: { ...STORE_DO_NOWEB, ...store, enabled: true } } };
 }
 
+/**
+ * Prazo de UM envio (texto, opções, mídia) ao WAHA. Na mídia, o WAHA baixa o
+ * arquivo, cifra e sobe para o WhatsApp antes de responder.
+ *
+ * Exportado porque a TELA depende dele: o inbox espera o envio de mídia por
+ * mais tempo que isto (`lib/inbox/prazo-do-envio.ts`), senão desiste com o
+ * servidor ainda enviando. `tests/unit/envio-de-video-pelo-inbox.test.ts`
+ * reprova subir este número sem subir aquele.
+ */
+export const PRAZO_DO_ENVIO_MS = 60_000;
+
 export class WahaClient {
   constructor(
     private readonly baseUrl: string,
@@ -381,7 +392,7 @@ export class WahaClient {
     replyTo?: string | null,
   ): Promise<unknown> {
     const res = await fetch(`${this.baseUrl}/api/sendText`, {
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(PRAZO_DO_ENVIO_MS),
       method: "POST",
       headers: {
         "X-Api-Key": this.apiKey,
@@ -454,7 +465,7 @@ export class WahaClient {
     payload: Record<string, unknown>,
   ): Promise<unknown> {
     const res = await fetch(`${this.baseUrl}/api/${endpoint}`, {
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(PRAZO_DO_ENVIO_MS),
       method: "POST",
       headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
       body: JSON.stringify({ session, chatId, ...payload }),
@@ -472,7 +483,7 @@ export class WahaClient {
     plan: { endpoint: string; payload: Record<string, unknown> },
   ): Promise<unknown> {
     const res = await fetch(`${this.baseUrl}/api/${plan.endpoint}`, {
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(PRAZO_DO_ENVIO_MS),
       method: "POST",
       headers: { "X-Api-Key": this.apiKey, "Content-Type": "application/json" },
       body: JSON.stringify({ session, chatId, ...plan.payload }),

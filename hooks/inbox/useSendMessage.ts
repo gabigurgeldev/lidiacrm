@@ -1,9 +1,12 @@
 "use client";
 import { useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import { useUserOpcional } from "@/hooks/auth/AuthProvider";
+import { useT } from "@/hooks/i18n/useT";
 import { assinar, nomeParaAssinar } from "@/lib/assinatura-do-atendente";
+import { envioSemResposta, prazoDoEnvioNaTela } from "@/lib/inbox/prazo-do-envio";
 import type { Message } from "@/lib/types/messaging";
 
 interface SendArgs {
@@ -40,6 +43,7 @@ export function useSendMessage() {
   // JWT. Sem isto a bolha apareceria sem o nome e "ganharia" a assinatura no
   // refetch — o texto pulando de lugar na frente de quem acabou de enviar.
   const nomeDaAssinatura = nomeParaAssinar(useUserOpcional()?.assinatura);
+  const t = useT();
 
   return useMutation({
     // UMA tentativa. O cliente repete POST que estoura o teto de tempo, e o
@@ -48,8 +52,14 @@ export function useSendMessage() {
     // outra mensagem no WhatsApp do cliente. Mensagem dobrada não se desfaz;
     // um erro na tela, sim (o `onError` relê o hilo e a mensagem aparece se
     // tiver saído). Visto em produção com a CPU saturada.
+    //
+    // E mídia espera mais que o servidor (`prazoDoEnvioNaTela`): com os 10 s
+    // padrão, vídeo "dava erro" na tela enquanto o canal ainda o enviava.
     mutationFn: async (input: SendArgs) =>
-      apiClient.post<{ data: Message }>("/api/v1/messages", input, { semRepetir: true }),
+      apiClient.post<{ data: Message }>("/api/v1/messages", input, {
+        semRepetir: true,
+        timeoutMs: prazoDoEnvioNaTela(input),
+      }),
     onMutate: async (args) => {
       // Opções: o tipo e o corpo saem do servidor (o canal pode rebaixar para
       // texto), então o otimista mentiria — espera a resposta, como o contato.
@@ -121,6 +131,15 @@ export function useSendMessage() {
     },
     onError: (err, args) => {
       qc.invalidateQueries({ queryKey: ["messages", args.conversation_id] });
+      // Sem resposta do servidor, o desfecho é desconhecido — a mensagem pode
+      // ter saído. O toast genérico diria "Tente novamente", que é o conselho
+      // que dobra a mensagem no WhatsApp do cliente.
+      if (envioSemResposta(err)) {
+        toast.warning(
+          t("Não deu para confirmar o envio. Confira na conversa se a mensagem saiu antes de enviar de novo."),
+        );
+        return;
+      }
       showApiError(err);
     },
     onSettled: (_data, _err, args) => {

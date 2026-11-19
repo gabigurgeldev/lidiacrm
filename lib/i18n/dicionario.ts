@@ -4234,6 +4234,16 @@ export const DICIONARIO: Traducoes = {
   "Dá para enviar até {n} arquivos por vez. {d} ficaram de fora.": {
     es: "Puedes enviar hasta {n} archivos a la vez. {d} quedaron fuera.",
   },
+  "“{nome}” tem {mb} MB, e o limite por arquivo é {limite} MB. Para vídeo, envie um trecho mais curto ou uma versão comprimida.":
+    {
+      es: "“{nome}” pesa {mb} MB, y el límite por archivo es de {limite} MB. Para video, envía un fragmento más corto o una versión comprimida.",
+    },
+  "{d} arquivos passam do limite de {limite} MB por arquivo e ficaram de fora.": {
+    es: "{d} archivos superan el límite de {limite} MB por archivo y quedaron fuera.",
+  },
+  "Não deu para confirmar o envio. Confira na conversa se a mensagem saiu antes de enviar de novo.": {
+    es: "No fue posible confirmar el envío. Revisa en la conversación si el mensaje salió antes de enviarlo de nuevo.",
+  },
   "Legenda (opcional)": { es: "Descripción (opcional)" },
   Legenda: { es: "Descripción" },
   "Gravar áudio": { es: "Grabar audio" },

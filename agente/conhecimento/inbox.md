@@ -26,6 +26,8 @@ No Inbox, a lista de conversas tem as abas **Fila**, **Minhas**, **Todas**, **Fe
 3. Na janela que abre, confira as fotos: o **x** tira uma, e **Adicionar** põe mais.
 4. A legenda é opcional e vai junto da primeira foto. Clique em **Enviar**.
 5. As fotos saem uma de cada vez, na ordem em que aparecem. Se uma não sair, o envio para ali e as que faltam continuam na janela para você tentar de novo.
+6. Cada arquivo pode ter até 50 MB. Um arquivo maior é avisado na hora em que você o escolhe, com o tamanho dele; para vídeo, envie um trecho mais curto ou uma versão comprimida.
+7. Vídeo grande pode levar um tempo para sair. Se aparecer o aviso para conferir na conversa se a mensagem saiu, olhe a conversa antes de enviar de novo, para o cliente não receber o vídeo duas vezes.
 
 ### Usar uma resposta rápida no atendimento
 1. No campo de mensagem, digite **/** (barra). Aparece a lista de respostas salvas.

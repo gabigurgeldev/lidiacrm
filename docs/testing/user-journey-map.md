@@ -1330,6 +1330,41 @@ aleatório). O lote sai em sequência, espaçado com `PACING_DEFAULTS`
 
 ---
 
+## J43 — Mandar um vídeo pelo inbox, e ele sair uma vez só `[P0]` (2026-11-19)
+
+Relato de cliente em produção: "vídeo de 30 segundos ou de 14 minutos não
+envia, dá erro; e tentar de novo também dá erro". Três defeitos em cadeia,
+achados lendo o caminho inteiro (upload → envio → canal):
+
+1. **O inbox não normalizava o vídeo.** O disparo passou a preparar o vídeo no
+   upload depois da queda de 2026-10-01; o inbox ficou de fora, e todo envio
+   pedia `convert: true` ao WAHA — reencode do arquivo INTEIRO antes de mandar.
+2. **A tela desistia aos 10 s** (padrão do `apiClient`), enquanto o servidor
+   espera o canal por até 60 s. A pessoa via "Erro inesperado. Tente
+   novamente." com o servidor ainda enviando.
+3. **"Tente novamente" duplicava.** O arquivo ficava na janela; cada repetição
+   subia o vídeo de novo, empilhava outro reencode no WAHA, e virava outro
+   vídeo no WhatsApp do cliente.
+
+E o vídeo de 14 minutos de celular passa fácil de 50 MB (o teto por arquivo do
+Storage): a recusa só chegava depois de a tela tentar subir o arquivo inteiro.
+
+**O que muda no risco:** o reencode sai do WAHA (por envio) para o app (uma vez,
+no upload) — o mesmo desenho do disparo, já em produção. Vídeo H.264+AAC só
+troca o contêiner; HEVC é reencodado uma vez, e o upload demora mais nesse caso.
+
+| # | Caso | Prova |
+|---|---|---|
+| J43.1 | Vídeo do inbox é guardado como `.wa.mp4` e sai com `convert: false` | **PASS** unit (`tests/unit/envio-de-video-pelo-inbox.test.ts`) |
+| J43.2 | ffmpeg falha ou resultado passa do teto: guarda o original, envio segue como antes | **PASS** unit (idem) |
+| J43.3 | Envio de mídia espera mais que o prazo do canal mais lento (WAHA/Stevo) + folga | **PASS** unit — o teste amarra os números (idem) |
+| J43.4 | Tela sem resposta (prazo/conexão): avisa para conferir a conversa, sem "Tente novamente" | **PASS** unit (`tests/unit/envio-de-midia-na-tela.test.tsx`) |
+| J43.5 | Vídeo acima de 50 MB é barrado na escolha, com o tamanho, sem upload | **PASS** unit (idem) |
+| J43.6 | Pela tela, num ambiente fresco com WAHA real: vídeo de 30 s e vídeo HEVC chegam uma vez ao celular | **NÃO MEDIDO** — esta máquina não tem Docker nem ffmpeg; é o primeiro passo de quem retomar |
+| J43.7 | Vídeo de 30–50 MB: o WhatsApp aceita como vídeo pelo NOWEB dentro dos 60 s do canal | **NÃO MEDIDO** — depende da banda da VPS e do limite do WhatsApp, que não foi medido |
+
+---
+
 ## J7 — Exploração completa `[P2]`
 
 Andar por TODAS as rotas navegáveis logado como admin e como agent: settings, contacts,

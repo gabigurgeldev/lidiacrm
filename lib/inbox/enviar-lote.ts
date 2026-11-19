@@ -18,6 +18,7 @@
  *   o cliente já recebeu. Mensagem dobrada não se desfaz.
  */
 import { PACING_DEFAULTS } from "@/lib/agent-engine/pacing/defaults";
+import { MAX_MEDIA_BYTES } from "@/lib/messaging/media/types";
 
 /**
  * Teto de arquivos por lote. Dez cobre "várias opções para o cliente" com
@@ -37,6 +38,29 @@ export function juntarAoLote(
     arquivos: [...atuais, ...novos.slice(0, vagas)],
     descartados: Math.max(novos.length - vagas, 0),
   };
+}
+
+/**
+ * Separa o que passa do teto por arquivo (`MAX_MEDIA_BYTES`, o mesmo que a
+ * rota de upload e o bucket aplicam).
+ *
+ * Avisar na ESCOLHA, e não depois do upload: vídeo longo passa fácil do teto,
+ * e a recusa do servidor só chegava depois de a tela tentar subir o arquivo
+ * inteiro — minutos olhando "Enviando" para ler "Arquivo acima de 50MB" no fim.
+ */
+export function separarPeloTamanho<T extends { size: number }>(
+  arquivos: readonly T[],
+  teto: number = MAX_MEDIA_BYTES,
+): { cabem: T[]; grandes: T[] } {
+  const cabem: T[] = [];
+  const grandes: T[] = [];
+  for (const a of arquivos) (a.size > teto ? grandes : cabem).push(a);
+  return { cabem, grandes };
+}
+
+/** Megabytes para a frase da tela: inteiro, arredondado para cima. */
+export function emMegabytes(bytes: number): number {
+  return Math.ceil(bytes / (1024 * 1024));
 }
 
 /** Intervalo entre dois envios do lote: o piso do motor + um jitter sorteado. */

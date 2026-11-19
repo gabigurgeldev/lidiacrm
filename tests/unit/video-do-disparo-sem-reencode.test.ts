@@ -25,7 +25,9 @@ describe("wahaSendPlanFor com vídeo", () => {
   it("vídeo PRONTO sai sem pedir conversão", () => {
     expect(wahaSendPlanFor("video", { ...midia, pronto: true }).payload.convert).toBe(false);
   });
-  it("vídeo sem marca (disparo antigo, inbox) segue pedindo — comportamento de antes", () => {
+  // O inbox normaliza no upload desde 2026-11-19 (`prepararParaGuardar`); sem
+  // a marca ficam só o arquivo antigo e o que o ffmpeg não conseguiu tratar.
+  it("vídeo sem marca (arquivo antigo, ou que não normalizou) segue pedindo — comportamento de antes", () => {
     expect(wahaSendPlanFor("video", midia).payload.convert).toBe(true);
   });
 });
