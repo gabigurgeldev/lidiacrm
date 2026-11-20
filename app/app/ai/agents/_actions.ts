@@ -19,6 +19,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Role } from "@/lib/auth/types";
 import { duplicateAgentWithVersion } from "@/lib/ai/agents/duplicate";
 import { despausarAgente } from "@/lib/ai/agents/despausar";
+import { ligarSoSugestao } from "@/lib/ai/agents/modo";
 import { mensagemDeErroDoAgente } from "@/lib/ai/agents/mensagem-de-erro";
 
 const UUID_RX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -51,13 +52,15 @@ export async function pauseAgentAction(id: string): Promise<ActionResult> {
   const admin = createAdminClient();
   const { data: existing } = await admin
     .from("ai_agents")
-    .select("id, published_version_id, archived_at, is_active, kind")
+    .select("id, published_version_id, archived_at, is_active, kind, so_sugestao")
     .eq("id", id)
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
 
   if (!existing) return { ok: false, error: "not_found" };
   if (existing.archived_at) return { ok: false, error: "state_conflict", message: "Agent arquivado." };
+  // Pausar é "não atende e não sugere": o agente que só sugeria sai do modo.
+  const estavaSoSugerindo = (existing as { so_sugestao?: boolean }).so_sugestao === true;
 
   const requestId = randomUUID();
   const previousVersionId = (existing as { published_version_id: string | null }).published_version_id;
@@ -75,6 +78,7 @@ export async function pauseAgentAction(id: string): Promise<ActionResult> {
     updated_at: new Date().toISOString(),
     published_version_id: null,
   };
+  if (estavaSoSugerindo) updates.so_sugestao = false;
   // Legacy rag_bot: também flip is_active para refletir no badge.
   if (existing.kind !== "mcp_agent") updates.is_active = false;
 
@@ -92,10 +96,47 @@ export async function pauseAgentAction(id: string): Promise<ActionResult> {
     resourceType: "ai_agent",
     resourceId: id,
     requestId,
-    metadata: { previous_version_id: previousVersionId },
+    metadata: {
+      previous_version_id: previousVersionId,
+      ...(estavaSoSugerindo ? { so_sugestao_desligado: true } : {}),
+    },
   });
 
   revalidatePath("/app/ai/agents");
+  return { ok: true };
+}
+
+/**
+ * O agente para de atender clientes e passa a SÓ SUGERIR respostas no Inbox
+ * (migration 0255). Vale a partir de "atendendo" (a versão no ar é a que passa
+ * a sugerir) e de "pausado" (a última que esteve no ar). Ver
+ * `lib/ai/agents/modo.ts`.
+ */
+export async function soSugerirAgenteAction(id: string): Promise<ActionResult> {
+  if (!UUID_RX.test(id)) return { ok: false, error: "invalid_request" };
+  const guard = await ensureAdmin();
+  if (guard.kind === "fail") return guard.result;
+  const { authUser, activeOrg } = guard;
+
+  const admin = createAdminClient();
+  const requestId = randomUUID();
+  const result = await ligarSoSugestao(admin, { orgId: activeOrg.orgId, agentId: id });
+  if (!result.ok) {
+    return { ok: false, error: result.code, message: mensagemDeErroDoAgente(result.code) };
+  }
+
+  void audit({
+    action: "ai_agent.so_sugestao_ligado",
+    actorUserId: authUser.id,
+    organizationId: activeOrg.orgId,
+    resourceType: "ai_agent",
+    resourceId: id,
+    requestId,
+    metadata: { version_id: result.version_id, previous_version_id: result.previous_version_id },
+  });
+
+  revalidatePath("/app/ai/agents");
+  revalidatePath(`/app/ai/agents/${id}`);
   return { ok: true };
 }
 
@@ -108,13 +149,16 @@ export async function unpauseAgentAction(id: string): Promise<ActionResult> {
   const admin = createAdminClient();
   const { data: existing } = await admin
     .from("ai_agents")
-    .select("id, kind, archived_at, is_active")
+    .select("id, kind, archived_at, is_active, so_sugestao")
     .eq("id", id)
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
 
   if (!existing) return { ok: false, error: "not_found" };
   if (existing.archived_at) return { ok: false, error: "state_conflict" };
+  // Despausar devolve ao ATENDIMENTO — inclusive o agente que só sugeria, que
+  // sai do modo (é o "Voltar a atender clientes" da tela).
+  const estavaSoSugerindo = (existing as { so_sugestao?: boolean }).so_sugestao === true;
 
   // mcp_agent: pausar tirou a versão do ar; despausar a devolve. Antes daqui
   // saía "Publique uma versão" — e o editor só publica rascunho, que o agente
@@ -137,6 +181,7 @@ export async function unpauseAgentAction(id: string): Promise<ActionResult> {
         version_id: result.version_id,
         previous_version_id: result.previous_version_id,
         unpaused: true,
+        ...(estavaSoSugerindo ? { so_sugestao_desligado: true } : {}),
       },
     });
 
@@ -161,6 +206,7 @@ export async function unpauseAgentAction(id: string): Promise<ActionResult> {
   });
 
   revalidatePath("/app/ai/agents");
+  revalidatePath(`/app/ai/agents/${id}`);
   return { ok: true };
 }
 

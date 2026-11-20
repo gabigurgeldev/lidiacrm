@@ -31,7 +31,11 @@ const REASON_TO_RESPONSE: Record<
   Exclude<DraftReplyResult, { ok: true }>["reason"],
   [code: string, message: string, status: number]
 > = {
-  no_agent: ["no_agent", "Nenhum agente publicado para sugerir resposta.", 422],
+  no_agent: [
+    "no_agent",
+    "Nenhum agente de IA atendendo ou sugerindo respostas neste número. Em IA › Agentes, publique um agente ou deixe um no modo \"Só sugere respostas\".",
+    422,
+  ],
   blocked: ["blocked", "Contato bloqueado/anonimizado.", 422],
   empty: ["empty", "A IA não gerou um rascunho.", 422],
   error: ["internal_error", "Erro ao gerar rascunho.", 500],

@@ -1,15 +1,20 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { generateDraftReply } from "./draft-reply";
-import { loadPublishedAgentConfig, type PublishedAgentConfig } from "./agent-config";
+import {
+  loadPublishedAgentConfig,
+  loadSuggestionOnlyAgentConfig,
+  type PublishedAgentConfig,
+} from "./agent-config";
 import { getLeadContext, type LeadContextResult } from "../edge/crm/get-lead-context";
 import { runModelCall } from "../edge/llm/run-model-call";
 
-vi.mock("./agent-config", () => ({ loadPublishedAgentConfig: vi.fn() }));
+vi.mock("./agent-config", () => ({ loadPublishedAgentConfig: vi.fn(), loadSuggestionOnlyAgentConfig: vi.fn() }));
 vi.mock("../edge/crm/get-lead-context", () => ({ getLeadContext: vi.fn() }));
 vi.mock("../edge/llm/run-model-call", () => ({ runModelCall: vi.fn() }));
 
 const mockLoadAgent = vi.mocked(loadPublishedAgentConfig);
+const mockLoadSoSugestao = vi.mocked(loadSuggestionOnlyAgentConfig);
 const mockGetLeadContext = vi.mocked(getLeadContext);
 const mockRunModelCall = vi.mocked(runModelCall);
 
@@ -89,6 +94,9 @@ function contextResult(overrides: Partial<LeadContextResult & { ok: true }> = {}
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // `clearAllMocks` não desfaz implementação: sem isto, um caso que liga o
+  // agente "só sugere" vazaria para os seguintes.
+  mockLoadSoSugestao.mockResolvedValue(null);
 });
 
 describe("generateDraftReply", () => {
@@ -118,14 +126,50 @@ describe("generateDraftReply", () => {
     expect(runInput).not.toHaveProperty("maxSteps");
   });
 
-  it("sem agente publicado → no_agent, sem chamar runModelCall", async () => {
+  it("sem agente publicado nem agente que só sugere → no_agent, sem chamar runModelCall", async () => {
     mockLoadAgent.mockResolvedValue(null);
 
     const result = await generateDraftReply(db, llmCfg, crmCfg, input);
 
     expect(result).toEqual({ ok: false, reason: "no_agent" });
+    expect(mockLoadSoSugestao).toHaveBeenCalledWith(db, input.tenantId, input.channelSessionId);
     expect(mockGetLeadContext).not.toHaveBeenCalled();
     expect(mockRunModelCall).not.toHaveBeenCalled();
+  });
+
+  // Migration 0255: a empresa que não quer a IA falando com o cliente deixa o
+  // agente "só sugere". Fora do ar para o motor, mas é dele o prompt do rascunho.
+  it("agente que SÓ SUGERE (fora do ar) escreve o rascunho com o próprio prompt e modelo", async () => {
+    const SO_SUGERE: PublishedAgentConfig = {
+      ...AGENT,
+      agentId: "agent-so-sugere",
+      systemPrompt: "Você é a florista da Faby.",
+      model: "modelo-do-agente",
+    };
+    mockLoadAgent.mockResolvedValue(null);
+    mockLoadSoSugestao.mockResolvedValue(SO_SUGERE);
+    mockGetLeadContext.mockResolvedValue(contextResult());
+    mockRunModelCall.mockResolvedValue({ result: { text: "Temos rosas, sim!" } } as never);
+
+    const result = await generateDraftReply(db, llmCfg, crmCfg, input);
+
+    expect(result).toEqual({ ok: true, draft: "Temos rosas, sim!" });
+    const runInput = mockRunModelCall.mock.calls[0]![2];
+    expect(runInput.system).toContain("Você é a florista da Faby.");
+    expect(runInput.model).toBe("modelo-do-agente");
+    expect(runInput).not.toHaveProperty("tools");
+  });
+
+  it("havendo agente NO AR no número, ele escreve o rascunho — o que só sugere nem é consultado", async () => {
+    mockLoadAgent.mockResolvedValue(AGENT);
+    mockLoadSoSugestao.mockResolvedValue({ ...AGENT, systemPrompt: "outro" });
+    mockGetLeadContext.mockResolvedValue(contextResult());
+    mockRunModelCall.mockResolvedValue({ result: { text: "ok" } } as never);
+
+    await generateDraftReply(db, llmCfg, crmCfg, input);
+
+    expect(mockLoadSoSugestao).not.toHaveBeenCalled();
+    expect(mockRunModelCall.mock.calls[0]![2].system).toContain(AGENT.systemPrompt);
   });
 
   it("contato bloqueado → blocked, sem chamar runModelCall", async () => {

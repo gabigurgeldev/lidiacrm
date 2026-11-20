@@ -22,7 +22,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const AGENT_COLUMNS =
-  "id, organization_id, name, description, model, system_prompt, is_active, is_default, kind, priority, published_version_id, archived_at, config, guardrails, active_kb_version_id, created_at, updated_at";
+  "id, organization_id, name, description, model, system_prompt, is_active, is_default, kind, priority, published_version_id, so_sugestao, archived_at, config, guardrails, active_kb_version_id, created_at, updated_at";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 

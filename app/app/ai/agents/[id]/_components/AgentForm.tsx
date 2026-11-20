@@ -387,7 +387,11 @@ export function AgentForm(props: Props) {
         toast.error(`${t("Falha ao publicar:")} ${erroDoServidor(res.error)}`);
         return;
       }
-      toast.success(`v${props.draft.version_number} ${t("publicada e ativa.")}`);
+      toast.success(
+        res.data?.so_sugestao
+          ? `v${props.draft.version_number} ${t("publicada. O agente continua só sugerindo respostas no Inbox.")}`
+          : `v${props.draft.version_number} ${t("publicada e ativa.")}`,
+      );
       setConfirmOpen(false);
       router.refresh();
     } finally {
@@ -659,6 +663,7 @@ export function AgentForm(props: Props) {
           onOpenChange={setConfirmOpen}
           draft={props.draft}
           published={props.published}
+          soSugestao={props.agent.so_sugestao === true}
           onConfirm={handlePublish}
           isPending={publishing}
         />

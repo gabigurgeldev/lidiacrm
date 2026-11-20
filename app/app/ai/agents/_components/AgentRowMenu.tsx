@@ -22,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { DotsThree, PencilSimple, Copy, Pause, Play, Archive } from "@/lib/ui/icons";
+import { DotsThree, PencilSimple, Copy, Pause, Play, Archive, Sparkle } from "@/lib/ui/icons";
 import { useT } from "@/hooks/i18n/useT";
 import { deriveAgentStatus } from "./AgentStatusBadge";
 import type { AgentRow } from "@/hooks/ai/useAgent";
@@ -30,6 +30,7 @@ import {
   archiveAgentAction,
   duplicateAgentAction,
   pauseAgentAction,
+  soSugerirAgenteAction,
   unpauseAgentAction,
 } from "../_actions";
 import { RenameAgentDialog } from "./RenameAgentDialog";
@@ -48,6 +49,10 @@ export function AgentRowMenu({ agent }: Props) {
   const status = deriveAgentStatus(agent);
   const isPaused = status === "paused" || status === "draft";
   const isArchived = status === "archived";
+  // Só sugere respostas (migration 0255): fora do atendimento, servindo o Inbox.
+  const isSuggesting = status === "suggesting";
+  // O modo só existe para o agente com versões; o `rag_bot` legado não tem.
+  const podeSoSugerir = agent.kind === "mcp_agent" && !isSuggesting && !isArchived;
 
   const run = (label: string, action: () => Promise<{ ok: boolean; error?: string; message?: string }>) => {
     startTransition(async () => {
@@ -79,7 +84,7 @@ export function AgentRowMenu({ agent }: Props) {
             <DotsThree size={18} aria-hidden />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuItem asChild>
             <Link href={`/app/ai/agents/${agent.id}`} className="flex items-center gap-2">
               <PencilSimple size={14} aria-hidden /> {t("Editar")}
@@ -100,6 +105,24 @@ export function AgentRowMenu({ agent }: Props) {
           >
             <PencilSimple size={14} aria-hidden className="mr-2" /> {t("Renomear")}
           </DropdownMenuItem>
+          {isSuggesting ? (
+            <DropdownMenuItem
+              onSelect={() =>
+                run(t("O agente voltou a atender clientes."), () => unpauseAgentAction(agent.id))
+              }
+            >
+              <Play size={14} aria-hidden className="mr-2" /> {t("Voltar a atender clientes")}
+            </DropdownMenuItem>
+          ) : null}
+          {podeSoSugerir ? (
+            <DropdownMenuItem
+              onSelect={() =>
+                run(t("O agente agora só sugere respostas no Inbox."), () => soSugerirAgenteAction(agent.id))
+              }
+            >
+              <Sparkle size={14} aria-hidden className="mr-2" /> {t("Só sugerir respostas")}
+            </DropdownMenuItem>
+          ) : null}
           {isPaused ? (
             <DropdownMenuItem
               disabled={isArchived}

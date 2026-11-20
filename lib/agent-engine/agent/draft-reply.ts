@@ -9,7 +9,7 @@
 import type pg from 'pg';
 import type { ModelMessage } from 'ai';
 
-import { loadPublishedAgentConfig } from './agent-config';
+import { loadPublishedAgentConfig, loadSuggestionOnlyAgentConfig } from './agent-config';
 import { getLeadContext } from '../edge/crm/get-lead-context';
 import type { CrmEdgeConfig } from '../edge/crm/mcp-client';
 import { runModelCall, type LlmEdgeConfig } from '../edge/llm/run-model-call';
@@ -31,7 +31,13 @@ export async function generateDraftReply(
   crmCfg: CrmEdgeConfig,
   input: DraftReplyInput,
 ): Promise<DraftReplyResult> {
-  const agent = await loadPublishedAgentConfig(db, input.tenantId, input.channelSessionId);
+  // O agente que atende o número sugere como sempre. Sem nenhum no ar, vale o
+  // que a empresa deixou SÓ sugerindo (migration 0255): fora do atendimento,
+  // mas é dele o prompt que escreve o rascunho. Ordem importa — quem atende é
+  // a voz que o cliente já ouviu, e a sugestão deve soar igual.
+  const agent =
+    (await loadPublishedAgentConfig(db, input.tenantId, input.channelSessionId)) ??
+    (await loadSuggestionOnlyAgentConfig(db, input.tenantId, input.channelSessionId));
   if (agent === null) return { ok: false, reason: 'no_agent' };
 
   const ctx = await getLeadContext(

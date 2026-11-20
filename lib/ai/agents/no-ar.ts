@@ -60,6 +60,12 @@ export interface FatosDoAgente {
   is_active?: boolean | null;
   published_version_id?: string | null;
   archived_at?: string | null;
+  /**
+   * Modo "só sugere respostas" (migration 0255). `undefined` = o SELECT não
+   * pediu a coluna, e o agente cai em `parado` — que para quem pergunta
+   * "atende?" é a MESMA resposta (não). Só a tela precisa da distinção.
+   */
+  so_sugestao?: boolean | null;
 }
 
 export type EstadoDoAgente =
@@ -73,6 +79,12 @@ export type EstadoDoAgente =
    * `ai_agents`. Está no ar — por outro motor.
    */
   | "no_ar_legado"
+  /**
+   * Fora do ar para o motor — nenhuma porta de atendimento o enxerga, porque
+   * ele não tem versão publicada —, mas o "Sugerir resposta" do Inbox usa a
+   * última versão que esteve no ar. Ver a migration 0255.
+   */
+  | "so_sugestao"
   /** Existe e não responde: nem versão publicada, nem `is_active` legado. */
   | "parado";
 
@@ -81,6 +93,10 @@ export function estadoDoAgente(a: FatosDoAgente): EstadoDoAgente {
   // `!= null` cobre o `undefined` do select incompleto do mesmo jeito que o
   // `null` do banco: sem ponteiro conhecido, não se afirma que está no ar.
   if (a.published_version_id != null) return "no_ar";
+  // Depois de `no_ar` de propósito: o CHECK do banco proíbe flag ligada com
+  // versão no ar, mas se um dia as duas coisas aparecerem juntas, quem decide é
+  // o que o motor EXECUTA (o ponteiro), não a flag.
+  if (a.so_sugestao === true && a.kind === "mcp_agent") return "so_sugestao";
   // Sem versão publicada, só o legado tem para onde ir — e a porta é ESTREITA:
   // exige `kind === "rag_bot"` explícito, em vez de "qualquer coisa que não
   // seja mcp_agent".

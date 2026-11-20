@@ -31,10 +31,17 @@ export type DespausarResult =
   | PublishResult
   | { ok: false; code: "nada_para_despausar"; message: string };
 
-export async function despausarAgente(
+/**
+ * A versão que a pausa (ou o modo "só sugere") tirou do ar: `superseded`, já
+ * publicada alguma vez, a mais recentemente retirada. É também a versão que o
+ * rascunho do Inbox usa enquanto o agente só sugere
+ * (`loadSuggestionOnlyAgentConfig`, mesma regra em SQL) — por isso "voltar a
+ * atender" devolve exatamente o agente que estava sugerindo.
+ */
+export async function ultimaVersaoQueEsteveNoAr(
   admin: SupabaseClient,
   params: { orgId: string; agentId: string },
-): Promise<DespausarResult> {
+): Promise<string | null> {
   const { data } = await admin
     .from("ai_agent_versions")
     .select("id, published_at, superseded_at")
@@ -49,7 +56,19 @@ export async function despausarAgente(
     published_at: string | null;
     superseded_at: string | null;
   }>;
-  const alvo = candidatas.find((v) => v.published_at !== null && v.superseded_at !== null);
+  return candidatas.find((v) => v.published_at !== null && v.superseded_at !== null)?.id ?? null;
+}
+
+/**
+ * Devolve ao ar a versão retirada. `destino` padrão é `atendendo`: despausar é
+ * voltar a falar com o cliente — inclusive para o agente que só sugeria, que
+ * sai do modo. Quem quer religar SÓ a sugestão passa `so_sugestao`.
+ */
+export async function despausarAgente(
+  admin: SupabaseClient,
+  params: { orgId: string; agentId: string; destino?: "atendendo" | "so_sugestao" },
+): Promise<DespausarResult> {
+  const alvo = await ultimaVersaoQueEsteveNoAr(admin, params);
   if (!alvo) {
     return {
       ok: false,
@@ -61,6 +80,7 @@ export async function despausarAgente(
   return publishAgentVersion(admin, {
     orgId: params.orgId,
     agentId: params.agentId,
-    versionId: alvo.id,
+    versionId: alvo,
+    destino: params.destino ?? "atendendo",
   });
 }

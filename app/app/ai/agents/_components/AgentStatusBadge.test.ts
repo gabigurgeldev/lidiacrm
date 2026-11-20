@@ -12,6 +12,26 @@ const base = {
 } as unknown as AgentRow;
 
 describe("deriveAgentStatus", () => {
+  it("mcp_agent no modo SÓ SUGERE é 'suggesting' — nem Publicado (não atende) nem Rascunho (sugere)", () => {
+    expect(
+      deriveAgentStatus({ ...base, kind: "mcp_agent", published_version_id: null, so_sugestao: true } as AgentRow),
+    ).toBe("suggesting");
+  });
+
+  it("flag de só sugere com versão no ar: quem vence é o ponteiro (o que o motor executa)", () => {
+    // O CHECK do banco proíbe as duas coisas juntas; se um dia aparecerem, a
+    // tela não pode esconder que o agente está atendendo.
+    expect(
+      deriveAgentStatus({ ...base, kind: "mcp_agent", published_version_id: "v1", so_sugestao: true } as AgentRow),
+    ).toBe("published");
+  });
+
+  it("rag_bot com a flag ligada NÃO vira 'suggesting' — o modo não existe para o legado", () => {
+    expect(
+      deriveAgentStatus({ ...base, kind: "rag_bot", is_active: false, so_sugestao: true } as AgentRow),
+    ).toBe("draft");
+  });
+
   it("mcp_agent sem versão publicada é RASCUNHO — a config dele vive na versão", () => {
     // O defeito de origem: o agente do onboarding aparecia como "Publicado"
     // enquanto nenhum runtime o executava. `createDefaultAgent.ts` grava

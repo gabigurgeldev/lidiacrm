@@ -4,6 +4,9 @@
  * Spec 10 §4.3. Limpa published_version_id (agente não responde gatilhos),
  * mas mantém archived_at=null. Versão antes-published vira 'superseded' pra
  * preservar continuidade do versionamento.
+ *
+ * Pausar é "não atende e não sugere": desliga também o modo "só sugere
+ * respostas" (migration 0255), igual a `pauseAgentAction`.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
@@ -54,7 +57,7 @@ export async function POST(_req: NextRequest, ctx: Ctx): Promise<Response> {
 
   const { error } = await admin
     .from("ai_agents")
-    .update({ published_version_id: null, updated_at: new Date().toISOString() })
+    .update({ published_version_id: null, so_sugestao: false, updated_at: new Date().toISOString() })
     .eq("id", id)
     .eq("organization_id", activeOrg.orgId);
 

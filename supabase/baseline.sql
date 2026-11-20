@@ -26003,6 +26003,123 @@ alter table public.org_memory_entries
   add constraint org_memory_entries_source_check
   check (source in ('manual', 'flywheel', 'agent'));
 
+-- ---- agente que só sugere respostas: fora do atendimento, dentro do Inbox (migration 0255) ----
+-- O modo "só sugere" é, para o motor, um agente PAUSADO (published_version_id nulo):
+-- toda porta de atendimento já o ignora. Só o rascunho do Inbox lê a flag. O CHECK
+-- faz um caminho de publicação que não conheça o modo falhar em vez de pôr o agente
+-- no ar. A coluna nasce false em todas as linhas: nada a corrigir antes do CHECK.
+-- Idempotente. Racional inteiro no cabeçalho da migration 0255.
+alter table public.ai_agents
+  add column if not exists so_sugestao boolean not null default false;
+
+comment on column public.ai_agents.so_sugestao is
+  'Agente fora do atendimento que segue servindo o "Sugerir resposta" do Inbox (migration 0255). Ligado => published_version_id nulo (CHECK). A versão usada é a última que esteve no ar.';
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conname = 'ai_agents_so_sugestao_fora_do_ar_check'
+       and conrelid = 'public.ai_agents'::regclass
+  ) then
+    alter table public.ai_agents
+      add constraint ai_agents_so_sugestao_fora_do_ar_check
+      check (not so_sugestao or published_version_id is null);
+  end if;
+end $$;
+
+-- Publica uma versão e decide, NA MESMA TRANSAÇÃO, se ela fica no ar ou só
+-- servindo sugestões. Atômica de propósito: publicar e retirar em duas chamadas
+-- deixaria uma janela em que o agente está no ar — e uma mensagem que chegasse
+-- nela abriria um turno de atendimento.
+--
+-- Toda a validação (credencial, número conectado, modelo existente, estado da
+-- versão) é a de `fn_publish_ai_agent_version`, chamada aqui dentro — não há
+-- segunda régua. Quando a versão pedida JÁ está no ar (ligar o modo a partir de
+-- "atendendo"), não há o que publicar: só se retira.
+create or replace function public.fn_publicar_versao_do_agente(
+  p_org_id uuid,
+  p_agent_id uuid,
+  p_version_id uuid,
+  p_so_sugestao boolean
+)
+returns table (
+  agent_id uuid,
+  version_id uuid,
+  previous_version_id uuid,
+  published_at timestamptz
+)
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_agent record;
+  v_prev uuid;
+  v_published_at timestamptz;
+  v_agora timestamptz := now();
+begin
+  select a.id, a.organization_id, a.published_version_id, a.archived_at
+    into v_agent
+    from public.ai_agents a
+   where a.id = p_agent_id
+   for update;
+
+  if not found or v_agent.organization_id <> p_org_id then
+    raise exception 'agent_not_found' using errcode = 'P0001';
+  end if;
+  if v_agent.archived_at is not null then
+    raise exception 'agent_archived' using errcode = 'P0001';
+  end if;
+
+  if p_version_id is not null and v_agent.published_version_id is not distinct from p_version_id then
+    v_prev := v_agent.published_version_id;
+    v_published_at := v_agora;
+  else
+    -- O CHECK proíbe flag ligada com versão no ar: desliga antes de publicar e
+    -- religa depois, se for o caso. Tudo dentro desta transação — ninguém de
+    -- fora enxerga o meio.
+    update public.ai_agents a
+       set so_sugestao = false
+     where a.id = p_agent_id;
+
+    select r.previous_version_id, r.published_at
+      into v_prev, v_published_at
+      from public.fn_publish_ai_agent_version(p_org_id, p_agent_id, p_version_id) r;
+  end if;
+
+  if p_so_sugestao then
+    update public.ai_agent_versions v
+       set status = 'superseded',
+           superseded_at = v_agora
+     where v.id = p_version_id
+       and v.status = 'published';
+
+    update public.ai_agents a
+       set published_version_id = null,
+           so_sugestao = true,
+           updated_at = v_agora
+     where a.id = p_agent_id;
+  else
+    update public.ai_agents a
+       set so_sugestao = false,
+           updated_at = v_agora
+     where a.id = p_agent_id;
+  end if;
+
+  return query
+    select p_agent_id, p_version_id, v_prev, v_published_at;
+end;
+$$;
+
+comment on function public.fn_publicar_versao_do_agente(uuid, uuid, uuid, boolean) is
+  'Publica a versão (validação de fn_publish_ai_agent_version) e, se p_so_sugestao, a retira do ar na mesma transação e liga ai_agents.so_sugestao (migration 0255). Chamador: lib/ai/agents/publish.ts.';
+
+-- Item 9 da doutrina: as duas origens de EXECUTE. Só o service_role publica.
+revoke execute on function public.fn_publicar_versao_do_agente(uuid, uuid, uuid, boolean) from public, anon;
+revoke execute on function public.fn_publicar_versao_do_agente(uuid, uuid, uuid, boolean) from authenticated;
+grant execute on function public.fn_publicar_versao_do_agente(uuid, uuid, uuid, boolean) to service_role;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES

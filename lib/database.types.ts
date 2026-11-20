@@ -652,6 +652,7 @@ export type Database = {
           organization_id: string
           priority: number
           published_version_id: string | null
+          so_sugestao: boolean
           system_prompt: string
           updated_at: string
         }
@@ -672,6 +673,7 @@ export type Database = {
           organization_id: string
           priority?: number
           published_version_id?: string | null
+          so_sugestao?: boolean
           system_prompt: string
           updated_at?: string
         }
@@ -692,6 +694,7 @@ export type Database = {
           organization_id?: string
           priority?: number
           published_version_id?: string | null
+          so_sugestao?: boolean
           system_prompt?: string
           updated_at?: string
         }
@@ -7410,6 +7413,20 @@ export type Database = {
       fn_podar_fila_de_jobs: {
         Args: { p_limite?: number; p_retencao_dias?: number }
         Returns: number
+      }
+      fn_publicar_versao_do_agente: {
+        Args: {
+          p_agent_id: string
+          p_org_id: string
+          p_so_sugestao: boolean
+          p_version_id: string
+        }
+        Returns: {
+          agent_id: string
+          previous_version_id: string
+          published_at: string
+          version_id: string
+        }[]
       }
       fn_publish_ai_agent_version: {
         Args: { p_agent_id: string; p_org_id: string; p_version_id: string }

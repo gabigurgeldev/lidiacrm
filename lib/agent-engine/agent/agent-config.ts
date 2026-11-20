@@ -344,6 +344,53 @@ export async function loadPublishedAgentConfig(
 }
 
 /**
+ * O agente que SÓ SUGERE respostas neste número (migration 0255) — e mais
+ * nenhum leitor além do rascunho do Inbox (`draft-reply.ts`).
+ *
+ * ⚠️ NÃO USE ESTA FUNÇÃO PARA ATENDER. O modo existe para a empresa que pediu
+ * que a IA não falasse com o cliente: o agente fica sem `published_version_id`
+ * justamente para que nenhuma porta de atendimento o enxergue. Um turno que
+ * chamasse isto devolveria a voz a quem a dona tirou. Vigiado por
+ * `tests/unit/agente-so-sugere-nao-atende.test.ts`.
+ *
+ * A versão é a última que esteve no ar (`superseded` já publicada, a mais
+ * recentemente retirada) — a MESMA regra de `ultimaVersaoQueEsteveNoAr`
+ * (`lib/ai/agents/despausar.ts`), que é o que "voltar a atender" republica.
+ * O número é o da VERSÃO, como no agente publicado.
+ */
+export async function loadSuggestionOnlyAgentConfig(
+  db: pg.Pool,
+  organizationId: string,
+  channelSessionId: string,
+): Promise<PublishedAgentConfig | null> {
+  const { rows } = await db.query<Row>(
+    `select ${SELECT_AGENT_CONFIG_COLUMNS}
+     from ai_agents a
+     join lateral (
+       select vv.*
+         from ai_agent_versions vv
+        where vv.agent_id = a.id
+          and vv.organization_id = a.organization_id
+          and vv.status = 'superseded'
+          and vv.published_at is not null
+        order by vv.superseded_at desc nulls last
+        limit 1
+     ) v on true
+     where a.organization_id = $1
+       and a.archived_at is null
+       and a.so_sugestao
+       and a.published_version_id is null
+       and v.channel_session_id = $2
+     order by a.priority desc, a.created_at asc
+     limit 1`,
+    [organizationId, channelSessionId],
+  );
+  const r = rows[0];
+  if (r === undefined) return null;
+  return mapAgentConfigRow(r);
+}
+
+/**
  * Variante por agent_id — usada pelo Intent Router (Fase 3): membros de
  * router (`ai_router_members.agent_id`) apontam pro agente diretamente, sem
  * vínculo com a channel_session do turno (quem tem o vínculo é o ROUTER, não

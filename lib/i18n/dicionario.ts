@@ -595,6 +595,12 @@ export const DICIONARIO: Traducoes = {
   "Este agente nunca esteve no ar. Abra o editor e publique uma versão.": {
     es: "Este agente nunca estuvo activo. Abra el editor y publique una versión.",
   },
+  "Este agente ainda não tem uma versão publicada para usar nas sugestões. Abra o editor e publique uma versão.": {
+    es: "Este agente aún no tiene una versión publicada para usar en las sugerencias. Abra el editor y publique una versión.",
+  },
+  "Este agente é do modelo antigo e não pode ficar só sugerindo respostas. Crie um agente novo para usar esse modo.": {
+    es: "Este agente es del modelo antiguo y no puede quedarse solo sugiriendo respuestas. Cree un agente nuevo para usar ese modo.",
+  },
   "Esta versão não existe mais. Recarregue a página.": {
     es: "Esta versión ya no existe. Recarga la página.",
   },
@@ -8809,6 +8815,22 @@ export const DICIONARIO: Traducoes = {
   "Não consegui apagar o histórico agora. Tente de novo.": { es: "No pude borrar el historial ahora. Inténtalo de nuevo." },
   "Você atingiu o limite de perguntas de hoje. Amanhã ele renova.": { es: "Alcanzaste el límite de preguntas de hoy. Mañana se renueva." },
   "Não consegui responder agora. Tente de novo em instantes.": { es: "No pude responder ahora. Inténtalo de nuevo en unos instantes." },
+  // ─── Agente que só sugere respostas (migration 0255) ───
+  "publicada. O agente continua só sugerindo respostas no Inbox.": { es: "publicada. El agente sigue solo sugiriendo respuestas en el Inbox." },
+  "Este agente está no modo \"Só sugere respostas\": a nova versão passa a escrever as sugestões do Inbox, e ele continua sem atender clientes.": { es: "Este agente está en el modo \"Solo sugiere respuestas\": la nueva versión pasa a escribir las sugerencias del Inbox, y él sigue sin atender clientes." },
+  "O agente voltou a atender clientes.": { es: "El agente volvió a atender clientes." },
+  "Voltar a atender clientes": { es: "Volver a atender clientes" },
+  "O agente agora só sugere respostas no Inbox.": { es: "El agente ahora solo sugiere respuestas en el Inbox." },
+  "Só sugerir respostas": { es: "Solo sugerir respuestas" },
+  "Responde sozinho aos clientes no WhatsApp e também sugere respostas no Inbox.": { es: "Responde solo a los clientes en WhatsApp y también sugiere respuestas en el Inbox." },
+  "Não fala com nenhum cliente. No Inbox, a equipe clica em Sugerir resposta, revisa o texto e envia.": { es: "No habla con ningún cliente. En el Inbox, el equipo hace clic en Sugerir respuesta, revisa el texto y lo envía." },
+  "Não atende clientes e não sugere respostas.": { es: "No atiende clientes y no sugiere respuestas." },
+  "Como este agente trabalha": { es: "Cómo trabaja este agente" },
+  "Atende clientes": { es: "Atiende clientes" },
+  "Só sugere respostas": { es: "Solo sugiere respuestas" },
+  "Colocar o agente para atender clientes?": { es: "¿Poner al agente a atender clientes?" },
+  "A partir de agora ele responde sozinho às mensagens que chegarem neste número de WhatsApp. As sugestões no Inbox continuam funcionando.": { es: "A partir de ahora responde solo a los mensajes que lleguen a este número de WhatsApp. Las sugerencias en el Inbox siguen funcionando." },
+  "Atender clientes": { es: "Atender clientes" },
 };
 
 /**

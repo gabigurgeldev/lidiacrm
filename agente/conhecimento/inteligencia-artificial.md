@@ -38,6 +38,14 @@ O grupo **Inteligência Artificial** reúne tudo que define quem atende por voc�
 1. Na lista de **Agentes**, abra o menu de ações do agente.
 2. Escolha **Pausar** (ele para de responder; **Despausar** volta), **Duplicar**, **Renomear** ou **Arquivar**.
 
+### Usar o agente só para sugerir respostas (sem atender clientes)
+Serve para quem não quer a IA conversando com os clientes, mas quer ajuda para escrever as respostas.
+1. Abra o agente em **Inteligência Artificial › Agentes**.
+2. No topo, em **Como este agente trabalha**, escolha **Só sugere respostas**. (Também dá pelo menu de ações da lista: **Só sugerir respostas**.)
+3. Pronto: o agente não responde nenhum cliente sozinho. No Inbox, a equipe clica em **Sugerir resposta**, revisa o texto e envia.
+4. Para ele voltar a atender, escolha **Atende clientes** e confirme. **Pausado** desliga tudo: não atende e não sugere.
+5. Se você publicar uma versão nova no editor com o agente nesse modo, ele continua só sugerindo — a versão nova passa a escrever as sugestões.
+
 ### Corrigir um comportamento do agente
 1. No agente, clique em **Corrigir com IA**.
 2. Em **Conte o problema**, descreva o que está errado (ex.: está dando desconto sem autorização).
