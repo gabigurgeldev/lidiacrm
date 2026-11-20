@@ -26,6 +26,10 @@ const MENSAGENS: Record<string, string> = {
   agent_archived: "Este agente está arquivado e não pode ser alterado.",
   agent_not_found: "Este agente não existe mais.",
   nada_para_despausar: "Este agente nunca esteve no ar. Abra o editor e publique uma versão.",
+  nada_para_sugerir:
+    "Este agente ainda não tem uma versão publicada para usar nas sugestões. Abra o editor e publique uma versão.",
+  modo_indisponivel:
+    "Este agente é do modelo antigo e não pode ficar só sugerindo respostas. Crie um agente novo para usar esse modo.",
   not_found: "Este agente não existe mais.",
   version_not_found: "Esta versão não existe mais. Recarregue a página.",
   version_invalid_state: "Esta versão já foi publicada. Recarregue a página para ver a mais recente.",

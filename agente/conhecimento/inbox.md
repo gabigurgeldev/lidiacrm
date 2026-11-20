@@ -34,6 +34,11 @@ No Inbox, a lista de conversas tem as abas **Fila**, **Minhas**, **Todas**, **Fe
 2. Continue digitando para filtrar e escolha a resposta. Ela entra no campo para você revisar antes de enviar.
 3. Também dá para abrir pelo menu de opções do campo de texto, em **Mensagens prontas**.
 
+### Pedir uma sugestão de resposta à IA
+1. Abra a conversa e, no botão de opções ao lado do campo de texto, escolha **Sugerir resposta**.
+2. A sugestão entra no campo de mensagem para você revisar e editar. Nada é enviado sem você clicar em **Enviar**.
+3. Funciona quando o número tem um agente de IA atendendo ou no modo **Só sugere respostas** (em **Inteligência Artificial › Agentes**). Esse modo é para quem quer a ajuda da IA para escrever, sem ela conversar com os clientes.
+
 ### Criar uma resposta rápida
 1. Abra **Atendimento › Respostas rápidas** e clique em **Novo template**.
 2. Preencha **Título**, **Mensagem** e, se quiser, um **Atalho (opcional)**. Use `{{primeiro_nome}}` para o cliente receber o próprio nome.

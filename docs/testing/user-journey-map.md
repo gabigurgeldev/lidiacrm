@@ -1363,6 +1363,27 @@ troca o contêiner; HEVC é reencodado uma vez, e o upload demora mais nesse cas
 | J43.6 | Pela tela, num ambiente fresco com WAHA real: vídeo de 30 s e vídeo HEVC chegam uma vez ao celular | **NÃO MEDIDO** — esta máquina não tem Docker nem ffmpeg; é o primeiro passo de quem retomar |
 | J43.7 | Vídeo de 30–50 MB: o WhatsApp aceita como vídeo pelo NOWEB dentro dos 60 s do canal | **NÃO MEDIDO** — depende da banda da VPS e do limite do WhatsApp, que não foi medido |
 
+## J44 — Agente que só sugere respostas no Inbox, sem atender clientes (2026-11-20)
+
+Pedido de cliente em produção: a empresa não quer a IA falando com o cliente,
+mas quer o **Sugerir resposta** do Inbox. Não havia como: o rascunho procurava o
+agente PUBLICADO no número, e publicado é o que atende. Pausar desligava as duas
+coisas; o dono republicava para ter a sugestão e o agente voltava a responder.
+
+**Desenho:** o modo "só sugere" é, para o motor, um agente PAUSADO
+(`published_version_id` nulo) — nenhuma porta de atendimento muda. Só o rascunho
+do Inbox lê `ai_agents.so_sugestao` (migration 0255). Publicar com o modo ligado
+mantém o modo (publica e retira na mesma transação).
+
+| # | Caso | Prova |
+|---|---|---|
+| J44.1 | Função SQL: entrar no modo a partir de atendendo/pausado, publicar mantendo, voltar a atender, org errada, rollback em falha, ACL só `service_role` | **PASS** em Postgres embutido (PGlite 0.5.17 / PG 17, roteiro fora do repo) com a `fn_publish_ai_agent_version` real do baseline — 16/16. O baseline INTEIRO (install + update, pg15) é do job `invariants` |
+| J44.2 | CHECK: publicar pela função antiga um agente no modo falha em vez de pô-lo no ar | **PASS** (idem) |
+| J44.3 | Rascunho usa o agente "só sugere" quando não há agente no ar; o que está no ar tem precedência | **PASS** unit (`lib/agent-engine/agent/draft-reply.test.ts`) |
+| J44.4 | Publicar no editor com o modo ligado não volta a atender; despausar volta e sai do modo | **PASS** unit (`lib/ai/agents/modo.test.ts`) |
+| J44.5 | O carregador do modo só é usado pelo rascunho; as portas de atendimento seguem por versão publicada | **PASS** unit (`tests/unit/agente-so-sugere-nao-atende.test.ts`) — sabotado: tirar a trava do carregador deixa 5 casos vermelhos |
+| J44.6 | Pela tela: escolher "Só sugere respostas", pedir sugestão no Inbox, conferir que mensagem do cliente não recebe resposta | **NÃO MEDIDO** — esta máquina não tem Docker para o ambiente fresco |
+
 ---
 
 ## J7 — Exploração completa `[P2]`

@@ -20,6 +20,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   draft: AgentVersionRow;
   published: AgentVersionRow | null;
+  /** O agente só sugere respostas (migration 0255): publicar NÃO o põe para atender. */
+  soSugestao?: boolean;
   onConfirm: () => void;
   isPending: boolean;
 }
@@ -35,6 +37,7 @@ export function PublishConfirmDialog({
   onOpenChange,
   draft,
   published,
+  soSugestao = false,
   onConfirm,
   isPending,
 }: Props) {
@@ -54,9 +57,17 @@ export function PublishConfirmDialog({
             {draft.version_number}?
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {t("Esta versão se tornará a ativa no atendimento. A versão atual (")}
-            {published ? `v${published.version_number}` : t("nenhuma")}
-            {t(") deixa de valer.")}
+            {soSugestao ? (
+              t(
+                "Este agente está no modo \"Só sugere respostas\": a nova versão passa a escrever as sugestões do Inbox, e ele continua sem atender clientes.",
+              )
+            ) : (
+              <>
+                {t("Esta versão se tornará a ativa no atendimento. A versão atual (")}
+                {published ? `v${published.version_number}` : t("nenhuma")}
+                {t(") deixa de valer.")}
+              </>
+            )}
           </AlertDialogDescription>
         </AlertDialogHeader>
 

@@ -606,6 +606,12 @@ export const AUDIT_ACTIONS = [
   // contagens (`invoices`, `subscriptions`, `enqueued`, `sent`), a fase do
   // cursor e se foi a última página — nenhum dado do titular.
   "backoffice.sincronizacao_run",
+  // Agente passou a SÓ SUGERIR respostas no Inbox (migration 0255): saiu do
+  // atendimento, segue servindo o rascunho. Metadata: `{ version_id,
+  // previous_version_id }` — a versão que sugere e a que estava no ar.
+  // Sair do modo audita pelo caminho de sempre: `ai_agent.published` (voltar a
+  // atender) ou `ai_agent.paused`, com `so_sugestao_desligado: true`.
+  "ai_agent.so_sugestao_ligado",
 ] as const;
 
 /** Um código de auditoria. Derivado de `AUDIT_ACTIONS` — não redigite a lista. */

@@ -21,6 +21,8 @@ export interface AgentRow {
   kind?: "rag_bot" | "mcp_agent" | null;
   priority?: number | null;
   published_version_id?: string | null;
+  /** Modo "só sugere respostas" (migration 0255): fora do atendimento, servindo o rascunho do Inbox. */
+  so_sugestao?: boolean | null;
   /**
    * Provedor e modelo da versão PUBLICADA — o que de fato responde. Vem por join
    * na lista, e é opcional porque nem todo chamador precisa dele. Sem isto, a

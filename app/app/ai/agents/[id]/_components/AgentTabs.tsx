@@ -23,6 +23,7 @@ import { RunsTable } from "./RunsTable";
 import { UsoDasCapacidades } from "./UsoDasCapacidades";
 import { VersionHistory } from "./VersionHistory";
 import { ProposalsPanel } from "./ProposalsPanel";
+import { ModoDoAgente } from "./ModoDoAgente";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 import type { AgentVersionRow } from "@/hooks/ai/useAgentVersions";
 import type { CredentialRow } from "@/hooks/ai/useCredentials";
@@ -99,6 +100,8 @@ export function AgentTabs(props: Props) {
       onValueChange={(v) => setTab(v as Aba)}
       className="flex flex-col gap-4"
     >
+      {/* Atende clientes / Só sugere respostas / Pausado — visível em todas as abas. */}
+      <ModoDoAgente agent={props.agent} readOnly={props.readOnly} />
       <div className="flex flex-wrap items-center justify-between gap-3">
       {/* No segmentado do kit de Ajustes. */}
       <TabsList className={SEGMENTADO_ABAS}>

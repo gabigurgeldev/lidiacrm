@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { estadoDoAgente } from "@/lib/ai/agents/no-ar";
 import type { AgentRow } from "@/hooks/ai/useAgent";
 
-export type AgentStatus = "published" | "draft" | "paused" | "archived" | "invalid";
+export type AgentStatus = "published" | "suggesting" | "draft" | "paused" | "archived" | "invalid";
 
 /**
  * "Publicado" tem que significar "está no ar", e quem decide isso é o runtime.
@@ -37,6 +37,9 @@ export function deriveAgentStatus(agent: AgentRow): AgentStatus {
     case "no_ar":
     case "no_ar_legado":
       return "published";
+    // Fora do atendimento, servindo o "Sugerir resposta" do Inbox (migration 0255).
+    case "so_sugestao":
+      return "suggesting";
     case "parado":
       return "draft";
   }
@@ -44,6 +47,7 @@ export function deriveAgentStatus(agent: AgentRow): AgentStatus {
 
 const LABEL: Record<AgentStatus, string> = {
   published: "Publicado",
+  suggesting: "Só sugere respostas",
   draft: "Rascunho",
   paused: "Pausado",
   archived: "Arquivado",
@@ -52,6 +56,7 @@ const LABEL: Record<AgentStatus, string> = {
 
 const VARIANT: Record<AgentStatus, "default" | "secondary" | "outline" | "destructive"> = {
   published: "default",
+  suggesting: "secondary",
   draft: "secondary",
   paused: "outline",
   archived: "outline",

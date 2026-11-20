@@ -250,7 +250,7 @@ export async function saveAgentDraftAction(
 export async function publishAgentAction(
   agentId: string,
   versionId: string,
-): Promise<ActionResult<{ version_id: string; previous_version_id: string | null }>> {
+): Promise<ActionResult<{ version_id: string; previous_version_id: string | null; so_sugestao: boolean }>> {
   if (!UUID_RX.test(agentId) || !UUID_RX.test(versionId)) {
     return { ok: false, error: "invalid_request" };
   }
@@ -298,14 +298,23 @@ export async function publishAgentAction(
     resourceType: "ai_agent",
     resourceId: agentId,
     requestId,
-    metadata: { version_id: result.version_id, previous_version_id: result.previous_version_id },
+    metadata: {
+      version_id: result.version_id,
+      previous_version_id: result.previous_version_id,
+      // Publicada no modo "só sugere": fora do ar, servindo o rascunho do Inbox.
+      ...(result.so_sugestao ? { so_sugestao: true } : {}),
+    },
   });
 
   revalidatePath(`/app/ai/agents/${agentId}`);
   revalidatePath("/app/ai/agents");
   return {
     ok: true,
-    data: { version_id: result.version_id, previous_version_id: result.previous_version_id },
+    data: {
+      version_id: result.version_id,
+      previous_version_id: result.previous_version_id,
+      so_sugestao: result.so_sugestao === true,
+    },
   };
 }
 
