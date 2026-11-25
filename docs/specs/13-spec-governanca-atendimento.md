@@ -331,6 +331,13 @@ a migration `20260716120000_0030_config_rls_role_policies.sql` aplica
   consome com claim + dedup (at-least-once seguro: conversa que já tem dono nunca
   é reatribuída pelo replay).
 - Sem elegível ⇒ fila (visível, com posição) + re-agenda com backoff.
+  **Exceção — fora do horário:** se há quem esteja disponível e com folga e só
+  o horário o impede (almoço, noite, fim de semana), o evento volta na abertura
+  da primeira janela (`nextScheduleOpening` em `lib/routing/eligibility.ts`) e
+  NÃO gasta tentativa de `max_retries`. Antes, 5 × 60 s matavam todo lead que
+  chegava fora do expediente, e evento morto não é reavaliado nunca mais.
+  Conversa encerrada sem dono (`resolved`/`closed`/`archived`) quando o evento
+  volta é descartada (`skipped_not_queued`).
 - **Notificação de atribuição** (decisão G5-03): o repo NÃO tem sistema de
   notificação in-app (só `notification_prefs` = preferências; sem tabela de
   notificação nem entrega de toast). A notificação ao novo dono é, portanto, o

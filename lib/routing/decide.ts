@@ -22,8 +22,12 @@ export type RoutingAction =
   | { kind: "assign"; userId: string }
   /** Marca o evento consumido sem atribuir (já tem dono, modo manual, modo não suportado). */
   | { kind: "skip"; reason: string }
-  /** Sem elegível: reenfileira com backoff (fica na fila até haver quem atenda). */
-  | { kind: "requeue"; nextAttemptAt: string; attempts: number }
+  /**
+   * Sem elegível: reenfileira (fica na fila até haver quem atenda).
+   * `aguardandoHorario` = a volta foi marcada para a abertura de uma janela, e
+   * a tentativa NÃO foi gasta — ver `nextOpeningAt` em `DecideRoutingInput`.
+   */
+  | { kind: "requeue"; nextAttemptAt: string; attempts: number; aguardandoHorario?: true }
   /** Estourou max_retries sem elegível: desiste do evento; conversa fica na fila (G5-03 mostra). */
   | { kind: "dead"; reason: string };
 
@@ -37,6 +41,13 @@ export interface DecideRoutingInput {
   /** attempts atual do event_log (antes deste processamento). */
   attempts: number;
   now: Date;
+  /**
+   * Quando alguém disponível e com folga entra no horário (`loadRoutingPool`).
+   * Sem elegível e com abertura marcada, o evento volta NA abertura e não gasta
+   * tentativa: fora do horário é espera com fim conhecido, não falha. Ausente ou
+   * `null` = o caminho antigo, backoff + tentativa.
+   */
+  nextOpeningAt?: Date | null;
 }
 
 /**
@@ -130,6 +141,20 @@ export function decideRouting(input: DecideRoutingInput): RoutingAction {
 
   const picked = selectRoundRobin(input.eligibles);
   if (picked) return { kind: "assign", userId: picked };
+
+  // Sem elegível porque é almoço, noite ou antes do expediente: volta quando a
+  // primeira janela abrir, sem contar tentativa. Contando, `max_retries` × `backoff`
+  // (5 min no default) mataria todo lead que chega fora do horário — e evento
+  // morto não é reavaliado nunca mais: a conversa fica sem dono para sempre.
+  const abre = input.nextOpeningAt ?? null;
+  if (abre !== null && abre.getTime() > input.now.getTime()) {
+    return {
+      kind: "requeue",
+      nextAttemptAt: abre.toISOString(),
+      attempts: input.attempts,
+      aguardandoHorario: true,
+    };
+  }
 
   // Sem elegível (acceptance 4): re-agenda com backoff da config (não hardcoded).
   const nextAttempts = input.attempts + 1;

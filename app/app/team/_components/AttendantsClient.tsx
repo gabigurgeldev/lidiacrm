@@ -90,6 +90,22 @@ function summarizeSchedule(windows: ScheduleWindow[], t: (texto: string) => stri
 function StatusBadge({ attendant, now }: { attendant: Attendant; now: Date }) {
   const t = useT();
   const a = attendant.availability;
+  // Lotada vem ANTES de Online. A distribuição só entrega a quem tem carga
+  // abaixo da capacidade, e este selo dizia "Online" para quem estava com 44
+  // conversas e capacidade 5: o gestor via todas online, a distribuição não
+  // entregava a ninguém, e nada na tela ligava uma coisa à outra (medido numa
+  // org de produção, em que o rodízio parou no primeiro dia).
+  if (a?.is_available && (a.current_load ?? 0) >= (a.capacity ?? 5)) {
+    return (
+      <Badge
+        variant="warning"
+        title={t("Atingiu a capacidade: não recebe conversa nova da distribuição. Aumente a capacidade ou encerre conversas.")}
+        data-testid="atendente-lotada"
+      >
+        {t("Lotada")}
+      </Badge>
+    );
+  }
   // Quem é "sempre disponível" não manda sinal de vida — e não precisa: o cron
   // não a derruba. Medir o sinal aqui a mostraria offline enquanto o rodízio a
   // escolhe.
