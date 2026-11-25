@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: Devolver a conversa à IA passou a fechar o aviso da passagem — e a próxima passagem volta a avisar o dono
+titulo: Devolver a conversa à IA fecha o aviso da passagem, e a próxima volta a avisar o dono
 ---
 
 Quando a IA passa uma conversa para a equipe, ela abre um aviso na Central e

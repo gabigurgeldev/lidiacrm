@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: Número conectado há meses deixa de ser tratado como novo, e o follow-up no limite do dia é adiado em vez de sumir
+titulo: Número antigo deixa de ser tratado como novo, e o follow-up no limite do dia é adiado em vez de sumir
 ---
 
 Todo número de WhatsApp passa por um aquecimento contra banimento: nos

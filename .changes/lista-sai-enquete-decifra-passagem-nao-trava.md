@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: A lista do WhatsApp volta a sair, o voto da enquete passa a ser lido e a passagem não trava por motivo longo
+titulo: A lista do WhatsApp volta a sair, o voto da enquete é lido e a passagem não trava
 ---
 
 **Lista.** Toda lista mandada pelo número por QR voltava recusada pelo

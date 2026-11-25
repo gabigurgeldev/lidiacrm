@@ -5,7 +5,9 @@ titulo: A base de conhecimento do agente funciona com a chave da OpenRouter
 ---
 
 Quem cadastrou só a chave da OpenRouter em **IA › Credenciais** agora consegue
-subir material para o agente: ele é preparado com o mesmo modelo de antes
+subir material para o agente.
+
+Ele é preparado com o mesmo modelo de antes
 (`openai/text-embedding-3-small`), servido pela OpenRouter. Antes, o material
 ficava esperando uma chave da OpenAI para sempre.
 

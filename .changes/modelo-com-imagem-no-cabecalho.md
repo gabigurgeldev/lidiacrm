@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: Modelo com imagem no cabeçalho era recusado em toda mensagem pela instância oficial importada por chave de conta
+titulo: Modelo com imagem no cabeçalho volta a sair pela instância oficial importada por chave de conta
 ---
 
 O envio por modelo aprovado nessa conexão mandava o cabeçalho sempre como texto,
