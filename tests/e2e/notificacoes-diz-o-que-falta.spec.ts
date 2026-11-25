@@ -198,4 +198,66 @@ test.describe("Notificações — a tela conta a verdade sobre esta instalação
 
     await captura(page, "02-controle-presente-com-motivo");
   });
+
+  test("som de aviso: vem ligado, desliga, continua desligado depois de recarregar, e o Testar toca", async ({
+    page,
+  }) => {
+    // O som não depende de Push nem da permissão do navegador (que aqui é
+    // `denied`, sempre — ver o caso acima). É justamente por isso que ele é
+    // mensurável neste ambiente: se o "Testar som" tocar com a permissão
+    // negada, a dependência que deixava "No sistema" mudo acabou.
+    //
+    // Conta os osciladores criados pelo Web Audio, antes de qualquer script do
+    // app: `playSound` cria dois por bip.
+    await page.addInitScript(() => {
+      const w = window as unknown as { __osciladores: number; AudioContext: typeof AudioContext };
+      w.__osciladores = 0;
+      const Original = w.AudioContext;
+      if (!Original) return;
+      w.AudioContext = class extends Original {
+        createOscillator(): OscillatorNode {
+          w.__osciladores += 1;
+          return super.createOscillator();
+        }
+      } as typeof AudioContext;
+    });
+
+    const quem = creds.users[PAPEL_SEM_MFA]!;
+    await login(page, quem.email, creds.password);
+    await page.goto("/app/settings/notifications");
+
+    const som = page.getByTestId("som-de-aviso");
+    await expect(som).toBeVisible();
+
+    try {
+      // 1 · Quem nunca mexeu ouve: vem ligado.
+      await expect(som).toHaveAttribute("aria-checked", "true");
+
+      // 2 · O Testar toca, com a permissão de notificação NEGADA.
+      await page.getByTestId("som-de-aviso-testar").click();
+      await expect
+        .poll(() => page.evaluate(() => (window as unknown as { __osciladores: number }).__osciladores))
+        .toBeGreaterThanOrEqual(2);
+
+      // 3 · Desligar é da PESSOA e sobrevive ao recarregar (vem do servidor,
+      //     não do localStorage deste navegador).
+      await som.click();
+      await expect(som).toHaveAttribute("aria-checked", "false");
+      await expect(som).toBeEnabled();
+      await page.reload();
+      await expect(page.getByTestId("som-de-aviso")).toHaveAttribute("aria-checked", "false");
+      await captura(page, "03-som-desligado");
+    } finally {
+      // Deixa a conta de teste como estava: os outros specs contam com o padrão.
+      const s2 = page.getByTestId("som-de-aviso");
+      if ((await s2.getAttribute("aria-checked")) === "false") {
+        await s2.click();
+        await expect(s2).toHaveAttribute("aria-checked", "true");
+        await expect(s2).toBeEnabled();
+      }
+    }
+    await page.reload();
+    await expect(page.getByTestId("som-de-aviso")).toHaveAttribute("aria-checked", "true");
+  });
 });
+

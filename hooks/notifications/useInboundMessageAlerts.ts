@@ -18,7 +18,7 @@ function tabFocused(): boolean {
 }
 
 /** postgres_changes entrega `{ new }`; alguns mocks aninham em `payload`. */
-function rowFromRealtime(payload: unknown): Record<string, unknown> | null {
+export function rowFromRealtime(payload: unknown): Record<string, unknown> | null {
   if (!payload || typeof payload !== "object") return null;
   const p = payload as {
     tipo?: unknown;
@@ -38,7 +38,7 @@ function previewFromMessage(row: { type?: unknown; body?: unknown }): string {
   return body || "Nova mensagem";
 }
 
-async function contactNotifyBits(contactId: string): Promise<{ title: string; icon?: string }> {
+export async function contactNotifyBits(contactId: string): Promise<{ title: string; icon?: string }> {
   const supabase = createClient();
   const { data } = await supabase
     .from("contacts")
@@ -75,6 +75,9 @@ async function contactIdFromRow(
   const c = data as { contact_id?: string | null } | null;
   return typeof c?.contact_id === "string" ? c.contact_id : null;
 }
+
+/** Um bip por cliente a cada 10 s, por mais mensagens que ele mande nesse meio-tempo. */
+export const JANELA_DO_SOM_POR_CONTATO_MS = 10_000;
 
 export function useInboundMessageAlerts(): void {
   const orgId = useActiveOrg()?.orgId ?? null;
@@ -113,6 +116,13 @@ export function useInboundMessageAlerts(): void {
         tag: conversationId ?? undefined,
         href: conversationId ? `/app/inbox?id=${conversationId}` : undefined,
         icon: bits.icon,
+        // Cada mensagem é um evento (as abas disputam o id), mas o mesmo
+        // cliente mandando cinco seguidas toca uma vez a cada 10 s. O grupo
+        // por CONTATO é o mesmo do aviso de lead novo: a mensagem e a
+        // atribuição do mesmo lead não bipam em dobro.
+        chaveDoSom: typeof row.id === "string" ? row.id : undefined,
+        grupoDoSom: contactId ? `contato:${contactId}` : undefined,
+        janelaDoSomMs: JANELA_DO_SOM_POR_CONTATO_MS,
       });
     })();
   }, []);

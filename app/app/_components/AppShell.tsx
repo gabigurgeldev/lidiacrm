@@ -6,6 +6,8 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { AppHeader } from "@/components/shell/header/AppHeader";
 import { useInboundMessageAlerts } from "@/hooks/notifications/useInboundMessageAlerts";
 import { useCrmAlerts } from "@/hooks/notifications/useCrmAlerts";
+import { useNovaConversaAlerts } from "@/hooks/notifications/useNovaConversaAlerts";
+import { useSomDeAviso } from "@/hooks/notifications/useSomDeAviso";
 import { useNotifyOpenFromServiceWorker } from "@/lib/notifications/notify_open";
 import { alturaDaJanelaEm, cabecalhoEscondidoEm } from "@/lib/navigation/casca";
 import type { NavGroupId } from "@/lib/navigation/registry";
@@ -25,7 +27,9 @@ interface AppShellProps {
 }
 
 export function AppShell({ sidebarCollapsed, gruposAbertosSalvos, agente = null, children }: AppShellProps) {
+  useSomDeAviso();
   useInboundMessageAlerts();
+  useNovaConversaAlerts();
   useCrmAlerts();
   useNotifyOpenFromServiceWorker();
   const pathname = usePathname();

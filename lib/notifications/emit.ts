@@ -14,6 +14,13 @@ export interface EmitNotificationInput {
   icon?: string;
   sound?: SoundId;
   force?: boolean;
+  /**
+   * Notificação muda: nem o tom da página nem o som do sistema operacional.
+   * O som agora é do `tocarAviso` (`lib/notifications/som.ts`), que respeita a
+   * preferência da pessoa e toca numa aba só — tocar aqui também seria bip em
+   * dobro, ou bip para quem desligou o som.
+   */
+  silenciar?: boolean;
 }
 
 export function truncateNotifyBody(text: string): string {
@@ -53,14 +60,14 @@ export function emitNotification(input: EmitNotificationInput): void {
   const opts: NotificationOptions & { renotify?: boolean } = {
     body,
     tag,
-    silent: false,
+    silent: !!input.silenciar,
     renotify: true,
     icon,
     badge: marca,
     data: { href },
   };
 
-  if (typeof document !== "undefined" && document.visibilityState === "visible") {
+  if (!input.silenciar && typeof document !== "undefined" && document.visibilityState === "visible") {
     try {
       playSound(sound, 1.0);
     } catch {

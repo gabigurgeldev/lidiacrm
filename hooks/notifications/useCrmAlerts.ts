@@ -43,8 +43,16 @@ export function useCrmAlerts(): void {
       const ownerAntes = str(antigo?.owner_user_id);
       const status = str(novo.status);
       const statusAntes = str(antigo?.status);
+      // "Mudou?" só tem resposta quando o registro ANTIGO traz o campo. Com
+      // replica identity default, o `old` de um UPDATE leva só a chave
+      // primária: `ownerAntes`/`statusAntes` saem nulos e TODA edição de um
+      // lead meu pareceria "acabou de ser atribuído a você". Com o som de aviso
+      // tocando em todo aviso, isso viraria um bip a cada edição. O "lead novo
+      // para você" confiável é `useNovaConversaAlerts`.
+      const sabeODonoDeAntes = antigo !== null && "owner_user_id" in antigo;
+      const sabeOStatusDeAntes = antigo !== null && "status" in antigo;
 
-      if (owner && owner === user.id && owner !== ownerAntes) {
+      if (sabeODonoDeAntes && owner && owner === user.id && owner !== ownerAntes) {
         entregarAviso({
           category: "lead_assigned",
           kind: "lead_assigned",
@@ -52,9 +60,13 @@ export function useCrmAlerts(): void {
           body: title,
           tag: str(novo.id) ?? undefined,
           href,
+          // Mesmo assunto do aviso de conversa nova: o lead e a conversa do
+          // mesmo cliente, atribuídos juntos pelo rodízio, bipam uma vez.
+          grupoDoSom: str(novo.contact_id) ? `contato:${str(novo.contact_id)}` : undefined,
+          janelaDoSomMs: 60_000,
         });
       }
-      if (owner === user.id && status === "won" && statusAntes !== "won") {
+      if (sabeOStatusDeAntes && owner === user.id && status === "won" && statusAntes !== "won") {
         entregarAviso({
           category: "lead_won",
           kind: "lead_won",
@@ -64,7 +76,7 @@ export function useCrmAlerts(): void {
           href,
         });
       }
-      if (owner === user.id && status === "lost" && statusAntes !== "lost") {
+      if (sabeOStatusDeAntes && owner === user.id && status === "lost" && statusAntes !== "lost") {
         entregarAviso({
           category: "lead_lost",
           kind: "lead_lost",

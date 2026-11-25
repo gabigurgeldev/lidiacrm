@@ -84,6 +84,13 @@ export interface AuthUser {
   avatar_url: string | null;
   is_platform_admin: boolean;
   /**
+   * Tocar som quando chega mensagem ou lead novo — de
+   * `user_metadata.notify_sound`, preferência DA PESSOA (segue em qualquer
+   * computador). Ausente = ligado: só `false` explícito desliga. Opcional no
+   * tipo para quem monta um AuthUser à mão (testes) não precisar saber dele.
+   */
+  som_de_aviso?: boolean;
+  /**
    * Idioma da interface, de `user_metadata.locale`.
    *
    * Vem no AuthUser e não numa consulta própria porque toda tela precisa dele
