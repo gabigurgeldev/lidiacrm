@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EntradaDeMensagem } from "@/lib/channels/pos-entrada";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
+import { rotearConversaAgora } from "@/lib/routing/worker";
 
 /**
  * OS EFEITOS QUE TRANSFORMAM UMA MENSAGEM EM TRABALHO.
@@ -41,6 +42,9 @@ vi.mock("@/lib/logger", () => ({
 vi.mock("@/lib/dev/kick-local-pipeline", () => ({
   acelerarPipelineDeEventos: vi.fn(async () => {}),
   kickLocalPipeline: vi.fn(async () => {}),
+}));
+vi.mock("@/lib/routing/worker", () => ({
+  rotearConversaAgora: vi.fn(async () => ({ batch_size: 0, outcomes: {}, errors: [] })),
 }));
 
 /** A sequência do que ACONTECEU — é o que os casos de ordem inspecionam. */
@@ -317,6 +321,34 @@ describe("os dois canais usam o mesmo passo", () => {
         texto: "oi, tudo bem?",
       }),
     );
+  });
+
+  it("distribui a conversa ANTES do pipeline pesado (lead novo aparece em segundos)", async () => {
+    // Nas orgs "só as minhas" a conversa nova só aparece para a atendente
+    // quando ganha dono. Com o rodízio atrás do dreno de 50 eventos (IA no
+    // meio), ou só no cron de 1 minuto, ela levava mediana de 33 s, até 80 s,
+    // medido em produção em 2026-11-25.
+    vi.mocked(rotearConversaAgora).mockImplementation(async () => {
+      sequencia.push("rodizio");
+      return { batch_size: 1, outcomes: {} as never, errors: [] };
+    });
+    vi.mocked(acelerarPipelineDeEventos).mockImplementation(async () => {
+      sequencia.push("acelerar-followup");
+    });
+    await rodar();
+    expect(rotearConversaAgora).toHaveBeenCalledWith("org-1", expect.any(String));
+    const rodizio = sequencia.indexOf("rodizio");
+    expect(rodizio).toBeGreaterThanOrEqual(0);
+    expect(sequencia.indexOf("acelerar-followup")).toBeGreaterThan(rodizio);
+  });
+
+  it("rodízio imediato que falha não segura o resto (o cron retoma)", async () => {
+    vi.mocked(rotearConversaAgora).mockRejectedValueOnce(new Error("pool caiu"));
+    vi.mocked(acelerarPipelineDeEventos).mockImplementation(async () => {
+      sequencia.push("acelerar-followup");
+    });
+    await rodar();
+    expect(sequencia).toContain("acelerar-followup");
   });
 
   it("avança o follow-up ANTES de acordar o agente", async () => {

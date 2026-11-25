@@ -79,6 +79,18 @@ interface Opts<T> {
 export const INTERVALO_COM_CANAL_ASSINADO_MS = 5 * 60_000;
 
 /**
+ * O Inbox confere a cada 1 minuto, e não a cada 5, mesmo com o canal assinado.
+ *
+ * No kanban e no dossiê, 5 minutos de atraso num canal assinado e mudo custam
+ * pouco. No Inbox custam o cliente: a atendente olha a tela, não vê a mensagem
+ * que o celular já mostrou, e aprende a responder pelo WhatsApp (reclamação de
+ * cliente em 2026-11-25). Com 1 minuto, um canal mudo deixa a tela no máximo um
+ * minuto atrás. Custa uma leitura por minuto por aba de Inbox aberta, menos que
+ * os 45 s que o Inbox fazia antes de existir a redução por canal assinado.
+ */
+export const INTERVALO_DO_INBOX_COM_CANAL_ASSINADO_MS = 60_000;
+
+/**
  * ⚠️ NÃO É "só um refetch periódico com outro nome". A diferença é o
  * COMPARADOR: um refetch periódico esconde a perda (o dado volta e ninguém sabe
  * que faltou); este a DENUNCIA, porque compara o antes com o depois e sabe se o

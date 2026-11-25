@@ -83,7 +83,7 @@ const clienteFalso = {
 
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => clienteFalso }));
 
-const { runRoutingWorker } = await import("@/lib/routing/worker");
+const { runRoutingWorker, rotearConversaAgora } = await import("@/lib/routing/worker");
 const { ESPERA_NA_FILA_SEGUNDOS } = await import("@/lib/routing/decide");
 
 const ORG = "11111111-1111-4111-8111-111111111111";
@@ -98,6 +98,8 @@ function semeia({ attempts, atendenteDisponivel }: { attempts: number; atendente
       id: "ev-1",
       organization_id: ORG,
       event_type: "conversation.routing_requested",
+      entity_kind: "conversation",
+      entity_id: CONVERSA,
       status: "pending",
       attempts,
       next_attempt_at: null,
@@ -186,5 +188,47 @@ describe("worker de rodízio — sem ninguém para receber, a conversa espera", 
       ["next_attempt_at", { ascending: true, nullsFirst: true }],
       ["created_at", { ascending: true }],
     ]);
+  });
+});
+
+describe("rotearConversaAgora — distribui na chegada, sem esperar o cron", () => {
+  it("processa SÓ o evento da conversa que chegou, filtrando org e entidade", async () => {
+    semeia({ attempts: 0, atendenteDisponivel: true });
+    const OUTRA = "44444444-4444-4444-8444-444444444444";
+    banco.event_log!.push({
+      ...banco.event_log![0]!,
+      id: "ev-outra",
+      entity_id: OUTRA,
+      payload: { conversation_id: OUTRA, organization_id: ORG },
+    });
+    banco.conversations!.push({ ...banco.conversations![0]!, id: OUTRA });
+
+    const resumo = await rotearConversaAgora(ORG, CONVERSA);
+
+    expect(resumo.batch_size).toBe(1);
+    expect(resumo.outcomes.assigned).toBe(1);
+    expect(banco.conversations!.find((c) => c.id === CONVERSA)!.assigned_to_user_id).toBe(ATENDENTE);
+    // A outra conversa fica para o cron — e o evento dela, intocado.
+    expect(banco.conversations!.find((c) => c.id === OUTRA)!.assigned_to_user_id).toBeNull();
+    expect(banco.event_log!.find((e) => e.id === "ev-outra")!.status).toBe("pending");
+
+    const puxada = consultas.find((c) => c.tabela === "event_log" && c.op === "select");
+    expect(puxada?.filtros).toEqual(
+      expect.arrayContaining([
+        ["eq", "organization_id", ORG],
+        ["eq", "entity_kind", "conversation"],
+        ["eq", "entity_id", CONVERSA],
+      ]),
+    );
+  });
+
+  it("evento já pego pelo cron (processing) ⇒ não faz nada", async () => {
+    semeia({ attempts: 0, atendenteDisponivel: true });
+    banco.event_log![0]!.status = "processing";
+
+    const resumo = await rotearConversaAgora(ORG, CONVERSA);
+
+    expect(resumo.batch_size).toBe(0);
+    expect(rpcs).toHaveLength(0);
   });
 });

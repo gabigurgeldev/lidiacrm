@@ -3,7 +3,10 @@ import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { useInvalidacaoAgrupada } from "@/hooks/realtime/useInvalidacaoAgrupada";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
-import { useRefetchDeSeguranca } from "@/hooks/realtime/useRefetchDeSeguranca";
+import {
+  INTERVALO_DO_INBOX_COM_CANAL_ASSINADO_MS,
+  useRefetchDeSeguranca,
+} from "@/hooks/realtime/useRefetchDeSeguranca";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Conversation } from "@/lib/types/messaging";
@@ -212,9 +215,11 @@ export function useConversationsRealtime(
       return `${conversas.length}:${maior}`;
     },
     ultimaEntrega,
-    // Canal assinado: 45s vira 5 min. A lista é a leitura mais cara do inbox
-    // e cada aba aberta a fazia, com o Realtime entregando normalmente.
+    // Canal assinado: 45s vira 1 min. A lista é a leitura mais cara do inbox,
+    // por isso não fica nos 45s; e não fica nos 5 min das outras telas porque
+    // aqui canal mudo é lead novo que a atendente não vê.
     statusDoCanal: realtimeStatus,
+    intervaloComCanalAssinadoMs: INTERVALO_DO_INBOX_COM_CANAL_ASSINADO_MS,
     enabled: !!orgId,
   });
 
