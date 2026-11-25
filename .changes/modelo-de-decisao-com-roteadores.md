@@ -5,7 +5,9 @@ titulo: Escolher o modelo de decisão do coordenador, com os roteadores da OpenR
 ---
 
 A tela do coordenador (IA › Coordenador › Configurar) ganhou o cartão
-**Modelo de decisão**, sempre visível: é ali que se escolhe o modelo que decide
+**Modelo de decisão**, sempre visível.
+
+É ali que se escolhe o modelo que decide
 quem conduz a conversa quando as regras não bastam.
 
 O seletor de modelo — nesse cartão e em IA › Provedores — agora tem busca, e na

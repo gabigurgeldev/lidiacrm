@@ -266,6 +266,7 @@ export const loadAuthUser = cache(async (): Promise<AuthUser | null> => {
     full_name: fullName,
     avatar_url: avatarUrl,
     is_platform_admin: !!paRow,
+    som_de_aviso: user.user_metadata?.notify_sound !== false,
     locale,
     idioma,
     timezone,

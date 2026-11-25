@@ -3,7 +3,10 @@ import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { useInvalidacaoAgrupada } from "@/hooks/realtime/useInvalidacaoAgrupada";
 import { useRealtimeChannel } from "@/hooks/realtime/useRealtimeChannel";
-import { useRefetchDeSeguranca } from "@/hooks/realtime/useRefetchDeSeguranca";
+import {
+  INTERVALO_DO_INBOX_COM_CANAL_ASSINADO_MS,
+  useRefetchDeSeguranca,
+} from "@/hooks/realtime/useRefetchDeSeguranca";
 import { apiClient } from "@/lib/api/client";
 import { showApiError } from "@/components/feedback/ApiErrorToast";
 import type { Message } from "@/lib/types/messaging";
@@ -101,8 +104,10 @@ export function useMessagesRealtime(conversationId: string | null) {
     // chegou". Uma consulta leve (uma página) por conversa aberta.
     intervaloMs: 15_000,
     // Os 15s valem para o canal CAÍDO. Assinado, quem entrega é o Realtime e a
-    // conferência cai para 5 min — ver `statusDoCanal` no hook.
+    // conferência cai para 1 min (5 min nas outras telas): no Inbox, canal
+    // assinado e mudo é mensagem que o celular mostra e o CRM não.
     statusDoCanal: realtimeStatus,
+    intervaloComCanalAssinadoMs: INTERVALO_DO_INBOX_COM_CANAL_ASSINADO_MS,
     enabled: !!conversationId,
   });
 

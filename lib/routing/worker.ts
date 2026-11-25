@@ -73,6 +73,11 @@ export interface RoutingWorkerOptions {
   batchSize?: number;
   /** Relógio injetável (testes) — usado na elegibilidade (horário) e no backoff. */
   now?: Date;
+  /**
+   * Só o evento DESTA conversa — ver `rotearConversaAgora`. Ausente = o lote
+   * global de sempre (o cron).
+   */
+  conversa?: { organizationId: string; conversationId: string };
 }
 
 export async function runRoutingWorker(opts: RoutingWorkerOptions = {}): Promise<RoutingSummary> {
@@ -81,11 +86,21 @@ export async function runRoutingWorker(opts: RoutingWorkerOptions = {}): Promise
   const batchSize = Math.min(Math.max(opts.batchSize ?? DEFAULT_BATCH_SIZE, 1), 500);
   const summary: RoutingSummary = { batch_size: 0, outcomes: EMPTY_OUTCOMES(), errors: [] };
 
-  const { data: rawEvents, error: pullErr } = await admin
+  let pull = admin
     .from("event_log")
     .select("id, organization_id, payload, metadata, consumed_by, attempts, next_attempt_at, status")
     .eq("event_type", ROUTING_EVENT_TYPE)
-    .eq("status", "pending")
+    .eq("status", "pending");
+  if (opts.conversa) {
+    // O trigger 0040 grava a conversa em `entity_id` (índice
+    // `event_log_entity_idx`). A org entra no filtro também: este caminho roda
+    // com service role, e a doutrina pede o escopo explícito em toda query.
+    pull = pull
+      .eq("organization_id", opts.conversa.organizationId)
+      .eq("entity_kind", "conversation")
+      .eq("entity_id", opts.conversa.conversationId);
+  }
+  const { data: rawEvents, error: pullErr } = await pull
     .or(`next_attempt_at.is.null,next_attempt_at.lte.${now.toISOString()}`)
     // Conversa NOVA primeiro (`next_attempt_at` nulo = nunca tentada), depois as
     // retentativas pela hora em que venceram. Desde que o evento sem elegível
@@ -127,6 +142,30 @@ export async function runRoutingWorker(opts: RoutingWorkerOptions = {}): Promise
   }
 
   return summary;
+}
+
+/**
+ * Distribui a conversa NO MOMENTO em que a mensagem chega, em vez de esperar o
+ * cron do rodízio (1×/min).
+ *
+ * Medido em produção (2026-11-25): nas orgs com visibilidade "só as minhas",
+ * o lead novo só aparece para a atendente quando ganha dono, e o dono vinha
+ * do cron. A conversa levava mediana de 33 s, até 80 s, para aparecer, enquanto
+ * no celular a mensagem chegava na hora. A atendente aprendia que valia mais a
+ * pena responder pelo WhatsApp.
+ *
+ * Roda o MESMO caminho do cron (claim CAS `pending → processing`, decisão
+ * pura, `fn_conversation_assign`), só que restrito ao evento desta conversa.
+ * Disputar com o cron é seguro: quem perde o claim não faz nada. Conversa que
+ * não emitiu evento (já nasceu com dono, ou não é nova) não encontra nada e
+ * volta sem efeito. Sem ninguém elegível, o evento segue na fila como sempre,
+ * e o cron o retoma.
+ */
+export async function rotearConversaAgora(
+  organizationId: string,
+  conversationId: string,
+): Promise<RoutingSummary> {
+  return runRoutingWorker({ batchSize: 1, conversa: { organizationId, conversationId } });
 }
 
 async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome> {

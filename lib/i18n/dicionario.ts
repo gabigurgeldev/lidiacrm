@@ -3800,6 +3800,9 @@ export const DICIONARIO: Traducoes = {
   Email: { es: "Correo" },
   "In-app": { es: "En la app" },
   Push: { es: "Push" },
+  "Tocar som quando chegar mensagem ou lead novo": { es: "Reproducir un sonido cuando llegue un mensaje o un lead nuevo" },
+  "Toca no computador em que você estiver com o sistema aberto, para as conversas que são suas. Vale só para você.": { es: "Suena en la computadora donde tengas el sistema abierto, para las conversaciones que son tuyas. Vale solo para ti." },
+  "Testar som": { es: "Probar sonido" },
   // ─── Configurações: Segurança ───
   "Gerar novos códigos invalida TODOS os atuais. Tem certeza?": {
     es: "Generar nuevos códigos invalida TODOS los actuales. ¿Estás seguro?",

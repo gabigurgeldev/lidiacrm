@@ -44,6 +44,7 @@ import { logger } from "@/lib/logger";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { ehPedidoDeOptOut } from "@/lib/opt-out/deteccao";
 import { acelerarPipelineDeEventos } from "@/lib/dev/kick-local-pipeline";
+import { rotearConversaAgora } from "@/lib/routing/worker";
 import { depoisDaResposta } from "./depois-da-resposta";
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -122,6 +123,20 @@ export async function aplicarEfeitosPosEntrada(
   // provedor, na mesma ordem — ver `depois-da-resposta.ts`. Opt-out e demanda
   // seguem aqui, síncronos: são a ordem que protege quem pediu para sair.
   await depoisDaResposta("pos-entrada", async () => {
+    // O rodízio vem PRIMEIRO, antes do pipeline (que drena até 50 eventos, com
+    // IA no meio). Nas orgs "só as minhas", a conversa nova só aparece para a
+    // atendente quando ganha dono: esperar o cron custava mediana de 33 s, até
+    // 80 s, medido em produção. Ver `rotearConversaAgora`. Falhar aqui não
+    // segura o resto: o cron do rodízio continua sendo a rede de segurança.
+    try {
+      await rotearConversaAgora(entrada.organizationId, entrada.conversationId);
+    } catch (err) {
+      logger.warn("pos-entrada: rodízio imediato falhou (o cron retoma)", {
+        organization_id: entrada.organizationId,
+        conversation_id: entrada.conversationId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     await acelerarPipelineDeEventos(admin, {
       organizationId: entrada.organizationId,
       contactId: entrada.contactId,

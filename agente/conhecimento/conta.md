@@ -41,6 +41,11 @@ Estas telas cuidam da **sua** conta, não da empresa. Em **Perfil** você muda s
 2. Para cada categoria — **Nova mensagem**, **Lead atribuído a você**, **Lead ganho**, **Lead perdido** e **Você foi mencionado** — ligue ou desligue **In-app** (aviso dentro do sistema) e **Push** (aviso do navegador).
 3. Se o navegador pedir permissão para mostrar notificações, clique em permitir.
 
+### Ligar ou desligar o som de aviso
+1. Abra **Configurações › Notificações**.
+2. No topo, use o botão **Tocar som quando chegar mensagem ou lead novo**. Ele vem ligado.
+3. Clique em **Testar som** para ouvir como é. O som toca para as conversas que são suas, no computador em que você estiver com o sistema aberto, e a escolha vale só para você.
+
 ### Trocar de organização
 1. Se você participa de mais de uma empresa no sistema, clique no nome da empresa no topo da tela.
 2. Escolha a outra organização na lista. O sistema passa a mostrar os dados dela.
@@ -60,6 +65,8 @@ Estas telas cuidam da **sua** conta, não da empresa. Em **Perfil** você muda s
 - **Não consigo desligar a verificação em duas etapas.** Quando ela é obrigatória para administradores da empresa, não dá para desligar na sua conta. Um administrador pode mudar a regra em **Exigir de quem administra**.
 - **E-mail aparece desligado nas notificações.** O aviso por e-mail ainda não está disponível. Use In-app e Push.
 - **O Push não aparece com a aba fechada.** Em algumas instalações os avisos só aparecem com o site aberto numa aba.
+- **Não ouço o som de aviso.** Confira se **Tocar som quando chegar mensagem ou lead novo** está ligado em **Configurações › Notificações** e clique em **Testar som**. O navegador só libera som depois do primeiro clique na página: depois de abrir o sistema, clique em qualquer lugar uma vez. Confira também o volume do computador.
+- **Tenho várias abas abertas e o som toca uma vez só.** É de propósito: o aviso toca numa aba só, para não repetir.
 - **O navegador bloqueou as notificações.** Libere as notificações nas configurações do site no navegador e recarregue a página.
 - **Como mudo o idioma do sistema?** Em **Perfil › Idioma**. "Seguir o idioma da empresa" usa o idioma definido para a organização.
 - **Quantas perguntas posso fazer à assistente?** Até 50 por dia (pode variar por instalação). O contador aparece no topo do painel da assistente e renova à meia-noite.

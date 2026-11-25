@@ -64,6 +64,8 @@ vi.mock("@/hooks/notifications/useInboundMessageAlerts", () => ({
   useInboundMessageAlerts: () => {},
 }));
 vi.mock("@/hooks/notifications/useCrmAlerts", () => ({ useCrmAlerts: () => {} }));
+vi.mock("@/hooks/notifications/useNovaConversaAlerts", () => ({ useNovaConversaAlerts: () => {} }));
+vi.mock("@/hooks/notifications/useSomDeAviso", () => ({ useSomDeAviso: () => {} }));
 vi.mock("@/lib/notifications/notify_open", () => ({
   useNotifyOpenFromServiceWorker: () => {},
 }));

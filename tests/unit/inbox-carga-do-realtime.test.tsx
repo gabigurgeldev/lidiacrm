@@ -46,7 +46,11 @@ vi.mock("@/hooks/auth/AuthProvider", () => ({ useUserOpcional: () => null }));
 const { useInvalidacaoAgrupada, JANELA_DE_AGRUPAMENTO_MS } = await import(
   "@/hooks/realtime/useInvalidacaoAgrupada"
 );
-const { useRefetchDeSeguranca, INTERVALO_COM_CANAL_ASSINADO_MS } = await import(
+const {
+  useRefetchDeSeguranca,
+  INTERVALO_COM_CANAL_ASSINADO_MS,
+  INTERVALO_DO_INBOX_COM_CANAL_ASSINADO_MS,
+} = await import(
   "@/hooks/realtime/useRefetchDeSeguranca"
 );
 const { useConversationsRealtime } = await import("@/hooks/inbox/useConversationsRealtime");
@@ -184,6 +188,40 @@ describe("refetch de segurança só aperta quando o canal caiu", () => {
     });
     expect(refetch).toHaveBeenCalledTimes(1);
   });
+
+  it("Inbox: canal assinado confere a cada 1 min, não a cada 5", async () => {
+    // Reclamação de cliente (2026-11-25): a mensagem aparecia no celular e
+    // não no CRM. Canal assinado e mudo não pode deixar o Inbox 5 min atrás.
+    const { qc, wrapper } = montarQc();
+    const refetch = vi.spyOn(qc, "refetchQueries").mockResolvedValue(undefined);
+    renderHook(
+      () =>
+        useRefetchDeSeguranca({
+          queryKey: ["messages", "conv-1"],
+          assinatura: () => "x",
+          ultimaEntrega: { current: null },
+          intervaloMs: 15_000,
+          statusDoCanal: "subscribed",
+          intervaloComCanalAssinadoMs: INTERVALO_DO_INBOX_COM_CANAL_ASSINADO_MS,
+        }),
+      { wrapper },
+    );
+    await act(async () => {
+      vi.advanceTimersByTime(INTERVALO_DO_INBOX_COM_CANAL_ASSINADO_MS);
+    });
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(INTERVALO_DO_INBOX_COM_CANAL_ASSINADO_MS).toBeLessThan(INTERVALO_COM_CANAL_ASSINADO_MS);
+  });
+
+  it.each(["hooks/inbox/useConversationsRealtime.ts", "hooks/inbox/useMessagesRealtime.ts"])(
+    "%s usa o intervalo do Inbox com o canal assinado",
+    async (arquivo) => {
+      const { readFileSync } = await import("node:fs");
+      expect(readFileSync(arquivo, "utf8")).toMatch(
+        /intervaloComCanalAssinadoMs:\s*INTERVALO_DO_INBOX_COM_CANAL_ASSINADO_MS/,
+      );
+    },
+  );
 
   it.each<RealtimeStatus>(["channel_error", "timed_out", "closed", "connecting"])(
     "canal %s: confere no intervalo curto",

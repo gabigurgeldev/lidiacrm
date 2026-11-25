@@ -22,6 +22,7 @@ vi.mock("next/server", () => ({
   },
 }));
 vi.mock("@/lib/dev/kick-local-pipeline", () => ({ acelerarPipelineDeEventos: acelerar }));
+vi.mock("@/lib/routing/worker", () => ({ rotearConversaAgora: vi.fn(async () => ({})) }));
 
 import { depoisDaResposta } from "@/lib/channels/depois-da-resposta";
 

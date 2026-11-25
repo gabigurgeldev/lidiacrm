@@ -4,7 +4,9 @@ secao: adicionado
 titulo: Criar agente com IA, a partir do que você conta sobre o negócio
 ---
 
-Na lista de Agentes, "Criar com IA" monta um agente completo: você cola tudo o
+Na lista de Agentes, "Criar com IA" monta um agente completo.
+
+Você cola tudo o
 que tem sobre o negócio, a IA pergunta só o que falta (até três rodadas) e
 escreve as instruções do agente, as capacidades, as frases que chamam uma
 pessoa e os materiais de conhecimento (perguntas frequentes e documentos).

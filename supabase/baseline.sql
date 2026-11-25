@@ -26120,6 +26120,44 @@ revoke execute on function public.fn_publicar_versao_do_agente(uuid, uuid, uuid,
 revoke execute on function public.fn_publicar_versao_do_agente(uuid, uuid, uuid, boolean) from authenticated;
 grant execute on function public.fn_publicar_versao_do_agente(uuid, uuid, uuid, boolean) to service_role;
 
+-- ---- atribuição de conversa no Realtime: aviso de lead novo (migration 0256) ----
+--
+-- Idempotente. Racional inteiro no cabeçalho da migration 0256.
+
+do $$
+begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+     where pubname = 'supabase_realtime'
+       and schemaname = 'public'
+       and tablename = 'conversation_assignment_events'
+  ) then
+    alter publication supabase_realtime add table public.conversation_assignment_events;
+  end if;
+end $$;
+
+do $$
+begin
+  if to_regrole('authenticated') is null then
+    return;
+  end if;
+  if exists (
+    select 1 from pg_policies
+     where schemaname = 'public' and tablename = 'conversation_assignment_events' and policyname = 'cae_select'
+  ) then
+    alter policy cae_select on public.conversation_assignment_events to authenticated;
+  end if;
+  if exists (
+    select 1 from pg_policies
+     where schemaname = 'public' and tablename = 'conversation_assignment_events' and policyname = 'cae_insert'
+  ) then
+    alter policy cae_insert on public.conversation_assignment_events to authenticated;
+  end if;
+end $$;
+
 -- ---- VARREDURA anon: função nova nasce exposta em quem ATUALIZA (migration 0116) ----
 --
 -- ⚠️ ESTE BLOCO É, DE PROPÓSITO, O ÚLTIMO DO ARQUIVO. Apêndice novo entra ANTES
