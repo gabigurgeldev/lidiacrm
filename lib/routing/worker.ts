@@ -32,7 +32,7 @@ export type RoutingOutcome =
   | "skipped_unsupported_mode"
   | "requeued_no_eligible"
   | "requeued_outside_schedule"
-  | "dead_no_eligible"
+  | "requeued_na_fila"
   | "skipped_conv_missing"
   | "skipped_not_queued"
   | "skipped_invalid_payload"
@@ -61,7 +61,7 @@ const EMPTY_OUTCOMES = (): Record<RoutingOutcome, number> => ({
   skipped_unsupported_mode: 0,
   requeued_no_eligible: 0,
   requeued_outside_schedule: 0,
-  dead_no_eligible: 0,
+  requeued_na_fila: 0,
   skipped_conv_missing: 0,
   skipped_not_queued: 0,
   skipped_invalid_payload: 0,
@@ -87,6 +87,13 @@ export async function runRoutingWorker(opts: RoutingWorkerOptions = {}): Promise
     .eq("event_type", ROUTING_EVENT_TYPE)
     .eq("status", "pending")
     .or(`next_attempt_at.is.null,next_attempt_at.lte.${now.toISOString()}`)
+    // Conversa NOVA primeiro (`next_attempt_at` nulo = nunca tentada), depois as
+    // retentativas pela hora em que venceram. Desde que o evento sem elegível
+    // deixou de morrer (`ESPERA_NA_FILA_SEGUNDOS`), uma org sem ninguém
+    // disponível acumula eventos vivos; ordenar só por `created_at` poria esses
+    // eventos velhos na frente do lote e atrasaria a conversa que acabou de
+    // chegar — em TODAS as orgs da instalação, porque o worker é um só.
+    .order("next_attempt_at", { ascending: true, nullsFirst: true })
     .order("created_at", { ascending: true })
     .limit(batchSize);
 
@@ -233,17 +240,20 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
         await requeueEvent(event, now, action.attempts, { reason: "outside_schedule" }, action.nextAttemptAt);
         return "requeued_outside_schedule";
       }
+      if (action.naFila) {
+        await requeueEvent(event, now, action.attempts, { reason: "na_fila" }, action.nextAttemptAt);
+        return "requeued_na_fila";
+      }
       await requeueEvent(event, now, action.attempts, { reason: "no_eligible" }, action.nextAttemptAt);
       return "requeued_no_eligible";
-    }
-    case "dead": {
-      await markDead(event, action.reason);
-      return "dead_no_eligible";
     }
   }
 }
 
-// --- event lifecycle (mesma mecânica do agent-dispatcher; status ∈ pending|processing|done|dead) ---
+// --- event lifecycle (mesma mecânica do agent-dispatcher; status ∈ pending|processing|done) ---
+// Este worker não produz mais `dead`: sem elegível, o evento espera na fila
+// (ver `ESPERA_NA_FILA_SEGUNDOS` em decide.ts). `dead` ainda existe no event_log
+// para os outros consumidores — e nos eventos que este worker matou antes.
 
 async function claimEvent(eventId: string): Promise<boolean> {
   const admin = createAdminClient();
@@ -301,21 +311,6 @@ async function requeueEvent(
     })
     .eq("id", event.id);
   if (error) logger.warn("[routing-worker] requeue failed", { event_id: event.id, error: error.message });
-}
-
-async function markDead(event: EventRow, reason: string): Promise<void> {
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from("event_log")
-    .update({
-      status: "dead",
-      attempts: event.attempts + 1,
-      last_error: reason.slice(0, 500),
-      metadata: { ...(event.metadata ?? {}), outcome: "dead", reason },
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", event.id);
-  if (error) logger.warn("[routing-worker] markDead failed", { event_id: event.id, error: error.message });
 }
 
 function strOrNull(v: unknown): string | null {

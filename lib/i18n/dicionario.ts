@@ -3597,9 +3597,9 @@ export const DICIONARIO: Traducoes = {
   "Não consegui salvar.": { es: "No pude guardar." },
   "Quem recebe o cliente novo": { es: "Quién recibe al cliente nuevo" },
   "Vale para conversa que chega sem dono.": { es: "Vale para conversación que llega sin dueño." },
-  "Tentativas antes de desistir": { es: "Intentos antes de desistir" },
-  "Quando não há ninguém disponível, o sistema tenta de novo mais tarde. Ao estourar, a conversa fica na fila esperando alguém.": {
-    es: "Cuando no hay nadie disponible, el sistema lo intenta de nuevo más tarde. Al agotarse, la conversación queda en la fila esperando a alguien.",
+  "Tentativas rápidas": { es: "Intentos rápidos" },
+  "Quando não há ninguém disponível, o sistema tenta de novo nesse intervalo. Depois, segue conferindo a cada 10 minutos — a conversa vai para a primeira pessoa que puder recebê-la, sem nunca ficar esquecida.": {
+    es: "Cuando no hay nadie disponible, el sistema lo intenta de nuevo en ese intervalo. Después, sigue revisando cada 10 minutos: la conversación va a la primera persona que pueda recibirla, sin quedar olvidada.",
   },
   "Espera entre tentativas (segundos)": { es: "Espera entre intentos (segundos)" },
   "O que cada atendente enxerga": { es: "Qué ve cada agente" },
@@ -5585,8 +5585,8 @@ export const DICIONARIO: Traducoes = {
   "Atingiu a capacidade: não recebe conversa nova da distribuição. Aumente a capacidade ou encerre conversas.": {
     es: "Llegó a su capacidad: no recibe conversaciones nuevas de la distribución. Aumenta la capacidad o cierra conversaciones.",
   },
-  "Fica disponível no horário mesmo com o CRM fechado": {
-    es: "Queda disponible en su horario aunque el CRM esté cerrado",
+  "Segue no rodízio durante o horário de trabalho. Sem isto, sai do rodízio 15 minutos depois que a disponibilidade é ligada, mesmo com o CRM aberto.": {
+    es: "Sigue en la rotación durante el horario de trabajo. Sin esto, sale de la rotación 15 minutos después de activar la disponibilidad, aunque el CRM esté abierto.",
   },
   "Capacidade de": { es: "Capacidad de" },
   "Editar horário de": { es: "Editar horario de" },

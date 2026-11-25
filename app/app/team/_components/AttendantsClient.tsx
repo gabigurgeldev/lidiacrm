@@ -387,7 +387,12 @@ export function AttendantsClient({ canManage }: Props) {
                 {canManage ? (
                   <TableHead
                     className="w-[140px]"
-                    title={t("Fica disponível no horário mesmo com o CRM fechado")}
+                    // O texto antigo ("mesmo com o CRM fechado") sugeria que, com o
+                    // CRM ABERTO, a pessoa seguia disponível. Não segue: nada no app
+                    // manda sinal de vida, e o cron `attendant-heartbeat` derruba em
+                    // 15 min quem não tem esta opção. Desligá-la por esse engano tirou
+                    // as duas atendentes de uma org do ar por dois dias (2026-11-23).
+                    title={t("Segue no rodízio durante o horário de trabalho. Sem isto, sai do rodízio 15 minutos depois que a disponibilidade é ligada, mesmo com o CRM aberto.")}
                   >
                     {t("Sempre disponível")}
                   </TableHead>

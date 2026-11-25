@@ -127,7 +127,7 @@ Tela: **Distribuição de atendimento** (`/app/settings/atendimento`).
 
 | Campo | Padrão | Limite | Efeito |
 |---|---|---|---|
-| **Tentativas antes de desistir** | 5 | 0–20 | Quando não há ninguém elegível, tenta de novo mais tarde. Ao estourar, a conversa fica na fila. |
+| **Tentativas rápidas** | 5 | 0–20 | Quando não há ninguém elegível, tenta de novo a cada intervalo. Ao estourar, **não desiste**: o evento segue na fila conferindo a cada 10 min (`ESPERA_NA_FILA_SEGUNDOS` em `lib/routing/decide.ts`, nunca mais rápido que o intervalo) e entrega a conversa a quem ficar elegível primeiro. Termina sozinho quando a conversa ganha dono, é encerrada ou a org volta ao modo manual. |
 | **Espera entre tentativas (segundos)** | 60 | 1–3600 | Intervalo entre tentativas. |
 
 Vale para conversa que chega **sem dono**. Worker: cron `routing-worker` (1×/min) consome `conversation.routing_requested`; nunca reatribui conversa que já tem dono.
@@ -138,7 +138,7 @@ Elegível = **disponível** ∧ **dentro do horário** da pessoa ∧ **abaixo da
 
 | Configuração por atendente | Detalhe |
 |---|---|
-| Disponível | Liga/desliga. Sem heartbeat por **15 minutos**, o atendente vira offline sozinho (cron `attendant-heartbeat`), exceto se estiver **sempre disponível**. |
+| Disponível | Liga/desliga. Sem heartbeat por **15 minutos**, o atendente vira offline sozinho (cron `attendant-heartbeat`), exceto se estiver **sempre disponível**. ⚠️ **O app não emite heartbeat** (o `useHeartbeat` da spec 04 §8.2 nunca foi construído): `last_heartbeat_at` só anda quando alguém liga a disponibilidade. Na prática, sem "Sempre disponível" a pessoa sai do rodízio 15 min depois de ser ligada, com o CRM aberto ou não. |
 | Sempre disponível | Só manager+ liga. O cron não a desliga por falta de heartbeat, e ela fica elegível durante o horário mesmo com o CRM fechado. Ligar a opção também liga a pessoa (`attendant_availability.always_available`, migration 0246). |
 | Capacidade | 1 a 1.000 conversas abertas atribuídas simultâneas. |
 | Agenda | Fuso (validado; ex.: `America/Asuncion` — sem acento) + janelas por dia da semana (início < fim). **Sem janelas = 24/7.** |

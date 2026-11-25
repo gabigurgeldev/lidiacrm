@@ -160,7 +160,7 @@ export function AtendimentoForm({ initial }: { initial: AtendimentoConfig }) {
         {form.mode === "round_robin" ? (
           <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label htmlFor="max_retries">{t("Tentativas antes de desistir")}</Label>
+              <Label htmlFor="max_retries">{t("Tentativas rápidas")}</Label>
               <Input
                 id="max_retries"
                 type="number"
@@ -174,7 +174,7 @@ export function AtendimentoForm({ initial }: { initial: AtendimentoConfig }) {
               />
               <p className="text-xs text-muted-foreground">
                 {t(
-                  "Quando não há ninguém disponível, o sistema tenta de novo mais tarde. Ao estourar, a conversa fica na fila esperando alguém.",
+                  "Quando não há ninguém disponível, o sistema tenta de novo nesse intervalo. Depois, segue conferindo a cada 10 minutos — a conversa vai para a primeira pessoa que puder recebê-la, sem nunca ficar esquecida.",
                 )}
               </p>
             </div>

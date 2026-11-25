@@ -27,9 +27,50 @@ export type RoutingAction =
    * `aguardandoHorario` = a volta foi marcada para a abertura de uma janela, e
    * a tentativa NÃO foi gasta — ver `nextOpeningAt` em `DecideRoutingInput`.
    */
-  | { kind: "requeue"; nextAttemptAt: string; attempts: number; aguardandoHorario?: true }
-  /** Estourou max_retries sem elegível: desiste do evento; conversa fica na fila (G5-03 mostra). */
-  | { kind: "dead"; reason: string };
+  | {
+      kind: "requeue";
+      nextAttemptAt: string;
+      attempts: number;
+      aguardandoHorario?: true;
+      /**
+       * As tentativas rápidas (`max_retries`) acabaram e o evento passou a
+       * conferir a fila devagar — ver `ESPERA_NA_FILA_SEGUNDOS`. Não existe mais
+       * "desistir": a conversa sem dono espera até alguém poder recebê-la.
+       */
+      naFila?: true;
+    };
+
+/**
+ * De quanto em quanto tempo o rodízio confere de novo uma conversa que esgotou
+ * as tentativas rápidas sem ninguém para recebê-la.
+ *
+ * ## Por que existe, e por que o evento não morre mais
+ *
+ * Até aqui, `max_retries` × `backoff_seconds` sem elegível matava o evento
+ * (`status = 'dead'`) — e evento morto nunca é reavaliado. A conversa ficava sem
+ * dono PARA SEMPRE, mesmo depois de a equipe voltar. Com a visibilidade "só as
+ * minhas" (`visibility_mode = 'own'`), conversa sem dono não aparece para
+ * atendente nenhuma: o cliente escreveu e ninguém nunca viu.
+ *
+ * Medido em produção (Faby Flores, 2026-11-25): 248 eventos mortos em três
+ * episódios que nada tinham a ver um com o outro — ninguém marcado disponível
+ * (04–06/11), as duas atendentes no teto de capacidade 30 (10–21/11) e "Sempre
+ * disponível" desligado, com o cron de sinal de vida tirando as duas do ar
+ * (23–25/11). Cada episódio foi corrigido na configuração; nenhum devolveu as
+ * conversas, porque os eventos delas já estavam mortos — 214 seguiam sem dono.
+ *
+ * Ninguém disponível, todo mundo lotado ou offline são estados sem hora marcada
+ * para acabar (o fora-do-horário tem hora, e é tratado por `nextOpeningAt`).
+ * Então o evento continua na fila e confere a cada `ESPERA_NA_FILA_SEGUNDOS`.
+ * Ele termina sozinho quando a conversa deixa de estar na fila: ganhou dono
+ * (`already_assigned`), foi encerrada (`skipped_not_queued`), sumiu
+ * (`skipped_conv_missing`) ou a organização voltou para o modo manual.
+ *
+ * 10 min é o atraso máximo entre a equipe voltar e a conversa chegar a ela. O
+ * custo é ~4 leituras por conversa parada a cada 10 min. Nunca confere mais
+ * rápido que o `backoff_seconds` configurado: quem pediu calma, tem calma.
+ */
+export const ESPERA_NA_FILA_SEGUNDOS = 600;
 
 export interface DecideRoutingInput {
   mode: RoutingMode | string;
@@ -143,9 +184,9 @@ export function decideRouting(input: DecideRoutingInput): RoutingAction {
   if (picked) return { kind: "assign", userId: picked };
 
   // Sem elegível porque é almoço, noite ou antes do expediente: volta quando a
-  // primeira janela abrir, sem contar tentativa. Contando, `max_retries` × `backoff`
-  // (5 min no default) mataria todo lead que chega fora do horário — e evento
-  // morto não é reavaliado nunca mais: a conversa fica sem dono para sempre.
+  // primeira janela abrir, sem contar tentativa. Sem isto, a conversa que chega
+  // fora do horário cairia na conferência lenta e esperaria até 10 min depois
+  // da abertura; com isto, ela chega no minuto em que a jornada começa.
   const abre = input.nextOpeningAt ?? null;
   if (abre !== null && abre.getTime() > input.now.getTime()) {
     return {
@@ -159,7 +200,15 @@ export function decideRouting(input: DecideRoutingInput): RoutingAction {
   // Sem elegível (acceptance 4): re-agenda com backoff da config (não hardcoded).
   const nextAttempts = input.attempts + 1;
   if (nextAttempts > input.config.max_retries) {
-    return { kind: "dead", reason: "max_retries_no_eligible" };
+    // Esgotou as tentativas rápidas: segue na fila, conferindo devagar. NÃO
+    // desiste — ver `ESPERA_NA_FILA_SEGUNDOS`.
+    const segundos = Math.max(input.config.backoff_seconds, ESPERA_NA_FILA_SEGUNDOS);
+    return {
+      kind: "requeue",
+      nextAttemptAt: new Date(input.now.getTime() + segundos * 1000).toISOString(),
+      attempts: nextAttempts,
+      naFila: true,
+    };
   }
   const nextAttemptAt = new Date(input.now.getTime() + input.config.backoff_seconds * 1000).toISOString();
   return { kind: "requeue", nextAttemptAt, attempts: nextAttempts };
