@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: Áudio e imagem do cliente deixaram de sumir quando o modelo padrão da organização não tem chave
+titulo: Áudio e imagem do cliente não somem mais quando o modelo padrão não tem chave
 ---
 
 Quando o modelo padrão da organização apontava para um provedor sem chave

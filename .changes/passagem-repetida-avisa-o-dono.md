@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: Toda passagem nova para a equipe volta a avisar o dono — mesmo do cliente que já foi passado antes
+titulo: Toda passagem para a equipe avisa o dono, mesmo de cliente já passado antes
 ---
 
 O aviso no WhatsApp do dono (gatilho de fluxo "Quando a IA passar para uma

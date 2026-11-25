@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: A Atividade do coordenador mostra também as decisões que mantêm quem conduz, com o erro quando o modelo falha
+titulo: A Atividade do coordenador mostra as decisões que mantêm quem conduz e o erro do modelo
 ---
 
 O coordenador consulta o modelo de decisão a cada mensagem, mas a aba

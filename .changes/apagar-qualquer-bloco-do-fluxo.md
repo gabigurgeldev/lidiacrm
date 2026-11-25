@@ -1,7 +1,7 @@
 ---
 impacto: nada_mudou
 secao: corrigido
-titulo: O botão de remover bloco sumia embaixo da dobra, e o bloco de início não saía de jeito nenhum
+titulo: O botão de remover bloco não some mais, e o bloco de início pode ser removido
 ---
 
 Dois defeitos no editor de fluxos, com a mesma consequência: blocos que não

@@ -331,6 +331,24 @@ a migration `20260716120000_0030_config_rls_role_policies.sql` aplica
   consome com claim + dedup (at-least-once seguro: conversa que já tem dono nunca
   é reatribuída pelo replay).
 - Sem elegível ⇒ fila (visível, com posição) + re-agenda com backoff.
+  **Exceção — fora do horário:** se há quem esteja disponível e com folga e só
+  o horário o impede (almoço, noite, fim de semana), o evento volta na abertura
+  da primeira janela (`nextScheduleOpening` em `lib/routing/eligibility.ts`) e
+  NÃO gasta tentativa de `max_retries`. Antes, 5 × 60 s matavam todo lead que
+  chegava fora do expediente, e evento morto não é reavaliado nunca mais.
+  Conversa encerrada sem dono (`resolved`/`closed`/`archived`) quando o evento
+  volta é descartada (`skipped_not_queued`).
+  **Estourou `max_retries`? O evento NÃO morre.** Passa a conferir a cada
+  `ESPERA_NA_FILA_SEGUNDOS` (600 s, nunca menos que `backoff_seconds`) e entrega
+  a conversa a quem ficar elegível primeiro (`requeued_na_fila`). Ele termina
+  sozinho quando a conversa sai da fila — ganhou dono, foi encerrada, sumiu ou a
+  org voltou ao modo manual. Antes, o evento ia para `dead` e a conversa ficava
+  sem dono para sempre: medido em produção (2026-11-25), 248 eventos mortos e
+  214 conversas invisíveis às atendentes no modo `own`, mesmo depois de cada
+  causa (ninguém disponível, capacidade estourada, cron de sinal de vida) ter
+  sido corrigida na configuração. O lote do worker põe evento nunca tentado
+  (`next_attempt_at` nulo) na frente das retentativas, para que uma fila parada
+  não atrase a conversa nova de outra org.
 - **Notificação de atribuição** (decisão G5-03): o repo NÃO tem sistema de
   notificação in-app (só `notification_prefs` = preferências; sem tabela de
   notificação nem entrega de toast). A notificação ao novo dono é, portanto, o

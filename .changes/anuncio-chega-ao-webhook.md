@@ -5,7 +5,9 @@ titulo: O clique em anúncio passou a ser reconhecido — e a automação manda 
 ---
 
 Quem clica num anúncio "Clique para o WhatsApp" manda junto, na primeira
-mensagem, os dados do anúncio: título, texto, link, id do anúncio e o id do
+mensagem, os dados do anúncio.
+
+São título, texto, link, id do anúncio e o id do
 clique (`ctwa_clid`), que é o que os sistemas de rastreio usam para casar a
 conversão.
 

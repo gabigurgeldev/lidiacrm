@@ -90,6 +90,22 @@ function summarizeSchedule(windows: ScheduleWindow[], t: (texto: string) => stri
 function StatusBadge({ attendant, now }: { attendant: Attendant; now: Date }) {
   const t = useT();
   const a = attendant.availability;
+  // Lotada vem ANTES de Online. A distribuição só entrega a quem tem carga
+  // abaixo da capacidade, e este selo dizia "Online" para quem estava com 44
+  // conversas e capacidade 5: o gestor via todas online, a distribuição não
+  // entregava a ninguém, e nada na tela ligava uma coisa à outra (medido numa
+  // org de produção, em que o rodízio parou no primeiro dia).
+  if (a?.is_available && (a.current_load ?? 0) >= (a.capacity ?? 5)) {
+    return (
+      <Badge
+        variant="warning"
+        title={t("Atingiu a capacidade: não recebe conversa nova da distribuição. Aumente a capacidade ou encerre conversas.")}
+        data-testid="atendente-lotada"
+      >
+        {t("Lotada")}
+      </Badge>
+    );
+  }
   // Quem é "sempre disponível" não manda sinal de vida — e não precisa: o cron
   // não a derruba. Medir o sinal aqui a mostraria offline enquanto o rodízio a
   // escolhe.
@@ -371,7 +387,12 @@ export function AttendantsClient({ canManage }: Props) {
                 {canManage ? (
                   <TableHead
                     className="w-[140px]"
-                    title={t("Fica disponível no horário mesmo com o CRM fechado")}
+                    // O texto antigo ("mesmo com o CRM fechado") sugeria que, com o
+                    // CRM ABERTO, a pessoa seguia disponível. Não segue: nada no app
+                    // manda sinal de vida, e o cron `attendant-heartbeat` derruba em
+                    // 15 min quem não tem esta opção. Desligá-la por esse engano tirou
+                    // as duas atendentes de uma org do ar por dois dias (2026-11-23).
+                    title={t("Segue no rodízio durante o horário de trabalho. Sem isto, sai do rodízio 15 minutos depois que a disponibilidade é ligada, mesmo com o CRM aberto.")}
                   >
                     {t("Sempre disponível")}
                   </TableHead>
