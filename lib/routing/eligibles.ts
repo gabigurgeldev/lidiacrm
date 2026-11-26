@@ -2,7 +2,7 @@
  * Carregador reutilizável de atendentes elegíveis (G5-02/G5-03 → G6-01/INB-12).
  *
  * A lógica de "quem pode receber uma conversa agora" (disponível ∧ dentro do
- * horário ∧ com folga) vivia inline no worker de roteamento. G6-01 unifica: o
+ * horário) vivia inline no worker de roteamento. G6-01 unifica: o
  * mesmo cálculo alimenta o worker (cron), o handoff v2 (crm_request_human_handoff)
  * e o crm_get_queue_status — UM algoritmo, não três divergentes.
  *
@@ -15,7 +15,7 @@ import { isAttendantEligible, isWithinSchedule, nextScheduleOpening, OPEN_LOAD_S
 import type { RoutingCandidate } from "./decide";
 import { availabilityScheduleSchema } from "@/lib/schemas/routing";
 
-/** Elegíveis = disponíveis ∧ dentro do horário ∧ com folga (carga < capacidade). */
+/** Elegíveis = disponíveis ∧ dentro do horário (sem teto de carga — ver eligibility.ts). */
 export async function loadEligibleAttendants(
   supabase: SupabaseClient,
   organizationId: string,
@@ -27,9 +27,9 @@ export async function loadEligibleAttendants(
 export interface RoutingPool {
   eligibles: RoutingCandidate[];
   /**
-   * Quando alguém que está disponível e com folga, mas FORA DO HORÁRIO, entra
+   * Quando alguém que está disponível, mas FORA DO HORÁRIO, entra
    * na próxima janela. `null` = não há quem esteja só esperando o horário
-   * (ninguém disponível, todo mundo lotado, ou já há elegível agora).
+   * (ninguém disponível, ou já há elegível agora).
    *
    * É o que permite ao worker esperar o fim do almoço em vez de desistir — ver
    * `nextScheduleOpening`.
@@ -45,11 +45,11 @@ export async function loadRoutingPool(
 ): Promise<RoutingPool> {
   const { data: avail } = await supabase
     .from("attendant_availability")
-    .select("user_id, capacity, schedule")
+    .select("user_id, schedule")
     .eq("organization_id", organizationId)
     .eq("is_available", true);
 
-  const rows = (avail ?? []) as Array<{ user_id: string; capacity: number; schedule: unknown }>;
+  const rows = (avail ?? []) as Array<{ user_id: string; schedule: unknown }>;
   if (rows.length === 0) return { eligibles: [], nextOpeningAt: null };
 
   const userIds = rows.map((r) => r.user_id);
@@ -87,19 +87,15 @@ export async function loadRoutingPool(
   for (const r of rows) {
     const currentLoad = loadByUser.get(r.user_id) ?? 0;
     const schedule = availabilityScheduleSchema.parse(r.schedule ?? {});
-    const eligible = isAttendantEligible(
-      { isAvailable: true, capacity: r.capacity, currentLoad, schedule },
-      now,
-    );
+    const eligible = isAttendantEligible({ isAvailable: true, schedule }, now);
     if (eligible) {
       candidates.push({
         userId: r.user_id,
         currentLoad,
         lastAssignedAt: lastAssignedByUser.get(r.user_id) ?? null,
       });
-    } else if (currentLoad < r.capacity && !isWithinSchedule(schedule, now)) {
-      // Só o horário a impede. Quem está lotado não entra: a abertura da
-      // janela não muda a carga, e prometer a volta dela seria esperar à toa.
+    } else if (!isWithinSchedule(schedule, now)) {
+      // Só o horário a impede (não há mais teto de carga — ver eligibility.ts).
       const abre = nextScheduleOpening(schedule, now);
       if (abre !== null && (nextOpeningAt === null || abre < nextOpeningAt)) nextOpeningAt = abre;
     }

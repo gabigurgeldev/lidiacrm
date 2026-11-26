@@ -83,7 +83,7 @@ export interface DecideRoutingInput {
   attempts: number;
   now: Date;
   /**
-   * Quando alguém disponível e com folga entra no horário (`loadRoutingPool`).
+   * Quando alguém disponível entra no horário (`loadRoutingPool`).
    * Sem elegível e com abertura marcada, o evento volta NA abertura e não gasta
    * tentativa: fora do horário é espera com fim conhecido, não falha. Ausente ou
    * `null` = o caminho antigo, backoff + tentativa.

@@ -90,22 +90,9 @@ function summarizeSchedule(windows: ScheduleWindow[], t: (texto: string) => stri
 function StatusBadge({ attendant, now }: { attendant: Attendant; now: Date }) {
   const t = useT();
   const a = attendant.availability;
-  // Lotada vem ANTES de Online. A distribuição só entrega a quem tem carga
-  // abaixo da capacidade, e este selo dizia "Online" para quem estava com 44
-  // conversas e capacidade 5: o gestor via todas online, a distribuição não
-  // entregava a ninguém, e nada na tela ligava uma coisa à outra (medido numa
-  // org de produção, em que o rodízio parou no primeiro dia).
-  if (a?.is_available && (a.current_load ?? 0) >= (a.capacity ?? 5)) {
-    return (
-      <Badge
-        variant="warning"
-        title={t("Atingiu a capacidade: não recebe conversa nova da distribuição. Aumente a capacidade ou encerre conversas.")}
-        data-testid="atendente-lotada"
-      >
-        {t("Lotada")}
-      </Badge>
-    );
-  }
+  // Não existe mais selo "Lotada": o teto de conversas por atendente foi
+  // removido (2026-11-26). Ele tirava a conversa nova de TODO MUNDO quando a
+  // equipe estava ocupada — ver `lib/routing/eligibility.ts`.
   // Quem é "sempre disponível" não manda sinal de vida — e não precisa: o cron
   // não a derruba. Medir o sinal aqui a mostraria offline enquanto o rodízio a
   // escolhe.
@@ -351,13 +338,13 @@ export function AttendantsClient({ canManage }: Props) {
             {/*
               A frase NOMEIA o que a coluna "Horário" faz, e isso é o conserto —
               não enfeite. Esta é a única tela do produto onde se publica a
-              jornada, e ela se anunciava como "status, carga e capacidade": quem
+              jornada, e ela se anunciava como "status, carga e capacidade" (hoje "status e carga"): quem
               procurava "meus horários" passava por cima. A Agenda manda para cá
               (`/app/team?aba=atendimento`) quando ninguém publicou nada, e o
               destino tinha de dizer que é o lugar certo.
             */}
             {t(
-              "Status, carga e capacidade de cada atendente — e a jornada semanal que decide os horários oferecidos na Agenda. Sem ela ninguém consegue marcar.",
+              "Status e carga de cada atendente — e a jornada semanal que decide os horários oferecidos na Agenda. Sem ela ninguém consegue marcar.",
             )}
           </p>
         </div>
@@ -381,7 +368,6 @@ export function AttendantsClient({ canManage }: Props) {
                 <TableHead>Atendente</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Carga</TableHead>
-                <TableHead>Capacidade</TableHead>
                 <TableHead>{t("Horário")}</TableHead>
                 {canManage ? <TableHead className="w-[120px]">{t("Disponível")}</TableHead> : null}
                 {canManage ? (
@@ -401,7 +387,6 @@ export function AttendantsClient({ canManage }: Props) {
             </TableHeader>
             <TableBody>
               {attendants.map((a) => {
-                const capacity = a.availability?.capacity ?? 5;
                 const load = a.availability?.current_load ?? 0;
                 const windows = a.availability?.schedule?.windows ?? [];
                 return (
@@ -416,29 +401,9 @@ export function AttendantsClient({ canManage }: Props) {
                       <StatusBadge attendant={a} now={now} />
                     </TableCell>
                     <TableCell>
-                      <span className={load >= capacity ? "font-medium text-destructive" : ""}>
+                      <span title={t("Conversas abertas com esta pessoa. Não há limite: a distribuição continua entregando.")}>
                         {load}
                       </span>
-                    </TableCell>
-                    <TableCell>
-                      {canManage ? (
-                        <Input
-                          type="number"
-                          min={1}
-                          max={1000}
-                          defaultValue={capacity}
-                          className="h-8 w-20"
-                          aria-label={`Capacidade de ${a.name}`}
-                          onBlur={(e) => {
-                            const next = Number(e.target.value);
-                            if (Number.isInteger(next) && next >= 1 && next !== capacity) {
-                              patch.mutate({ userId: a.userId, patch: { capacity: next } });
-                            }
-                          }}
-                        />
-                      ) : (
-                        capacity
-                      )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       <div className="flex items-center gap-2">

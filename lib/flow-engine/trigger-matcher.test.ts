@@ -147,3 +147,54 @@ describe("coordenador ativo — o gatilho de mensagem não arma fluxo interativo
     expect(a.insert).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("gatilho 'Quando o sistema distribuir uma conversa' (conversation.routed)", () => {
+  function adminRoteado() {
+    const insert = vi.fn(async (_linha: Record<string, unknown>) => ({ error: null }));
+    const grafo = {
+      nodes: [{ id: "n1", type: "trigger.conversation_routed", label: "g", position: { x: 0, y: 0 }, config: {} }],
+      edges: [],
+    };
+    const cliente = {
+      from(tabela: string) {
+        if (tabela === "flow_executions") return { insert };
+        const linha =
+          tabela === "flows"
+            ? [{ id: "f1", organization_id: "org-1", active_version_id: "v1", settings: {} }]
+            : { id: "v1", graph: grafo, trigger_config: {} };
+        const cadeia: Record<string, unknown> = {
+          then: (r: (v: unknown) => unknown) => Promise.resolve({ data: linha, error: null }).then(r),
+        };
+        for (const m of ["select", "eq", "not", "maybeSingle"]) {
+          cadeia[m] = () => (m === "maybeSingle" ? Promise.resolve({ data: linha, error: null }) : cadeia);
+        }
+        return cadeia;
+      },
+    };
+    return { cliente: cliente as never, insert };
+  }
+
+  it("⭐ a distribuição arma o fluxo, com a conversa e quem recebeu na execução", async () => {
+    const a = adminRoteado();
+    await armarFluxosParaEvento(a.cliente, {
+      id: "evt-r",
+      organization_id: "org-1",
+      event_type: "conversation.routed",
+      entity_kind: "conversation",
+      entity_id: "conv-1",
+      payload: { conversation_id: "conv-1", contact_id: "ct-1", assigned_to_user_id: "u-kelly" },
+      metadata: {},
+    } as unknown as Parameters<typeof armarFluxosParaEvento>[1]);
+    expect(a.insert).toHaveBeenCalledTimes(1);
+    const linha = a.insert.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(linha.conversation_id).toBe("conv-1");
+    expect(linha.contact_id).toBe("ct-1");
+    expect((linha.input as Record<string, unknown>).assigned_to_user_id).toBe("u-kelly");
+  });
+
+  it("mensagem recebida NÃO arma o fluxo de distribuição (não repete aviso a cada mensagem)", async () => {
+    const a = adminRoteado();
+    await armarFluxosParaEvento(a.cliente, evento(CANAL_A));
+    expect(a.insert).not.toHaveBeenCalled();
+  });
+});

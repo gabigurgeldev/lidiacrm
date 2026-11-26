@@ -22,6 +22,15 @@ import { routingConfigSchema } from "@/lib/schemas/routing";
 export const ROUTING_WORKER_KEY = "worker.routing.v1";
 export const ROUTING_EVENT_TYPE = "conversation.routing_requested";
 
+/**
+ * "O sistema acabou de entregar esta conversa a alguém." Emitido SÓ pelo
+ * rodízio automático (este worker), depois da atribuição confirmada — nunca por
+ * Assumir, Transferir ou bloco de fluxo. Quem escuta: o gatilho de fluxo
+ * `trigger.conversation_routed` ("Quando o sistema distribuir uma conversa"),
+ * que é onde o dono da operação desenha o aviso a quem recebeu.
+ */
+export const ROUTED_EVENT_TYPE = "conversation.routed";
+
 const DEFAULT_BATCH_SIZE = 100;
 
 
@@ -165,7 +174,87 @@ export async function rotearConversaAgora(
   organizationId: string,
   conversationId: string,
 ): Promise<RoutingSummary> {
+  await pedirRoteamentoSeFicouSemDono(organizationId, conversationId);
   return runRoutingWorker({ batchSize: 1, conversa: { organizationId, conversationId } });
+}
+
+/**
+ * O cliente voltou a escrever numa conversa que EXISTE e está sem dono — põe a
+ * conversa na fila do rodízio.
+ *
+ * ## Por que isto existe
+ *
+ * O pedido de distribuição nasce de um trigger AFTER INSERT (migration 0040):
+ * só conversa NOVA entra na fila. Mas a conversa é uma por contato, e o cliente
+ * que volta escreve na MESMA linha. Se ela ficou sem dono — chegou antes de o
+ * rodízio ser ligado, alguém a soltou, o evento antigo morreu —, nada a põe na
+ * fila de novo, e no modo "só as minhas" ela é invisível para TODA a equipe.
+ * Medido na Faby Flores (2026-11-26): 183 conversas abertas sem dono, uma delas
+ * com mensagem do cliente na véspera, sem ninguém ver.
+ *
+ * Só emite quando há o que distribuir: conversa viva, sem dono, org em rodízio
+ * e nenhum pedido ainda pendente para ela (não empilha um evento por mensagem).
+ * Duas mensagens simultâneas podem emitir dois pedidos; o segundo encontra a
+ * conversa com dono e vira `skipped_already_assigned`. Nunca lança: o caminho
+ * de entrada da mensagem não pode cair por causa do rodízio.
+ */
+export async function pedirRoteamentoSeFicouSemDono(
+  organizationId: string,
+  conversationId: string,
+): Promise<boolean> {
+  try {
+    const admin = createAdminClient();
+    const { data: conv } = await admin
+      .from("conversations")
+      .select("id, assigned_to_user_id, status")
+      .eq("organization_id", organizationId)
+      .eq("id", conversationId)
+      .maybeSingle();
+    const c = conv as { assigned_to_user_id: string | null; status: string } | null;
+    if (c === null || c.assigned_to_user_id !== null) return false;
+    if (!(OPEN_LOAD_STATUSES as readonly string[]).includes(String(c.status))) return false;
+
+    const { data: org } = await admin
+      .from("organizations")
+      .select("settings")
+      .eq("id", organizationId)
+      .maybeSingle();
+    const config = routingConfigSchema.parse(
+      ((org?.settings ?? {}) as { routing?: unknown }).routing ?? {},
+    );
+    if (config.mode !== "round_robin") return false;
+
+    const { data: pendente } = await admin
+      .from("event_log")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("event_type", ROUTING_EVENT_TYPE)
+      .eq("entity_kind", "conversation")
+      .eq("entity_id", conversationId)
+      .in("status", ["pending", "processing"])
+      .limit(1);
+    if (Array.isArray(pendente) && pendente.length > 0) return false;
+
+    const { error } = await admin.rpc("emit_event", {
+      p_event_type: ROUTING_EVENT_TYPE,
+      p_entity_kind: "conversation",
+      p_entity_id: conversationId,
+      // Mesmo formato do trigger 0040 — o worker lê `conversation_id` e
+      // `organization_id` do payload. `motivo` é só para quem audita.
+      p_payload: { conversation_id: conversationId, organization_id: organizationId, motivo: "cliente_voltou" },
+      p_metadata: {},
+      p_organization_id: organizationId,
+    });
+    if (error) throw new Error(error.message);
+    return true;
+  } catch (err) {
+    logger.warn("[routing-worker] não consegui pôr a conversa que voltou na fila", {
+      organization_id: organizationId,
+      conversation_id: conversationId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
 }
 
 async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome> {
@@ -181,7 +270,7 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
 
   const { data: conv } = await admin
     .from("conversations")
-    .select("id, organization_id, contact_id, assigned_to_user_id, status")
+    .select("id, organization_id, contact_id, channel_session_id, assigned_to_user_id, status")
     .eq("id", conversationId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -255,6 +344,13 @@ async function processEvent(event: EventRow, now: Date): Promise<RoutingOutcome>
       await markDone(event, "assigned", {
         assigned_to_user_id: action.userId,
         leads_adotados: leads,
+      });
+      await anunciarDistribuicao(admin, {
+        organizationId: orgId,
+        conversationId,
+        contactId: strOrNull((conv as { contact_id?: unknown }).contact_id),
+        channelSessionId: strOrNull((conv as { channel_session_id?: unknown }).channel_session_id),
+        userId: action.userId,
       });
       return "assigned";
     }
@@ -350,6 +446,47 @@ async function requeueEvent(
     })
     .eq("id", event.id);
   if (error) logger.warn("[routing-worker] requeue failed", { event_id: event.id, error: error.message });
+}
+
+/**
+ * Emite `conversation.routed` — ver `ROUTED_EVENT_TYPE`. Best-effort: a
+ * conversa JÁ tem dono quando chegamos aqui, e lançar faria o evento de
+ * roteamento voltar para a fila por causa de um aviso. O que falha vira log.
+ */
+async function anunciarDistribuicao(
+  admin: ReturnType<typeof createAdminClient>,
+  p: {
+    organizationId: string;
+    conversationId: string;
+    contactId: string | null;
+    channelSessionId: string | null;
+    userId: string;
+  },
+): Promise<void> {
+  try {
+    const { error } = await admin.rpc("emit_event", {
+      p_event_type: ROUTED_EVENT_TYPE,
+      p_entity_kind: "conversation",
+      p_entity_id: p.conversationId,
+      p_payload: {
+        conversation_id: p.conversationId,
+        organization_id: p.organizationId,
+        contact_id: p.contactId,
+        // O filtro de número do gatilho (`escutaEsteCanal`) lê este campo.
+        channel_session_id: p.channelSessionId,
+        assigned_to_user_id: p.userId,
+      },
+      p_metadata: {},
+      p_organization_id: p.organizationId,
+    });
+    if (error) throw new Error(error.message);
+  } catch (err) {
+    logger.warn("[routing-worker] não consegui anunciar a distribuição", {
+      organization_id: p.organizationId,
+      conversation_id: p.conversationId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 function strOrNull(v: unknown): string | null {

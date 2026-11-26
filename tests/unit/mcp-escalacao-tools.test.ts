@@ -177,15 +177,15 @@ describe("crm_list_available_attendants", () => {
     return { data: [] };
   };
 
-  it("só quem pode assumir agora: quem está sem folga fica de fora", async () => {
+  it("quem está disponível pode assumir, com qualquer carga (não há teto por atendente)", async () => {
     const res = (await crmListAvailableAttendants.handler(
       { only_available: true },
       fazerCtx(equipe),
     )) as { attendants: Array<{ user_id: string; current_load: number }>; available_count: number };
 
-    expect(res.attendants.map((a) => a.user_id)).toEqual([ANA]);
-    expect(res.attendants[0]?.current_load).toBe(2);
-    expect(res.available_count).toBe(1);
+    expect(res.attendants.map((a) => a.user_id).sort()).toEqual([ANA, BRUNO].sort());
+    expect(res.attendants.find((a) => a.user_id === BRUNO)?.current_load).toBe(5);
+    expect(res.available_count).toBe(2);
   });
 
   it("viewer não é atendente — não entra no roster", async () => {

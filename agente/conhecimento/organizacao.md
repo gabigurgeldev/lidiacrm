@@ -31,7 +31,7 @@ O botão **Configurações** fica fixo no rodapé do menu lateral. Dentro dele, 
 
 ### Definir horários de atendimento da equipe
 1. Em **Equipe**, abra a aba **Atendimento** (gerente ou administrador).
-2. Na tabela de atendentes, veja status, carga e capacidade. Use **Editar horário** ao lado do nome para cadastrar as janelas da jornada semanal e o **Telefone de aviso (WhatsApp)**.
+2. Na tabela de atendentes, veja status e carga (quantas conversas abertas cada um tem). Não há limite de conversas por atendente: quem está disponível e no horário sempre recebe. Use **Editar horário** ao lado do nome para cadastrar as janelas da jornada semanal e o **Telefone de aviso (WhatsApp)**.
 3. Sem janelas publicadas, a Agenda não oferece horário com essa pessoa.
 
 ### Escolher como os clientes novos são distribuídos

@@ -46,10 +46,10 @@ describe("isWithinSchedule (tz-aware)", () => {
   });
 });
 
-describe("isAttendantEligible (§5: disponível ∧ horário ∧ folga)", () => {
-  const base = { isAvailable: true, capacity: 5, currentLoad: 2, schedule: schedule8to18Mon };
+describe("isAttendantEligible (§5: disponível ∧ horário — sem teto de carga)", () => {
+  const base = { isAvailable: true, schedule: schedule8to18Mon };
 
-  it("disponível + dentro da janela + com folga (2/5) ⇒ elegível", () => {
+  it("disponível + dentro da janela ⇒ elegível", () => {
     expect(isAttendantEligible(base, MON_1400_BRT)).toBe(true);
   });
 
@@ -57,15 +57,15 @@ describe("isAttendantEligible (§5: disponível ∧ horário ∧ folga)", () => 
     expect(isAttendantEligible(base, MON_1900_BRT)).toBe(false);
   });
 
-  it("capacidade cheia (carga 5 == capacity 5) ⇒ NÃO elegível", () => {
-    expect(isAttendantEligible({ ...base, currentLoad: 5 }, MON_1400_BRT)).toBe(false);
+  it("a entrada nem carrega carga: o teto por atendente deixou de existir (2026-11-26)", () => {
+    // Regressão: a Faby Flores parou de distribuir quando as duas atendentes
+    // bateram 30 conversas abertas. Se alguém reintroduzir o campo, este teste
+    // (e o typecheck do objeto abaixo) mostra a decisão de produto que ele desfaz.
+    const comCarga = { ...base, currentLoad: 500, capacity: 1 } as unknown as Parameters<typeof isAttendantEligible>[0];
+    expect(isAttendantEligible(comCarga, MON_1400_BRT)).toBe(true);
   });
 
-  it("carga acima da capacidade (6 > 5) ⇒ NÃO elegível", () => {
-    expect(isAttendantEligible({ ...base, currentLoad: 6 }, MON_1400_BRT)).toBe(false);
-  });
-
-  it("offline (is_available=false), mesmo com folga e no horário ⇒ NÃO elegível", () => {
+  it("offline (is_available=false), mesmo no horário ⇒ NÃO elegível", () => {
     expect(isAttendantEligible({ ...base, isAvailable: false }, MON_1400_BRT)).toBe(false);
   });
 });

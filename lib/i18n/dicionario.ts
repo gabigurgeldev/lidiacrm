@@ -5584,10 +5584,6 @@ export const DICIONARIO: Traducoes = {
   "Disponível": { es: "Disponible" },
   "Sempre disponível": { es: "Siempre disponible" },
   "Disponível no horário": { es: "Disponible en su horario" },
-  "Lotada": { es: "Sin cupo" },
-  "Atingiu a capacidade: não recebe conversa nova da distribuição. Aumente a capacidade ou encerre conversas.": {
-    es: "Llegó a su capacidad: no recibe conversaciones nuevas de la distribución. Aumenta la capacidad o cierra conversaciones.",
-  },
   "Segue no rodízio durante o horário de trabalho. Sem isto, sai do rodízio 15 minutos depois que a disponibilidade é ligada, mesmo com o CRM aberto.": {
     es: "Sigue en la rotación durante el horario de trabajo. Sin esto, sale de la rotación 15 minutos después de activar la disponibilidad, aunque el CRM esté abierto.",
   },
@@ -6103,7 +6099,9 @@ export const DICIONARIO: Traducoes = {
   "Sem janelas, o roteamento aceita conversa a qualquer hora — mas a Agenda não oferece NENHUM horário para marcar. Adicione janelas para publicar seus horários de atendimento.": { es: "Sin franjas, el enrutamiento acepta conversación a cualquier hora — pero la Agenda no ofrece NINGÚN horario para agendar. Agrega franjas para publicar tus horarios de atención." },
   "Nenhuma janela publicada — ninguém consegue marcar com esta pessoa.": { es: "Ninguna franja publicada — nadie puede agendar con esta persona." },
   "Atendentes e horários de atendimento": { es: "Agentes y horarios de atención" },
-  "Status, carga e capacidade de cada atendente — e a jornada semanal que decide os horários oferecidos na Agenda. Sem ela ninguém consegue marcar.": { es: "Estado, carga y capacidad de cada agente — y la jornada semanal que decide los horarios ofrecidos en la Agenda. Sin ella nadie puede agendar." },
+  "Status e carga de cada atendente — e a jornada semanal que decide os horários oferecidos na Agenda. Sem ela ninguém consegue marcar.": { es: "Estado y carga de cada agente — y la jornada semanal que decide los horarios ofrecidos en la Agenda. Sin ella nadie puede agendar." },
+  "Conversas abertas com esta pessoa. Não há limite: a distribuição continua entregando.": { es: "Conversaciones abiertas con esta persona. No hay límite: la distribución sigue entregando." },
+  "Este fluxo começa sozinho toda vez que o sistema distribui uma conversa para alguém da equipe. Ligue um bloco \"Avisar o vendedor no WhatsApp\" com o destinatário \"Dono do lead\" para avisar quem recebeu. Use {{contact.name}}, {{contact.phone_number}} e {{lead.title}} na mensagem.": { es: "Este flujo empieza solo cada vez que el sistema distribuye una conversación a alguien del equipo. Conecta un bloque \"Avisar al vendedor por WhatsApp\" con el destinatario \"Dueño del lead\" para avisar a quien la recibió. Usa {{contact.name}}, {{contact.phone_number}} y {{lead.title}} en el mensaje." },
   "Só gerentes e administradores editam os horários de atendimento da equipe. Para publicar os seus, peça a um gerente que abra esta aba e use o botão &ldquo;Editar horário&rdquo; ao lado do seu nome.": { es: "Solo gerentes y administradores editan los horarios de atención del equipo. Para publicar los tuyos, pídele a un gerente que abra esta pestaña y use el botón «Editar horario» al lado de tu nombre." },
   " — não publicado": { es: " — no publicado" },
   "Escolha um fluxo publicado": { es: "Elige un flujo publicado" },
@@ -7113,6 +7111,10 @@ export const DICIONARIO: Traducoes = {
   "Avisos": { es: "Avisos" },
   "Quando um lead é criado": { es: "Cuando se crea un lead" },
   "Quando a IA passar para uma pessoa": { es: "Cuando la IA pase a una persona" },
+  "Quando o sistema distribuir uma conversa": { es: "Cuando el sistema distribuya una conversación" },
+  "Começa o fluxo toda vez que o rodízio automático entrega uma conversa a alguém da equipe.": {
+    es: "Empieza el flujo cada vez que la rotación automática entrega una conversación a alguien del equipo.",
+  },
   "Começa o fluxo toda vez que o agente de IA passa uma conversa para a equipe.":
     { es: "Empieza el flujo cada vez que el agente de IA pasa una conversación al equipo." },
   "Começa o fluxo toda vez que um lead novo entra no Kanban.":

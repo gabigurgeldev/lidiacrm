@@ -1,10 +1,20 @@
 /**
  * Elegibilidade de atendente para roteamento (spec 13 §5).
  *
- * Elegível = disponível ∧ dentro do horário (schedule tz-aware) ∧ abaixo da
- * capacidade. Lógica PURA e testável — o worker de G5-02 (cron TS) importa daqui
- * e passa o `now` + a carga atual (conversas abertas atribuídas). Sem acesso a
- * DB, sem relógio implícito: o `now` é sempre injetado (teste usa clock mockado).
+ * Elegível = disponível ∧ dentro do horário (schedule tz-aware). Lógica PURA e
+ * testável — o worker de G5-02 (cron TS) importa daqui e passa o `now`. Sem
+ * acesso a DB, sem relógio implícito: o `now` é sempre injetado (teste usa
+ * clock mockado).
+ *
+ * ⚠️ NÃO HÁ MAIS TETO DE CONVERSAS POR ATENDENTE (2026-11-26, decisão do dono do
+ * produto). Existia `carga < capacidade`, e ele foi a causa medida de a Faby
+ * Flores parar de distribuir entre 10 e 21/11: as duas atendentes bateram 30
+ * conversas abertas, ninguém mais era elegível e a conversa nova ficava sem dono
+ * — invisível no modo "só as minhas". Um teto que tira a conversa de TODO MUNDO
+ * quando a equipe está ocupada não protege a atendente: esconde o cliente. A
+ * carga continua sendo calculada, mas só para DESEMPATE e para o painel.
+ * A coluna `attendant_availability.capacity` fica no banco (clones antigos e a
+ * API ainda a escrevem) e não é lida por ninguém que decida distribuição.
  *
  * AT-08: o auto-offline por heartbeat velho vive aqui como constante NOMEADA
  * única (não espalhada como número mágico) e como predicado testável; o cron
@@ -137,17 +147,10 @@ export function isHeartbeatStale(
 
 export interface AttendantEligibilityInput {
   isAvailable: boolean;
-  capacity: number;
-  /** Conversas abertas atribuídas ao atendente (carga atual). */
-  currentLoad: number;
   schedule?: Pick<AvailabilitySchedule, "timezone" | "windows"> | null;
 }
 
-/** disponível ∧ com folga (carga < capacidade) ∧ dentro do horário (§5). */
+/** disponível ∧ dentro do horário (§5). Sem teto de carga — ver o cabeçalho. */
 export function isAttendantEligible(input: AttendantEligibilityInput, now: Date): boolean {
-  return (
-    input.isAvailable &&
-    input.currentLoad < input.capacity &&
-    isWithinSchedule(input.schedule ?? null, now)
-  );
+  return input.isAvailable && isWithinSchedule(input.schedule ?? null, now);
 }
