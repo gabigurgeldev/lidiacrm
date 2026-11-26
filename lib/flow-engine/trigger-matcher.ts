@@ -228,8 +228,13 @@ export async function armarFluxosParaEvento(
       contact_id: contactId,
       // Só no gatilho de mensagem, cujo payload traz o id REAL da conversa (FK).
       // Payload de webhook é texto de terceiro e não pode virar FK.
+      // E no de distribuição (`conversation.routed`), que o NOSSO worker emite
+      // com o id da conversa que ele acabou de atribuir.
       conversation_id:
-        triagem !== null && typeof row.payload?.conversation_id === "string" ? row.payload.conversation_id : null,
+        (triagem !== null || row.event_type === "conversation.routed") &&
+        typeof row.payload?.conversation_id === "string"
+          ? row.payload.conversation_id
+          : null,
       trigger_event_id: row.id,
       silencia_ia: triagem?.silenciar_ia ?? false,
       exclusiva_por_contato: triagem?.uma_por_contato ?? false,

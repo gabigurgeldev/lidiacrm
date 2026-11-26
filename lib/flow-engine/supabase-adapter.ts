@@ -499,8 +499,40 @@ async function carregarFatos(
     }
   }
 
-  const assigned_user = await carregarDono(admin, orgId, lead?.owner_user_id ?? null);
+  const quemRecebeu = await quemRecebeuADistribuicao(admin, orgId, exec);
+  const assigned_user = await carregarDono(admin, orgId, quemRecebeu ?? lead?.owner_user_id ?? null);
   return { lead, contact, assigned_user };
+}
+
+/**
+ * Na execução armada por "o sistema distribuiu uma conversa"
+ * (`trigger.conversation_routed`), o "dono" que os blocos enxergam é QUEM
+ * RECEBEU a conversa — não o dono do lead.
+ *
+ * Quase sempre são a mesma pessoa (o rodízio adota o lead sem dono), mas não
+ * quando o lead já tinha dono: aí o aviso "chegou um lead para você" iria para
+ * quem NÃO recebeu nada. O pedido que motivou o gatilho é avisar quem recebeu.
+ *
+ * Confere no BANCO, não só no payload: vale apenas se a conversa da execução
+ * tem hoje exatamente esse dono. Um payload qualquer (corpo de webhook é texto
+ * de terceiro) que trouxesse `assigned_to_user_id` não redireciona aviso, e uma
+ * conversa que trocou de mãos depois volta à regra de sempre.
+ */
+async function quemRecebeuADistribuicao(
+  admin: SupabaseClient,
+  orgId: string,
+  exec: FlowExecutionRow,
+): Promise<string | null> {
+  const alvo = exec.input?.assigned_to_user_id;
+  if (typeof alvo !== "string" || alvo === "" || exec.conversation_id === null) return null;
+  const { data } = await admin
+    .from("conversations")
+    .select("assigned_to_user_id")
+    .eq("organization_id", orgId)
+    .eq("id", exec.conversation_id)
+    .maybeSingle();
+  const dono = (data as { assigned_to_user_id: string | null } | null)?.assigned_to_user_id ?? null;
+  return dono === alvo ? alvo : null;
 }
 
 /**

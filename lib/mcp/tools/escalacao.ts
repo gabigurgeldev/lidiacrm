@@ -61,8 +61,8 @@ const atendentesInputShape = {
 export const crmListAvailableAttendants: McpToolDefinition<typeof atendentesInputShape> = {
   name: "crm_list_available_attendants",
   description:
-    "Atendentes da org com is_available, capacity, current_load e can_take_now (disponível ∧ " +
-    "com folga ∧ dentro do horário — mesmo predicado do worker de roteamento). Use ANTES de " +
+    "Atendentes da org com is_available, current_load e can_take_now (disponível ∧ " +
+    "dentro do horário; não há teto de carga — mesmo predicado do worker de roteamento). Use ANTES de " +
     "escalar: com zero elegíveis a conversa vai para a fila e pode não ser puxada. Sem e-mail " +
     "nem telefone.",
   inputSchema: atendentesInputShape,

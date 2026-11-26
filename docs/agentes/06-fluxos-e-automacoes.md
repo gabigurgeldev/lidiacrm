@@ -46,6 +46,7 @@ Cada execução fica presa à **versão publicada** em que nasceu (o gatilho tam
 | **Quando o cliente manda mensagem** (`trigger.message_received`) | Toda mensagem recebida de cliente. O texto fica em `{{event...}}`. | **Canal** (opcional — só um número). |
 | **Quando o cliente escrever uma palavra** (`trigger.keyword`) | A mensagem traz uma das palavras. | **Palavras** (1–20, até 60 caracteres), **modo** contém / exata, **canal** opcional. |
 | **Quando a IA passar para uma pessoa** (`trigger.ai_handoff`) | O agente passa uma conversa para a equipe (`agent.handoff_requested`). | — |
+| **Quando o sistema distribuir uma conversa** (`trigger.conversation_routed`) | O rodízio automático entrega uma conversa a alguém da equipe (`conversation.routed`, emitido só pelo worker de roteamento — Assumir, Transferir e blocos de fluxo não disparam). Nesta execução o "dono do lead" é **quem recebeu**, então "Avisar o vendedor" com destinatário dono do lead avisa a pessoa certa. | — |
 | **Ativação manual pelo botão** (`trigger.manual`) | Um atendente aperta **"Ativar fluxo"** dentro da conversa e escolhe este fluxo para o contato. | — |
 | **Quando outro sistema chamar** (`trigger.webhook`) | Um sistema externo chama o **endereço público** do gatilho. O corpo recebido fica em `{{event...}}`. | **Nome** (2–120). O endereço é criado **ao publicar** e **não muda** em republicações (quem já copiou continua funcionando). |
 
@@ -79,7 +80,7 @@ Variáveis gravadas dentro de um ramo paralelo ficam **naquele ramo** (`frame`),
 
 #### Distribuição (roteamento de leads para vendedores)
 
-Todos usam a **mesma** regra de elegibilidade do roteamento de conversas: disponível ∧ dentro do horário da pessoa ∧ abaixo da capacidade ∧ heartbeat vivo ([07](07-handoff-chamados-e-roteamento-humano.md)).
+Todos usam a **mesma** regra de elegibilidade do roteamento de conversas: disponível ∧ dentro do horário da pessoa ∧ heartbeat vivo (sem teto de carga desde 2026-11-26) ([07](07-handoff-chamados-e-roteamento-humano.md)).
 
 | Bloco | O que faz | Configuração |
 |---|---|---|

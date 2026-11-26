@@ -74,6 +74,7 @@ describe("o registry decide o que existe", () => {
       "routing.redistribute",
       "routing.round_robin",
       "trigger.ai_handoff",
+      "trigger.conversation_routed",
       "trigger.keyword",
       "trigger.lead_created",
       "trigger.manual",

@@ -88,8 +88,6 @@ export async function quemPodeAssumirAgora(
     return isAttendantEligible(
       {
         isAvailable: true,
-        capacity: r.capacity,
-        currentLoad: Number(r.carga),
         schedule: availabilityScheduleSchema.parse(r.schedule ?? {}),
       },
       now,

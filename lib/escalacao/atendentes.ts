@@ -115,7 +115,7 @@ export async function carregarRosterDeAtendimento(
 
 /**
  * Consegue receber uma conversa AGORA? Mesmo predicado do worker de roteamento —
- * disponível ∧ com folga ∧ dentro do horário.
+ * disponível ∧ dentro do horário (sem teto de carga desde 2026-11-26).
  *
  * Quem nunca configurou disponibilidade tem `capacidade` null: isso é "não
  * configurado", e o worker o trata como fora (só entram linhas de
@@ -127,8 +127,6 @@ export function podeAssumirAgora(atendente: AtendenteDoRoster, now: Date): boole
   return isAttendantEligible(
     {
       isAvailable: atendente.disponivel,
-      capacity: atendente.capacidade,
-      currentLoad: atendente.cargaAtual,
       schedule: availabilityScheduleSchema.parse(atendente.agenda ?? {}),
     },
     now,

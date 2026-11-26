@@ -69,18 +69,18 @@ describe("quem pode assumir agora", () => {
     return { query: () => Promise.resolve({ rows: linhas, rowCount: linhas.length }) } as never;
   }
 
-  it("conta só quem está online, com folga e é atendente", async () => {
+  it("conta quem está online e é atendente — carga não tira ninguém (sem teto desde 2026-11-26)", async () => {
     const q = await quemPodeAssumirAgora(
       dublePg([
         { user_id: "a", role: "agent", capacity: 5, schedule: {}, carga: "2" }, // livre
-        { user_id: "b", role: "manager", capacity: 3, schedule: {}, carga: "3" }, // lotado
+        { user_id: "b", role: "manager", capacity: 3, schedule: {}, carga: "30" }, // carga alta, segue elegível
         { user_id: "c", role: "agent", capacity: null, schedule: null, carga: "0" }, // offline/não configurado
         { user_id: "d", role: "viewer", capacity: 9, schedule: {}, carga: "0" }, // não é atendente
       ]),
       "org",
       AGORA,
     );
-    expect(q).toEqual({ disponiveis: 1, total: 3 });
+    expect(q).toEqual({ disponiveis: 2, total: 3 });
   });
 
   it("quem nunca configurou disponibilidade NÃO é contado como disponível", async () => {

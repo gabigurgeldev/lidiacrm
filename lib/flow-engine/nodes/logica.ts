@@ -61,6 +61,40 @@ export const triggerAiHandoff: FlowNodeDefinition<Record<string, never>> = {
   execute: async () => ({ kind: "advance", branch_id: "else" }),
 };
 
+// ──────────────────────── trigger.conversation_routed ────────────────────────
+
+/**
+ * O bloco de início por "o sistema distribuiu uma conversa".
+ *
+ * O evento `conversation.routed` é emitido SÓ pelo rodízio automático
+ * (`lib/routing/worker.ts`), depois de a atribuição ser confirmada — uma vez por
+ * distribuição. Assumir, transferir ou um bloco de fluxo que escolhe dono NÃO
+ * disparam: o pedido que motivou (Faby Flores, 2026-11-26) foi "toda vez que
+ * for distribuída automaticamente pelo sistema, a pessoa seja notificada".
+ *
+ * Quem recebeu vira o `assigned_user` da execução (`carregarFatos`), então o
+ * aviso "Avisar o vendedor" com destinatário "dono do lead" chega a QUEM
+ * RECEBEU — mesmo que o lead já tivesse outro dono. O payload traz
+ * `conversation_id`, `contact_id`, `channel_session_id` e
+ * `assigned_to_user_id` (`{{event.*}}`).
+ *
+ * Por que um gatilho e não "mensagem recebida" + bloco de distribuir: um fluxo
+ * assim roda a CADA mensagem do cliente e reatribui a conversa toda vez. Foi o
+ * que se mediu na Faby: a mesma conversa trocou de dona 6 vezes em 3 minutos,
+ * e cada troca mandava um aviso novo.
+ */
+export const triggerConversationRouted: FlowNodeDefinition<Record<string, never>> = {
+  type: "trigger.conversation_routed",
+  version: 1,
+  category: "trigger",
+  rotulo: "Quando o sistema distribuir uma conversa",
+  descricao: "Começa o fluxo toda vez que o rodízio automático entrega uma conversa a alguém da equipe.",
+  eventos: ["conversation.routed"],
+  configSchema: z.strictObject({}),
+  branches: () => [ramoPadrao("Começa aqui")],
+  execute: async () => ({ kind: "advance", branch_id: "else" }),
+};
+
 // ──────────────────────────────── logic.if ───────────────────────────────────
 
 const saidaSchema = z.strictObject({

@@ -35,11 +35,10 @@ describe("config do painel → comportamento do worker (G5-04 acceptance 4)", ()
     expect(action).toEqual({ kind: "assign", userId: "agent-a" });
   });
 
-  it("capacidade do painel manda: atendente cheio fica inelegível ⇒ worker não atribui a ele", () => {
-    // capacity=2 e carga=1 ⇒ com folga (elegível).
-    expect(isAttendantEligible({ isAvailable: true, capacity: 2, currentLoad: 1 }, NOW)).toBe(true);
-    // manager REDUZ capacity para 1 ⇒ mesma carga=1 agora enche ⇒ inelegível.
-    expect(isAttendantEligible({ isAvailable: true, capacity: 1, currentLoad: 1 }, NOW)).toBe(false);
+  it("não há teto de carga: atendente disponível segue elegível com qualquer número de conversas", () => {
+    expect(isAttendantEligible({ isAvailable: true }, NOW)).toBe(true);
+    // Só "indisponível" (ou fora do horário) tira alguém da distribuição.
+    expect(isAttendantEligible({ isAvailable: false }, NOW)).toBe(false);
 
     // Sem elegível, o worker reenfileira (backoff da config) em vez de atribuir.
     const action = workerDecisionForMode("round_robin", []);

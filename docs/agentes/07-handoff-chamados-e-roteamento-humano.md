@@ -134,7 +134,7 @@ Vale para conversa que chega **sem dono**. Worker: cron `routing-worker` (1×/mi
 
 ### C.2. Quem é elegível
 
-Elegível = **disponível** ∧ **dentro do horário** da pessoa ∧ **abaixo da capacidade**. O heartbeat não entra na conta na hora de escolher: ele só serve para o cron desligar quem sumiu.
+Elegível = **disponível** ∧ **dentro do horário** da pessoa. **Não há teto de carga** desde 2026-11-26: a capacidade por atendente foi removida (`lib/routing/eligibility.ts` explica por quê); a carga só desempata. O heartbeat não entra na conta na hora de escolher: ele só serve para o cron desligar quem sumiu.
 
 | Configuração por atendente | Detalhe |
 |---|---|
